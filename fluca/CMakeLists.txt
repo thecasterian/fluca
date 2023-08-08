@@ -11,15 +11,16 @@ message(STATUS "PETSc libraries: ${PETSC_LIBRARIES}")
 message(STATUS "PETSc compile flags: ${PETSC_CFLAGS_OTHER}")
 
 # C++ flags.
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g3 -O0 -DDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+set(CMAKE_C_COMPILER mpicc)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g3 -O0")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -DNDEBUG")
 
 # Add libraries found.
 include_directories(${PETSC_INCLUDE_DIRS})
 link_directories(${PETSC_LIBRARY_DIRS})
 link_libraries(${PETSC_LIBRARIES})
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PETSC_CFLAGS_OTHER}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${PETSC_CFLAGS_OTHER}")
 
 add_subdirectory(app)
+add_subdirectory(src)
