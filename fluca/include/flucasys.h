@@ -14,7 +14,6 @@
 #define FLUCA_INTERN extern FLUCA_VISIBILITY_INTERNAL
 #endif
 
-FLUCA_EXTERN PetscBool FlucaBeganPetsc;
 FLUCA_EXTERN PetscBool FlucaInitializeCalled;
 FLUCA_EXTERN PetscBool FlucaFinalizeCalled;
 
