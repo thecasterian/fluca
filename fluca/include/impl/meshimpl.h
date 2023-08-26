@@ -40,4 +40,6 @@ struct _p_Mesh {
     PetscBool setupcalled;
 };
 
+PetscErrorCode MeshBoundaryTypeToDMBoundaryType(MeshBoundaryType type, DMBoundaryType *dmtype);
+
 #endif

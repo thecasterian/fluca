@@ -36,9 +36,13 @@ FLUCA_EXTERN PetscErrorCode MeshCartesianSetSize(Mesh, PetscInt, PetscInt, Petsc
 FLUCA_EXTERN PetscErrorCode MeshCartesianSetNumProcs(Mesh, PetscInt, PetscInt, PetscInt);
 FLUCA_EXTERN PetscErrorCode MeshCartesianSetBoundaryType(Mesh, MeshBoundaryType, MeshBoundaryType, MeshBoundaryType);
 FLUCA_EXTERN PetscErrorCode MeshCartesianSetOwnershipRanges(Mesh, const PetscInt *, const PetscInt *, const PetscInt *);
-FLUCA_EXTERN PetscErrorCode MeshCartesianSetStencilWidth(Mesh, PetscInt);
+FLUCA_EXTERN PetscErrorCode MeshCartesianSetUniformCoordinates(Mesh, PetscReal, PetscReal, PetscReal, PetscReal,
+                                                               PetscReal, PetscReal);
+FLUCA_EXTERN PetscErrorCode MeshCartesianTransformCoordinates(Mesh, PetscReal (*)(PetscReal, void *),
+                                                              PetscReal (*)(PetscReal, void *),
+                                                              PetscReal (*)(PetscReal, void *), void *);
 FLUCA_EXTERN PetscErrorCode MeshCartesianGetInfo(Mesh, PetscInt *, PetscInt *, PetscInt *, PetscInt *, PetscInt *,
-                                                 PetscInt *, PetscInt *, PetscInt *, MeshBoundaryType *,
-                                                 MeshBoundaryType *, MeshBoundaryType *);
+                                                 PetscInt *, PetscInt *, MeshBoundaryType *, MeshBoundaryType *,
+                                                 MeshBoundaryType *);
 
 #endif

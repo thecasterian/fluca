@@ -4,28 +4,11 @@
 #include <petscdmda.h>
 #include <petscdmstag.h>
 
-static PetscErrorCode MeshBoundaryTypeToDMBoundaryType(MeshBoundaryType type, DMBoundaryType *dmtype) {
-    PetscFunctionBegin;
-
-    switch (type) {
-        case MESH_BOUNDARY_NOT_PERIODIC:
-            *dmtype = DM_BOUNDARY_GHOSTED;
-            break;
-        case MESH_BOUNDARY_PERIODIC:
-            *dmtype = DM_BOUNDARY_PERIODIC;
-            break;
-        default:
-            SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Invalid boundary type %d", type);
-    }
-
-    PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     MPI_Comm comm;
     DMBoundaryType bndx, bndy, bndz;
-    PetscInt daDof, stagDof0, stagDof1, stagDof2, stagDof3;
+    PetscInt s = 1, daDof = 1, stagDof0, stagDof1, stagDof2, stagDof3;
     PetscInt m, n, p;
     const PetscInt *lx, *ly, *lz;
 
@@ -40,13 +23,12 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
     PetscCall(MeshBoundaryTypeToDMBoundaryType(cart->bndz, &bndz));
 
     /* Allocate DMs */
-    daDof = 1;
     if (mesh->dim == 2)
-        PetscCall(DMDACreate2d(comm, bndx, bndy, DMDA_STENCIL_STAR, cart->M, cart->N, cart->m, cart->n, daDof, cart->s,
+        PetscCall(DMDACreate2d(comm, bndx, bndy, DMDA_STENCIL_STAR, cart->M, cart->N, cart->m, cart->n, daDof, s,
                                cart->lx, cart->ly, &cart->dm));
     else
         PetscCall(DMDACreate3d(comm, bndx, bndy, bndz, DMDA_STENCIL_STAR, cart->M, cart->N, cart->P, cart->m, cart->n,
-                               cart->p, daDof, cart->s, cart->lx, cart->ly, cart->lz, &cart->dm));
+                               cart->p, daDof, s, cart->lx, cart->ly, cart->lz, &cart->dm));
     PetscCall(DMSetUp(cart->dm));
 
     PetscCall(DMDAGetInfo(cart->dm, NULL, NULL, NULL, NULL, &m, &n, &p, NULL, NULL, NULL, NULL, NULL, NULL));
@@ -57,18 +39,16 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
         stagDof1 = 1;
         stagDof2 = 0;
         PetscCall(DMStagCreate2d(comm, bndx, bndy, cart->M, cart->N, m, n, stagDof0, stagDof1, stagDof2,
-                                 DMSTAG_STENCIL_STAR, cart->s, lx, ly, &cart->vdm));
+                                 DMSTAG_STENCIL_STAR, s, lx, ly, &cart->vdm));
     } else {
         stagDof0 = 0;
         stagDof1 = 0;
         stagDof2 = 1;
         stagDof3 = 0;
         PetscCall(DMStagCreate3d(comm, bndx, bndy, bndz, cart->M, cart->N, cart->P, m, n, p, stagDof0, stagDof1,
-                                 stagDof2, stagDof3, DMSTAG_STENCIL_STAR, cart->s, lx, ly, lz, &cart->vdm));
+                                 stagDof2, stagDof3, DMSTAG_STENCIL_STAR, s, lx, ly, lz, &cart->vdm));
     }
     PetscCall(DMSetUp(cart->vdm));
-
-    // TODO: allocate coordinates
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -147,9 +127,8 @@ PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
             if (mesh->dim == 2) {
                 PetscCall(PetscViewerASCIISynchronizedPrintf(v,
                                                              "Processor [%d] M %" PetscInt_FMT " N %" PetscInt_FMT
-                                                             " m %" PetscInt_FMT " n %" PetscInt_FMT " s %" PetscInt_FMT
-                                                             "\n",
-                                                             rank, cart->M, cart->N, m, n, cart->s));
+                                                             " m %" PetscInt_FMT " n %" PetscInt_FMT "\n",
+                                                             rank, cart->M, cart->N, m, n));
                 PetscCall(PetscViewerASCIISynchronizedPrintf(v,
                                                              "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT
                                                              ", Y range of indices: %" PetscInt_FMT " %" PetscInt_FMT
@@ -159,8 +138,8 @@ PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
                 PetscCall(PetscViewerASCIISynchronizedPrintf(v,
                                                              "Processor [%d] M %" PetscInt_FMT " N %" PetscInt_FMT
                                                              " P %" PetscInt_FMT " m %" PetscInt_FMT " n %" PetscInt_FMT
-                                                             " p %" PetscInt_FMT " s %" PetscInt_FMT "\n",
-                                                             rank, cart->M, cart->N, cart->P, m, n, p, cart->s));
+                                                             " p %" PetscInt_FMT "\n",
+                                                             rank, cart->M, cart->N, cart->P, m, n, p));
                 PetscCall(PetscViewerASCIISynchronizedPrintf(
                     v,
                     "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT ", Y range of indices: %" PetscInt_FMT
@@ -196,7 +175,6 @@ PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
     cart->lx = NULL;
     cart->ly = NULL;
     cart->lz = NULL;
-    cart->s = -1;
     cart->dm = NULL;
     cart->vdm = NULL;
     cart->cxdm = NULL;
@@ -301,20 +279,166 @@ PetscErrorCode MeshCartesianSetOwnershipRanges(Mesh mesh, const PetscInt *lx, co
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianSetStencilWidth(Mesh mesh, PetscInt s) {
+PetscErrorCode MeshCartesianSetUniformCoordinates(Mesh mesh, PetscReal xmin, PetscReal xmax, PetscReal ymin,
+                                                  PetscReal ymax, PetscReal zmin, PetscReal zmax) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+    MPI_Comm comm, subcomm;
+    PetscInt m, n, p;
+    DMBoundaryType bnd = DM_BOUNDARY_GHOSTED;
+    PetscMPIInt rank, rankx, ranky, rankz, color, key = 0;
+    const PetscInt *lx, *ly, *lz;
+    PetscInt s = 1, dof0 = 1, dof1 = 1;
+    PetscReal **arrc;
+    PetscInt xs, xm;
+    PetscInt ielem, ileft, i;
 
     PetscFunctionBegin;
+
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-    PetscCheck(!mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
-               "This function must be called before MeshSetUp()");
-    cart->s = s;
+    PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
+               "This function must be called after MeshSetUp()");
+
+    PetscCall(PetscObjectGetComm((PetscObject)mesh, &comm));
+    PetscCall(DMDAGetInfo(cart->dm, NULL, NULL, NULL, NULL, &m, &n, &p, NULL, NULL, NULL, NULL, NULL, NULL));
+    PetscCallMPI(MPI_Comm_rank(comm, &rank));
+    if (mesh->dim == 2) {
+        rankx = rank % m;
+        ranky = rank / m;
+        rankz = 0;
+    } else {
+        rankx = rank % m;
+        ranky = (rank % (m * n)) / m;
+        rankz = rank / (m * n);
+    }
+    PetscCall(DMDAGetOwnershipRanges(cart->dm, &lx, &ly, &lz));
+
+    /* X coordinate */
+    if (!cart->cxdm) {
+        color = ranky + (mesh->dim > 2 ? n * rankz : 0);
+        PetscCallMPI(MPI_Comm_split(comm, color, key, &subcomm));
+        PetscCall(DMStagCreate1d(subcomm, bnd, cart->M, dof0, dof1, DMSTAG_STENCIL_BOX, s, lx, &cart->cxdm));
+        PetscCall(DMSetUp(cart->cxdm));
+        PetscCallMPI(MPI_Comm_free(&subcomm));
+    }
+    if (!cart->cx)
+        PetscCall(DMCreateLocalVector(cart->cxdm, &cart->cx));
+    PetscCall(DMStagVecGetArray(cart->cxdm, cart->cx, &arrc));
+    PetscCall(DMStagGetCorners(cart->cxdm, &xs, NULL, NULL, &xm, NULL, NULL, NULL, NULL, NULL));
+    PetscCall(DMStagGetLocationSlot(cart->cxdm, DMSTAG_ELEMENT, 0, &ielem));
+    PetscCall(DMStagGetLocationSlot(cart->cxdm, DMSTAG_LEFT, 0, &ileft));
+    for (i = xs - 1; i < xs + xm + 1; i++)
+        arrc[i][ielem] = (xmax - xmin) * (i + 0.5) / cart->M + xmin;
+    for (i = xs; i < xs + xm + 1; i++)
+        arrc[i][ileft] = (xmax - xmin) * i / cart->M + xmin;
+    PetscCall(DMStagVecRestoreArray(cart->cxdm, cart->cx, &arrc));
+    PetscCall(DMLocalToLocalBegin(cart->cxdm, cart->cx, INSERT_VALUES, cart->cx));
+    PetscCall(DMLocalToLocalEnd(cart->cxdm, cart->cx, INSERT_VALUES, cart->cx));
+
+    /* Y coordinate */
+    if (!cart->cydm) {
+        color = rankx + (mesh->dim > 2 ? m * rankz : 0);
+        PetscCallMPI(MPI_Comm_split(comm, color, key, &subcomm));
+        PetscCall(DMStagCreate1d(subcomm, bnd, cart->N, dof0, dof1, DMSTAG_STENCIL_BOX, s, ly, &cart->cydm));
+        PetscCall(DMSetUp(cart->cydm));
+        PetscCallMPI(MPI_Comm_free(&subcomm));
+    }
+    if (!cart->cy)
+        PetscCall(DMCreateLocalVector(cart->cydm, &cart->cy));
+    PetscCall(DMStagVecGetArray(cart->cydm, cart->cy, &arrc));
+    PetscCall(DMStagGetCorners(cart->cydm, &xs, NULL, NULL, &xm, NULL, NULL, NULL, NULL, NULL));
+    PetscCall(DMStagGetLocationSlot(cart->cydm, DMSTAG_ELEMENT, 0, &ielem));
+    PetscCall(DMStagGetLocationSlot(cart->cydm, DMSTAG_LEFT, 0, &ileft));
+    for (i = xs - 1; i < xs + xm + 1; i++)
+        arrc[i][ielem] = (ymax - ymin) * (i + 0.5) / cart->N + ymin;
+    for (i = xs; i <= xs + xm; i++)
+        arrc[i][ileft] = (ymax - ymin) * i / cart->N + ymin;
+    PetscCall(DMStagVecRestoreArray(cart->cydm, cart->cy, &arrc));
+    PetscCall(DMLocalToLocalBegin(cart->cydm, cart->cy, INSERT_VALUES, cart->cy));
+    PetscCall(DMLocalToLocalEnd(cart->cydm, cart->cy, INSERT_VALUES, cart->cy));
+
+    /* Z coordinate */
+    if (mesh->dim > 2) {
+        if (!cart->czdm) {
+            color = rankx + m * ranky;
+            PetscCallMPI(MPI_Comm_split(comm, color, key, &subcomm));
+            PetscCall(DMStagCreate1d(subcomm, bnd, cart->P, dof0, dof1, DMSTAG_STENCIL_BOX, s, lz, &cart->czdm));
+            PetscCall(DMSetUp(cart->czdm));
+            PetscCallMPI(MPI_Comm_free(&subcomm));
+        }
+        if (!cart->cz)
+            PetscCall(DMCreateLocalVector(cart->czdm, &cart->cz));
+        PetscCall(DMStagVecGetArray(cart->czdm, cart->cz, &arrc));
+        PetscCall(DMStagGetCorners(cart->czdm, &xs, NULL, NULL, &xm, NULL, NULL, NULL, NULL, NULL));
+        PetscCall(DMStagGetLocationSlot(cart->czdm, DMSTAG_ELEMENT, 0, &ielem));
+        PetscCall(DMStagGetLocationSlot(cart->czdm, DMSTAG_LEFT, 0, &ileft));
+        for (i = xs - 1; i < xs + xm + 1; i++)
+            arrc[i][ielem] = (zmax - zmin) * (i + 0.5) / cart->P + zmin;
+        for (i = xs; i < xs + xm + 1; i++)
+            arrc[i][ileft] = (zmax - zmin) * i / cart->P + zmin;
+        PetscCall(DMStagVecRestoreArray(cart->czdm, cart->cz, &arrc));
+        PetscCall(DMLocalToLocalBegin(cart->czdm, cart->cz, INSERT_VALUES, cart->cz));
+        PetscCall(DMLocalToLocalEnd(cart->czdm, cart->cz, INSERT_VALUES, cart->cz));
+    }
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartesianTransformCoordinates(Mesh mesh, PetscReal (*tx)(PetscReal, void *),
+                                                 PetscReal (*ty)(PetscReal, void *), PetscReal (*tz)(PetscReal, void *),
+                                                 void *ctx) {
+    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+    PetscReal **arrc;
+    PetscInt ielem, ileft;
+    PetscInt xs, xm;
+
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+
+    PetscCall(DMStagVecGetArray(cart->cxdm, cart->cx, &arrc));
+    PetscCall(DMStagGetCorners(cart->cxdm, &xs, NULL, NULL, &xm, NULL, NULL, NULL, NULL, NULL));
+    PetscCall(DMStagGetLocationSlot(cart->cxdm, DMSTAG_ELEMENT, 0, &ielem));
+    PetscCall(DMStagGetLocationSlot(cart->cxdm, DMSTAG_LEFT, 0, &ileft));
+    for (PetscInt i = xs; i < xs + xm; i++)
+        arrc[i][ielem] = tx(arrc[i][ielem], ctx);
+    for (PetscInt i = xs; i <= xs + xm; i++)
+        arrc[i][ileft] = tx(arrc[i][ileft], ctx);
+    PetscCall(DMStagVecRestoreArray(cart->cxdm, cart->cx, &arrc));
+    PetscCall(DMLocalToLocalBegin(cart->cxdm, cart->cx, INSERT_VALUES, cart->cx));
+    PetscCall(DMLocalToLocalEnd(cart->cxdm, cart->cx, INSERT_VALUES, cart->cx));
+
+    PetscCall(DMStagVecGetArray(cart->cydm, cart->cy, &arrc));
+    PetscCall(DMStagGetCorners(cart->cydm, &xs, NULL, NULL, &xm, NULL, NULL, NULL, NULL, NULL));
+    PetscCall(DMStagGetLocationSlot(cart->cydm, DMSTAG_ELEMENT, 0, &ielem));
+    PetscCall(DMStagGetLocationSlot(cart->cydm, DMSTAG_LEFT, 0, &ileft));
+    for (PetscInt i = xs; i < xs + xm; i++)
+        arrc[i][ielem] = ty(arrc[i][ielem], ctx);
+    for (PetscInt i = xs; i <= xs + xm; i++)
+        arrc[i][ileft] = ty(arrc[i][ileft], ctx);
+    PetscCall(DMStagVecRestoreArray(cart->cydm, cart->cy, &arrc));
+    PetscCall(DMLocalToLocalBegin(cart->cydm, cart->cy, INSERT_VALUES, cart->cy));
+    PetscCall(DMLocalToLocalEnd(cart->cydm, cart->cy, INSERT_VALUES, cart->cy));
+
+    if (mesh->dim > 2) {
+        PetscCall(DMStagVecGetArray(cart->czdm, cart->cz, &arrc));
+        PetscCall(DMStagGetCorners(cart->czdm, &xs, NULL, NULL, &xm, NULL, NULL, NULL, NULL, NULL));
+        PetscCall(DMStagGetLocationSlot(cart->czdm, DMSTAG_ELEMENT, 0, &ielem));
+        PetscCall(DMStagGetLocationSlot(cart->czdm, DMSTAG_LEFT, 0, &ileft));
+        for (PetscInt i = xs; i < xs + xm; i++)
+            arrc[i][ielem] = tz(arrc[i][ielem], ctx);
+        for (PetscInt i = xs; i <= xs + xm; i++)
+            arrc[i][ileft] = tz(arrc[i][ileft], ctx);
+        PetscCall(DMStagVecRestoreArray(cart->czdm, cart->cz, &arrc));
+        PetscCall(DMLocalToLocalBegin(cart->czdm, cart->cz, INSERT_VALUES, cart->cz));
+        PetscCall(DMLocalToLocalEnd(cart->czdm, cart->cz, INSERT_VALUES, cart->cz));
+    }
+
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode MeshCartesianGetInfo(Mesh mesh, PetscInt *dim, PetscInt *M, PetscInt *N, PetscInt *P, PetscInt *m,
-                                    PetscInt *n, PetscInt *p, PetscInt *s, MeshBoundaryType *bndx,
-                                    MeshBoundaryType *bndy, MeshBoundaryType *bndz) {
+                                    PetscInt *n, PetscInt *p, MeshBoundaryType *bndx, MeshBoundaryType *bndy,
+                                    MeshBoundaryType *bndz) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
 
     PetscFunctionBegin;
@@ -333,8 +457,6 @@ PetscErrorCode MeshCartesianGetInfo(Mesh mesh, PetscInt *dim, PetscInt *M, Petsc
         *n = cart->n;
     if (p)
         *p = cart->p;
-    if (s)
-        *s = cart->s;
     if (bndx)
         *bndx = cart->bndx;
     if (bndy)

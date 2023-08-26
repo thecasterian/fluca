@@ -9,13 +9,14 @@ typedef struct {
     PetscInt M, N, P;       /* global number of elements */
     PetscInt m, n, p;       /* number of processes */
     PetscInt *lx, *ly, *lz; /* ownership range */
-    PetscInt s;             /* stencil width */
 
     DM dm;  /* DMDA for element-centered variables */
     DM vdm; /* DMStag for velocities at face */
 
     DM cxdm, cydm, czdm; /* 1d DMStag for coordinates */
-    Vec cx, cy, cz;      /* coordinate and its derivatives vectors */
+    Vec cx, cy, cz;      /* coordinates */
+    Vec dx, dy, dz;      /* derivatives of index w.r.t. coordinate */
+    Vec dx2, dy2, dz2;   /* second derivative */
 } Mesh_Cartesian;
 
 #endif

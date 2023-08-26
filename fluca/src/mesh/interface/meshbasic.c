@@ -146,3 +146,20 @@ PetscErrorCode MeshDestroy(Mesh *mesh) {
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode MeshBoundaryTypeToDMBoundaryType(MeshBoundaryType type, DMBoundaryType *dmtype) {
+    PetscFunctionBegin;
+
+    switch (type) {
+        case MESH_BOUNDARY_NOT_PERIODIC:
+            *dmtype = DM_BOUNDARY_GHOSTED;
+            break;
+        case MESH_BOUNDARY_PERIODIC:
+            *dmtype = DM_BOUNDARY_PERIODIC;
+            break;
+        default:
+            SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Invalid boundary type %d", type);
+    }
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}

@@ -10,7 +10,7 @@ message(STATUS "PETSc library dirs: ${PETSC_LIBRARY_DIRS}")
 message(STATUS "PETSc libraries: ${PETSC_LIBRARIES}")
 message(STATUS "PETSc compile flags: ${PETSC_CFLAGS_OTHER}")
 
-# C++ flags.
+# C flags.
 set(CMAKE_C_COMPILER mpicc)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g3 -O0")
