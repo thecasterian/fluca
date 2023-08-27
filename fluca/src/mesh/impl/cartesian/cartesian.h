@@ -4,19 +4,20 @@
 #include <impl/meshimpl.h>
 
 typedef struct {
-    MeshBoundaryType bndx, bndy, bndz; /* boundary types */
+    PetscInt N[MESH_MAX_DIM];                /* global number of elements */
+    PetscInt nRanks[MESH_MAX_DIM];           /* number of processes */
+    PetscInt *l[MESH_MAX_DIM];               /* ownership range */
+    MeshBoundaryType bndTypes[MESH_MAX_DIM]; /* boundary types */
 
-    PetscInt M, N, P;       /* global number of elements */
-    PetscInt m, n, p;       /* number of processes */
-    PetscInt *lx, *ly, *lz; /* ownership range */
+    PetscMPIInt rank[MESH_MAX_DIM]; /* location in grid of ranks */
 
     DM dm;  /* DMDA for element-centered variables */
-    DM vdm; /* DMStag for velocities at face */
+    DM fdm; /* DMStag for face-centered variables */
 
-    DM cxdm, cydm, czdm; /* 1d DMStag for coordinates */
-    Vec cx, cy, cz;      /* coordinates */
-    Vec dx, dy, dz;      /* derivatives of index w.r.t. coordinate */
-    Vec dx2, dy2, dz2;   /* second derivative */
+    DM cdm;               /* DMProduct of DMDAs for element coordinates */
+    DM cfdm;              /* DMProduct of DMStags for face coordinates */
+    Vec c[MESH_MAX_DIM];  /* element coordinates */
+    Vec cf[MESH_MAX_DIM]; /* face coordinates */
 } Mesh_Cartesian;
 
 #endif

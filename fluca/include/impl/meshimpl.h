@@ -5,6 +5,9 @@
 #include <impl/flucaimpl.h>
 #include <petscdm.h>
 
+#define MESH_MIN_DIM 2
+#define MESH_MAX_DIM 3
+
 FLUCA_EXTERN PetscBool MeshRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode MeshRegisterAll(void);
 FLUCA_EXTERN PetscLogEvent MESH_SetUp;

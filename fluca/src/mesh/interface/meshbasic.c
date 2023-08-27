@@ -82,8 +82,8 @@ PetscErrorCode MeshSetUp(Mesh mesh) {
         PetscCall(MeshSetType(mesh, MESHCARTESIAN));
 
     /* Validate */
-    PetscCheck(mesh->dim == 2 || mesh->dim == 3, PetscObjectComm((PetscObject)mesh), PETSC_ERR_SUP,
-               "Unsupported mesh dimension %d", mesh->dim);
+    PetscCheck(MESH_MIN_DIM <= mesh->dim && mesh->dim <= MESH_MAX_DIM, PetscObjectComm((PetscObject)mesh),
+               PETSC_ERR_SUP, "Unsupported mesh dimension %d", mesh->dim);
 
     /* Call specific type setup */
     PetscTryTypeMethod(mesh, setup);
