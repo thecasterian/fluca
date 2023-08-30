@@ -32,11 +32,13 @@ struct _p_Mesh {
     PetscInt dim; /* dimension */
 
     /* User functions and contexts ------------------------------------------ */
-    void *ctx;    /* user context */
+    void *ctx; /* user context */
     PetscErrorCode (*ctxdestroy)(void **);
 
     /* Data ----------------------------------------------------------------- */
-    void *data;   /* implementation-specific data */
+    void *data; /* implementation-specific data */
+    PetscInt seqnum;
+    PetscReal seqval;
 
     /* Status --------------------------------------------------------------- */
     MeshStateType state;

@@ -19,3 +19,21 @@ PetscErrorCode MeshGetDim(Mesh mesh, PetscInt *dim) {
     *dim = mesh->dim;
     PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode MeshSetSequenceNumber(Mesh mesh, PetscInt num, PetscReal val) {
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    mesh->seqnum = num;
+    mesh->seqval = val;
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshGetSequenceNumber(Mesh mesh, PetscInt *num, PetscReal *val) {
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    if (num)
+        *num = mesh->seqnum;
+    if (val)
+        *val = mesh->seqval;
+    PetscFunctionReturn(PETSC_SUCCESS);
+}

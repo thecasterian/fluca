@@ -4,6 +4,8 @@
 #include <petscdmda.h>
 #include <petscdmstag.h>
 
+extern PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer v);
+
 static PetscErrorCode MeshCartesianCreateCoordinate(Mesh mesh) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     MPI_Comm comm;
@@ -180,7 +182,7 @@ PetscErrorCode MeshDestroy_Cartesian(Mesh mesh) {
 PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     PetscMPIInt rank;
-    PetscBool isascii;
+    PetscBool isascii, iscgns;
 
     // TODO: support other viewers
 
@@ -188,6 +190,7 @@ PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
 
     PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)mesh), &rank));
     PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERASCII, &isascii));
+    PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
 
     if (isascii) {
         PetscViewerFormat format;
@@ -258,6 +261,9 @@ PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
             PetscCall(PetscViewerASCIIPopSynchronized(v));
             PetscFunctionReturn(PETSC_SUCCESS);
         }
+    } else if (iscgns) {
+        PetscCall(MeshView_CartesianCGNS(mesh, v));
+        PetscFunctionReturn(PETSC_SUCCESS);
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);

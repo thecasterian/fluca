@@ -20,6 +20,8 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh) {
     m->ctx = NULL;
     m->ctxdestroy = NULL;
     m->data = NULL;
+    m->seqnum = 0;
+    m->seqval = 0.0;
     m->state = MESH_STATE_INITIAL;
     m->setupcalled = PETSC_FALSE;
 
@@ -140,6 +142,9 @@ PetscErrorCode MeshDestroy(Mesh *mesh) {
         *mesh = NULL;
         PetscFunctionReturn(PETSC_SUCCESS);
     }
+
+    if ((*mesh)->ctx && (*mesh)->ctxdestroy)
+        PetscCall((*(*mesh)->ctxdestroy)(&(*mesh)->ctx));
 
     PetscTryTypeMethod((*mesh), destroy);
     PetscCall(PetscHeaderDestroy(mesh));
