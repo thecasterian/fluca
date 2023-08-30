@@ -34,14 +34,34 @@ FLUCA_EXTERN PetscErrorCode MeshDestroy(Mesh *);
 FLUCA_EXTERN PetscFunctionList MeshList;
 FLUCA_EXTERN PetscErrorCode MeshRegister(const char *, PetscErrorCode (*)(Mesh));
 
+typedef enum {
+    MESHCARTESIAN_COORDINATE_LEFT,
+    MESHCARTESIAN_COORDINATE_RIGHT,
+    MESHCARTESIAN_COORDINATE_BOTTOM,
+    MESHCARTESIAN_COORDINATE_TOP,
+    MESHCARTESIAN_COORDINATE_BACK,
+    MESHCARTESIAN_COORDINATE_FRONT,
+} MeshCartesianCoordinateStencilLocation;
+FLUCA_EXTERN const char *MeshCartesianCoordinateStencilLocations[];
+
 FLUCA_EXTERN PetscErrorCode MeshCartesianSetSizes(Mesh, PetscInt, PetscInt, PetscInt);
 FLUCA_EXTERN PetscErrorCode MeshCartesianSetNumProcs(Mesh, PetscInt, PetscInt, PetscInt);
 FLUCA_EXTERN PetscErrorCode MeshCartesianSetBoundaryType(Mesh, MeshBoundaryType, MeshBoundaryType, MeshBoundaryType);
 FLUCA_EXTERN PetscErrorCode MeshCartesianSetOwnershipRanges(Mesh, const PetscInt *, const PetscInt *, const PetscInt *);
 FLUCA_EXTERN PetscErrorCode MeshCartesianSetUniformCoordinates(Mesh, PetscReal, PetscReal, PetscReal, PetscReal,
                                                                PetscReal, PetscReal);
+FLUCA_EXTERN PetscErrorCode MeshCartesianCoordinateVecGetArray(Mesh, PetscReal ***, PetscReal ***, PetscReal ***);
+FLUCA_EXTERN PetscErrorCode MeshCartesianCoordinateVecGetArrayRead(Mesh, const PetscReal ***, const PetscReal ***,
+                                                                   const PetscReal ***);
+FLUCA_EXTERN PetscErrorCode MeshCartesianCoordinateGetLocationSlot(Mesh, MeshCartesianCoordinateStencilLocation,
+                                                                   PetscInt *);
+FLUCA_EXTERN PetscErrorCode MeshCartesianCoordinateVecRestoreArray(Mesh, PetscReal ***, PetscReal ***, PetscReal ***);
+FLUCA_EXTERN PetscErrorCode MeshCartesianCoordinateVecRestoreArrayRead(Mesh, const PetscReal ***, const PetscReal ***,
+                                                                       const PetscReal ***);
 FLUCA_EXTERN PetscErrorCode MeshCartesianGetInfo(Mesh, PetscInt *, PetscInt *, PetscInt *, PetscInt *, PetscInt *,
                                                  PetscInt *, PetscInt *, MeshBoundaryType *, MeshBoundaryType *,
                                                  MeshBoundaryType *);
+FLUCA_EXTERN PetscErrorCode MeshCartesianGetCorners(Mesh, PetscInt *, PetscInt *, PetscInt *, PetscInt *, PetscInt *,
+                                                    PetscInt *);
 
 #endif

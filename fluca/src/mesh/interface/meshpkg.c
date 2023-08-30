@@ -2,7 +2,7 @@
 
 static PetscBool MeshPackageInitialized = PETSC_FALSE;
 
-const char *MeshBoundaryTypes[] = {"NOT_PERIODIC", "PERIODIC", "MeshBoundaryType", "MESH_BOUNDARY_", NULL};
+const char *MeshBoundaryTypes[] = {"NOT_PERIODIC", "PERIODIC", "MeshBoundaryType", "", NULL};
 
 PetscErrorCode MeshInitializePackage(void) {
     char log_list[256];

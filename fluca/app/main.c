@@ -7,7 +7,6 @@ const char *help = "mesh test\n";
 
 int main(int argc, char **argv) {
     Mesh mesh;
-    PetscViewer viewer;
 
     PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
@@ -19,14 +18,33 @@ int main(int argc, char **argv) {
         MeshCartesianSetBoundaryType(mesh, MESH_BOUNDARY_PERIODIC, MESH_BOUNDARY_PERIODIC, MESH_BOUNDARY_NOT_PERIODIC));
     PetscCall(MeshSetUp(mesh));
 
-    PetscCall(MeshCartesianSetUniformCoordinates(mesh, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0));
+    {
+        PetscInt M, N, xs, ys, xm, ym;
+        PetscReal **arrcx, **arrcy;
+        PetscInt i, j, ileft, ibottom;
 
-    PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)mesh), &viewer));
-    PetscCall(PetscViewerSetType(viewer, PETSCVIEWERCGNS));
-    PetscCall(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
-    PetscCall(PetscViewerFileSetName(viewer, "mesh-%d.cgns"));
-    PetscCall(MeshView(mesh, viewer));
-    PetscCall(PetscViewerDestroy(&viewer));
+        PetscCall(MeshCartesianGetInfo(mesh, NULL, &M, &N, NULL, NULL, NULL, NULL, NULL, NULL, NULL));
+        PetscCall(MeshCartesianGetCorners(mesh, &xs, &ys, NULL, &xm, &ym, NULL));
+        PetscCall(MeshCartesianCoordinateVecGetArray(mesh, &arrcx, &arrcy, NULL));
+        PetscCall(MeshCartesianCoordinateGetLocationSlot(mesh, MESHCARTESIAN_COORDINATE_LEFT, &ileft));
+        PetscCall(MeshCartesianCoordinateGetLocationSlot(mesh, MESHCARTESIAN_COORDINATE_BOTTOM, &ibottom));
+        for (i = xs; i <= xs + xm; i++)
+            arrcx[i][ileft] = 0.5 - 0.5 * cos(M_PI * i / M);
+        for (j = ys; j <= ys + ym; j++)
+            arrcy[j][ibottom] = 0.5 - 0.5 * cos(M_PI * j / N);
+        PetscCall(MeshCartesianCoordinateVecRestoreArray(mesh, &arrcx, &arrcy, NULL));
+    }
+
+    {
+        PetscViewer viewer;
+
+        PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)mesh), &viewer));
+        PetscCall(PetscViewerSetType(viewer, PETSCVIEWERCGNS));
+        PetscCall(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
+        PetscCall(PetscViewerFileSetName(viewer, "mesh-%d.cgns"));
+        PetscCall(MeshView(mesh, viewer));
+        PetscCall(PetscViewerDestroy(&viewer));
+    }
 
     PetscCall(MeshDestroy(&mesh));
 
