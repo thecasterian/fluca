@@ -70,6 +70,46 @@ static PetscErrorCode MeshCartesianCreateCoordinate(Mesh mesh) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode MeshSetFromOptions_Cartesian(Mesh mesh, PetscOptionItems *PetscOptionsObject) {
+    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+
+    PetscFunctionBegin;
+
+    PetscOptionsHeadBegin(PetscOptionsObject, "MeshCartesian Options");
+
+    PetscCall(PetscOptionsBoundedInt("-cartesian_grid_x", "Number of grid elements in x direction",
+                                     "MeshCartesianSetSizes", cart->N[0], &cart->N[0], NULL, 1));
+    PetscCall(PetscOptionsBoundedInt("-cartesian_grid_y", "Number of grid elements in y direction",
+                                     "MeshCartesianSetSizes", cart->N[1], &cart->N[1], NULL, 1));
+    if (mesh->dim > 2)
+        PetscCall(PetscOptionsBoundedInt("-cartesian_grid_z", "Number of grid elements in z direction",
+                                         "MeshCartesianSetSizes", cart->N[2], &cart->N[2], NULL, 1));
+
+    PetscCall(PetscOptionsBoundedInt("-cartesian_processors_x", "Number of processors in x direction",
+                                     "MeshCartesianSetNumProcs", cart->nRanks[0], &cart->nRanks[0], NULL,
+                                     PETSC_DECIDE));
+    PetscCall(PetscOptionsBoundedInt("-cartesian_processors_y", "Number of processors in y direction",
+                                     "MeshCartesianSetNumProcs", cart->nRanks[1], &cart->nRanks[1], NULL,
+                                     PETSC_DECIDE));
+    if (mesh->dim > 2)
+        PetscCall(PetscOptionsBoundedInt("-cartesian_processors_z", "Number of processors in z direction",
+                                         "MeshCartesianSetNumProcs", cart->nRanks[2], &cart->nRanks[2], NULL,
+                                         PETSC_DECIDE));
+
+    PetscCall(PetscOptionsEnum("-cartesian_boundary_x", "Boundary type in x direction", "MeshCartesianSetBoundaryType",
+                               MeshBoundaryTypes, (PetscEnum)cart->bndTypes[0], (PetscEnum *)&cart->bndTypes[0], NULL));
+    PetscCall(PetscOptionsEnum("-cartesian_boundary_y", "Boundary type in y direction", "MeshCartesianSetBoundaryType",
+                               MeshBoundaryTypes, (PetscEnum)cart->bndTypes[1], (PetscEnum *)&cart->bndTypes[1], NULL));
+    if (mesh->dim > 2)
+        PetscCall(PetscOptionsEnum("-cartesian_boundary_z", "Boundary type in z direction",
+                                   "MeshCartesianSetBoundaryType", MeshBoundaryTypes, (PetscEnum)cart->bndTypes[2],
+                                   (PetscEnum *)&cart->bndTypes[2], NULL));
+
+    PetscOptionsHeadEnd();
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     MPI_Comm comm;
@@ -297,6 +337,7 @@ PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
         cart->cf[d] = NULL;
     }
 
+    mesh->ops->setfromoptions = MeshSetFromOptions_Cartesian;
     mesh->ops->setup = MeshSetUp_Cartesian;
     mesh->ops->destroy = MeshDestroy_Cartesian;
     mesh->ops->view = MeshView_Cartesian;

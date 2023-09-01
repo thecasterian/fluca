@@ -6,17 +6,23 @@
 const char *help = "mesh test\n";
 
 int main(int argc, char **argv) {
+    PetscLogStage stage;
     Mesh mesh;
 
     PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
-    PetscCall(MeshCreate(PETSC_COMM_WORLD, &mesh));
-    PetscCall(MeshSetType(mesh, MESHCARTESIAN));
-    PetscCall(MeshSetDim(mesh, 2));
-    PetscCall(MeshCartesianSetSizes(mesh, 8, 8, 1));
-    PetscCall(
-        MeshCartesianSetBoundaryType(mesh, MESH_BOUNDARY_PERIODIC, MESH_BOUNDARY_PERIODIC, MESH_BOUNDARY_NOT_PERIODIC));
-    PetscCall(MeshSetUp(mesh));
+    PetscCall(PetscLogStageRegister("Assemble mesh", &stage));
+    PetscCall(PetscLogStagePush(stage));
+    {
+        PetscCall(MeshCreate(PETSC_COMM_WORLD, &mesh));
+        PetscCall(MeshSetType(mesh, MESHCARTESIAN));
+        PetscCall(MeshSetDim(mesh, 2));
+        PetscCall(MeshCartesianSetSizes(mesh, 8, 8, 1));
+        PetscCall(MeshCartesianSetBoundaryType(mesh, MESH_BOUNDARY_NOT_PERIODIC, MESH_BOUNDARY_NOT_PERIODIC,
+                                               MESH_BOUNDARY_NOT_PERIODIC));
+        PetscCall(MeshSetFromOptions(mesh));
+        PetscCall(MeshSetUp(mesh));
+    }
 
     {
         PetscInt M, N, xs, ys, xm, ym;
@@ -34,7 +40,10 @@ int main(int argc, char **argv) {
             arrcy[j][ibottom] = 0.5 - 0.5 * cos(M_PI * j / N);
         PetscCall(MeshCartesianCoordinateVecRestoreArray(mesh, &arrcx, &arrcy, NULL));
     }
+    PetscCall(PetscLogStagePop());
 
+    PetscCall(PetscLogStageRegister("View mesh", &stage));
+    PetscCall(PetscLogStagePush(stage));
     {
         PetscViewer viewer;
 
@@ -45,6 +54,7 @@ int main(int argc, char **argv) {
         PetscCall(MeshView(mesh, viewer));
         PetscCall(PetscViewerDestroy(&viewer));
     }
+    PetscCall(PetscLogStagePop());
 
     PetscCall(MeshDestroy(&mesh));
 

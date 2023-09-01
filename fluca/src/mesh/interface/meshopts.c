@@ -37,3 +37,33 @@ PetscErrorCode MeshGetSequenceNumber(Mesh mesh, PetscInt *num, PetscReal *val) {
         *val = mesh->seqval;
     PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode MeshSetFromOptions(Mesh mesh) {
+    char type[256];
+    PetscBool flg;
+
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    PetscCall(MeshRegisterAll());
+
+    PetscObjectOptionsBegin((PetscObject)mesh);
+
+    PetscCall(
+        PetscOptionsFList("-mesh_type", "Mesh type", "MeshSetType", MeshList,
+                          (char *)(((PetscObject)mesh)->type_name ? ((PetscObject)mesh)->type_name : MESHCARTESIAN),
+                          type, sizeof(type), &flg));
+    if (flg)
+        PetscCall(MeshSetType(mesh, type));
+    else if (!((PetscObject)mesh)->type_name)
+        PetscCall(MeshSetType(mesh, MESHCARTESIAN));
+
+    PetscCall(
+        PetscOptionsBoundedInt("-mesh_dim", "Mesh dimension", "MeshSetDim", mesh->dim, &mesh->dim, NULL, MESH_MIN_DIM));
+
+    PetscTryTypeMethod(mesh, setfromoptions, PetscOptionsObject);
+
+    PetscOptionsEnd();
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
