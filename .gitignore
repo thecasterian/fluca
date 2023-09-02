@@ -27,6 +27,13 @@
 *.lib
 
 # Executables
+build/
 *.exe
 *.out
 *.app
+
+# Configurations
+.vscode/
+
+# Outputs
+*.cgns
