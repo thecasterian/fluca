@@ -1,4 +1,5 @@
 #include <flucamesh.h>
+#include <flucasol.h>
 #include <flucasys.h>
 #include <math.h>
 #include <petscviewer.h>
@@ -6,13 +7,10 @@
 const char *help = "mesh test\n";
 
 int main(int argc, char **argv) {
-    PetscLogStage stage;
     Mesh mesh;
 
     PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
-    PetscCall(PetscLogStageRegister("Assemble mesh", &stage));
-    PetscCall(PetscLogStagePush(stage));
     {
         PetscCall(MeshCreate(PETSC_COMM_WORLD, &mesh));
         PetscCall(MeshSetType(mesh, MESHCARTESIAN));
@@ -40,10 +38,7 @@ int main(int argc, char **argv) {
             arrcy[j][ibottom] = 0.5 - 0.5 * cos(M_PI * j / N);
         PetscCall(MeshCartesianCoordinateVecRestoreArray(mesh, &arrcx, &arrcy, NULL));
     }
-    PetscCall(PetscLogStagePop());
 
-    PetscCall(PetscLogStageRegister("View mesh", &stage));
-    PetscCall(PetscLogStagePush(stage));
     {
         PetscViewer viewer;
 
@@ -54,7 +49,6 @@ int main(int argc, char **argv) {
         PetscCall(MeshView(mesh, viewer));
         PetscCall(PetscViewerDestroy(&viewer));
     }
-    PetscCall(PetscLogStagePop());
 
     PetscCall(MeshDestroy(&mesh));
 

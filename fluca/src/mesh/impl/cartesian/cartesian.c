@@ -312,6 +312,22 @@ PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode MeshGetDM_Cartesian(Mesh mesh, DM *dm) {
+    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+
+    PetscFunctionBegin;
+    *dm = cart->dm;
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshGetFaceDM_Cartesian(Mesh mesh, DM *dm) {
+    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+
+    PetscFunctionBegin;
+    *dm = cart->fdm;
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
     Mesh_Cartesian *cart;
     PetscInt d;
@@ -350,7 +366,7 @@ PetscErrorCode MeshCartesianSetSizes(Mesh mesh, PetscInt M, PetscInt N, PetscInt
 
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-    PetscCheck(!mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
+    PetscCheck(mesh->state < MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "This function must be called before MeshSetUp()");
     cart->N[0] = M;
     cart->N[1] = N;
@@ -363,7 +379,7 @@ PetscErrorCode MeshCartesianSetNumProcs(Mesh mesh, PetscInt m, PetscInt n, Petsc
 
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-    PetscCheck(!mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
+    PetscCheck(mesh->state < MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "This function must be called before MeshSetUp()");
     PetscCheck(cart->nRanks[0] != m && cart->l[0], PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "Cannot set number of procs after setting ownership ranges, or reset ownership ranges");
@@ -383,7 +399,7 @@ PetscErrorCode MeshCartesianSetBoundaryType(Mesh mesh, MeshBoundaryType bndx, Me
 
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-    PetscCheck(!mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
+    PetscCheck(mesh->state < MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "This function must be called before MeshSetUp()");
     cart->bndTypes[0] = bndx;
     cart->bndTypes[1] = bndy;
@@ -399,7 +415,7 @@ PetscErrorCode MeshCartesianSetOwnershipRanges(Mesh mesh, const PetscInt *lx, co
     PetscFunctionBegin;
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-    PetscCheck(!mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
+    PetscCheck(mesh->state < MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "This function must be called before MeshSetUp()");
 
     for (d = 0; d < mesh->dim; d++) {
@@ -426,7 +442,7 @@ PetscErrorCode MeshCartesianSetUniformCoordinates(Mesh mesh, PetscReal xmin, Pet
     PetscFunctionBegin;
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-    PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
+    PetscCheck(mesh->state >= MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "This function must be called after MeshSetUp()");
 
     for (d = 0; d < mesh->dim; d++) {
