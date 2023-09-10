@@ -1,5 +1,7 @@
 #include <impl/solimpl.h>
 
+extern PetscErrorCode SolView_CGNSCartesian(Sol, PetscViewer);
+
 PetscClassId SOL_CLASSID = 0;
 
 PetscFunctionList SolList = NULL;
@@ -91,6 +93,8 @@ PetscErrorCode SolSetMesh(Sol sol, Mesh mesh) {
         PetscCall(DMCreateLocalVector(dm, &sol->w));
     PetscCall(DMCreateLocalVector(dm, &sol->p));
 
+    PetscCall(SolViewFromOptions(sol, NULL, "-sol_view"));
+
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -101,9 +105,30 @@ PetscErrorCode SolGetMesh(Sol sol, Mesh *mesh) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode SolGetVelocity(Sol sol, Vec *u, Vec *v, Vec *w) {
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
+    if (u)
+        *u = sol->u;
+    if (v)
+        *v = sol->v;
+    if (w)
+        *w = sol->w;
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode SolGetPressure(Sol sol, Vec *p) {
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
+    if (p)
+        *p = sol->p;
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode SolView(Sol sol, PetscViewer v) {
     PetscViewerFormat format;
     PetscMPIInt size;
+    PetscBool iscgns, iscart;
 
     PetscFunctionBegin;
 
@@ -117,6 +142,13 @@ PetscErrorCode SolView(Sol sol, PetscViewer v) {
     PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)sol), &size));
     if (format == PETSC_VIEWER_LOAD_BALANCE && size == 1)
         PetscFunctionReturn(PETSC_SUCCESS);
+
+    PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
+    PetscCall(PetscObjectTypeCompare((PetscObject)sol->mesh, MESHCARTESIAN, &iscart));
+    if (iscgns) {
+        if (iscart)
+            PetscCall(SolView_CGNSCartesian(sol, v));
+    }
 
     PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)sol, v));
     PetscTryTypeMethod(sol, view, v);

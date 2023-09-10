@@ -1,4 +1,5 @@
 #include <flucamap.h>
+#include <impl/cgnsviewerinfo.h>
 
 static PetscBool FlucaSysPackageInitialized = PETSC_FALSE;
 

@@ -219,6 +219,8 @@ PetscErrorCode MeshDestroy_Cartesian(Mesh mesh) {
         PetscCall(VecDestroy(&cart->cf[d]));
     }
 
+    PetscCall(PetscFree(mesh->data));
+
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -356,6 +358,8 @@ PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
     mesh->ops->setfromoptions = MeshSetFromOptions_Cartesian;
     mesh->ops->setup = MeshSetUp_Cartesian;
     mesh->ops->destroy = MeshDestroy_Cartesian;
+    mesh->ops->getdm = MeshGetDM_Cartesian;
+    mesh->ops->getfacedm = MeshGetFaceDM_Cartesian;
     mesh->ops->view = MeshView_Cartesian;
 
     PetscFunctionReturn(PETSC_SUCCESS);

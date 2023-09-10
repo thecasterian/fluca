@@ -4,7 +4,6 @@
 #include <flucamesh.h>
 #include <flucasol.h>
 #include <impl/flucaimpl.h>
-#include <petscvec.h>
 
 FLUCA_EXTERN PetscBool SolRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode SolRegisterAll(void);
@@ -20,14 +19,10 @@ struct _SolOps {
 struct _p_Sol {
     PETSCHEADER(struct _SolOps);
 
-    /* Parameters ----------------------------------------------------------- */
-
     /* Data ----------------------------------------------------------------- */
     Mesh mesh;
     Vec u, v, w, p;
     void *data; /* implementation-specific data */
-
-    /* Status --------------------------------------------------------------- */
 };
 
 #endif

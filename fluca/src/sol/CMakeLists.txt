@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 add_library(fluca_sol SHARED
     impl/fsm/fsm.c
     interface/solbasic.c
+    interface/solcgns.c
     interface/solpkg.c
     interface/solreg.c
 )

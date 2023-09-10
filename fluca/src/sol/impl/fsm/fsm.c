@@ -81,6 +81,8 @@ PetscErrorCode SolDestroy_FSM(Sol sol) {
     PetscCall(VecDestroy(&fsm->v_tilde));
     PetscCall(VecDestroy(&fsm->w_tilde));
 
+    PetscCall(PetscFree(sol->data));
+
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 

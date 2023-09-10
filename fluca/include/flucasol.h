@@ -3,6 +3,7 @@
 
 #include <flucameshtypes.h>
 #include <flucasys.h>
+#include <petscvec.h>
 
 typedef struct _p_Sol *Sol;
 
@@ -19,6 +20,8 @@ FLUCA_EXTERN PetscErrorCode SolSetType(Sol, SolType);
 FLUCA_EXTERN PetscErrorCode SolGetType(Sol, SolType *);
 FLUCA_EXTERN PetscErrorCode SolSetMesh(Sol, Mesh);
 FLUCA_EXTERN PetscErrorCode SolGetMesh(Sol, Mesh *);
+FLUCA_EXTERN PetscErrorCode SolGetVelocity(Sol, Vec *, Vec *, Vec *);
+FLUCA_EXTERN PetscErrorCode SolGetPressure(Sol, Vec *);
 FLUCA_EXTERN PetscErrorCode SolView(Sol, PetscViewer);
 FLUCA_EXTERN PetscErrorCode SolViewFromOptions(Sol, PetscObject, const char *);
 FLUCA_EXTERN PetscErrorCode SolDestroy(Sol *);
