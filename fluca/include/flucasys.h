@@ -23,4 +23,7 @@ FLUCA_EXTERN PetscErrorCode FlucaFinalize(void);
 FLUCA_EXTERN PetscErrorCode FlucaInitialized(PetscBool *);
 FLUCA_EXTERN PetscErrorCode FlucaFinalized(PetscBool *);
 
+FLUCA_EXTERN PetscErrorCode FlucaSysInitializePackage(void);
+FLUCA_EXTERN PetscErrorCode FlucaSysFinalizePackage(void);
+
 #endif
