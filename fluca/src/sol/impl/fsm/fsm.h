@@ -5,16 +5,15 @@
 #include <petscvec.h>
 
 typedef struct {
+    Vec v_star[3];
+    Vec v_tilde[3];
+    Vec N[3];
+    Vec N_prev[3];
+    Vec fv;
+    Vec fv_star;
     Vec p_half;
-    Vec UVW;
-    Vec u_star, v_star, w_star;
-    Vec UVW_star;
     Vec p_prime;
-    Vec Nu, Nv, Nw;
     Vec p_half_prev;
-    Vec Nu_prev, Nv_prev, Nw_prev;
-
-    Vec u_tilde, v_tilde, w_tilde;
 } Sol_FSM;
 
 #endif

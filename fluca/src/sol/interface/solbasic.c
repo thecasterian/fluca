@@ -64,8 +64,8 @@ PetscErrorCode SolGetType(Sol sol, SolType *type) {
 }
 
 PetscErrorCode SolSetMesh(Sol sol, Mesh mesh) {
-    PetscInt dim;
     DM dm;
+    PetscInt dim, d;
 
     PetscFunctionBegin;
 
@@ -76,21 +76,18 @@ PetscErrorCode SolSetMesh(Sol sol, Mesh mesh) {
         PetscFunctionReturn(PETSC_SUCCESS);
 
     PetscCall(MeshDestroy(&sol->mesh));
-    PetscCall(VecDestroy(&sol->u));
-    PetscCall(VecDestroy(&sol->v));
-    PetscCall(VecDestroy(&sol->w));
+    for (d = 0; d < 3; d++)
+        PetscCall(VecDestroy(&sol->v[d]));
     PetscCall(VecDestroy(&sol->p));
 
     sol->mesh = mesh;
     PetscCall(PetscObjectReference((PetscObject)mesh));
 
-    PetscCall(MeshGetDim(mesh, &dim));
     PetscCall(MeshGetDM(mesh, &dm));
+    PetscCall(MeshGetDim(mesh, &dim));
 
-    PetscCall(DMCreateLocalVector(dm, &sol->u));
-    PetscCall(DMCreateLocalVector(dm, &sol->v));
-    if (dim > 2)
-        PetscCall(DMCreateLocalVector(dm, &sol->w));
+    for (d = 0; d < dim; d++)
+        PetscCall(DMCreateLocalVector(dm, &sol->v[d]));
     PetscCall(DMCreateLocalVector(dm, &sol->p));
 
     PetscTryTypeMethod(sol, setmesh, mesh);
@@ -111,11 +108,11 @@ PetscErrorCode SolGetVelocity(Sol sol, Vec *u, Vec *v, Vec *w) {
     PetscFunctionBegin;
     PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
     if (u)
-        *u = sol->u;
+        *u = sol->v[0];
     if (v)
-        *v = sol->v;
+        *v = sol->v[1];
     if (w)
-        *w = sol->w;
+        *w = sol->v[2];
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -166,6 +163,8 @@ PetscErrorCode SolViewFromOptions(Sol sol, PetscObject obj, const char *name) {
 }
 
 PetscErrorCode SolDestroy(Sol *sol) {
+    PetscInt d;
+
     PetscFunctionBegin;
 
     if (!*sol)
@@ -178,9 +177,8 @@ PetscErrorCode SolDestroy(Sol *sol) {
     }
 
     PetscCall(MeshDestroy(&(*sol)->mesh));
-    PetscCall(VecDestroy(&(*sol)->u));
-    PetscCall(VecDestroy(&(*sol)->v));
-    PetscCall(VecDestroy(&(*sol)->w));
+    for (d = 0; d < 3; d++)
+        PetscCall(VecDestroy(&(*sol)->v[d]));
     PetscCall(VecDestroy(&(*sol)->p));
 
     PetscTryTypeMethod((*sol), destroy);

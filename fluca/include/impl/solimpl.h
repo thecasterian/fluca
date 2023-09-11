@@ -21,7 +21,8 @@ struct _p_Sol {
 
     /* Data ----------------------------------------------------------------- */
     Mesh mesh;
-    Vec u, v, w, p;
+    Vec v[3];
+    Vec p;
     void *data; /* implementation-specific data */
 };
 

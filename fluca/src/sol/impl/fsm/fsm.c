@@ -5,83 +5,59 @@ extern PetscErrorCode SolView_FSMCGNSCartesian(Sol, PetscViewer);
 
 PetscErrorCode SolSetMesh_FSM(Sol sol, Mesh mesh) {
     Sol_FSM *fsm = (Sol_FSM *)sol->data;
-    PetscInt dim;
     DM dm, fdm;
+    PetscInt dim, d;
 
     PetscFunctionBegin;
 
+    for (d = 0; d < 3; d++) {
+        PetscCall(VecDestroy(&fsm->v_star[d]));
+        PetscCall(VecDestroy(&fsm->v_tilde[d]));
+        PetscCall(VecDestroy(&fsm->N[d]));
+        PetscCall(VecDestroy(&fsm->N_prev[d]));
+    }
+    PetscCall(VecDestroy(&fsm->fv));
+    PetscCall(VecDestroy(&fsm->fv_star));
     PetscCall(VecDestroy(&fsm->p_half));
-    PetscCall(VecDestroy(&fsm->UVW));
-    PetscCall(VecDestroy(&fsm->u_star));
-    PetscCall(VecDestroy(&fsm->v_star));
-    PetscCall(VecDestroy(&fsm->w_star));
-    PetscCall(VecDestroy(&fsm->UVW_star));
     PetscCall(VecDestroy(&fsm->p_prime));
-    PetscCall(VecDestroy(&fsm->Nu));
-    PetscCall(VecDestroy(&fsm->Nv));
-    PetscCall(VecDestroy(&fsm->Nw));
     PetscCall(VecDestroy(&fsm->p_half_prev));
-    PetscCall(VecDestroy(&fsm->Nu_prev));
-    PetscCall(VecDestroy(&fsm->Nv_prev));
-    PetscCall(VecDestroy(&fsm->Nw_prev));
 
-    PetscCall(VecDestroy(&fsm->u_tilde));
-    PetscCall(VecDestroy(&fsm->v_tilde));
-    PetscCall(VecDestroy(&fsm->w_tilde));
-
-    PetscCall(MeshGetDim(mesh, &dim));
     PetscCall(MeshGetDM(mesh, &dm));
     PetscCall(MeshGetFaceDM(mesh, &fdm));
+    PetscCall(MeshGetDim(mesh, &dim));
 
+    for (d = 0; d < dim; d++) {
+        PetscCall(DMCreateLocalVector(dm, &fsm->v_star[d]));
+        PetscCall(DMCreateLocalVector(dm, &fsm->v_tilde[d]));
+        PetscCall(DMCreateLocalVector(dm, &fsm->N[d]));
+        PetscCall(DMCreateLocalVector(dm, &fsm->N_prev[d]));
+    }
+    PetscCall(DMCreateLocalVector(fdm, &fsm->fv));
+    PetscCall(DMCreateLocalVector(fdm, &fsm->fv_star));
     PetscCall(DMCreateLocalVector(dm, &fsm->p_half));
-    PetscCall(DMCreateGlobalVector(fdm, &fsm->UVW));
-    PetscCall(VecDuplicate(fsm->p_half, &fsm->u_star));
-    PetscCall(VecDuplicate(fsm->p_half, &fsm->v_star));
-    if (dim > 2)
-        PetscCall(VecDuplicate(fsm->p_half, &fsm->w_star));
-    PetscCall(VecDuplicate(fsm->UVW, &fsm->UVW_star));
-    PetscCall(VecDuplicate(fsm->p_half, &fsm->p_prime));
-    PetscCall(VecDuplicate(fsm->p_half, &fsm->Nu));
-    PetscCall(VecDuplicate(fsm->p_half, &fsm->Nv));
-    if (dim > 2)
-        PetscCall(VecDuplicate(fsm->p_half, &fsm->Nw));
-    PetscCall(VecDuplicate(fsm->p_half, &fsm->p_half_prev));
-    PetscCall(VecDuplicate(fsm->p_half, &fsm->Nu_prev));
-    PetscCall(VecDuplicate(fsm->p_half, &fsm->Nv_prev));
-    if (dim > 2)
-        PetscCall(VecDuplicate(fsm->p_half, &fsm->Nw_prev));
-
-    PetscCall(VecDuplicate(fsm->p_half, &fsm->u_tilde));
-    PetscCall(VecDuplicate(fsm->p_half, &fsm->v_tilde));
-    if (dim > 2)
-        PetscCall(VecDuplicate(fsm->p_half, &fsm->w_tilde));
+    PetscCall(DMCreateLocalVector(dm, &fsm->p_prime));
+    PetscCall(DMCreateLocalVector(dm, &fsm->p_half_prev));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode SolDestroy_FSM(Sol sol) {
     Sol_FSM *fsm = (Sol_FSM *)sol->data;
+    PetscInt d;
 
     PetscFunctionBegin;
 
+    for (d = 0; d < 3; d++) {
+        PetscCall(VecDestroy(&fsm->v_star[d]));
+        PetscCall(VecDestroy(&fsm->v_tilde[d]));
+        PetscCall(VecDestroy(&fsm->N[d]));
+        PetscCall(VecDestroy(&fsm->N_prev[d]));
+    }
+    PetscCall(VecDestroy(&fsm->fv));
+    PetscCall(VecDestroy(&fsm->fv_star));
     PetscCall(VecDestroy(&fsm->p_half));
-    PetscCall(VecDestroy(&fsm->UVW));
-    PetscCall(VecDestroy(&fsm->u_star));
-    PetscCall(VecDestroy(&fsm->v_star));
-    PetscCall(VecDestroy(&fsm->w_star));
-    PetscCall(VecDestroy(&fsm->UVW_star));
     PetscCall(VecDestroy(&fsm->p_prime));
-    PetscCall(VecDestroy(&fsm->Nu));
-    PetscCall(VecDestroy(&fsm->Nv));
-    PetscCall(VecDestroy(&fsm->Nw));
     PetscCall(VecDestroy(&fsm->p_half_prev));
-    PetscCall(VecDestroy(&fsm->Nu_prev));
-    PetscCall(VecDestroy(&fsm->Nv_prev));
-    PetscCall(VecDestroy(&fsm->Nw_prev));
-
-    PetscCall(VecDestroy(&fsm->u_tilde));
-    PetscCall(VecDestroy(&fsm->v_tilde));
-    PetscCall(VecDestroy(&fsm->w_tilde));
 
     PetscCall(PetscFree(sol->data));
 
@@ -105,30 +81,24 @@ PetscErrorCode SolView_FSM(Sol sol, PetscViewer v) {
 
 PetscErrorCode SolCreate_FSM(Sol sol) {
     Sol_FSM *fsm;
+    PetscInt d;
 
     PetscFunctionBegin;
 
     PetscCall(PetscNew(&fsm));
     sol->data = (void *)fsm;
 
+    for (d = 0; d < 3; d++) {
+        fsm->v_star[d] = NULL;
+        fsm->v_tilde[d] = NULL;
+        fsm->N[d] = NULL;
+        fsm->N_prev[d] = NULL;
+    }
+    fsm->fv = NULL;
+    fsm->fv_star = NULL;
     fsm->p_half = NULL;
-    fsm->UVW = NULL;
-    fsm->u_star = NULL;
-    fsm->v_star = NULL;
-    fsm->w_star = NULL;
-    fsm->UVW_star = NULL;
     fsm->p_prime = NULL;
-    fsm->Nu = NULL;
-    fsm->Nv = NULL;
-    fsm->Nw = NULL;
     fsm->p_half_prev = NULL;
-    fsm->Nu_prev = NULL;
-    fsm->Nv_prev = NULL;
-    fsm->Nw_prev = NULL;
-
-    fsm->u_tilde = NULL;
-    fsm->v_tilde = NULL;
-    fsm->w_tilde = NULL;
 
     sol->ops->setmesh = SolSetMesh_FSM;
     sol->ops->destroy = SolDestroy_FSM;

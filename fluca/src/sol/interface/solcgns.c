@@ -54,17 +54,16 @@ PetscErrorCode ViewerCGNSWriteStructuredSolution_Private(DM da, Vec v, int file_
 
 PetscErrorCode SolView_CGNSCartesian(Sol sol, PetscViewer v) {
     PetscViewer_CGNS *cgns = (PetscViewer_CGNS *)v->data;
-    PetscInt dim;
     FlucaMap map;
     PetscContainer viewerinfo_container;
     ViewerCGNSInfo *viewerinfo;
     DM dm;
+    PetscInt dim, d;
+    const char *const velnames[3] = {"VelocityX", "VelocityY", "VelocityZ"};
 
     PetscFunctionBegin;
 
     PetscCall(MeshView(sol->mesh, v));
-
-    PetscCall(MeshGetDim(sol->mesh, &dim));
 
     PetscCall(PetscObjectQuery((PetscObject)v, "_Fluca_CGNSViewerMeshCartesianMap", (PetscObject *)&map));
     PetscCall(FlucaMapGetValue(map, (PetscObject)sol->mesh, (PetscObject *)&viewerinfo_container));
@@ -74,13 +73,10 @@ PetscErrorCode SolView_CGNSCartesian(Sol sol, PetscViewer v) {
                                &viewerinfo->sol));
 
     PetscCall(MeshGetDM(sol->mesh, &dm));
-    PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, sol->u, cgns->file_num, cgns->base, viewerinfo->zone,
-                                                        viewerinfo->sol, "VelocityX"));
-    PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, sol->v, cgns->file_num, cgns->base, viewerinfo->zone,
-                                                        viewerinfo->sol, "VelocityY"));
-    if (dim > 2)
-        PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, sol->w, cgns->file_num, cgns->base, viewerinfo->zone,
-                                                            viewerinfo->sol, "VelocityZ"));
+    PetscCall(MeshGetDim(sol->mesh, &dim));
+    for (d = 0; d < dim; d++)
+        PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, sol->v[d], cgns->file_num, cgns->base, viewerinfo->zone,
+                                                            viewerinfo->sol, velnames[d]));
     PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, sol->p, cgns->file_num, cgns->base, viewerinfo->zone,
                                                         viewerinfo->sol, "Pressure"));
 
