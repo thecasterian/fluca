@@ -1,12 +1,10 @@
 #include <flucamap.h>
-#include <impl/cgnsviewerinfo.h>
 #include <impl/solimpl.h>
-#include <pcgnslib.h>
+#include <impl/viewercgnsutils.h>
 #include <petsc/private/viewercgnsimpl.h>
-#include <petscdmda.h>
 
-static PetscErrorCode SolView_CGNSCartesian_WriteVec(DM dm, Vec v, int file_num, int base, int zone, int sol,
-                                                     const char *name) {
+PetscErrorCode ViewerCGNSWriteStructuredSolution_Private(DM da, Vec v, int file_num, int base, int zone, int sol,
+                                                         const char *name) {
     PetscInt dim, xs[3], xm[3], d, cnt, i, j, k;
     const PetscReal **arr2d, ***arr3d;
     cgsize_t rmin[3], rmax[3], rsize;
@@ -15,8 +13,8 @@ static PetscErrorCode SolView_CGNSCartesian_WriteVec(DM dm, Vec v, int file_num,
 
     PetscFunctionBegin;
 
-    PetscCall(DMGetDimension(dm, &dim));
-    PetscCall(DMDAGetCorners(dm, &xs[0], &xs[1], &xs[2], &xm[0], &xm[1], &xm[2]));
+    PetscCall(DMGetDimension(da, &dim));
+    PetscCall(DMDAGetCorners(da, &xs[0], &xs[1], &xs[2], &xm[0], &xm[1], &xm[2]));
 
     rsize = 1;
     for (d = 0; d < dim; d++) {
@@ -28,24 +26,24 @@ static PetscErrorCode SolView_CGNSCartesian_WriteVec(DM dm, Vec v, int file_num,
     PetscCall(PetscMalloc1(rsize, &arrraw));
     switch (dim) {
         case 2:
-            PetscCall(DMDAVecGetArrayRead(dm, v, &arr2d));
+            PetscCall(DMDAVecGetArrayRead(da, v, &arr2d));
             cnt = 0;
             for (j = rmin[1] - 1; j <= rmax[1] - 1; j++)
                 for (i = rmin[0] - 1; i <= rmax[0] - 1; i++)
                     arrraw[cnt++] = arr2d[j][i];
-            PetscCall(DMDAVecRestoreArrayRead(dm, v, &arr2d));
+            PetscCall(DMDAVecRestoreArrayRead(da, v, &arr2d));
             break;
         case 3:
-            PetscCall(DMDAVecGetArrayRead(dm, v, &arr3d));
+            PetscCall(DMDAVecGetArrayRead(da, v, &arr3d));
             cnt = 0;
             for (k = rmin[2] - 1; k <= rmax[2] - 1; k++)
                 for (j = rmin[1] - 1; j <= rmax[1] - 1; j++)
                     for (i = rmin[0] - 1; i <= rmax[0] - 1; i++)
                         arrraw[cnt++] = arr3d[k][j][i];
-            PetscCall(DMDAVecRestoreArrayRead(dm, v, &arr3d));
+            PetscCall(DMDAVecRestoreArrayRead(da, v, &arr3d));
             break;
         default:
-            SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
+            SETERRQ(PetscObjectComm((PetscObject)da), PETSC_ERR_SUP, "Unsupported mesh dimension");
     }
     PetscCallCGNS(cgp_field_write(file_num, base, zone, sol, CGNS_ENUMV(RealDouble), name, &field));
     PetscCallCGNS(cgp_field_write_data(file_num, base, zone, sol, field, rmin, rmax, arrraw));
@@ -59,7 +57,7 @@ PetscErrorCode SolView_CGNSCartesian(Sol sol, PetscViewer v) {
     PetscInt dim;
     FlucaMap map;
     PetscContainer viewerinfo_container;
-    CGNSViewerInfo *viewerinfo;
+    ViewerCGNSInfo *viewerinfo;
     DM dm;
 
     PetscFunctionBegin;
@@ -76,15 +74,15 @@ PetscErrorCode SolView_CGNSCartesian(Sol sol, PetscViewer v) {
                                &viewerinfo->sol));
 
     PetscCall(MeshGetDM(sol->mesh, &dm));
-    PetscCall(SolView_CGNSCartesian_WriteVec(dm, sol->u, cgns->file_num, cgns->base, viewerinfo->zone, viewerinfo->sol,
-                                             "VelocityX"));
-    PetscCall(SolView_CGNSCartesian_WriteVec(dm, sol->v, cgns->file_num, cgns->base, viewerinfo->zone, viewerinfo->sol,
-                                             "VelocityY"));
+    PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, sol->u, cgns->file_num, cgns->base, viewerinfo->zone,
+                                                        viewerinfo->sol, "VelocityX"));
+    PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, sol->v, cgns->file_num, cgns->base, viewerinfo->zone,
+                                                        viewerinfo->sol, "VelocityY"));
     if (dim > 2)
-        PetscCall(SolView_CGNSCartesian_WriteVec(dm, sol->w, cgns->file_num, cgns->base, viewerinfo->zone,
-                                                 viewerinfo->sol, "VelocityZ"));
-    PetscCall(SolView_CGNSCartesian_WriteVec(dm, sol->p, cgns->file_num, cgns->base, viewerinfo->zone, viewerinfo->sol,
-                                             "Pressure"));
+        PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, sol->w, cgns->file_num, cgns->base, viewerinfo->zone,
+                                                            viewerinfo->sol, "VelocityZ"));
+    PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, sol->p, cgns->file_num, cgns->base, viewerinfo->zone,
+                                                        viewerinfo->sol, "Pressure"));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }

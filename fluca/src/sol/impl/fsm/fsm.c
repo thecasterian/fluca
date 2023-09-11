@@ -1,6 +1,8 @@
 #include <impl/meshimpl.h>
 #include <sol/impl/fsm/fsm.h>
 
+extern PetscErrorCode SolView_FSMCGNSCartesian(Sol, PetscViewer);
+
 PetscErrorCode SolSetMesh_FSM(Sol sol, Mesh mesh) {
     Sol_FSM *fsm = (Sol_FSM *)sol->data;
     PetscInt dim;
@@ -18,7 +20,7 @@ PetscErrorCode SolSetMesh_FSM(Sol sol, Mesh mesh) {
     PetscCall(VecDestroy(&fsm->Nu));
     PetscCall(VecDestroy(&fsm->Nv));
     PetscCall(VecDestroy(&fsm->Nw));
-    PetscCall(VecDestroy(&fsm->p_prev));
+    PetscCall(VecDestroy(&fsm->p_half_prev));
     PetscCall(VecDestroy(&fsm->Nu_prev));
     PetscCall(VecDestroy(&fsm->Nv_prev));
     PetscCall(VecDestroy(&fsm->Nw_prev));
@@ -43,7 +45,7 @@ PetscErrorCode SolSetMesh_FSM(Sol sol, Mesh mesh) {
     PetscCall(VecDuplicate(fsm->p_half, &fsm->Nv));
     if (dim > 2)
         PetscCall(VecDuplicate(fsm->p_half, &fsm->Nw));
-    PetscCall(VecDuplicate(fsm->p_half, &fsm->p_prev));
+    PetscCall(VecDuplicate(fsm->p_half, &fsm->p_half_prev));
     PetscCall(VecDuplicate(fsm->p_half, &fsm->Nu_prev));
     PetscCall(VecDuplicate(fsm->p_half, &fsm->Nv_prev));
     if (dim > 2)
@@ -72,7 +74,7 @@ PetscErrorCode SolDestroy_FSM(Sol sol) {
     PetscCall(VecDestroy(&fsm->Nu));
     PetscCall(VecDestroy(&fsm->Nv));
     PetscCall(VecDestroy(&fsm->Nw));
-    PetscCall(VecDestroy(&fsm->p_prev));
+    PetscCall(VecDestroy(&fsm->p_half_prev));
     PetscCall(VecDestroy(&fsm->Nu_prev));
     PetscCall(VecDestroy(&fsm->Nv_prev));
     PetscCall(VecDestroy(&fsm->Nw_prev));
@@ -87,11 +89,16 @@ PetscErrorCode SolDestroy_FSM(Sol sol) {
 }
 
 PetscErrorCode SolView_FSM(Sol sol, PetscViewer v) {
-    Sol_FSM *fsm = (Sol_FSM *)sol->data;
+    PetscBool iscgns, iscart;
 
     PetscFunctionBegin;
 
-    // TODO: implement
+    PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
+    PetscCall(PetscObjectTypeCompare((PetscObject)sol->mesh, MESHCARTESIAN, &iscart));
+    if (iscgns) {
+        if (iscart)
+            PetscCall(SolView_FSMCGNSCartesian(sol, v));
+    }
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -114,7 +121,7 @@ PetscErrorCode SolCreate_FSM(Sol sol) {
     fsm->Nu = NULL;
     fsm->Nv = NULL;
     fsm->Nw = NULL;
-    fsm->p_prev = NULL;
+    fsm->p_half_prev = NULL;
     fsm->Nu_prev = NULL;
     fsm->Nv_prev = NULL;
     fsm->Nw_prev = NULL;

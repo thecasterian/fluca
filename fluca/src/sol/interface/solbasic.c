@@ -93,6 +93,8 @@ PetscErrorCode SolSetMesh(Sol sol, Mesh mesh) {
         PetscCall(DMCreateLocalVector(dm, &sol->w));
     PetscCall(DMCreateLocalVector(dm, &sol->p));
 
+    PetscTryTypeMethod(sol, setmesh, mesh);
+
     PetscCall(SolViewFromOptions(sol, NULL, "-sol_view"));
 
     PetscFunctionReturn(PETSC_SUCCESS);

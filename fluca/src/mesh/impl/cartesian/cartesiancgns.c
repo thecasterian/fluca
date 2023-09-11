@@ -1,5 +1,5 @@
 #include <flucamap.h>
-#include <impl/cgnsviewerinfo.h>
+#include <impl/viewercgnsutils.h>
 #include <impl/meshimpl.h>
 #include <mesh/impl/cartesian/cartesian.h>
 #include <pcgnslib.h>
@@ -12,7 +12,7 @@ PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer v) {
     PetscViewer_CGNS *cgns = (PetscViewer_CGNS *)v->data;
     FlucaMap map;
     PetscContainer viewerinfo_container;
-    CGNSViewerInfo *viewerinfo;
+    ViewerCGNSInfo *viewerinfo;
 
     PetscFunctionBegin;
 
@@ -38,6 +38,7 @@ PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer v) {
     PetscCall(PetscContainerSetPointer(viewerinfo_container, viewerinfo));
     PetscCall(PetscContainerSetUserDestroy(viewerinfo_container, PetscContainerUserDestroyDefault));
     PetscCall(FlucaMapInsert(map, (PetscObject)mesh, (PetscObject)viewerinfo_container));
+    PetscCall(PetscContainerDestroy(&viewerinfo_container));
 
     {
         cgsize_t size[9] = {0};
