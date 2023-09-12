@@ -1,7 +1,7 @@
 #if !defined(FLUCA_MESH_CARTESIAN_H)
 #define FLUCA_MESH_CARTESIAN_H
 
-#include <impl/meshimpl.h>
+#include <fluca/private/meshimpl.h>
 
 typedef struct {
     PetscInt N[MESH_MAX_DIM];                /* global number of elements */

@@ -1,8 +1,8 @@
 #if !defined(FLUCAMESHIMPL_H)
 #define FLUCAMESHIMPL_H
 
+#include <fluca/private/flucaimpl.h>
 #include <flucamesh.h>
-#include <impl/flucaimpl.h>
 #include <petscdm.h>
 
 #define MESH_MIN_DIM 2
@@ -18,6 +18,8 @@ struct _MeshOps {
     PetscErrorCode (*setfromoptions)(Mesh, PetscOptionItems *);
     PetscErrorCode (*setup)(Mesh);
     PetscErrorCode (*destroy)(Mesh);
+    PetscErrorCode (*getdm)(Mesh, DM *);
+    PetscErrorCode (*getfacedm)(Mesh, DM *);
     PetscErrorCode (*view)(Mesh, PetscViewer);
 };
 
@@ -32,10 +34,6 @@ struct _p_Mesh {
     /* Parameters ----------------------------------------------------------- */
     PetscInt dim; /* dimension */
 
-    /* User functions and contexts ------------------------------------------ */
-    void *ctx; /* user context */
-    PetscErrorCode (*ctxdestroy)(void **);
-
     /* Data ----------------------------------------------------------------- */
     void *data; /* implementation-specific data */
     PetscInt seqnum;
@@ -43,7 +41,6 @@ struct _p_Mesh {
 
     /* Status --------------------------------------------------------------- */
     MeshStateType state;
-    PetscBool setupcalled;
 };
 
 PetscErrorCode MeshBoundaryTypeToDMBoundaryType(MeshBoundaryType type, DMBoundaryType *dmtype);

@@ -1,4 +1,4 @@
-#include <impl/flucamapimpl.h>
+#include <fluca/private/flucamapimpl.h>
 
 #define FLUCA_MAP_INIT_BUCKET_SIZE 7
 #define FLUCA_MAP_LOAD_FACTOR 0.75
@@ -94,7 +94,11 @@ PetscErrorCode FlucaMapInsert(FlucaMap map, PetscObject key, PetscObject value) 
     PetscCall(PetscMalloc1(1, &kv));
     kv->key = key;
     kv->value = value;
-    PetscCall(map->hash(key, &kv->hash));
+    if (map->hash)
+        PetscCall(map->hash(key, &kv->hash));
+    else
+        kv->hash = (intptr_t)key;
+
     PetscCall(PetscObjectReference((PetscObject)key));
     PetscCall(PetscObjectReference((PetscObject)value));
 
@@ -134,10 +138,16 @@ PetscErrorCode FlucaMapRemove(FlucaMap map, PetscObject key) {
     PetscValidHeaderSpecific(map, FLUCA_MAP_CLASSID, 1);
     PetscValidHeader(key, 2);
 
-    PetscCall(map->hash(key, &hash));
+    if (map->hash)
+        PetscCall(map->hash(key, &hash));
+    else
+        hash = (intptr_t)key;
     index = hash % map->bucketsize;
     for (kv = map->buckets[index].front; kv; kv = kv->next) {
-        PetscCall(map->eq(kv->key, key, &eq));
+        if (map->eq)
+            PetscCall(map->eq(kv->key, key, &eq));
+        else
+            eq = kv->key == key;
         if (eq) {
             PetscCall(FlucaMapKVListRemove(&map->buckets[index], kv));
             PetscCall(PetscObjectDereference((PetscObject)kv->key));
@@ -161,13 +171,18 @@ PetscErrorCode FlucaMapGetValue(FlucaMap map, PetscObject key, PetscObject *valu
     PetscValidHeaderSpecific(map, FLUCA_MAP_CLASSID, 1);
     PetscValidHeader(key, 2);
 
-    PetscCall(map->hash(key, &hash));
+    if (map->hash)
+        PetscCall(map->hash(key, &hash));
+    else
+        hash = (intptr_t)key;
     index = hash % map->bucketsize;
     for (kv = map->buckets[index].front; kv; kv = kv->next) {
-        PetscCall(map->eq(kv->key, key, &eq));
+        if (map->eq)
+            PetscCall(map->eq(kv->key, key, &eq));
+        else
+            eq = kv->key == key;
         if (eq) {
             *value = kv->value;
-            PetscCall(PetscObjectReference((PetscObject)*value));
             PetscFunctionReturn(PETSC_SUCCESS);
         }
     }
@@ -183,6 +198,11 @@ PetscErrorCode FlucaMapDestroy(FlucaMap *map) {
     if (!*map)
         PetscFunctionReturn(PETSC_SUCCESS);
     PetscValidHeaderSpecific(*map, FLUCA_MAP_CLASSID, 1);
+
+    if (--((PetscObject)(*map))->refct > 0) {
+        *map = NULL;
+        PetscFunctionReturn(PETSC_SUCCESS);
+    }
 
     for (PetscInt i = 0; i < (*map)->bucketsize; i++) {
         struct _FlucaMapKV *curr, *next;

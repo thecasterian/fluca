@@ -1,4 +1,5 @@
 #include <flucamesh.h>
+#include <flucasol.h>
 #include <flucasys.h>
 #include <math.h>
 #include <petscviewer.h>
@@ -6,13 +7,11 @@
 const char *help = "mesh test\n";
 
 int main(int argc, char **argv) {
-    PetscLogStage stage;
     Mesh mesh;
+    Sol sol;
 
     PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
-    PetscCall(PetscLogStageRegister("Assemble mesh", &stage));
-    PetscCall(PetscLogStagePush(stage));
     {
         PetscCall(MeshCreate(PETSC_COMM_WORLD, &mesh));
         PetscCall(MeshSetType(mesh, MESHCARTESIAN));
@@ -40,10 +39,13 @@ int main(int argc, char **argv) {
             arrcy[j][ibottom] = 0.5 - 0.5 * cos(M_PI * j / N);
         PetscCall(MeshCartesianCoordinateVecRestoreArray(mesh, &arrcx, &arrcy, NULL));
     }
-    PetscCall(PetscLogStagePop());
 
-    PetscCall(PetscLogStageRegister("View mesh", &stage));
-    PetscCall(PetscLogStagePush(stage));
+    {
+        PetscCall(SolCreate(PETSC_COMM_WORLD, &sol));
+        PetscCall(SolSetType(sol, SOLFSM));
+        PetscCall(SolSetMesh(sol, mesh));
+    }
+
     {
         PetscViewer viewer;
 
@@ -51,12 +53,12 @@ int main(int argc, char **argv) {
         PetscCall(PetscViewerSetType(viewer, PETSCVIEWERCGNS));
         PetscCall(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
         PetscCall(PetscViewerFileSetName(viewer, "mesh-%d.cgns"));
-        PetscCall(MeshView(mesh, viewer));
+        PetscCall(SolView(sol, viewer));
         PetscCall(PetscViewerDestroy(&viewer));
     }
-    PetscCall(PetscLogStagePop());
 
     PetscCall(MeshDestroy(&mesh));
+    PetscCall(SolDestroy(&sol));
 
     PetscCall(FlucaFinalize());
 }

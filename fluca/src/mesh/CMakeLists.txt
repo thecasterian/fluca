@@ -11,7 +11,6 @@ add_library(fluca_mesh SHARED
 
 target_include_directories(fluca_mesh PUBLIC
     ${CMAKE_SOURCE_DIR}/fluca/include
-    ${CMAKE_SOURCE_DIR}/fluca/src
 )
 target_link_libraries(fluca_mesh PUBLIC
     fluca::sys

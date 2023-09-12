@@ -1,4 +1,6 @@
-#include <impl/meshimpl.h>
+#include <fluca/private/meshimpl.h>
+
+const char *MeshBoundaryTypes[] = {"NOT_PERIODIC", "PERIODIC", "MeshBoundaryType", "", NULL};
 
 PetscClassId MESH_CLASSID = 0;
 PetscLogEvent MESH_SetUp = 0;
@@ -17,13 +19,10 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh) {
     PetscCall(FlucaHeaderCreate(m, MESH_CLASSID, "Mesh", "Mesh", "Mesh", comm, MeshDestroy, MeshView));
 
     m->dim = -1;
-    m->ctx = NULL;
-    m->ctxdestroy = NULL;
     m->data = NULL;
     m->seqnum = 0;
     m->seqval = 0.0;
     m->state = MESH_STATE_INITIAL;
-    m->setupcalled = PETSC_FALSE;
 
     *mesh = m;
 
@@ -55,7 +54,6 @@ PetscErrorCode MeshSetType(Mesh mesh, MeshType type) {
     }
 
     mesh->state = MESH_STATE_INITIAL;
-    mesh->setupcalled = PETSC_FALSE;
     PetscCall(PetscObjectChangeTypeName((PetscObject)mesh, type));
     PetscCall((*impl_create)(mesh));
 
@@ -96,7 +94,6 @@ PetscErrorCode MeshSetUp(Mesh mesh) {
     PetscCall(MeshViewFromOptions(mesh, NULL, "-mesh_view"));
 
     mesh->state = MESH_STATE_SETUP;
-    mesh->setupcalled = PETSC_TRUE;
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -143,12 +140,29 @@ PetscErrorCode MeshDestroy(Mesh *mesh) {
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
-    if ((*mesh)->ctx && (*mesh)->ctxdestroy)
-        PetscCall((*(*mesh)->ctxdestroy)(&(*mesh)->ctx));
-
     PetscTryTypeMethod((*mesh), destroy);
     PetscCall(PetscHeaderDestroy(mesh));
 
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshGetDM(Mesh mesh, DM *dm) {
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    PetscValidPointer(dm, 2);
+    PetscCheck(mesh->state >= MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
+               "Mesh not setup");
+    PetscTryTypeMethod(mesh, getdm, dm);
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshGetFaceDM(Mesh mesh, DM *dm) {
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    PetscValidPointer(dm, 2);
+    PetscCheck(mesh->state >= MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
+               "Mesh not setup");
+    PetscTryTypeMethod(mesh, getfacedm, dm);
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
