@@ -1,4 +1,4 @@
-#include <impl/meshimpl.h>
+#include <fluca/private/meshimpl.h>
 
 PetscErrorCode MeshSetDim(Mesh mesh, PetscInt dim) {
     PetscFunctionBegin;

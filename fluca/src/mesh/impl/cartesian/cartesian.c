@@ -1,5 +1,5 @@
-#include <impl/meshimpl.h>
-#include <mesh/impl/cartesian/cartesian.h>
+#include <fluca/private/mesh_cartesian.h>
+#include <fluca/private/meshimpl.h>
 #include <petsc/private/petscimpl.h>
 #include <petscdmda.h>
 #include <petscdmstag.h>

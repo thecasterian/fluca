@@ -1,4 +1,4 @@
-#include <impl/solimpl.h>
+#include <fluca/private/solimpl.h>
 
 FLUCA_EXTERN PetscErrorCode SolCreate_FSM(Sol);
 

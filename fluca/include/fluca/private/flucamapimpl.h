@@ -2,7 +2,7 @@
 #define FLUCAMAPIMPL_H
 
 #include <flucamap.h>
-#include <impl/flucaimpl.h>
+#include <fluca/private/flucaimpl.h>
 
 struct _FlucaMapKV {
     PetscObject key, value;

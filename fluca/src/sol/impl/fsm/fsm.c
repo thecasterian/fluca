@@ -1,5 +1,5 @@
-#include <impl/meshimpl.h>
-#include <sol/impl/fsm/fsm.h>
+#include <fluca/private/meshimpl.h>
+#include <fluca/private/sol_fsm.h>
 
 extern PetscErrorCode SolView_FSMCGNSCartesian(Sol, PetscViewer);
 

@@ -1,6 +1,7 @@
 #if !defined(VIEWERCGNSUTILS_H)
 #define VIEWERCGNSUTILS_H
 
+#include <fluca/private/flucaimpl.h>
 #include <pcgnslib.h>
 #include <petscdmda.h>
 #include <petscvec.h>

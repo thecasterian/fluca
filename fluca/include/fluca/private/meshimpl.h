@@ -1,8 +1,8 @@
 #if !defined(FLUCAMESHIMPL_H)
 #define FLUCAMESHIMPL_H
 
+#include <fluca/private/flucaimpl.h>
 #include <flucamesh.h>
-#include <impl/flucaimpl.h>
 #include <petscdm.h>
 
 #define MESH_MIN_DIM 2

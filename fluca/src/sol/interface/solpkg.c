@@ -1,4 +1,4 @@
-#include <impl/solimpl.h>
+#include <fluca/private/solimpl.h>
 
 static PetscBool SolPackageInitialized = PETSC_FALSE;
 

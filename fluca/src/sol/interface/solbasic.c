@@ -1,4 +1,4 @@
-#include <impl/solimpl.h>
+#include <fluca/private/solimpl.h>
 
 extern PetscErrorCode SolView_CGNSCartesian(Sol, PetscViewer);
 

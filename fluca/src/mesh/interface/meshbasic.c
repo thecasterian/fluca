@@ -1,4 +1,4 @@
-#include <impl/meshimpl.h>
+#include <fluca/private/meshimpl.h>
 
 const char *MeshBoundaryTypes[] = {"NOT_PERIODIC", "PERIODIC", "MeshBoundaryType", "", NULL};
 

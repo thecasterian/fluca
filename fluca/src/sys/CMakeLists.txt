@@ -8,6 +8,5 @@ add_library(fluca_sys SHARED
 
 target_include_directories(fluca_sys PUBLIC
     ${CMAKE_SOURCE_DIR}/fluca/include
-    ${CMAKE_SOURCE_DIR}/fluca/src
 )
 add_library(fluca::sys ALIAS fluca_sys)

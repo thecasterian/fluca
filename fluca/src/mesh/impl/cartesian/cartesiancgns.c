@@ -1,7 +1,7 @@
+#include <fluca/private/mesh_cartesian.h>
+#include <fluca/private/meshimpl.h>
+#include <fluca/private/viewercgnsutils.h>
 #include <flucamap.h>
-#include <impl/viewercgnsutils.h>
-#include <impl/meshimpl.h>
-#include <mesh/impl/cartesian/cartesian.h>
 #include <pcgnslib.h>
 #include <petsc/private/petscimpl.h>
 #include <petsc/private/viewercgnsimpl.h>

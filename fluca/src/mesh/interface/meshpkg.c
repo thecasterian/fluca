@@ -1,4 +1,4 @@
-#include <impl/meshimpl.h>
+#include <fluca/private/meshimpl.h>
 
 static PetscBool MeshPackageInitialized = PETSC_FALSE;
 

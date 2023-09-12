@@ -1,7 +1,7 @@
 #if !defined(FLUCA_SOL_SINGLEZONE_H)
 #define FLUCA_SOL_SINGLEZONE_H
 
-#include <impl/solimpl.h>
+#include <fluca/private/solimpl.h>
 #include <petscvec.h>
 
 typedef struct {

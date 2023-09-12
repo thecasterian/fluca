@@ -1,4 +1,4 @@
-#include <impl/flucamapimpl.h>
+#include <fluca/private/flucamapimpl.h>
 
 #define FLUCA_MAP_INIT_BUCKET_SIZE 7
 #define FLUCA_MAP_LOAD_FACTOR 0.75

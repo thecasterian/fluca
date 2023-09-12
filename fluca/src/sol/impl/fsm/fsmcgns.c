@@ -1,7 +1,7 @@
+#include <fluca/private/sol_fsm.h>
+#include <fluca/private/viewercgnsutils.h>
 #include <flucamap.h>
-#include <impl/viewercgnsutils.h>
 #include <petsc/private/viewercgnsimpl.h>
-#include <sol/impl/fsm/fsm.h>
 
 PetscErrorCode SolView_FSMCGNSCartesian(Sol sol, PetscViewer v) {
     Sol_FSM *fsm = (Sol_FSM *)sol->data;

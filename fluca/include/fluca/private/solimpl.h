@@ -1,9 +1,9 @@
 #if !defined(FLUCASOLIMPL_H)
 #define FLUCASOLIMPL_H
 
+#include <fluca/private/flucaimpl.h>
 #include <flucamesh.h>
 #include <flucasol.h>
-#include <impl/flucaimpl.h>
 
 FLUCA_EXTERN PetscBool SolRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode SolRegisterAll(void);

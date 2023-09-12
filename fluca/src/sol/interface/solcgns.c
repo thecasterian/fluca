@@ -1,6 +1,6 @@
+#include <fluca/private/solimpl.h>
+#include <fluca/private/viewercgnsutils.h>
 #include <flucamap.h>
-#include <impl/solimpl.h>
-#include <impl/viewercgnsutils.h>
 #include <petsc/private/viewercgnsimpl.h>
 
 PetscErrorCode ViewerCGNSWriteStructuredSolution_Private(DM da, Vec v, int file_num, int base, int zone, int sol,
