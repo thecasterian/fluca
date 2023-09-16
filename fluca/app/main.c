@@ -1,4 +1,5 @@
 #include <flucamesh.h>
+#include <flucans.h>
 #include <flucasol.h>
 #include <flucasys.h>
 #include <math.h>
@@ -8,6 +9,7 @@ const char *help = "mesh test\n";
 
 int main(int argc, char **argv) {
     Mesh mesh;
+    NS ns;
     Sol sol;
 
     PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
@@ -39,9 +41,10 @@ int main(int argc, char **argv) {
     }
 
     {
-        PetscCall(SolCreate(PETSC_COMM_WORLD, &sol));
-        PetscCall(SolSetType(sol, SOLFSM));
-        PetscCall(SolSetMesh(sol, mesh));
+        PetscCall(NSCreate(PETSC_COMM_WORLD, &ns));
+        PetscCall(NSSetType(ns, NSFSM));
+        PetscCall(NSSetMesh(ns, mesh));
+        PetscCall(NSSetUp(ns));
     }
 
     {
@@ -50,8 +53,8 @@ int main(int argc, char **argv) {
         PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)mesh), &viewer));
         PetscCall(PetscViewerSetType(viewer, PETSCVIEWERCGNS));
         PetscCall(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
-        PetscCall(PetscViewerFileSetName(viewer, "mesh-%d.cgns"));
-        PetscCall(SolView(sol, viewer));
+        PetscCall(PetscViewerFileSetName(viewer, "fluca-%d.cgns"));
+        PetscCall(NSView(ns, viewer));
         PetscCall(PetscViewerDestroy(&viewer));
     }
 

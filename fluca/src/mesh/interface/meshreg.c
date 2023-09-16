@@ -12,5 +12,6 @@ PetscErrorCode MeshRegister(const char *type, PetscErrorCode (*function)(Mesh)) 
 PetscErrorCode MeshRegisterAll(void) {
     PetscFunctionBegin;
     PetscCall(MeshRegister(MESHCARTESIAN, MeshCreate_Cartesian));
+    MeshRegisterAllCalled = PETSC_TRUE;
     PetscFunctionReturn(PETSC_SUCCESS);
 }

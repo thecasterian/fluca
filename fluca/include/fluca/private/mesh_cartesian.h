@@ -1,5 +1,5 @@
-#if !defined(FLUCA_MESH_CARTESIAN_H)
-#define FLUCA_MESH_CARTESIAN_H
+#if !defined(FLUCA_PRIVATE_MESH_CARTESIAN_H)
+#define FLUCA_PRIVATE_MESH_CARTESIAN_H
 
 #include <fluca/private/meshimpl.h>
 

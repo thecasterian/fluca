@@ -1,5 +1,5 @@
-#if !defined(FLUCA_SOL_SINGLEZONE_H)
-#define FLUCA_SOL_SINGLEZONE_H
+#if !defined(FLUCA_PRIVATE_SOL_FSM_H)
+#define FLUCA_PRIVATE_SOL_FSM_H
 
 #include <fluca/private/solimpl.h>
 #include <petscvec.h>

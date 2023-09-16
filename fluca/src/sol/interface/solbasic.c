@@ -71,6 +71,7 @@ PetscErrorCode SolSetMesh(Sol sol, Mesh mesh) {
 
     PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 2);
+    PetscCheckSameComm(sol, 1, mesh, 2);
 
     if (sol->mesh == mesh)
         PetscFunctionReturn(PETSC_SUCCESS);
