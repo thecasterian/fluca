@@ -14,10 +14,8 @@ typedef struct {
     DM dm;  /* DMDA for element-centered variables */
     DM fdm; /* DMStag for face-centered variables */
 
-    DM cdm;               /* DMProduct of DMDAs for element coordinates */
-    DM cfdm;              /* DMProduct of DMStags for face coordinates */
-    Vec c[MESH_MAX_DIM];  /* element coordinates */
-    Vec cf[MESH_MAX_DIM]; /* face coordinates */
+    PetscReal *c[MESH_MAX_DIM];  /* element coordinates */
+    PetscReal *cf[MESH_MAX_DIM]; /* face coordinates */
 } Mesh_Cartesian;
 
 #endif
