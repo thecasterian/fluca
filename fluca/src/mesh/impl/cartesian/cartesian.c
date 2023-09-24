@@ -138,10 +138,33 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
     }
 
     for (d = 0; d < mesh->dim; d++) {
-        PetscReal *c;
+        PetscMPIInt color, key = 0;
+
+        switch (d) {
+            case 0:
+                color = cart->rank[1] + (mesh->dim > 2 ? cart->nRanks[1] * cart->rank[2] : 0);
+                break;
+            case 1:
+                color = cart->rank[0] + (mesh->dim > 2 ? cart->nRanks[0] * cart->rank[2] : 0);
+                break;
+            case 2:
+                color = cart->rank[0] + cart->nRanks[0] * cart->rank[1];
+                break;
+            default:
+                SETERRQ(comm, PETSC_ERR_SUP, "Unsupported dimension index %" PetscInt_FMT, d);
+        }
+        PetscCallMPI(MPI_Comm_split(comm, color, key, &cart->subcomm[d]));
+    }
+
+    for (d = 0; d < mesh->dim; d++) {
+        PetscReal *c, *w;
+
         PetscMalloc1(cart->N[d] + 2, &c);
         cart->c[d] = c + 1;
         PetscMalloc1(cart->N[d] + 1, &cart->cf[d]);
+        PetscMalloc1(cart->N[d] + 2, &w);
+        cart->w[d] = w + 1;
+        PetscMalloc1(cart->N[d] + 1, &cart->rf[d]);
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);
@@ -153,15 +176,23 @@ PetscErrorCode MeshDestroy_Cartesian(Mesh mesh) {
 
     PetscFunctionBegin;
 
-    for (d = 0; d < mesh->dim; d++)
+    for (d = 0; d < mesh->dim; d++) {
         PetscCall(PetscFree(cart->l[d]));
+        PetscCallMPI(MPI_Comm_free(&cart->subcomm[d]));
+    }
     PetscCall(DMDestroy(&cart->dm));
     PetscCall(DMDestroy(&cart->fdm));
     for (d = 0; d < mesh->dim; d++) {
-        PetscReal *c = cart->c[d] - 1;
-        PetscCall(PetscFree(c));
+        PetscReal *dummy;
+
+        dummy = cart->c[d] - 1;
+        PetscCall(PetscFree(dummy));
         cart->c[d] = NULL;
         PetscCall(PetscFree(cart->cf[d]));
+        dummy = cart->w[d] - 1;
+        PetscCall(PetscFree(dummy));
+        cart->w[d] = NULL;
+        PetscCall(PetscFree(cart->rf[d]));
     }
 
     PetscCall(PetscFree(mesh->data));
@@ -289,6 +320,8 @@ PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
         cart->nRanks[d] = PETSC_DECIDE;
         cart->l[d] = NULL;
         cart->bndTypes[d] = MESH_BOUNDARY_NOT_PERIODIC;
+        cart->rank[d] = -1;
+        cart->subcomm[d] = NULL;
     }
 
     cart->dm = NULL;
@@ -296,6 +329,8 @@ PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
     for (d = 0; d < MESH_MAX_DIM; d++) {
         cart->c[d] = NULL;
         cart->cf[d] = NULL;
+        cart->w[d] = NULL;
+        cart->rf[d] = NULL;
     }
 
     mesh->ops->setfromoptions = MeshSetFromOptions_Cartesian;
@@ -460,13 +495,13 @@ PetscErrorCode MeshCartesianFaceCoordinateGetArrayRead(Mesh mesh, const PetscRea
 PetscErrorCode MeshCartesianFaceCoordinateRestoreArray(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     PetscReal ***arr[3] = {ax, ay, az};
-    PetscInt s[3], d;
+    PetscInt s[3], m[3], d;
 
     PetscFunctionBegin;
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
-    PetscCall(DMDAGetCorners(cart->dm, &s[0], &s[1], &s[2], NULL, NULL, NULL));
+    PetscCall(DMDAGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2]));
 
     for (d = 0; d < mesh->dim; d++)
         if (arr[d]) {
@@ -474,6 +509,46 @@ PetscErrorCode MeshCartesianFaceCoordinateRestoreArray(Mesh mesh, PetscReal ***a
             PetscFree(dummy);
             *arr[d] = NULL;
         }
+
+    for (d = 0; d < mesh->dim; d++) {
+        /* All gather face coordinates */
+        PetscReal *sendbuf = cart->cf[d] + s[d];
+        PetscMPIInt sendcount = m[d] + (s[d] + m[d] >= cart->N[d]);
+        PetscMPIInt recvcounts[cart->nRanks[d]], displs[cart->nRanks[d]];
+        PetscInt i;
+
+        for (i = 0; i < cart->nRanks[d]; i++) {
+            recvcounts[i] = cart->l[d][i] + (i == cart->nRanks[d] - 1);
+            displs[i] = i > 0 ? displs[i - 1] + recvcounts[i - 1] : 0;
+        }
+
+        PetscCallMPI(MPI_Allgatherv(sendbuf, sendcount, MPIU_REAL, cart->cf[d], recvcounts, displs, MPIU_REAL,
+                                    cart->subcomm[d]));
+
+        for (i = 0; i < cart->N[d]; i++) {
+            cart->c[d][i] = 0.5 * (cart->cf[d][i] + cart->cf[d][i + 1]);
+            cart->w[d][i] = cart->cf[d][i + 1] - cart->cf[d][i];
+        }
+        /* Ghots elements */
+        switch (cart->bndTypes[d]) {
+            case MESH_BOUNDARY_NOT_PERIODIC:
+                cart->c[d][-1] = cart->cf[d][0] - 0.5 * cart->w[d][0];
+                cart->c[d][cart->N[d]] = cart->cf[d][cart->N[d]] + 0.5 * cart->w[d][cart->N[d] - 1];
+                cart->w[d][-1] = cart->w[d][0];
+                cart->w[d][cart->N[d]] = cart->w[d][cart->N[d] - 1];
+                break;
+            case MESH_BOUNDARY_PERIODIC:
+                cart->c[d][-1] = cart->cf[d][0] - 0.5 * cart->w[d][cart->N[d] - 1];
+                cart->c[d][cart->N[d]] = cart->cf[d][cart->N[d]] + 0.5 * cart->w[d][0];
+                cart->w[d][-1] = cart->w[d][cart->N[d] - 1];
+                cart->w[d][cart->N[d]] = cart->w[d][0];
+                break;
+            default:
+                SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_SUP, "Unsupported boundary type");
+        }
+        for (i = 0; i <= cart->N[d]; i++)
+            cart->rf[d][i] = cart->w[d][i] / (cart->w[d][i - 1] + cart->w[d][i]);
+    }
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
