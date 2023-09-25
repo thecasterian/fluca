@@ -26,18 +26,16 @@ int main(int argc, char **argv) {
     {
         PetscInt M, N, xs, ys, xm, ym;
         PetscReal **arrcx, **arrcy;
-        PetscInt i, j, ileft, ibottom;
+        PetscInt i, j;
 
         PetscCall(MeshCartesianGetInfo(mesh, NULL, &M, &N, NULL, NULL, NULL, NULL, NULL, NULL, NULL));
         PetscCall(MeshCartesianGetCorners(mesh, &xs, &ys, NULL, &xm, &ym, NULL));
-        PetscCall(MeshCartesianCoordinateVecGetArray(mesh, &arrcx, &arrcy, NULL));
-        PetscCall(MeshCartesianCoordinateGetLocationSlot(mesh, MESHCARTESIAN_COORDINATE_LEFT, &ileft));
-        PetscCall(MeshCartesianCoordinateGetLocationSlot(mesh, MESHCARTESIAN_COORDINATE_BOTTOM, &ibottom));
+        PetscCall(MeshCartesianFaceCoordinateGetArray(mesh, &arrcx, &arrcy, NULL));
         for (i = xs; i <= xs + xm; i++)
-            arrcx[i][ileft] = 0.5 - 0.5 * cos(M_PI * i / M);
+            arrcx[i][0] = 0.5 - 0.5 * cos(M_PI * i / M);
         for (j = ys; j <= ys + ym; j++)
-            arrcy[j][ibottom] = 0.5 - 0.5 * cos(M_PI * j / N);
-        PetscCall(MeshCartesianCoordinateVecRestoreArray(mesh, &arrcx, &arrcy, NULL));
+            arrcy[j][0] = 0.5 - 0.5 * cos(M_PI * j / N);
+        PetscCall(MeshCartesianFaceCoordinateRestoreArray(mesh, &arrcx, &arrcy, NULL));
     }
 
     {
