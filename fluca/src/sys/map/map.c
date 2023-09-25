@@ -97,7 +97,8 @@ PetscErrorCode FlucaMapInsert(FlucaMap map, PetscObject key, PetscObject value) 
     if (map->hash)
         PetscCall(map->hash(key, &kv->hash));
     else
-        kv->hash = (intptr_t)key;
+        kv->hash = (uintptr_t)key % PETSC_INT_MAX;
+    PetscCheck(kv->hash >= 0, PetscObjectComm((PetscObject)map), PETSC_ERR_ARG_OUTOFRANGE, "hash must be non-negative");
 
     PetscCall(PetscObjectReference((PetscObject)key));
     PetscCall(PetscObjectReference((PetscObject)value));
@@ -141,7 +142,9 @@ PetscErrorCode FlucaMapRemove(FlucaMap map, PetscObject key) {
     if (map->hash)
         PetscCall(map->hash(key, &hash));
     else
-        hash = (intptr_t)key;
+        hash = (uintptr_t)key % PETSC_INT_MAX;
+    PetscCheck(hash >= 0, PetscObjectComm((PetscObject)map), PETSC_ERR_ARG_OUTOFRANGE, "hash must be non-negative");
+
     index = hash % map->bucketsize;
     for (kv = map->buckets[index].front; kv; kv = kv->next) {
         if (map->eq)
@@ -174,7 +177,9 @@ PetscErrorCode FlucaMapGetValue(FlucaMap map, PetscObject key, PetscObject *valu
     if (map->hash)
         PetscCall(map->hash(key, &hash));
     else
-        hash = (intptr_t)key;
+        hash = (uintptr_t)key % PETSC_INT_MAX;
+    PetscCheck(hash >= 0, PetscObjectComm((PetscObject)map), PETSC_ERR_ARG_OUTOFRANGE, "hash must be non-negative");
+
     index = hash % map->bucketsize;
     for (kv = map->buckets[index].front; kv; kv = kv->next) {
         if (map->eq)
