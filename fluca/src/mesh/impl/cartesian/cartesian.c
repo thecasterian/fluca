@@ -54,7 +54,7 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
     MPI_Comm comm;
     PetscMPIInt rank;
     DMBoundaryType bndx, bndy, bndz;
-    PetscInt daS = 1, daDof = 1, stagS = 0, stagDof0, stagDof1, stagDof2, stagDof3;
+    PetscInt daS = 1, daDof = 1, stagS = 1, stagDof0, stagDof1, stagDof2, stagDof3;
     const PetscInt *lx, *ly, *lz;
     PetscInt d;
 

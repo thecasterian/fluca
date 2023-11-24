@@ -39,30 +39,30 @@ PetscErrorCode NSFSMInterpolateVelocity2d(NS ns) {
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &iU));
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &iV));
 
-    for (j = info.ys; j < info.ys + info.ym + 1; j++)
+    for (j = info.ys; j < info.ys + info.ym; j++)
         for (i = info.xs; i < info.xs + info.xm + 1; i++) {
-            if (j < info.my) {
-                /* Left wall. */
-                if (i == 0)
-                    arrUV[j][i][iU] = 0.0;
-                /* Right wall. */
-                else if (i == info.mx)
-                    arrUV[j][i][iU] = 0.0;
-                else
-                    arrUV[j][i][iU] = (cart->w[0][i] * arru[j][i - 1] + cart->w[0][i - 1] * arru[j][i]) /
-                                      (cart->w[0][i] + cart->w[0][i - 1]);
-            }
-            if (i < info.mx) {
-                /* Bottom wall. */
-                if (j == 0)
-                    arrUV[j][i][iV] = 0.0;
-                /* Top wall. */
-                else if (j == info.my)
-                    arrUV[j][i][iV] = 0.0;
-                else
-                    arrUV[j][i][iV] = (cart->w[1][j] * arrv[j - 1][i] + cart->w[1][j - 1] * arrv[j][i]) /
-                                      (cart->w[1][j] + cart->w[1][j - 1]);
-            }
+            /* Left wall. */
+            if (i == 0)
+                arrUV[j][i][iU] = 0.0;
+            /* Right wall. */
+            else if (i == info.mx)
+                arrUV[j][i][iU] = 0.0;
+            else
+                arrUV[j][i][iU] = (cart->w[0][i] * arru[j][i - 1] + cart->w[0][i - 1] * arru[j][i]) /
+                                  (cart->w[0][i] + cart->w[0][i - 1]);
+        }
+
+    for (j = info.ys; j < info.ys + info.ym + 1; j++)
+        for (i = info.xs; i < info.xs + info.xm; i++) {
+            /* Bottom wall. */
+            if (j == 0)
+                arrUV[j][i][iV] = 0.0;
+            /* Top wall. */
+            else if (j == info.my)
+                arrUV[j][i][iV] = 0.0;
+            else
+                arrUV[j][i][iV] = (cart->w[1][j] * arrv[j - 1][i] + cart->w[1][j - 1] * arrv[j][i]) /
+                                  (cart->w[1][j] + cart->w[1][j - 1]);
         }
 
     PetscCall(DMStagVecRestoreArray(cart->fdm, solfsm->fv, &arrUV));
@@ -229,44 +229,49 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d(NS ns) {
             arrv_tilde[j][i] = arrv_star[j][i] + ns->dt / ns->rho * (pn - ps) / (cart->c[1][j + 1] - cart->c[1][j - 1]);
         }
 
+    // PetscCall(DMDAVecRestoreArray(cart->dm, solfsm->v_tilde[0], &arru_tilde));
+    // PetscCall(DMDAVecRestoreArray(cart->dm, solfsm->v_tilde[1], &arrv_tilde));
+
     PetscCall(DMLocalToLocalBegin(cart->dm, solfsm->v_tilde[0], INSERT_VALUES, solfsm->v_tilde[0]));
     PetscCall(DMLocalToLocalEnd(cart->dm, solfsm->v_tilde[0], INSERT_VALUES, solfsm->v_tilde[0]));
     PetscCall(DMLocalToLocalBegin(cart->dm, solfsm->v_tilde[1], INSERT_VALUES, solfsm->v_tilde[1]));
     PetscCall(DMLocalToLocalEnd(cart->dm, solfsm->v_tilde[1], INSERT_VALUES, solfsm->v_tilde[1]));
 
-    for (j = info.ys; j < info.ys + info.ym + 1; j++)
+    // PetscCall(DMDAVecGetArray(cart->dm, solfsm->v_tilde[0], &arru_tilde));
+    // PetscCall(DMDAVecGetArray(cart->dm, solfsm->v_tilde[1], &arrv_tilde));
+
+    for (j = info.ys; j < info.ys + info.ym; j++)
         for (i = info.xs; i < info.xs + info.xm + 1; i++) {
-            if (j < info.my) {
-                // TODO: below is temporary for cavity flow
-                /* Left wall. */
-                if (i == 0) {
-                    arrUV_star[j][i][iU] = 0.0;
-                }
-                /* Right wall. */
-                else if (i == info.mx) {
-                    arrUV_star[j][i][iU] = 0.0;
-                } else {
-                    U_tilde = (cart->w[0][i] * arru_tilde[j][i - 1] + cart->w[0][i - 1] * arru_tilde[j][i]) /
-                              (cart->w[0][i] + cart->w[0][i - 1]);
-                    dpdx = (arrp[j][i] - arrp[j][i - 1]) / (cart->c[0][i] - cart->c[0][i - 1]);
-                    arrUV_star[j][i][iU] = U_tilde - ns->dt / ns->rho * dpdx;
-                }
+            // TODO: below is temporary for cavity flow
+            /* Left wall. */
+            if (i == 0) {
+                arrUV_star[j][i][iU] = 0.0;
             }
-            if (i < info.mx) {
-                // TODO: below is temporary for cavity flow
-                /* Bottom wall. */
-                if (j == 0) {
-                    arrUV_star[j][i][iV] = 0.0;
-                }
-                /* Top wall. */
-                else if (j == info.my) {
-                    arrUV_star[j][i][iV] = 0.0;
-                } else {
-                    V_tilde = (cart->w[1][j] * arrv_tilde[j - 1][i] + cart->w[1][j - 1] * arrv_tilde[j][i]) /
-                              (cart->w[1][j] + cart->w[1][j - 1]);
-                    dpdy = (arrp[j][i] - arrp[j - 1][i]) / (cart->c[1][j] - cart->c[1][j - 1]);
-                    arrUV_star[j][i][iV] = V_tilde - ns->dt / ns->rho * dpdy;
-                }
+            /* Right wall. */
+            else if (i == info.mx) {
+                arrUV_star[j][i][iU] = 0.0;
+            } else {
+                U_tilde = (cart->w[0][i] * arru_tilde[j][i - 1] + cart->w[0][i - 1] * arru_tilde[j][i]) /
+                          (cart->w[0][i] + cart->w[0][i - 1]);
+                dpdx = (arrp[j][i] - arrp[j][i - 1]) / (cart->c[0][i] - cart->c[0][i - 1]);
+                arrUV_star[j][i][iU] = U_tilde - ns->dt / ns->rho * dpdx;
+            }
+        }
+    for (j = info.ys; j < info.ys + info.ym + 1; j++)
+        for (i = info.xs; i < info.xs + info.xm; i++) {
+            // TODO: below is temporary for cavity flow
+            /* Bottom wall. */
+            if (j == 0) {
+                arrUV_star[j][i][iV] = 0.0;
+            }
+            /* Top wall. */
+            else if (j == info.my) {
+                arrUV_star[j][i][iV] = 0.0;
+            } else {
+                V_tilde = (cart->w[1][j] * arrv_tilde[j - 1][i] + cart->w[1][j - 1] * arrv_tilde[j][i]) /
+                          (cart->w[1][j] + cart->w[1][j - 1]);
+                dpdy = (arrp[j][i] - arrp[j - 1][i]) / (cart->c[1][j] - cart->c[1][j - 1]);
+                arrUV_star[j][i][iV] = V_tilde - ns->dt / ns->rho * dpdy;
             }
         }
 
@@ -367,32 +372,30 @@ PetscErrorCode NSFSMUpdate2d(NS ns) {
             arrp[j][i] += ppp - 0.5 * ns->mu * ns->dt / ns->rho * pplap;
         }
 
-    for (j = info.ys; j < info.ys + info.ym + 1; j++)
+    for (j = info.ys; j < info.ys + info.ym; j++)
         for (i = info.xs; i < info.xs + info.xm + 1; i++) {
-            if (j < info.my) {
-                /* Left wall. */
-                if (i == 0)
-                    arrUV[j][i][iU] = 0.0;
-                /* Right wall. */
-                else if (i == info.mx)
-                    arrUV[j][i][iU] = 0.0;
-                else
-                    arrUV[j][i][iU] = arrUV_star[j][i][iU] - ns->dt / ns->rho *
-                                                                 (arrp_prime[j][i] - arrp_prime[j][i - 1]) /
-                                                                 (cart->c[0][i] - cart->c[0][i - 1]);
-            }
-            if (i < info.mx) {
-                /* Bottom wall. */
-                if (j == 0)
-                    arrUV[j][i][iV] = 0.0;
-                /* Top wall. */
-                else if (j == info.my)
-                    arrUV[j][i][iV] = 0.0;
-                else
-                    arrUV[j][i][iV] = arrUV_star[j][i][iV] - ns->dt / ns->rho *
-                                                                 (arrp_prime[j][i] - arrp_prime[j - 1][i]) /
-                                                                 (cart->c[1][j] - cart->c[1][j - 1]);
-            }
+            /* Left wall. */
+            if (i == 0)
+                arrUV[j][i][iU] = 0.0;
+            /* Right wall. */
+            else if (i == info.mx)
+                arrUV[j][i][iU] = 0.0;
+            else
+                arrUV[j][i][iU] = arrUV_star[j][i][iU] - ns->dt / ns->rho * (arrp_prime[j][i] - arrp_prime[j][i - 1]) /
+                                                             (cart->c[0][i] - cart->c[0][i - 1]);
+        }
+
+    for (j = info.ys; j < info.ys + info.ym + 1; j++)
+        for (i = info.xs; i < info.xs + info.xm; i++) {
+            /* Bottom wall. */
+            if (j == 0)
+                arrUV[j][i][iV] = 0.0;
+            /* Top wall. */
+            else if (j == info.my)
+                arrUV[j][i][iV] = 0.0;
+            else
+                arrUV[j][i][iV] = arrUV_star[j][i][iV] - ns->dt / ns->rho * (arrp_prime[j][i] - arrp_prime[j - 1][i]) /
+                                                             (cart->c[1][j] - cart->c[1][j - 1]);
         }
 
     PetscCall(DMDAVecRestoreArray(cart->dm, sol->v[0], &arru));
@@ -585,6 +588,7 @@ PetscErrorCode NSFSMComputeRHSPprime2d(KSP ksp, Vec b, void *ctx) {
     Sol sol = ns->sol;
     Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
+    MPI_Comm comm;
     DMDALocalInfo info;
     PetscReal **arrb;
     const PetscReal ***arrUV_star;
@@ -594,6 +598,8 @@ PetscErrorCode NSFSMComputeRHSPprime2d(KSP ksp, Vec b, void *ctx) {
     PetscInt i, j;
 
     PetscFunctionBegin;
+
+    PetscCall(PetscObjectGetComm((PetscObject)ksp, &comm));
 
     PetscCall(DMDAGetLocalInfo(cart->dm, &info));
 
@@ -615,7 +621,7 @@ PetscErrorCode NSFSMComputeRHSPprime2d(KSP ksp, Vec b, void *ctx) {
 
     // TODO: below is temporary for cavity flow
     /* Remove null space. */
-    PetscCall(MatNullSpaceCreate(PETSC_COMM_WORLD, PETSC_TRUE, 0, NULL, &nullspace));
+    PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &nullspace));
     PetscCall(MatNullSpaceRemove(nullspace, b));
     PetscCall(MatNullSpaceDestroy(&nullspace));
 
@@ -702,6 +708,7 @@ PetscErrorCode NSFSMComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx)
     Mesh mesh = ns->mesh;
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
 
+    MPI_Comm comm;
     DM da;
     DMDALocalInfo info;
     MatStencil row, col[5];
@@ -712,6 +719,8 @@ PetscErrorCode NSFSMComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx)
     PetscInt i, j;
 
     PetscFunctionBegin;
+
+    PetscCall(PetscObjectGetComm((PetscObject)ksp, &comm));
 
     // TODO: support multigrid method (da != cart->dm)
     PetscCall(KSPGetDM(ksp, &da));
@@ -773,7 +782,7 @@ PetscErrorCode NSFSMComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx)
 
     // TODO: below is temporary for cavity flow
     /* Remove null space. */
-    PetscCall(MatNullSpaceCreate(PETSC_COMM_WORLD, PETSC_TRUE, 0, NULL, &nullspace));
+    PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &nullspace));
     PetscCall(MatSetNullSpace(J, nullspace));
     PetscCall(MatNullSpaceDestroy(&nullspace));
 
