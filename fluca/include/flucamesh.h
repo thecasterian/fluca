@@ -41,6 +41,10 @@ FLUCA_EXTERN PetscErrorCode MeshCartesianFaceCoordinateGetArrayRead(Mesh, const 
 FLUCA_EXTERN PetscErrorCode MeshCartesianFaceCoordinateRestoreArray(Mesh, PetscReal ***, PetscReal ***, PetscReal ***);
 FLUCA_EXTERN PetscErrorCode MeshCartesianFaceCoordinateRestoreArrayRead(Mesh, const PetscReal ***, const PetscReal ***,
                                                                         const PetscReal ***);
+FLUCA_EXTERN PetscErrorCode MeshCartesianCoordinateGetArrayRead(Mesh, const PetscReal **, const PetscReal **,
+                                                                const PetscReal **);
+FLUCA_EXTERN PetscErrorCode MeshCartesianCoordinateRestoreArrayRead(Mesh, const PetscReal **, const PetscReal **,
+                                                                    const PetscReal **);
 FLUCA_EXTERN PetscErrorCode MeshCartesianGetInfo(Mesh, PetscInt *, PetscInt *, PetscInt *, PetscInt *, PetscInt *,
                                                  PetscInt *, PetscInt *, MeshBoundaryType *, MeshBoundaryType *,
                                                  MeshBoundaryType *);

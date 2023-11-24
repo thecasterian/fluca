@@ -2,6 +2,7 @@
 
 PetscClassId NS_CLASSID = 0;
 PetscLogEvent NS_SetUp = 0;
+PetscLogEvent NS_Solve = 0;
 
 PetscFunctionList NSList = NULL;
 PetscBool NSRegisterAllCalled = PETSC_FALSE;
@@ -20,6 +21,7 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns) {
     n->mu = 0.0;
     n->dt = 0.0;
 
+    n->step = 0;
     n->t = 0.0;
     n->mesh = NULL;
     n->sol = NULL;
@@ -96,6 +98,34 @@ PetscErrorCode NSSetUp(NS ns) {
     PetscCall(NSViewFromOptions(ns, NULL, "-ns_view"));
 
     ns->state = NS_STATE_SETUP;
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSSolve(NS ns, PetscInt num_iters) {
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+
+    PetscCall(PetscLogEventBegin(NS_Solve, (PetscObject)ns, 0, 0, 0));
+
+    PetscTryTypeMethod(ns, solve, num_iters);
+
+    PetscCall(PetscLogEventEnd(NS_Solve, (PetscObject)ns, 0, 0, 0));
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSGetSol(NS ns, Sol *sol) {
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+
+    PetscCheck(ns->state >= NS_STATE_SETUP, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE,
+               "NS not set up");
+
+    if (sol)
+        *sol = ns->sol;
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }

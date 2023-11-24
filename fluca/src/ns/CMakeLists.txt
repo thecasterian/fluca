@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 add_library(fluca_ns SHARED
     impl/fsm/fsm.c
+    impl/fsm/fsmcart.c
     interface/nsbasic.c
     interface/nsopts.c
     interface/nspkg.c

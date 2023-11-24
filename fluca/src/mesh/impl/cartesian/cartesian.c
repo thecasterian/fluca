@@ -165,6 +165,7 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
         PetscMalloc1(cart->N[d] + 2, &w);
         cart->w[d] = w + 1;
         PetscMalloc1(cart->N[d] + 1, &cart->rf[d]);
+        PetscMalloc1(cart->N[d], &cart->a[d]);
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);
@@ -193,6 +194,7 @@ PetscErrorCode MeshDestroy_Cartesian(Mesh mesh) {
         PetscCall(PetscFree(dummy));
         cart->w[d] = NULL;
         PetscCall(PetscFree(cart->rf[d]));
+        PetscCall(PetscFree(cart->a[d]));
     }
 
     PetscCall(PetscFree(mesh->data));
@@ -331,6 +333,7 @@ PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
         cart->cf[d] = NULL;
         cart->w[d] = NULL;
         cart->rf[d] = NULL;
+        cart->a[d] = NULL;
     }
 
     mesh->ops->setfromoptions = MeshSetFromOptions_Cartesian;
@@ -548,6 +551,10 @@ PetscErrorCode MeshCartesianFaceCoordinateRestoreArray(Mesh mesh, PetscReal ***a
         }
         for (i = 0; i <= cart->N[d]; i++)
             cart->rf[d][i] = cart->w[d][i] / (cart->w[d][i - 1] + cart->w[d][i]);
+        for (i = 0; i < cart->N[d]; i++) {
+            cart->a[d][i][0] = 1.0 / (cart->w[d][i] * (cart->c[d][i] - cart->c[d][i - 1]));
+            cart->a[d][i][1] = 1.0 / (cart->w[d][i] * (cart->c[d][i + 1] - cart->c[d][i]));
+        }
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);
@@ -571,6 +578,40 @@ PetscErrorCode MeshCartesianFaceCoordinateRestoreArrayRead(Mesh mesh, const Pets
             PetscFree(dummy);
             *arr[d] = NULL;
         }
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartesianCoordinateGetArrayRead(Mesh mesh, const PetscReal **arrx, const PetscReal **arry,
+                                                   const PetscReal **arrz) {
+    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+
+    const PetscReal **arr[3] = {arrx, arry, arrz};
+    PetscInt d;
+
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+
+    for (d = 0; d < mesh->dim; d++)
+        if (arr[d])
+            *arr[d] = cart->c[d];
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartesianCoordinateRestoreArrayRead(Mesh mesh, const PetscReal **arrx, const PetscReal **arry,
+                                                       const PetscReal **arrz) {
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+
+    if (arrx)
+        *arrx = NULL;
+    if (arry)
+        *arry = NULL;
+    if (arrz)
+        *arrz = NULL;
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }

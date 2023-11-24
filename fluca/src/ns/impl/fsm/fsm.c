@@ -1,11 +1,16 @@
 #include <fluca/private/ns_fsm.h>
-#include <fluca/private/nsimpl.h>
+
+extern PetscErrorCode NSFSMInterpolateVelocity2d(NS ns);
+extern PetscErrorCode NSFSMCalculateConvection2d(NS ns);
+extern PetscErrorCode NSFSMCalculateIntermediateVelocity2d(NS ns);
+extern PetscErrorCode NSFSMCalculatePressureCorrection2d(NS ns);
+extern PetscErrorCode NSFSMUpdate2d(NS ns);
 
 PetscErrorCode NSSetup_FSM(NS ns) {
     NS_FSM *fsm = (NS_FSM *)ns->data;
     MPI_Comm comm;
     DM dm;
-    PetscInt dim, d;
+    PC pc;
 
     PetscFunctionBegin;
 
@@ -19,28 +24,57 @@ PetscErrorCode NSSetup_FSM(NS ns) {
     PetscCall(SolSetMesh(ns->sol, ns->mesh));
 
     /* Create KSP */
-    PetscCall(MeshGetDim(ns->mesh, &dim));
     PetscCall(MeshGetDM(ns->mesh, &dm));
-    // TODO: set RHS and operators
-    for (d = 0; d < dim; d++) {
-        PetscCall(KSPCreate(comm, &fsm->kspv[d]));
-        PetscCall(KSPSetDM(fsm->kspv[d], dm));
+    PetscCall(KSPCreate(comm, &fsm->ksp));
+    PetscCall(KSPSetDM(fsm->ksp, dm));
+    PetscCall(KSPGetPC(fsm->ksp, &pc));
+    PetscCall(PCSetType(pc, PCMG));
+    PetscCall(KSPSetFromOptions(fsm->ksp));
+
+    ns->state = NS_STATE_SETUP;
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSSolve_FSM(NS ns, PetscInt num_iters) {
+    PetscReal t_init;
+    PetscInt dim, i;
+
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+
+    if (ns->state < NS_STATE_SETUP)
+        PetscCall(NSSetUp(ns));
+
+    t_init = ns->t;
+    PetscCall(MeshGetDim(ns->mesh, &dim));
+    switch (dim) {
+        case 2:
+            PetscCall(NSFSMInterpolateVelocity2d(ns));
+            PetscCall(NSFSMCalculateConvection2d(ns));
+            for (i = 0; i < num_iters; i++) {
+                PetscCall(NSFSMCalculateIntermediateVelocity2d(ns));
+                PetscCall(NSFSMCalculatePressureCorrection2d(ns));
+                PetscCall(NSFSMUpdate2d(ns));
+                ns->step++;
+                ns->t = t_init + ns->step * ns->dt;
+            }
+            break;
+        // TODO: consider 3d case
+        default:
+            SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
     }
-    PetscCall(KSPCreate(comm, &fsm->kspp));
-    PetscCall(KSPSetDM(fsm->kspp, dm));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSDestroy_FSM(NS ns) {
     NS_FSM *fsm = (NS_FSM *)ns->data;
-    PetscInt d;
 
     PetscFunctionBegin;
 
-    for (d = 0; d < 3; d++)
-        PetscCall(KSPDestroy(&fsm->kspv[d]));
-    PetscCall(KSPDestroy(&fsm->kspp));
+    PetscCall(KSPDestroy(&fsm->ksp));
 
     PetscCall(PetscFree(ns->data));
 
@@ -60,17 +94,16 @@ PetscErrorCode NSView_FSM(NS ns, PetscViewer v) {
 
 PetscErrorCode NSCreate_FSM(NS ns) {
     NS_FSM *fsm;
-    PetscInt d;
 
     PetscFunctionBegin;
 
     PetscCall(PetscNew(&fsm));
     ns->data = (void *)fsm;
 
-    for (d = 0; d < 3; d++)
-        fsm->kspv[d] = NULL;
-    fsm->kspp = NULL;
+    fsm->ksp = NULL;
 
+    ns->ops->setup = NSSetup_FSM;
+    ns->ops->solve = NSSolve_FSM;
     ns->ops->destroy = NSDestroy_FSM;
     ns->ops->view = NSView_FSM;
 

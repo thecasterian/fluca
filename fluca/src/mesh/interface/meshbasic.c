@@ -149,7 +149,7 @@ PetscErrorCode MeshDestroy(Mesh *mesh) {
 PetscErrorCode MeshGetDM(Mesh mesh, DM *dm) {
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-    PetscValidPointer(dm, 2);
+    PetscAssertPointer(dm, 2);
     PetscCheck(mesh->state >= MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "Mesh not setup");
     PetscTryTypeMethod(mesh, getdm, dm);
@@ -159,7 +159,7 @@ PetscErrorCode MeshGetDM(Mesh mesh, DM *dm) {
 PetscErrorCode MeshGetFaceDM(Mesh mesh, DM *dm) {
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-    PetscValidPointer(dm, 2);
+    PetscAssertPointer(dm, 2);
     PetscCheck(mesh->state >= MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "Mesh not setup");
     PetscTryTypeMethod(mesh, getfacedm, dm);

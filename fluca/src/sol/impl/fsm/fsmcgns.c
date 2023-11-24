@@ -24,15 +24,15 @@ PetscErrorCode SolView_FSMCGNSCartesian(Sol sol, PetscViewer v) {
     PetscCall(MeshGetDim(sol->mesh, &dim));
 
     for (d = 0; d < dim; d++) {
-        PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, fsm->v_star[d], cgns->file_num, cgns->base,
-                                                            viewerinfo->zone, viewerinfo->sol, intervelnames[d]));
-        PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, fsm->N[d], cgns->file_num, cgns->base, viewerinfo->zone,
-                                                            viewerinfo->sol, convecnames[d]));
+        PetscCall(FlucaViewerCGNSWriteStructuredSolution_Private(dm, fsm->v_star[d], cgns->file_num, cgns->base,
+                                                                 viewerinfo->zone, viewerinfo->sol, intervelnames[d]));
+        PetscCall(FlucaViewerCGNSWriteStructuredSolution_Private(dm, fsm->N[d], cgns->file_num, cgns->base,
+                                                                 viewerinfo->zone, viewerinfo->sol, convecnames[d]));
     }
-    PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, fsm->p_half, cgns->file_num, cgns->base, viewerinfo->zone,
-                                                        viewerinfo->sol, "PressureHalfStep"));
-    PetscCall(ViewerCGNSWriteStructuredSolution_Private(dm, fsm->p_prime, cgns->file_num, cgns->base, viewerinfo->zone,
-                                                        viewerinfo->sol, "PressureCorrection"));
+    PetscCall(FlucaViewerCGNSWriteStructuredSolution_Private(dm, fsm->p_half, cgns->file_num, cgns->base,
+                                                             viewerinfo->zone, viewerinfo->sol, "PressureHalfStep"));
+    PetscCall(FlucaViewerCGNSWriteStructuredSolution_Private(dm, fsm->p_prime, cgns->file_num, cgns->base,
+                                                             viewerinfo->zone, viewerinfo->sol, "PressureCorrection"));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }

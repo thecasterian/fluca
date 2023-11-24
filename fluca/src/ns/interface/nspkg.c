@@ -19,6 +19,7 @@ PetscErrorCode NSInitializePackage(void) {
     PetscCall(NSRegisterAll());
     /* Register events */
     PetscCall(PetscLogEventRegister("NSSetUp", NS_CLASSID, &NS_SetUp));
+    PetscCall(PetscLogEventRegister("NSSolve", NS_CLASSID, &NS_Solve));
 
     /* Process Info */
     classids[0] = NS_CLASSID;

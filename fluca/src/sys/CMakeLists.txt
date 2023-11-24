@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 add_library(fluca_sys SHARED
     map/map.c
+    viewer/cgns.c
     flucainit.c
     flucapkg.c
 )
