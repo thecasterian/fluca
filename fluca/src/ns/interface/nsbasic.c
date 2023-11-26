@@ -105,13 +105,28 @@ PetscErrorCode NSSetUp(NS ns) {
 }
 
 PetscErrorCode NSSolve(NS ns, PetscInt num_iters) {
+    PetscReal t_init;
+    PetscInt i;
+
     PetscFunctionBegin;
 
     PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
 
+    if (ns->state < NS_STATE_SETUP)
+        PetscCall(NSSetUp(ns));
+
     PetscCall(PetscLogEventBegin(NS_Solve, (PetscObject)ns, 0, 0, 0));
 
-    PetscTryTypeMethod(ns, solve, num_iters);
+    t_init = ns->t;
+    PetscTryTypeMethod(ns, solve_init);
+
+    for (i = 0; i < num_iters; i++) {
+        PetscTryTypeMethod(ns, solve_iter);
+        ns->step++;
+        ns->t = t_init + ns->step * ns->dt;
+
+        PetscCall(NSMonitor(ns, ns->step, ns->t, ns->sol));
+    }
 
     PetscCall(PetscLogEventEnd(NS_Solve, (PetscObject)ns, 0, 0, 0));
 
@@ -146,6 +161,8 @@ PetscErrorCode NSDestroy(NS *ns) {
 
     PetscCall(MeshDestroy(&(*ns)->mesh));
     PetscCall(SolDestroy(&(*ns)->sol));
+
+    PetscCall(NSMonitorCancel(*ns));
 
     PetscTryTypeMethod((*ns), destroy);
     PetscCall(PetscHeaderDestroy(ns));

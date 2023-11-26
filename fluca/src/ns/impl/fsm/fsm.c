@@ -36,32 +36,38 @@ PetscErrorCode NSSetup_FSM(NS ns) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSSolve_FSM(NS ns, PetscInt num_iters) {
-    PetscReal t_init;
-    PetscInt dim, i;
+PetscErrorCode NSSolveInit_FSM(NS ns) {
+    PetscInt dim;
 
     PetscFunctionBegin;
 
-    PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-
-    if (ns->state < NS_STATE_SETUP)
-        PetscCall(NSSetUp(ns));
-
-    t_init = ns->t;
     PetscCall(MeshGetDim(ns->mesh, &dim));
     switch (dim) {
         case 2:
             PetscCall(NSFSMInterpolateVelocity2d_MeshCartesian(ns));
             PetscCall(NSFSMCalculateConvection2d_MeshCartesian(ns));
-            for (i = 0; i < num_iters; i++) {
-                PetscCall(NSFSMCalculateIntermediateVelocity2d_MeshCartesian(ns));
-                PetscCall(NSFSMCalculatePressureCorrection2d_MeshCartesian(ns));
-                PetscCall(NSFSMUpdate2d_MeshCartesian(ns));
-                ns->step++;
-                ns->t = t_init + ns->step * ns->dt;
-            }
             break;
-        // TODO: consider 3d case
+
+        default:
+            SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
+    }
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSSolveIter_FSM(NS ns) {
+    PetscInt dim;
+
+    PetscFunctionBegin;
+
+    PetscCall(MeshGetDim(ns->mesh, &dim));
+    switch (dim) {
+        case 2:
+            PetscCall(NSFSMCalculateIntermediateVelocity2d_MeshCartesian(ns));
+            PetscCall(NSFSMCalculatePressureCorrection2d_MeshCartesian(ns));
+            PetscCall(NSFSMUpdate2d_MeshCartesian(ns));
+            break;
+
         default:
             SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
     }
@@ -100,7 +106,8 @@ PetscErrorCode NSCreate_FSM(NS ns) {
     fsm->ksp = NULL;
 
     ns->ops->setup = NSSetup_FSM;
-    ns->ops->solve = NSSolve_FSM;
+    ns->ops->solve_init = NSSolveInit_FSM;
+    ns->ops->solve_iter = NSSolveIter_FSM;
     ns->ops->destroy = NSDestroy_FSM;
     ns->ops->view = NSView_FSM;
 

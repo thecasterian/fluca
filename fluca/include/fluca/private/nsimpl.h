@@ -6,6 +6,8 @@
 #include <flucans.h>
 #include <flucasol.h>
 
+#define MAXNSMONITORS 10
+
 FLUCA_EXTERN PetscBool NSRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode NSRegisterAll(void);
 FLUCA_EXTERN PetscLogEvent NS_SetUp;
@@ -15,7 +17,8 @@ typedef struct _NSOps *NSOps;
 
 struct _NSOps {
     PetscErrorCode (*setup)(NS);
-    PetscErrorCode (*solve)(NS, PetscInt);
+    PetscErrorCode (*solve_init)(NS);
+    PetscErrorCode (*solve_iter)(NS);
     PetscErrorCode (*destroy)(NS);
     PetscErrorCode (*view)(NS, PetscViewer);
 };
@@ -43,6 +46,12 @@ struct _p_NS {
 
     /* State ---------------------------------------------------------------- */
     NSStateType state;
+
+    /* Monitor -------------------------------------------------------------- */
+    PetscInt num_mons;
+    PetscErrorCode (*mons[MAXNSMONITORS])(NS, PetscInt, PetscReal, Sol, void *);
+    void *mon_ctxs[MAXNSMONITORS];
+    PetscErrorCode (*mon_ctx_destroys[MAXNSMONITORS])(void **);
 };
 
 #endif

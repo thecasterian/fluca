@@ -47,6 +47,7 @@ int main(int argc, char **argv) {
         PetscCall(NSSetDensity(ns, 1000.0));
         PetscCall(NSSetViscosity(ns, 1.0));
         PetscCall(NSSetTimeStepSize(ns, 0.002));
+        PetscCall(NSMonitorSet(ns, NSMonitorDefault, PETSC_VIEWER_STDOUT_WORLD, NULL));
         PetscCall(NSSetUp(ns));
         PetscCall(NSSolve(ns, 1));
     }
