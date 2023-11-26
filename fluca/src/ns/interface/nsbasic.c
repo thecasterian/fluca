@@ -7,6 +7,8 @@ PetscLogEvent NS_Solve = 0;
 PetscFunctionList NSList = NULL;
 PetscBool NSRegisterAllCalled = PETSC_FALSE;
 
+extern PetscErrorCode NSView_CGNS(NS, PetscViewer);
+
 PetscErrorCode NSCreate(MPI_Comm comm, NS *ns) {
     NS n;
 
@@ -152,8 +154,7 @@ PetscErrorCode NSDestroy(NS *ns) {
 }
 
 PetscErrorCode NSView(NS ns, PetscViewer v) {
-    PetscViewerFormat format;
-    PetscMPIInt size;
+    PetscBool isascii, iscgns;
 
     PetscFunctionBegin;
 
@@ -163,13 +164,20 @@ PetscErrorCode NSView(NS ns, PetscViewer v) {
     PetscValidHeaderSpecific(v, PETSC_VIEWER_CLASSID, 2);
     PetscCheckSameComm(ns, 1, v, 2);
 
-    PetscCall(PetscViewerGetFormat(v, &format));
-    PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)ns), &size));
-    if (format == PETSC_VIEWER_LOAD_BALANCE && size == 1)
-        PetscFunctionReturn(PETSC_SUCCESS);
+    PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERASCII, &isascii));
+    PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
 
-    PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)ns, v));
-    PetscTryTypeMethod(ns, view, v);
+    if (isascii) {
+        PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)ns, v));
+        PetscCall(
+            PetscViewerASCIIPrintf(v, "Density: %g, Viscosity: %g, Time step size: %g\n", ns->rho, ns->mu, ns->dt));
+        PetscCall(PetscViewerASCIIPrintf(v, "Current time step: %d, Current time: %g\n", ns->step, ns->t));
+        PetscCall(PetscViewerASCIIPushTab(v));
+        PetscTryTypeMethod(ns, view, v);
+        PetscCall(PetscViewerASCIIPopTab(v));
+    } else if (iscgns) {
+        PetscCall(NSView_CGNS(ns, v));
+    }
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }

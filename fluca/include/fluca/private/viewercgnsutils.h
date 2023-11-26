@@ -12,8 +12,7 @@ typedef struct {
     int sol;
 } ViewerCGNSInfo;
 
-FLUCA_EXTERN PetscErrorCode FlucaViewerCGNSFileOpen_Private(PetscViewer v, int sequence_number);
-FLUCA_EXTERN PetscErrorCode FlucaViewerCGNSWriteStructuredSolution_Private(DM da, Vec v, int file_num, int base,
-                                                                           int zone, int sol, const char *name);
+FLUCA_EXTERN PetscErrorCode FlucaViewerCGNSFileOpen_Private(PetscViewer, PetscBool, int);
+FLUCA_EXTERN PetscErrorCode FlucaViewerCGNSWriteStructuredSolution_Private(DM, Vec, int, int, int, int, const char *);
 
 #endif

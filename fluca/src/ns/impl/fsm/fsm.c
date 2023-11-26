@@ -1,10 +1,10 @@
 #include <fluca/private/ns_fsm.h>
 
-extern PetscErrorCode NSFSMInterpolateVelocity2d(NS ns);
-extern PetscErrorCode NSFSMCalculateConvection2d(NS ns);
-extern PetscErrorCode NSFSMCalculateIntermediateVelocity2d(NS ns);
-extern PetscErrorCode NSFSMCalculatePressureCorrection2d(NS ns);
-extern PetscErrorCode NSFSMUpdate2d(NS ns);
+extern PetscErrorCode NSFSMInterpolateVelocity2d_MeshCartesian(NS ns);
+extern PetscErrorCode NSFSMCalculateConvection2d_MeshCartesian(NS ns);
+extern PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns);
+extern PetscErrorCode NSFSMCalculatePressureCorrection2d_MeshCartesian(NS ns);
+extern PetscErrorCode NSFSMUpdate2d_MeshCartesian(NS ns);
 
 PetscErrorCode NSSetup_FSM(NS ns) {
     NS_FSM *fsm = (NS_FSM *)ns->data;
@@ -51,12 +51,12 @@ PetscErrorCode NSSolve_FSM(NS ns, PetscInt num_iters) {
     PetscCall(MeshGetDim(ns->mesh, &dim));
     switch (dim) {
         case 2:
-            PetscCall(NSFSMInterpolateVelocity2d(ns));
-            PetscCall(NSFSMCalculateConvection2d(ns));
+            PetscCall(NSFSMInterpolateVelocity2d_MeshCartesian(ns));
+            PetscCall(NSFSMCalculateConvection2d_MeshCartesian(ns));
             for (i = 0; i < num_iters; i++) {
-                PetscCall(NSFSMCalculateIntermediateVelocity2d(ns));
-                PetscCall(NSFSMCalculatePressureCorrection2d(ns));
-                PetscCall(NSFSMUpdate2d(ns));
+                PetscCall(NSFSMCalculateIntermediateVelocity2d_MeshCartesian(ns));
+                PetscCall(NSFSMCalculatePressureCorrection2d_MeshCartesian(ns));
+                PetscCall(NSFSMUpdate2d_MeshCartesian(ns));
                 ns->step++;
                 ns->t = t_init + ns->step * ns->dt;
             }
@@ -82,13 +82,10 @@ PetscErrorCode NSDestroy_FSM(NS ns) {
 }
 
 PetscErrorCode NSView_FSM(NS ns, PetscViewer v) {
-    PetscFunctionBegin;
-
-    // TODO: implement
-
     (void)ns;
     (void)v;
 
+    PetscFunctionBegin;
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 

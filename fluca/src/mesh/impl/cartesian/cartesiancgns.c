@@ -25,7 +25,7 @@ PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer v) {
     }
 
     if (!cgns->file_num)
-        PetscCall(FlucaViewerCGNSFileOpen_Private(v, mesh->seqnum));
+        PetscCall(FlucaViewerCGNSFileOpen_Private(v, PETSC_FALSE, 0));
     if (cgns->base == 0)
         PetscCallCGNS(cg_base_write(cgns->file_num, "Base", mesh->dim, mesh->dim, &cgns->base));
 

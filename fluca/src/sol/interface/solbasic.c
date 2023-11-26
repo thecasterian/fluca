@@ -126,8 +126,6 @@ PetscErrorCode SolGetPressure(Sol sol, Vec *p) {
 }
 
 PetscErrorCode SolView(Sol sol, PetscViewer v) {
-    PetscViewerFormat format;
-    PetscMPIInt size;
     PetscBool iscgns, iscart;
 
     PetscFunctionBegin;
@@ -137,11 +135,6 @@ PetscErrorCode SolView(Sol sol, PetscViewer v) {
         PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)sol), &v));
     PetscValidHeaderSpecific(v, PETSC_VIEWER_CLASSID, 2);
     PetscCheckSameComm(sol, 1, v, 2);
-
-    PetscCall(PetscViewerGetFormat(v, &format));
-    PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)sol), &size));
-    if (format == PETSC_VIEWER_LOAD_BALANCE && size == 1)
-        PetscFunctionReturn(PETSC_SUCCESS);
 
     PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
     PetscCall(PetscObjectTypeCompare((PetscObject)sol->mesh, MESHCARTESIAN, &iscart));

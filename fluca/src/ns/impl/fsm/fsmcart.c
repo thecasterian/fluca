@@ -9,14 +9,13 @@
 #define DERIV2S (cart->a[1][j][0])
 #define DERIV2N (cart->a[1][j][1])
 
-extern PetscErrorCode NSFSMComputeRHSUStar2d(KSP ksp, Vec b, void *ctx);
-extern PetscErrorCode NSFSMComputeRHSVStar2d(KSP ksp, Vec b, void *ctx);
-extern PetscErrorCode NSFSMComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx);
-extern PetscErrorCode NSFSMComputeRHSPprime2d(KSP ksp, Vec b, void *ctx);
-extern PetscErrorCode NSFSMComputeRHSPprime2d(KSP, Vec, void *);
-extern PetscErrorCode NSFSMComputeOperatorPprime2d(KSP, Mat, Mat, void *);
+extern PetscErrorCode ComputeRHSUStar2d(KSP, Vec, void *);
+extern PetscErrorCode ComputeRHSVStar2d(KSP, Vec, void *);
+extern PetscErrorCode ComputeOperatorsUVstar2d(KSP, Mat, Mat, void *);
+extern PetscErrorCode ComputeRHSPprime2d(KSP, Vec, void *);
+extern PetscErrorCode ComputeOperatorPprime2d(KSP, Mat, Mat, void *);
 
-PetscErrorCode NSFSMInterpolateVelocity2d(NS ns) {
+PetscErrorCode NSFSMInterpolateVelocity2d_MeshCartesian(NS ns) {
     Mesh mesh = ns->mesh;
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     Sol sol = ns->sol;
@@ -51,7 +50,6 @@ PetscErrorCode NSFSMInterpolateVelocity2d(NS ns) {
                 arrUV[j][i][iU] = (cart->w[0][i] * arru[j][i - 1] + cart->w[0][i - 1] * arru[j][i]) /
                                   (cart->w[0][i] + cart->w[0][i - 1]);
         }
-
     for (j = info.ys; j < info.ys + info.ym + 1; j++)
         for (i = info.xs; i < info.xs + info.xm; i++) {
             /* Bottom wall. */
@@ -72,7 +70,7 @@ PetscErrorCode NSFSMInterpolateVelocity2d(NS ns) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMCalculateConvection2d(NS ns) {
+PetscErrorCode NSFSMCalculateConvection2d_MeshCartesian(NS ns) {
     Mesh mesh = ns->mesh;
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     Sol sol = ns->sol;
@@ -157,14 +155,14 @@ PetscErrorCode NSFSMCalculateConvection2d(NS ns) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMCalculateIntermediateVelocity2d(NS ns) {
+PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns) {
     NS_FSM *nsfsm = (NS_FSM *)ns->data;
     Mesh mesh = ns->mesh;
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     Sol sol = ns->sol;
     Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
-    PetscErrorCode (*rhs[2])(KSP, Vec, void *) = {NSFSMComputeRHSUStar2d, NSFSMComputeRHSVStar2d};
+    PetscErrorCode (*rhs[2])(KSP, Vec, void *) = {ComputeRHSUStar2d, ComputeRHSVStar2d};
     Vec x;
     DMDALocalInfo info;
     PetscReal **arru_tilde, **arrv_tilde, ***arrUV_star;
@@ -178,7 +176,7 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d(NS ns) {
     /* Solve for cell-centered intermediate velocity. */
     for (d = 0; d < 2; d++) {
         PetscCall(KSPSetComputeRHS(nsfsm->ksp, rhs[d], ns));
-        PetscCall(KSPSetComputeOperators(nsfsm->ksp, NSFSMComputeOperatorsUVstar2d, ns));
+        PetscCall(KSPSetComputeOperators(nsfsm->ksp, ComputeOperatorsUVstar2d, ns));
         PetscCall(KSPSolve(nsfsm->ksp, NULL, NULL));
         PetscCall(KSPGetSolution(nsfsm->ksp, &x));
         PetscCall(DMGlobalToLocal(cart->dm, x, INSERT_VALUES, solfsm->v_star[d]));
@@ -285,7 +283,7 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d(NS ns) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMCalculatePressureCorrection2d(NS ns) {
+PetscErrorCode NSFSMCalculatePressureCorrection2d_MeshCartesian(NS ns) {
     NS_FSM *nsfsm = (NS_FSM *)ns->data;
     Mesh mesh = ns->mesh;
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
@@ -296,8 +294,8 @@ PetscErrorCode NSFSMCalculatePressureCorrection2d(NS ns) {
 
     PetscFunctionBegin;
 
-    PetscCall(KSPSetComputeRHS(nsfsm->ksp, NSFSMComputeRHSPprime2d, ns));
-    PetscCall(KSPSetComputeOperators(nsfsm->ksp, NSFSMComputeOperatorPprime2d, ns));
+    PetscCall(KSPSetComputeRHS(nsfsm->ksp, ComputeRHSPprime2d, ns));
+    PetscCall(KSPSetComputeOperators(nsfsm->ksp, ComputeOperatorPprime2d, ns));
     PetscCall(KSPSolve(nsfsm->ksp, NULL, NULL));
     PetscCall(KSPGetSolution(nsfsm->ksp, &x));
     PetscCall(DMGlobalToLocal(cart->dm, x, INSERT_VALUES, solfsm->p_prime));
@@ -305,7 +303,7 @@ PetscErrorCode NSFSMCalculatePressureCorrection2d(NS ns) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMUpdate2d(NS ns) {
+PetscErrorCode NSFSMUpdate2d_MeshCartesian(NS ns) {
     Mesh mesh = ns->mesh;
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     Sol sol = ns->sol;
@@ -414,12 +412,12 @@ PetscErrorCode NSFSMUpdate2d(NS ns) {
     PetscCall(DMLocalToLocalBegin(cart->dm, solfsm->p_half, INSERT_VALUES, solfsm->p_half));
     PetscCall(DMLocalToLocalEnd(cart->dm, solfsm->p_half, INSERT_VALUES, solfsm->p_half));
 
-    PetscCall(NSFSMCalculateConvection2d(ns));
+    PetscCall(NSFSMCalculateConvection2d_MeshCartesian(ns));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMComputeRHSUStar2d(KSP ksp, Vec b, void *ctx) {
+PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx) {
     (void)ksp;
 
     NS ns = (NS)ctx;
@@ -502,7 +500,7 @@ PetscErrorCode NSFSMComputeRHSUStar2d(KSP ksp, Vec b, void *ctx) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMComputeRHSVStar2d(KSP ksp, Vec b, void *ctx) {
+PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx) {
     (void)ksp;
 
     NS ns = (NS)ctx;
@@ -579,7 +577,7 @@ PetscErrorCode NSFSMComputeRHSVStar2d(KSP ksp, Vec b, void *ctx) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMComputeRHSPprime2d(KSP ksp, Vec b, void *ctx) {
+PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx) {
     (void)ksp;
 
     NS ns = (NS)ctx;
@@ -628,7 +626,7 @@ PetscErrorCode NSFSMComputeRHSPprime2d(KSP ksp, Vec b, void *ctx) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
+PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
     (void)J;
 
     NS ns = (NS)ctx;
@@ -703,7 +701,7 @@ PetscErrorCode NSFSMComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
+PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
     NS ns = (NS)ctx;
     Mesh mesh = ns->mesh;
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;

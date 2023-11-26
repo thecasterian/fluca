@@ -1,19 +1,22 @@
 #include <fluca/private/viewercgnsutils.h>
 #include <petsc/private/viewercgnsimpl.h>
 
-PetscErrorCode FlucaViewerCGNSFileOpen_Private(PetscViewer v, int sequence_number) {
+PetscErrorCode FlucaViewerCGNSFileOpen_Private(PetscViewer v, PetscBool expect_template, int sequence_number) {
     PetscViewer_CGNS *cgns = (PetscViewer_CGNS *)v->data;
 
     PetscFunctionBegin;
 
-    PetscCheck((!cgns->filename) ^ (sequence_number < 0), PetscObjectComm((PetscObject)v), PETSC_ERR_ARG_INCOMP,
-               "Expect either a template filename or non-negative sequence number");
+    PetscCheck(!expect_template || !cgns->filename, PetscObjectComm((PetscObject)v), PETSC_ERR_ARG_INCOMP,
+               "Expect a template filename");
+    PetscCheck(!expect_template || sequence_number >= 0, PetscObjectComm((PetscObject)v), PETSC_ERR_ARG_INCOMP,
+               "Expect a non-negative sequence number");
+    PetscCheck(expect_template || cgns->filename, PetscObjectComm((PetscObject)v), PETSC_ERR_ARG_INCOMP,
+               "Expect a non-template filename");
+
     if (!cgns->filename) {
         char filename_numbered[PETSC_MAX_PATH_LEN];
-        // Cast sequence_number so %d can be used also when PetscInt is 64-bit. We could upgrade the format string if
-        // users run more than 2B time steps.
         PetscCall(
-            PetscSNPrintf(filename_numbered, sizeof(filename_numbered), cgns->filename_template, (int)sequence_number));
+            PetscSNPrintf(filename_numbered, sizeof(filename_numbered), cgns->filename_template, sequence_number));
         PetscCall(PetscStrallocpy(filename_numbered, &cgns->filename));
     }
 

@@ -15,8 +15,6 @@ FLUCA_EXTERN PetscErrorCode MeshSetType(Mesh, MeshType);
 FLUCA_EXTERN PetscErrorCode MeshGetType(Mesh, MeshType *);
 FLUCA_EXTERN PetscErrorCode MeshSetDim(Mesh, PetscInt);
 FLUCA_EXTERN PetscErrorCode MeshGetDim(Mesh, PetscInt *);
-FLUCA_EXTERN PetscErrorCode MeshSetSequenceNumber(Mesh, PetscInt, PetscReal);
-FLUCA_EXTERN PetscErrorCode MeshGetSequenceNumber(Mesh, PetscInt *, PetscReal *);
 FLUCA_EXTERN PetscErrorCode MeshSetFromOptions(Mesh);
 FLUCA_EXTERN PetscErrorCode MeshSetUp(Mesh);
 FLUCA_EXTERN PetscErrorCode MeshView(Mesh, PetscViewer);

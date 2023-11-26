@@ -11,7 +11,6 @@ const char *help = "mesh test\n";
 int main(int argc, char **argv) {
     Mesh mesh;
     NS ns;
-    Sol sol;
 
     PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
@@ -49,8 +48,7 @@ int main(int argc, char **argv) {
         PetscCall(NSSetViscosity(ns, 1.0));
         PetscCall(NSSetTimeStepSize(ns, 0.002));
         PetscCall(NSSetUp(ns));
-        PetscCall(NSSolve(ns, 10000));
-        PetscCall(NSGetSol(ns, &sol));
+        PetscCall(NSSolve(ns, 1));
     }
 
     {
@@ -60,7 +58,7 @@ int main(int argc, char **argv) {
         PetscCall(PetscViewerSetType(viewer, PETSCVIEWERCGNS));
         PetscCall(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
         PetscCall(PetscViewerFileSetName(viewer, "fluca-%d.cgns"));
-        PetscCall(SolView(sol, viewer));
+        PetscCall(NSView(ns, viewer));
         PetscCall(PetscViewerDestroy(&viewer));
     }
 

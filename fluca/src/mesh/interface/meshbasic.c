@@ -20,8 +20,6 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh) {
 
     m->dim = -1;
     m->data = NULL;
-    m->seqnum = 0;
-    m->seqval = 0.0;
     m->state = MESH_STATE_INITIAL;
 
     *mesh = m;
