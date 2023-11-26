@@ -31,6 +31,9 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns) {
 
     n->state = NS_STATE_INITIAL;
 
+    n->num_mons = 0;
+    n->mon_freq = 1;
+
     *ns = n;
 
     PetscFunctionReturn(PETSC_SUCCESS);
@@ -71,6 +74,45 @@ PetscErrorCode NSGetType(NS ns, NSType *type) {
     PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
     PetscCall(NSRegisterAll());
     *type = ((PetscObject)ns)->type_name;
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+FLUCA_EXTERN PetscErrorCode NSSetFromOptions(NS ns) {
+    char type[256];
+    PetscBool flg, opt;
+
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+    PetscCall(NSRegisterAll());
+
+    PetscObjectOptionsBegin((PetscObject)ns);
+
+    PetscCall(PetscOptionsFList("-ns_type", "NS type", "NSSetType", NSList,
+                                (char *)(((PetscObject)ns)->type_name ? ((PetscObject)ns)->type_name : NSFSM), type,
+                                sizeof(type), &flg));
+    if (flg)
+        PetscCall(NSSetType(ns, type));
+    else if (!((PetscObject)ns)->type_name)
+        PetscCall(NSSetType(ns, NSFSM));
+
+    PetscCall(PetscOptionsReal("-ns_density", "Fluid density", "NSSetDensity", ns->rho, &ns->rho, NULL));
+    PetscCall(PetscOptionsReal("-ns_viscosity", "Fluid viscosity", "NSSetViscosity", ns->mu, &ns->mu, NULL));
+    PetscCall(PetscOptionsReal("-ns_time_step_size", "Time step size", "NSSetTimeStepSize", ns->dt, &ns->dt, NULL));
+
+    PetscCall(PetscOptionsInt("-ns_monitor_frequency", "Monitor frequency", "NSMonitorSetFrequency", ns->mon_freq,
+                              &ns->mon_freq, NULL));
+    PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor", "Monitor current step and time", "NSMonitorDefault",
+                                      NSMonitorDefault, NULL));
+    flg = PETSC_FALSE;
+    PetscCall(PetscOptionsBool("-ns_monitor_cancel", "Remove all monitors", "NSMonitorCancel", flg, &flg, &opt));
+    if (opt && flg)
+        PetscCall(NSMonitorCancel(ns));
+
+    PetscTryTypeMethod(ns, setfromoptions, PetscOptionsObject);
+
+    PetscOptionsEnd();
+
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -123,9 +165,10 @@ PetscErrorCode NSSolve(NS ns, PetscInt num_iters) {
     for (i = 0; i < num_iters; i++) {
         PetscTryTypeMethod(ns, solve_iter);
         ns->step++;
-        ns->t = t_init + ns->step * ns->dt;
+        ns->t = t_init + i * ns->dt;
 
-        PetscCall(NSMonitor(ns, ns->step, ns->t, ns->sol));
+        if (ns->step % ns->mon_freq == 0)
+            PetscCall(NSMonitor(ns, ns->step, ns->t, ns->sol));
     }
 
     PetscCall(PetscLogEventEnd(NS_Solve, (PetscObject)ns, 0, 0, 0));

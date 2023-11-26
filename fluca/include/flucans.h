@@ -28,6 +28,7 @@ FLUCA_EXTERN PetscErrorCode NSSetTimeStep(NS, PetscInt);
 FLUCA_EXTERN PetscErrorCode NSGetTimeStep(NS, PetscInt *);
 FLUCA_EXTERN PetscErrorCode NSSetTime(NS, PetscReal);
 FLUCA_EXTERN PetscErrorCode NSGetTime(NS, PetscReal *);
+FLUCA_EXTERN PetscErrorCode NSSetFromOptions(NS);
 FLUCA_EXTERN PetscErrorCode NSSetUp(NS);
 FLUCA_EXTERN PetscErrorCode NSSolve(NS, PetscInt);
 FLUCA_EXTERN PetscErrorCode NSGetSol(NS, Sol *);
@@ -39,7 +40,12 @@ FLUCA_EXTERN PetscErrorCode NSMonitorSet(NS, PetscErrorCode (*)(NS, PetscInt, Pe
                                          PetscErrorCode (*)(void **));
 FLUCA_EXTERN PetscErrorCode NSMonitorCancel(NS);
 FLUCA_EXTERN PetscErrorCode NSMonitor(NS, PetscInt, PetscReal, Sol);
-FLUCA_EXTERN PetscErrorCode NSMonitorDefault(NS, PetscInt, PetscReal, Sol, void *);
+FLUCA_EXTERN PetscErrorCode NSMonitorSetFrequency(NS, PetscInt);
+FLUCA_EXTERN PetscErrorCode NSMonitorSetFromOptions(NS, const char *, const char *, const char *,
+                                                    PetscErrorCode (*)(NS, PetscInt, PetscReal, Sol,
+                                                                       PetscViewerAndFormat *),
+                                                    PetscErrorCode (*)(NS, PetscViewerAndFormat *));
+FLUCA_EXTERN PetscErrorCode NSMonitorDefault(NS, PetscInt, PetscReal, Sol, PetscViewerAndFormat *);
 
 FLUCA_EXTERN PetscFunctionList NSList;
 FLUCA_EXTERN PetscErrorCode NSRegister(const char *, PetscErrorCode (*)(NS));

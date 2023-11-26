@@ -6,6 +6,21 @@ extern PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns);
 extern PetscErrorCode NSFSMCalculatePressureCorrection2d_MeshCartesian(NS ns);
 extern PetscErrorCode NSFSMUpdate2d_MeshCartesian(NS ns);
 
+PetscErrorCode NSSetFromOptions_FSM(NS ns, PetscOptionItems *PetscOptionsObject) {
+    NS_FSM *fsm = (NS_FSM *)ns->data;
+
+    PetscFunctionBegin;
+
+    PetscOptionsHeadBegin(PetscOptionsObject, "NSFSM Options");
+
+    // TODO: Add options
+    (void)fsm;
+
+    PetscOptionsHeadEnd();
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetup_FSM(NS ns) {
     NS_FSM *fsm = (NS_FSM *)ns->data;
     MPI_Comm comm;

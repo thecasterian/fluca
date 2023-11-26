@@ -16,6 +16,7 @@ FLUCA_EXTERN PetscLogEvent NS_Solve;
 typedef struct _NSOps *NSOps;
 
 struct _NSOps {
+    PetscErrorCode (*setfromoptions)(NS, PetscOptionItems *);
     PetscErrorCode (*setup)(NS);
     PetscErrorCode (*solve_init)(NS);
     PetscErrorCode (*solve_iter)(NS);
@@ -52,6 +53,7 @@ struct _p_NS {
     PetscErrorCode (*mons[MAXNSMONITORS])(NS, PetscInt, PetscReal, Sol, void *);
     void *mon_ctxs[MAXNSMONITORS];
     PetscErrorCode (*mon_ctx_destroys[MAXNSMONITORS])(void **);
+    PetscInt mon_freq;
 };
 
 #endif
