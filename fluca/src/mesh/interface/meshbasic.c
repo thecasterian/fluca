@@ -97,9 +97,6 @@ PetscErrorCode MeshSetUp(Mesh mesh) {
 }
 
 PetscErrorCode MeshView(Mesh mesh, PetscViewer v) {
-    PetscViewerFormat format;
-    PetscMPIInt size;
-
     PetscFunctionBegin;
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
@@ -107,11 +104,6 @@ PetscErrorCode MeshView(Mesh mesh, PetscViewer v) {
         PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)mesh), &v));
     PetscValidHeaderSpecific(v, PETSC_VIEWER_CLASSID, 2);
     PetscCheckSameComm(mesh, 1, v, 2);
-
-    PetscCall(PetscViewerGetFormat(v, &format));
-    PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)mesh), &size));
-    if (format == PETSC_VIEWER_LOAD_BALANCE && size == 1)
-        PetscFunctionReturn(PETSC_SUCCESS);
 
     PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)mesh, v));
     PetscTryTypeMethod(mesh, view, v);

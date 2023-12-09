@@ -50,7 +50,7 @@ struct _p_NS {
 
     /* Monitor -------------------------------------------------------------- */
     PetscInt num_mons;
-    PetscErrorCode (*mons[MAXNSMONITORS])(NS, PetscInt, PetscReal, Sol, void *);
+    PetscErrorCode (*mons[MAXNSMONITORS])(NS, void *);
     void *mon_ctxs[MAXNSMONITORS];
     PetscErrorCode (*mon_ctx_destroys[MAXNSMONITORS])(void **);
     PetscInt mon_freq;

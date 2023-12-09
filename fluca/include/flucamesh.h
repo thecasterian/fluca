@@ -23,6 +23,8 @@ FLUCA_EXTERN PetscErrorCode MeshDestroy(Mesh *);
 
 FLUCA_EXTERN PetscErrorCode MeshGetDM(Mesh, DM *);
 FLUCA_EXTERN PetscErrorCode MeshGetFaceDM(Mesh, DM *);
+FLUCA_EXTERN PetscErrorCode MeshSetOutputSequenceNumber(Mesh, PetscInt, PetscReal);
+FLUCA_EXTERN PetscErrorCode MeshGetOutputSequenceNumber(Mesh, PetscInt *, PetscReal *);
 
 FLUCA_EXTERN PetscFunctionList MeshList;
 FLUCA_EXTERN PetscErrorCode MeshRegister(const char *, PetscErrorCode (*)(Mesh));

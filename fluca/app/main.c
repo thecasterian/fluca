@@ -52,16 +52,16 @@ int main(int argc, char **argv) {
         PetscCall(NSSolve(ns, 100));
     }
 
-    {
-        PetscViewer viewer;
+    // {
+    //     PetscViewer viewer;
 
-        PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)mesh), &viewer));
-        PetscCall(PetscViewerSetType(viewer, PETSCVIEWERCGNS));
-        PetscCall(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
-        PetscCall(PetscViewerFileSetName(viewer, "fluca-%d.cgns"));
-        PetscCall(NSView(ns, viewer));
-        PetscCall(PetscViewerDestroy(&viewer));
-    }
+    //     PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)mesh), &viewer));
+    //     PetscCall(PetscViewerSetType(viewer, PETSCVIEWERCGNS));
+    //     PetscCall(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
+    //     PetscCall(PetscViewerFileSetName(viewer, "fluca-%d.cgns"));
+    //     PetscCall(NSView(ns, viewer));
+    //     PetscCall(PetscViewerDestroy(&viewer));
+    // }
 
     PetscCall(MeshDestroy(&mesh));
     PetscCall(NSDestroy(&ns));

@@ -1,6 +1,6 @@
 #include <fluca/private/nsimpl.h>
 
-PetscErrorCode NSMonitorSet(NS ns, PetscErrorCode (*mon)(NS, PetscInt, PetscReal, Sol, void *), void *mon_ctx,
+PetscErrorCode NSMonitorSet(NS ns, PetscErrorCode (*mon)(NS, void *), void *mon_ctx,
                             PetscErrorCode (*mon_ctx_destroy)(void **)) {
     PetscInt i;
     PetscBool identical;
@@ -41,15 +41,19 @@ PetscErrorCode NSMonitorCancel(NS ns) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSMonitor(NS ns, PetscInt step, PetscReal time, Sol sol) {
+PetscErrorCode NSMonitor(NS ns) {
+    DM dm;
     PetscInt i;
 
     PetscFunctionBegin;
 
     PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
 
+    PetscCall(MeshGetDM(ns->mesh, &dm));
+    PetscCall(DMSetOutputSequenceNumber(dm, ns->step, ns->t));
+
     for (i = 0; i < ns->num_mons; i++)
-        PetscCall((*ns->mons[i])(ns, step, time, sol, ns->mon_ctxs[i]));
+        PetscCall((*ns->mons[i])(ns, ns->mon_ctxs[i]));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -62,14 +66,14 @@ PetscErrorCode NSMonitorSetFrequency(NS ns, PetscInt freq) {
 }
 
 PetscErrorCode NSMonitorSetFromOptions(NS ns, const char *name, const char *help, const char *manual,
-                                       PetscErrorCode (*mon)(NS, PetscInt, PetscReal, Sol, PetscViewerAndFormat *),
+                                       PetscErrorCode (*mon)(NS, PetscViewerAndFormat *),
                                        PetscErrorCode (*mon_setup)(NS, PetscViewerAndFormat *)) {
+    (void)help;
+    (void)manual;
+
     PetscViewer viewer;
     PetscViewerFormat format;
     PetscBool flg;
-
-    (void)help;
-    (void)manual;
 
     PetscFunctionBegin;
 
@@ -77,28 +81,46 @@ PetscErrorCode NSMonitorSetFromOptions(NS ns, const char *name, const char *help
                                     ((PetscObject)ns)->prefix, name, &viewer, &format, &flg));
     if (flg) {
         PetscViewerAndFormat *vf;
+
         PetscCall(PetscViewerAndFormatCreate(viewer, format, &vf));
+        PetscCall(PetscObjectDereference((PetscObject)viewer));
         if (mon_setup)
             PetscCall((*mon_setup)(ns, vf));
-        PetscCall(NSMonitorSet(ns, (PetscErrorCode(*)(NS, PetscInt, PetscReal, Sol, void *))mon, vf,
+        PetscCall(NSMonitorSet(ns, (PetscErrorCode(*)(NS, void *))mon, vf,
                                (PetscErrorCode(*)(void **))PetscViewerAndFormatDestroy));
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSMonitorDefault(NS ns, PetscInt step, PetscReal time, Sol sol, PetscViewerAndFormat *vf) {
+PetscErrorCode NSMonitorDefault(NS ns, PetscViewerAndFormat *vf) {
+    (void)ns;
+
+    PetscViewer viewer = vf->viewer;
+    PetscViewerFormat format = vf->format;
     PetscBool isascii;
 
     PetscFunctionBegin;
 
-    PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-    PetscValidHeaderSpecific(sol, SOL_CLASSID, 4);
+    PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &isascii));
 
-    PetscCall(PetscObjectTypeCompare((PetscObject)vf->viewer, PETSCVIEWERASCII, &isascii));
+    PetscCall(PetscViewerPushFormat(viewer, format));
 
     if (isascii)
-        PetscCall(PetscViewerASCIIPrintf(vf->viewer, "step %" PetscInt_FMT ", time %g\n", step, (double)time));
+        PetscCall(PetscViewerASCIIPrintf(viewer, "step %" PetscInt_FMT ", time %g\n", ns->step, (double)ns->t));
 
+    PetscCall(PetscViewerPopFormat(viewer));
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSMonitorSolution(NS ns, PetscViewerAndFormat *vf) {
+    PetscViewer viewer = vf->viewer;
+    PetscViewerFormat format = vf->format;
+
+    PetscFunctionBegin;
+    PetscCall(PetscViewerPushFormat(viewer, format));
+    PetscCall(SolView(ns->sol, viewer));
+    PetscCall(PetscViewerPopFormat(viewer));
     PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -7,8 +7,6 @@ PetscLogEvent NS_Solve = 0;
 PetscFunctionList NSList = NULL;
 PetscBool NSRegisterAllCalled = PETSC_FALSE;
 
-extern PetscErrorCode NSView_CGNS(NS, PetscViewer);
-
 PetscErrorCode NSCreate(MPI_Comm comm, NS *ns) {
     NS n;
 
@@ -77,7 +75,7 @@ PetscErrorCode NSGetType(NS ns, NSType *type) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-FLUCA_EXTERN PetscErrorCode NSSetFromOptions(NS ns) {
+PetscErrorCode NSSetFromOptions(NS ns) {
     char type[256];
     PetscBool flg, opt;
 
@@ -104,6 +102,8 @@ FLUCA_EXTERN PetscErrorCode NSSetFromOptions(NS ns) {
                               &ns->mon_freq, NULL));
     PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor", "Monitor current step and time", "NSMonitorDefault",
                                       NSMonitorDefault, NULL));
+    PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor_solution", "Monitor solution", "NSMonitorSolution",
+                                      NSMonitorSolution, NULL));
     flg = PETSC_FALSE;
     PetscCall(PetscOptionsBool("-ns_monitor_cancel", "Remove all monitors", "NSMonitorCancel", flg, &flg, &opt));
     if (opt && flg)
@@ -138,8 +138,7 @@ PetscErrorCode NSSetUp(NS ns) {
 
     PetscCall(PetscLogEventEnd(NS_SetUp, (PetscObject)ns, 0, 0, 0));
 
-    /* Viewers */
-    PetscCall(NSViewFromOptions(ns, NULL, "-ns_view"));
+    /* NSViewFromOptions() is called in NSSolve(). */
 
     ns->state = NS_STATE_SETUP;
 
@@ -159,17 +158,22 @@ PetscErrorCode NSSolve(NS ns, PetscInt num_iters) {
 
     PetscCall(PetscLogEventBegin(NS_Solve, (PetscObject)ns, 0, 0, 0));
 
+    PetscCall(NSViewFromOptions(ns, NULL, "-ns_view_pre"));
+
     t_init = ns->t;
     PetscTryTypeMethod(ns, solve_init);
 
     for (i = 0; i < num_iters; i++) {
         PetscTryTypeMethod(ns, solve_iter);
         ns->step++;
-        ns->t = t_init + i * ns->dt;
+        ns->t = t_init + (i + 1) * ns->dt;
 
         if (ns->step % ns->mon_freq == 0)
-            PetscCall(NSMonitor(ns, ns->step, ns->t, ns->sol));
+            PetscCall(NSMonitor(ns));
     }
+
+    PetscCall(NSViewFromOptions(ns, NULL, "-ns_view"));
+    PetscCall(SolViewFromOptions(ns->sol, NULL, "-ns_view_solution"));
 
     PetscCall(PetscLogEventEnd(NS_Solve, (PetscObject)ns, 0, 0, 0));
 
@@ -235,8 +239,6 @@ PetscErrorCode NSView(NS ns, PetscViewer v) {
         PetscCall(PetscViewerASCIIPushTab(v));
         PetscTryTypeMethod(ns, view, v);
         PetscCall(PetscViewerASCIIPopTab(v));
-    } else if (iscgns) {
-        PetscCall(NSView_CGNS(ns, v));
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);
