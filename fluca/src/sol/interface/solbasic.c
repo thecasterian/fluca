@@ -1,6 +1,6 @@
 #include <fluca/private/solimpl.h>
-
-extern PetscErrorCode SolView_CGNSCartesian(Sol, PetscViewer);
+#include <petscdmda.h>
+#include <petscdraw.h>
 
 PetscClassId SOL_CLASSID = 0;
 
@@ -71,6 +71,7 @@ PetscErrorCode SolSetMesh(Sol sol, Mesh mesh) {
 
     PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 2);
+    PetscCheckSameComm(sol, 1, mesh, 2);
 
     if (sol->mesh == mesh)
         PetscFunctionReturn(PETSC_SUCCESS);
@@ -124,33 +125,17 @@ PetscErrorCode SolGetPressure(Sol sol, Vec *p) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode SolView(Sol sol, PetscViewer v) {
-    PetscViewerFormat format;
-    PetscMPIInt size;
-    PetscBool iscgns, iscart;
-
+PetscErrorCode SolView(Sol sol, PetscViewer viewer) {
     PetscFunctionBegin;
 
     PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
-    if (!v)
-        PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)sol), &v));
-    PetscValidHeaderSpecific(v, PETSC_VIEWER_CLASSID, 2);
-    PetscCheckSameComm(sol, 1, v, 2);
+    if (!viewer)
+        PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)sol), &viewer));
+    PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
+    PetscCheckSameComm(sol, 1, viewer, 2);
 
-    PetscCall(PetscViewerGetFormat(v, &format));
-    PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)sol), &size));
-    if (format == PETSC_VIEWER_LOAD_BALANCE && size == 1)
-        PetscFunctionReturn(PETSC_SUCCESS);
-
-    PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
-    PetscCall(PetscObjectTypeCompare((PetscObject)sol->mesh, MESHCARTESIAN, &iscart));
-    if (iscgns) {
-        if (iscart)
-            PetscCall(SolView_CGNSCartesian(sol, v));
-    }
-
-    PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)sol, v));
-    PetscTryTypeMethod(sol, view, v);
+    PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)sol, viewer));
+    PetscTryTypeMethod(sol, view, viewer);
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }

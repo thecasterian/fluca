@@ -12,5 +12,6 @@ PetscErrorCode SolRegister(const char *type, PetscErrorCode (*function)(Sol)) {
 PetscErrorCode SolRegisterAll(void) {
     PetscFunctionBegin;
     PetscCall(SolRegister(SOLFSM, SolCreate_FSM));
+    SolRegisterAllCalled = PETSC_TRUE;
     PetscFunctionReturn(PETSC_SUCCESS);
 }

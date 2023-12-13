@@ -1,14 +1,16 @@
 #include <flucamesh.h>
+#include <flucans.h>
 #include <flucasol.h>
 #include <flucasys.h>
 #include <math.h>
+#include <petscdmda.h>
 #include <petscviewer.h>
 
 const char *help = "mesh test\n";
 
 int main(int argc, char **argv) {
     Mesh mesh;
-    Sol sol;
+    NS ns;
 
     PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
@@ -32,31 +34,37 @@ int main(int argc, char **argv) {
         PetscCall(MeshCartesianGetCorners(mesh, &xs, &ys, NULL, &xm, &ym, NULL));
         PetscCall(MeshCartesianFaceCoordinateGetArray(mesh, &arrcx, &arrcy, NULL));
         for (i = xs; i <= xs + xm; i++)
-            arrcx[i][0] = 0.5 - 0.5 * cos(M_PI * i / M);
+            arrcx[i][0] = (PetscReal)i / M;
         for (j = ys; j <= ys + ym; j++)
-            arrcy[j][0] = 0.5 - 0.5 * cos(M_PI * j / N);
+            arrcy[j][0] = (PetscReal)j / N;
         PetscCall(MeshCartesianFaceCoordinateRestoreArray(mesh, &arrcx, &arrcy, NULL));
     }
 
     {
-        PetscCall(SolCreate(PETSC_COMM_WORLD, &sol));
-        PetscCall(SolSetType(sol, SOLFSM));
-        PetscCall(SolSetMesh(sol, mesh));
+        PetscCall(NSCreate(PETSC_COMM_WORLD, &ns));
+        PetscCall(NSSetType(ns, NSFSM));
+        PetscCall(NSSetMesh(ns, mesh));
+        PetscCall(NSSetDensity(ns, 1000.0));
+        PetscCall(NSSetViscosity(ns, 1.0));
+        PetscCall(NSSetTimeStepSize(ns, 0.002));
+        PetscCall(NSSetFromOptions(ns));
+        PetscCall(NSSetUp(ns));
+        PetscCall(NSSolve(ns, 100));
     }
 
-    {
-        PetscViewer viewer;
+    // {
+    //     PetscViewer viewer;
 
-        PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)mesh), &viewer));
-        PetscCall(PetscViewerSetType(viewer, PETSCVIEWERCGNS));
-        PetscCall(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
-        PetscCall(PetscViewerFileSetName(viewer, "mesh-%d.cgns"));
-        PetscCall(SolView(sol, viewer));
-        PetscCall(PetscViewerDestroy(&viewer));
-    }
+    //     PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)mesh), &viewer));
+    //     PetscCall(PetscViewerSetType(viewer, PETSCVIEWERCGNS));
+    //     PetscCall(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
+    //     PetscCall(PetscViewerFileSetName(viewer, "fluca-%d.cgns"));
+    //     PetscCall(NSView(ns, viewer));
+    //     PetscCall(PetscViewerDestroy(&viewer));
+    // }
 
     PetscCall(MeshDestroy(&mesh));
-    PetscCall(SolDestroy(&sol));
+    PetscCall(NSDestroy(&ns));
 
     PetscCall(FlucaFinalize());
 }

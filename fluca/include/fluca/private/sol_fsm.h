@@ -1,5 +1,5 @@
-#if !defined(FLUCA_SOL_SINGLEZONE_H)
-#define FLUCA_SOL_SINGLEZONE_H
+#if !defined(FLUCA_PRIVATE_SOL_FSM_H)
+#define FLUCA_PRIVATE_SOL_FSM_H
 
 #include <fluca/private/solimpl.h>
 #include <petscvec.h>
@@ -11,9 +11,9 @@ typedef struct {
     Vec N_prev[3];
     Vec fv;
     Vec fv_star;
-    Vec p_half;
+    Vec p_half; /* p^{n+1/2} */
     Vec p_prime;
-    Vec p_half_prev;
+    Vec p_half_prev; /* p^{n-1/2} */
 } Sol_FSM;
 
 #endif

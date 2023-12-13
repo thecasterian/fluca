@@ -20,8 +20,6 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh) {
 
     m->dim = -1;
     m->data = NULL;
-    m->seqnum = 0;
-    m->seqval = 0.0;
     m->state = MESH_STATE_INITIAL;
 
     *mesh = m;
@@ -99,9 +97,6 @@ PetscErrorCode MeshSetUp(Mesh mesh) {
 }
 
 PetscErrorCode MeshView(Mesh mesh, PetscViewer v) {
-    PetscViewerFormat format;
-    PetscMPIInt size;
-
     PetscFunctionBegin;
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
@@ -109,11 +104,6 @@ PetscErrorCode MeshView(Mesh mesh, PetscViewer v) {
         PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)mesh), &v));
     PetscValidHeaderSpecific(v, PETSC_VIEWER_CLASSID, 2);
     PetscCheckSameComm(mesh, 1, v, 2);
-
-    PetscCall(PetscViewerGetFormat(v, &format));
-    PetscCallMPI(MPI_Comm_size(PetscObjectComm((PetscObject)mesh), &size));
-    if (format == PETSC_VIEWER_LOAD_BALANCE && size == 1)
-        PetscFunctionReturn(PETSC_SUCCESS);
 
     PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)mesh, v));
     PetscTryTypeMethod(mesh, view, v);
@@ -149,7 +139,7 @@ PetscErrorCode MeshDestroy(Mesh *mesh) {
 PetscErrorCode MeshGetDM(Mesh mesh, DM *dm) {
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-    PetscValidPointer(dm, 2);
+    PetscAssertPointer(dm, 2);
     PetscCheck(mesh->state >= MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "Mesh not setup");
     PetscTryTypeMethod(mesh, getdm, dm);
@@ -159,7 +149,7 @@ PetscErrorCode MeshGetDM(Mesh mesh, DM *dm) {
 PetscErrorCode MeshGetFaceDM(Mesh mesh, DM *dm) {
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-    PetscValidPointer(dm, 2);
+    PetscAssertPointer(dm, 2);
     PetscCheck(mesh->state >= MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "Mesh not setup");
     PetscTryTypeMethod(mesh, getfacedm, dm);

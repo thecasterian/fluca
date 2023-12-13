@@ -36,8 +36,6 @@ struct _p_Mesh {
 
     /* Data ----------------------------------------------------------------- */
     void *data; /* implementation-specific data */
-    PetscInt seqnum;
-    PetscReal seqval;
 
     /* Status --------------------------------------------------------------- */
     MeshStateType state;

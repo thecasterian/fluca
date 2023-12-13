@@ -1,7 +1,7 @@
 #include <fluca/private/meshimpl.h>
 #include <fluca/private/sol_fsm.h>
 
-extern PetscErrorCode SolView_FSMCGNSCartesian(Sol, PetscViewer);
+extern PetscErrorCode SolView_FSMCGNS(Sol, PetscViewer);
 
 PetscErrorCode SolSetMesh_FSM(Sol sol, Mesh mesh) {
     Sol_FSM *fsm = (Sol_FSM *)sol->data;
@@ -65,15 +65,13 @@ PetscErrorCode SolDestroy_FSM(Sol sol) {
 }
 
 PetscErrorCode SolView_FSM(Sol sol, PetscViewer v) {
-    PetscBool iscgns, iscart;
+    PetscBool iscgns;
 
     PetscFunctionBegin;
 
     PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
-    PetscCall(PetscObjectTypeCompare((PetscObject)sol->mesh, MESHCARTESIAN, &iscart));
     if (iscgns) {
-        if (iscart)
-            PetscCall(SolView_FSMCGNSCartesian(sol, v));
+        PetscCall(SolView_FSMCGNS(sol, v));
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);

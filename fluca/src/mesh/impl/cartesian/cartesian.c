@@ -54,7 +54,7 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
     MPI_Comm comm;
     PetscMPIInt rank;
     DMBoundaryType bndx, bndy, bndz;
-    PetscInt daS = 1, daDof = 1, stagS = 0, stagDof0, stagDof1, stagDof2, stagDof3;
+    PetscInt daS = 1, daDof = 1, stagS = 1, stagDof0, stagDof1, stagDof2, stagDof3;
     const PetscInt *lx, *ly, *lz;
     PetscInt d;
 
@@ -165,6 +165,7 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
         PetscMalloc1(cart->N[d] + 2, &w);
         cart->w[d] = w + 1;
         PetscMalloc1(cart->N[d] + 1, &cart->rf[d]);
+        PetscMalloc1(cart->N[d], &cart->a[d]);
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);
@@ -193,6 +194,7 @@ PetscErrorCode MeshDestroy_Cartesian(Mesh mesh) {
         PetscCall(PetscFree(dummy));
         cart->w[d] = NULL;
         PetscCall(PetscFree(cart->rf[d]));
+        PetscCall(PetscFree(cart->a[d]));
     }
 
     PetscCall(PetscFree(mesh->data));
@@ -203,88 +205,53 @@ PetscErrorCode MeshDestroy_Cartesian(Mesh mesh) {
 PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     PetscMPIInt rank;
-    PetscBool isascii, iscgns;
-
-    // TODO: support other viewers
+    PetscBool isascii, iscgns, isdraw;
 
     PetscFunctionBegin;
 
     PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)mesh), &rank));
     PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERASCII, &isascii));
     PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
+    PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERDRAW, &isdraw));
 
     if (isascii) {
-        PetscViewerFormat format;
+        DMDALocalInfo info;
 
-        PetscCall(PetscViewerGetFormat(v, &format));
-        if (format == PETSC_VIEWER_LOAD_BALANCE) {
-            PetscMPIInt size;
-            DMDALocalInfo info;
-            PetscInt i, nmax = 0, nmin = PETSC_MAX_INT, navg = 0, *nz, nzlocal;
-
-            PetscCall(MPI_Comm_size(PetscObjectComm((PetscObject)mesh), &size));
-            PetscCall(DMDAGetLocalInfo(cart->dm, &info));
-            if (mesh->dim == 2)
-                nzlocal = info.mx * info.my;
-            else
-                nzlocal = info.mx * info.my * info.mz;
-            PetscCall(PetscMalloc1(size, &nz));
-            PetscCallMPI(MPI_Allgather(&nzlocal, 1, MPIU_INT, nz, 1, MPIU_INT, PetscObjectComm((PetscObject)mesh)));
-            for (i = 0; i < (PetscInt)size; i++) {
-                nmax = PetscMax(nmax, nz[i]);
-                nmin = PetscMin(nmin, nz[i]);
-                navg += nz[i];
-            }
-            navg /= size;
-            PetscCall(PetscFree(nz));
-            PetscCall(PetscViewerASCIIPrintf(v,
-                                             "  Load Balance - Grid Points: Min %" PetscInt_FMT "  avg %" PetscInt_FMT
-                                             "  max %" PetscInt_FMT "\n",
-                                             nmin, navg, nmax));
-            PetscFunctionReturn(PETSC_SUCCESS);
+        PetscCall(DMDAGetLocalInfo(cart->dm, &info));
+        PetscCall(PetscViewerASCIIPushSynchronized(v));
+        switch (mesh->dim) {
+            case 2:
+                PetscCall(PetscViewerASCIISynchronizedPrintf(
+                    v,
+                    "Processor [%d] M %" PetscInt_FMT " N %" PetscInt_FMT " m %" PetscInt_FMT " n %" PetscInt_FMT "\n",
+                    rank, cart->N[0], cart->N[1], cart->nRanks[0], cart->nRanks[1]));
+                PetscCall(PetscViewerASCIISynchronizedPrintf(v,
+                                                             "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT
+                                                             ", Y range of indices: %" PetscInt_FMT " %" PetscInt_FMT
+                                                             "\n",
+                                                             info.xs, info.xs + info.xm, info.ys, info.ys + info.ym));
+                break;
+            case 3:
+                PetscCall(PetscViewerASCIISynchronizedPrintf(
+                    v,
+                    "Processor [%d] M %" PetscInt_FMT " N %" PetscInt_FMT " P %" PetscInt_FMT " m %" PetscInt_FMT
+                    " n %" PetscInt_FMT " p %" PetscInt_FMT "\n",
+                    rank, cart->N[0], cart->N[1], cart->N[1], cart->nRanks[0], cart->nRanks[1], cart->nRanks[2]));
+                PetscCall(PetscViewerASCIISynchronizedPrintf(
+                    v,
+                    "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT ", Y range of indices: %" PetscInt_FMT
+                    " %" PetscInt_FMT ", Z range of indices: %" PetscInt_FMT " %" PetscInt_FMT "\n",
+                    info.xs, info.xs + info.xm, info.ys, info.ys + info.ym, info.zs, info.zs + info.zm));
+                break;
+            default:
+                SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_SUP, "Unsupported mesh dimension");
         }
-
-        if (format != PETSC_VIEWER_ASCII_VTK_DEPRECATED && format != PETSC_VIEWER_ASCII_VTK_CELL_DEPRECATED &&
-            format != PETSC_VIEWER_ASCII_GLVIS) {
-            DMDALocalInfo info;
-
-            PetscCall(DMDAGetLocalInfo(cart->dm, &info));
-            PetscCall(PetscViewerASCIIPushSynchronized(v));
-            switch (mesh->dim) {
-                case 2:
-                    PetscCall(PetscViewerASCIISynchronizedPrintf(v,
-                                                                 "Processor [%d] M %" PetscInt_FMT " N %" PetscInt_FMT
-                                                                 " m %" PetscInt_FMT " n %" PetscInt_FMT "\n",
-                                                                 rank, cart->N[0], cart->N[1], cart->nRanks[0],
-                                                                 cart->nRanks[1]));
-                    PetscCall(PetscViewerASCIISynchronizedPrintf(
-                        v,
-                        "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT ", Y range of indices: %" PetscInt_FMT
-                        " %" PetscInt_FMT "\n",
-                        info.xs, info.xs + info.xm, info.ys, info.ys + info.ym));
-                    break;
-                case 3:
-                    PetscCall(PetscViewerASCIISynchronizedPrintf(
-                        v,
-                        "Processor [%d] M %" PetscInt_FMT " N %" PetscInt_FMT " P %" PetscInt_FMT " m %" PetscInt_FMT
-                        " n %" PetscInt_FMT " p %" PetscInt_FMT "\n",
-                        rank, cart->N[0], cart->N[1], cart->N[1], cart->nRanks[0], cart->nRanks[1], cart->nRanks[2]));
-                    PetscCall(PetscViewerASCIISynchronizedPrintf(
-                        v,
-                        "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT ", Y range of indices: %" PetscInt_FMT
-                        " %" PetscInt_FMT ", Z range of indices: %" PetscInt_FMT " %" PetscInt_FMT "\n",
-                        info.xs, info.xs + info.xm, info.ys, info.ys + info.ym, info.zs, info.zs + info.zm));
-                    break;
-                default:
-                    SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_SUP, "Unsupported mesh dimension");
-            }
-            PetscCall(PetscViewerFlush(v));
-            PetscCall(PetscViewerASCIIPopSynchronized(v));
-            PetscFunctionReturn(PETSC_SUCCESS);
-        }
+        PetscCall(PetscViewerFlush(v));
+        PetscCall(PetscViewerASCIIPopSynchronized(v));
     } else if (iscgns) {
         PetscCall(MeshView_CartesianCGNS(mesh, v));
-        PetscFunctionReturn(PETSC_SUCCESS);
+    } else if (isdraw) {
+        PetscCall(DMView(cart->dm, v));
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);
@@ -331,6 +298,7 @@ PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
         cart->cf[d] = NULL;
         cart->w[d] = NULL;
         cart->rf[d] = NULL;
+        cart->a[d] = NULL;
     }
 
     mesh->ops->setfromoptions = MeshSetFromOptions_Cartesian;
@@ -548,6 +516,10 @@ PetscErrorCode MeshCartesianFaceCoordinateRestoreArray(Mesh mesh, PetscReal ***a
         }
         for (i = 0; i <= cart->N[d]; i++)
             cart->rf[d][i] = cart->w[d][i] / (cart->w[d][i - 1] + cart->w[d][i]);
+        for (i = 0; i < cart->N[d]; i++) {
+            cart->a[d][i][0] = 1.0 / (cart->w[d][i] * (cart->c[d][i] - cart->c[d][i - 1]));
+            cart->a[d][i][1] = 1.0 / (cart->w[d][i] * (cart->c[d][i + 1] - cart->c[d][i]));
+        }
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);
@@ -571,6 +543,40 @@ PetscErrorCode MeshCartesianFaceCoordinateRestoreArrayRead(Mesh mesh, const Pets
             PetscFree(dummy);
             *arr[d] = NULL;
         }
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartesianCoordinateGetArrayRead(Mesh mesh, const PetscReal **arrx, const PetscReal **arry,
+                                                   const PetscReal **arrz) {
+    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+
+    const PetscReal **arr[3] = {arrx, arry, arrz};
+    PetscInt d;
+
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+
+    for (d = 0; d < mesh->dim; d++)
+        if (arr[d])
+            *arr[d] = cart->c[d];
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartesianCoordinateRestoreArrayRead(Mesh mesh, const PetscReal **arrx, const PetscReal **arry,
+                                                       const PetscReal **arrz) {
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+
+    if (arrx)
+        *arrx = NULL;
+    if (arry)
+        *arry = NULL;
+    if (arrz)
+        *arrz = NULL;
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
