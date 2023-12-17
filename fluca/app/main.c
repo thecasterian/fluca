@@ -28,16 +28,17 @@ int main(int argc, char **argv) {
     {
         PetscInt M, N, xs, ys, xm, ym;
         PetscReal **arrcx, **arrcy;
-        PetscInt i, j;
+        PetscInt i, j, iprev;
 
-        PetscCall(MeshCartesianGetInfo(mesh, NULL, &M, &N, NULL, NULL, NULL, NULL, NULL, NULL, NULL));
+        PetscCall(MeshCartesianGetGlobalSizes(mesh, &M, &N, NULL));
         PetscCall(MeshCartesianGetCorners(mesh, &xs, &ys, NULL, &xm, &ym, NULL));
-        PetscCall(MeshCartesianFaceCoordinateGetArray(mesh, &arrcx, &arrcy, NULL));
+        PetscCall(MeshCartesianGetCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
+        PetscCall(MeshCartesianGetCoordinateLocationSlot(mesh, MESHCARTESIAN_LEFT, &iprev));
         for (i = xs; i <= xs + xm; i++)
-            arrcx[i][0] = (PetscReal)i / M;
+            arrcx[i][iprev] = (PetscReal)i / M;
         for (j = ys; j <= ys + ym; j++)
-            arrcy[j][0] = (PetscReal)j / N;
-        PetscCall(MeshCartesianFaceCoordinateRestoreArray(mesh, &arrcx, &arrcy, NULL));
+            arrcy[j][iprev] = (PetscReal)j / N;
+        PetscCall(MeshCartesianRestoreCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
     }
 
     {
@@ -51,17 +52,6 @@ int main(int argc, char **argv) {
         PetscCall(NSSetUp(ns));
         PetscCall(NSSolve(ns, 100));
     }
-
-    // {
-    //     PetscViewer viewer;
-
-    //     PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)mesh), &viewer));
-    //     PetscCall(PetscViewerSetType(viewer, PETSCVIEWERCGNS));
-    //     PetscCall(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
-    //     PetscCall(PetscViewerFileSetName(viewer, "fluca-%d.cgns"));
-    //     PetscCall(NSView(ns, viewer));
-    //     PetscCall(PetscViewerDestroy(&viewer));
-    // }
 
     PetscCall(MeshDestroy(&mesh));
     PetscCall(NSDestroy(&ns));

@@ -16,7 +16,8 @@ PetscErrorCode MeshSetDim(Mesh mesh, PetscInt dim) {
 PetscErrorCode MeshGetDim(Mesh mesh, PetscInt *dim) {
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-    *dim = mesh->dim;
+    if (dim)
+        *dim = mesh->dim;
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
