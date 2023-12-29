@@ -1,7 +1,6 @@
 #include <fluca/private/mesh_cartesian.h>
 #include <fluca/private/meshimpl.h>
 #include <petsc/private/petscimpl.h>
-#include <petscdmda.h>
 #include <petscdmstag.h>
 
 extern PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer v);
@@ -53,9 +52,9 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     MPI_Comm comm;
     PetscMPIInt rank;
-    DMBoundaryType bndx, bndy, bndz;
-    PetscInt daS = 1, daDof = 1, stagS = 1, stagDof0, stagDof1, stagDof2, stagDof3;
-    const PetscInt *lx, *ly, *lz;
+    DMBoundaryType bndTypes[3];
+    PetscInt dofElem = 1, dofFace = 1, stencilWidth = 1;
+    const PetscInt *l[3];
     PetscInt d;
 
     PetscFunctionBegin;
@@ -64,62 +63,43 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
 
     PetscCall(PetscObjectGetComm((PetscObject)mesh, &comm));
 
-    PetscCall(MeshBoundaryTypeToDMBoundaryType(cart->bndTypes[0], &bndx));
-    PetscCall(MeshBoundaryTypeToDMBoundaryType(cart->bndTypes[1], &bndy));
-    PetscCall(MeshBoundaryTypeToDMBoundaryType(cart->bndTypes[2], &bndz));
+    for (d = 0; d < mesh->dim; d++)
+        PetscCall(MeshBoundaryTypeToDMBoundaryType(cart->bndTypes[d], &bndTypes[d]));
 
     /* Allocate DMs */
     switch (mesh->dim) {
         case 2:
-            PetscCall(DMDACreate2d(comm, bndx, bndy, DMDA_STENCIL_STAR, cart->N[0], cart->N[1], cart->nRanks[0],
-                                   cart->nRanks[1], daDof, daS, cart->l[0], cart->l[1], &cart->dm));
+            PetscCall(DMStagCreate2d(comm, bndTypes[0], bndTypes[1], cart->N[0], cart->N[1], cart->nRanks[0],
+                                     cart->nRanks[1], 0, 0, dofElem, DMSTAG_STENCIL_STAR, stencilWidth, cart->l[0],
+                                     cart->l[1], &cart->dm));
             break;
         case 3:
-            PetscCall(DMDACreate3d(comm, bndx, bndy, bndz, DMDA_STENCIL_STAR, cart->N[0], cart->N[1], cart->N[2],
-                                   cart->nRanks[0], cart->nRanks[1], cart->nRanks[2], daDof, daS, cart->l[0],
-                                   cart->l[1], cart->l[2], &cart->dm));
+            PetscCall(DMStagCreate3d(comm, bndTypes[0], bndTypes[1], bndTypes[2], cart->N[0], cart->N[1], cart->N[2],
+                                     cart->nRanks[0], cart->nRanks[1], cart->nRanks[2], 0, 0, 0, dofElem,
+                                     DMSTAG_STENCIL_STAR, stencilWidth, cart->l[0], cart->l[1], cart->l[2], &cart->dm));
             break;
         default:
             SETERRQ(comm, PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, mesh->dim);
     }
     PetscCall(DMSetUp(cart->dm));
-
-    PetscCall(DMDAGetInfo(cart->dm, NULL, NULL, NULL, NULL, &cart->nRanks[0], &cart->nRanks[1], &cart->nRanks[2], NULL,
-                          NULL, NULL, NULL, NULL, NULL));
-    if (!cart->l[0])
-        PetscCall(PetscMalloc1(cart->nRanks[0], &cart->l[0]));
-    if (!cart->l[1])
-        PetscCall(PetscMalloc1(cart->nRanks[1], &cart->l[1]));
-    if (mesh->dim > 2 && !cart->l[2])
-        PetscCall(PetscMalloc1(cart->nRanks[2], &cart->l[2]));
-    PetscCall(DMDAGetOwnershipRanges(cart->dm, &lx, &ly, &lz));
-    PetscCall(PetscArraycpy(cart->l[0], lx, cart->nRanks[0]));
-    PetscCall(PetscArraycpy(cart->l[1], ly, cart->nRanks[1]));
-    if (mesh->dim > 2)
-        PetscCall(PetscArraycpy(cart->l[2], lz, cart->nRanks[2]));
-
     switch (mesh->dim) {
         case 2:
-            stagDof0 = 0;
-            stagDof1 = 1;
-            stagDof2 = 0;
-            PetscCall(DMStagCreate2d(comm, bndx, bndy, cart->N[0], cart->N[1], cart->nRanks[0], cart->nRanks[1],
-                                     stagDof0, stagDof1, stagDof2, DMSTAG_STENCIL_STAR, stagS, cart->l[0], cart->l[1],
-                                     &cart->fdm));
+            PetscCall(DMStagCreateCompatibleDMStag(cart->dm, 0, dofFace, 0, 0, &cart->fdm));
             break;
         case 3:
-            stagDof0 = 0;
-            stagDof1 = 0;
-            stagDof2 = 1;
-            stagDof3 = 0;
-            PetscCall(DMStagCreate3d(comm, bndx, bndy, bndz, cart->N[0], cart->N[1], cart->N[2], cart->nRanks[0],
-                                     cart->nRanks[1], cart->nRanks[2], stagDof0, stagDof1, stagDof2, stagDof3,
-                                     DMSTAG_STENCIL_STAR, stagS, cart->l[0], cart->l[1], cart->l[2], &cart->fdm));
+            PetscCall(DMStagCreateCompatibleDMStag(cart->dm, 0, 0, dofFace, 0, &cart->fdm));
             break;
         default:
             SETERRQ(comm, PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, mesh->dim);
     }
-    PetscCall(DMSetUp(cart->fdm));
+
+    PetscCall(DMStagGetNumRanks(cart->dm, &cart->nRanks[0], &cart->nRanks[1], &cart->nRanks[2]));
+    for (d = 0; d < mesh->dim; d++)
+        if (!cart->l[d])
+            PetscCall(PetscMalloc1(cart->nRanks[d], &cart->l[d]));
+    PetscCall(DMStagGetOwnershipRanges(cart->dm, &l[0], &l[1], &l[2]));
+    for (d = 0; d < mesh->dim; d++)
+        PetscCall(PetscArraycpy(cart->l[d], l[d], cart->nRanks[d]));
 
     PetscCallMPI(MPI_Comm_rank(comm, &rank));
     switch (mesh->dim) {
@@ -215,9 +195,9 @@ PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
     PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERDRAW, &isdraw));
 
     if (isascii) {
-        DMDALocalInfo info;
+        PetscInt xs, ys, zs, xm, ym, zm;
 
-        PetscCall(DMDAGetLocalInfo(cart->dm, &info));
+        PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, &zs, &xm, &ym, &zm, NULL, NULL, NULL));
         PetscCall(PetscViewerASCIIPushSynchronized(v));
         switch (mesh->dim) {
             case 2:
@@ -229,7 +209,7 @@ PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
                                                              "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT
                                                              ", Y range of indices: %" PetscInt_FMT " %" PetscInt_FMT
                                                              "\n",
-                                                             info.xs, info.xs + info.xm, info.ys, info.ys + info.ym));
+                                                             xs, xs + xm, ys, ys + ym));
                 break;
             case 3:
                 PetscCall(PetscViewerASCIISynchronizedPrintf(
@@ -241,7 +221,7 @@ PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
                     v,
                     "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT ", Y range of indices: %" PetscInt_FMT
                     " %" PetscInt_FMT ", Z range of indices: %" PetscInt_FMT " %" PetscInt_FMT "\n",
-                    info.xs, info.xs + info.xm, info.ys, info.ys + info.ym, info.zs, info.zs + info.zm));
+                    xs, xs + xm, ys, ys + ym, zs, zs + zm));
                 break;
             default:
                 SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_SUP, "Unsupported mesh dimension");
@@ -414,7 +394,7 @@ PetscErrorCode MeshCartesianFaceCoordinateGetArray(Mesh mesh, PetscReal ***ax, P
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
-    PetscCall(DMDAGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2]));
+    PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
 
     for (d = 0; d < mesh->dim; d++)
         if (arr[d]) {
@@ -444,7 +424,7 @@ PetscErrorCode MeshCartesianFaceCoordinateGetArrayRead(Mesh mesh, const PetscRea
     *ay = NULL;
     *az = NULL;
 
-    PetscCall(DMDAGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2]));
+    PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
 
     for (d = 0; d < mesh->dim; d++)
         if (arr[d]) {
@@ -469,7 +449,7 @@ PetscErrorCode MeshCartesianFaceCoordinateRestoreArray(Mesh mesh, PetscReal ***a
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
-    PetscCall(DMDAGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2]));
+    PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
 
     for (d = 0; d < mesh->dim; d++)
         if (arr[d]) {
@@ -535,7 +515,7 @@ PetscErrorCode MeshCartesianFaceCoordinateRestoreArrayRead(Mesh mesh, const Pets
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
-    PetscCall(DMDAGetCorners(cart->dm, &s[0], &s[1], &s[2], NULL, NULL, NULL));
+    PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], NULL, NULL, NULL, NULL, NULL, NULL));
 
     for (d = 0; d < mesh->dim; d++)
         if (arr[d]) {
@@ -620,7 +600,7 @@ PetscErrorCode MeshCartesianGetCorners(Mesh mesh, PetscInt *xs, PetscInt *ys, Pe
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
-    PetscCall(DMDAGetCorners(cart->dm, xs, ys, zs, xm, ym, zm));
+    PetscCall(DMStagGetCorners(cart->dm, xs, ys, zs, xm, ym, zm, NULL, NULL, NULL));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }

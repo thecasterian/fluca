@@ -1,7 +1,6 @@
 #include <fluca/private/mesh_cartesian.h>
 #include <fluca/private/ns_fsm.h>
 #include <fluca/private/sol_fsm.h>
-#include <petscdmda.h>
 #include <petscdmstag.h>
 
 #define DERIV2W (cart->a[0][i][0])
@@ -21,51 +20,53 @@ PetscErrorCode NSFSMInterpolateVelocity2d_MeshCartesian(NS ns) {
     Sol sol = ns->sol;
     Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
-    DMDALocalInfo info;
+    PetscInt M, N, xs, ys, xm, ym;
     PetscReal ***arrUV;
-    const PetscReal **arru, **arrv;
-    PetscInt iU, iV;
+    const PetscReal ***arru, ***arrv;
+    PetscInt iU, iV, ielem;
     PetscInt i, j;
 
     PetscFunctionBegin;
 
-    PetscCall(DMDAGetLocalInfo(cart->dm, &info));
+    PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
+    PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
     PetscCall(DMStagVecGetArray(cart->fdm, solfsm->fv, &arrUV));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, sol->v[0], &arru));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, sol->v[1], &arrv));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
 
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &iU));
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &iV));
+    PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
 
-    for (j = info.ys; j < info.ys + info.ym; j++)
-        for (i = info.xs; i < info.xs + info.xm + 1; i++) {
+    for (j = ys; j < ys + ym; j++)
+        for (i = xs; i < xs + xm + 1; i++) {
             /* Left wall. */
             if (i == 0)
                 arrUV[j][i][iU] = 0.0;
             /* Right wall. */
-            else if (i == info.mx)
+            else if (i == M)
                 arrUV[j][i][iU] = 0.0;
             else
-                arrUV[j][i][iU] = (cart->w[0][i] * arru[j][i - 1] + cart->w[0][i - 1] * arru[j][i]) /
+                arrUV[j][i][iU] = (cart->w[0][i] * arru[j][i - 1][ielem] + cart->w[0][i - 1] * arru[j][i][ielem]) /
                                   (cart->w[0][i] + cart->w[0][i - 1]);
         }
-    for (j = info.ys; j < info.ys + info.ym + 1; j++)
-        for (i = info.xs; i < info.xs + info.xm; i++) {
+    for (j = ys; j < ys + ym + 1; j++)
+        for (i = xs; i < xs + xm; i++) {
             /* Bottom wall. */
             if (j == 0)
                 arrUV[j][i][iV] = 0.0;
             /* Top wall. */
-            else if (j == info.my)
+            else if (j == N)
                 arrUV[j][i][iV] = 0.0;
             else
-                arrUV[j][i][iV] = (cart->w[1][j] * arrv[j - 1][i] + cart->w[1][j - 1] * arrv[j][i]) /
+                arrUV[j][i][iV] = (cart->w[1][j] * arrv[j - 1][i][ielem] + cart->w[1][j - 1] * arrv[j][i][ielem]) /
                                   (cart->w[1][j] + cart->w[1][j - 1]);
         }
 
     PetscCall(DMStagVecRestoreArray(cart->fdm, solfsm->fv, &arrUV));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -76,47 +77,49 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCartesian(NS ns) {
     Sol sol = ns->sol;
     Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
-    DMDALocalInfo info;
-    PetscReal **arrNu, **arrNv;
-    const PetscReal **arru, **arrv, ***arrUV;
-    PetscInt iU, iV;
+    PetscInt M, N, xs, ys, xm, ym;
+    PetscReal ***arrNu, ***arrNv;
+    const PetscReal ***arru, ***arrv, ***arrUV;
+    PetscInt iU, iV, ielem;
     PetscReal uw, ue, us, un, vw, ve, vs, vn;
     PetscInt i, j;
 
     PetscFunctionBegin;
 
-    PetscCall(DMDAGetLocalInfo(cart->dm, &info));
+    PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
+    PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
-    PetscCall(DMDAVecGetArray(cart->dm, solfsm->N[0], &arrNu));
-    PetscCall(DMDAVecGetArray(cart->dm, solfsm->N[1], &arrNv));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, sol->v[0], &arru));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, sol->v[1], &arrv));
+    PetscCall(DMStagVecGetArray(cart->dm, solfsm->N[0], &arrNu));
+    PetscCall(DMStagVecGetArray(cart->dm, solfsm->N[1], &arrNv));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
     PetscCall(DMStagVecGetArrayRead(cart->fdm, solfsm->fv, &arrUV));
 
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &iU));
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &iV));
+    PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
 
-    for (j = info.ys; j < info.ys + info.ym; j++)
-        for (i = info.xs; i < info.xs + info.xm; i++) {
+    for (j = ys; j < ys + ym; j++)
+        for (i = xs; i < xs + xm; i++) {
             // TODO: below is temporary for cavity flow
             /* Left wall. */
             if (i == 0) {
                 uw = 0.0;
                 vw = 0.0;
             } else {
-                uw = (cart->w[0][i] * arru[j][i - 1] + cart->w[0][i - 1] * arru[j][i]) /
+                uw = (cart->w[0][i] * arru[j][i - 1][ielem] + cart->w[0][i - 1] * arru[j][i][ielem]) /
                      (cart->w[0][i] + cart->w[0][i - 1]);
-                vw = (cart->w[0][i] * arrv[j][i - 1] + cart->w[0][i - 1] * arrv[j][i]) /
+                vw = (cart->w[0][i] * arrv[j][i - 1][ielem] + cart->w[0][i - 1] * arrv[j][i][ielem]) /
                      (cart->w[0][i] + cart->w[0][i - 1]);
             }
             /* Right wall. */
-            if (i == info.mx - 1) {
+            if (i == M - 1) {
                 ue = 0.0;
                 ve = 0.0;
             } else {
-                ue = (cart->w[0][i] * arru[j][i + 1] + cart->w[0][i + 1] * arru[j][i]) /
+                ue = (cart->w[0][i] * arru[j][i + 1][ielem] + cart->w[0][i + 1] * arru[j][i][ielem]) /
                      (cart->w[0][i] + cart->w[0][i + 1]);
-                ve = (cart->w[0][i] * arrv[j][i + 1] + cart->w[0][i + 1] * arrv[j][i]) /
+                ve = (cart->w[0][i] * arrv[j][i + 1][ielem] + cart->w[0][i + 1] * arrv[j][i][ielem]) /
                      (cart->w[0][i] + cart->w[0][i + 1]);
             }
             /* Bottom wall. */
@@ -124,32 +127,32 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCartesian(NS ns) {
                 us = 0.0;
                 vs = 0.0;
             } else {
-                us = (cart->w[1][j] * arru[j - 1][i] + cart->w[1][j - 1] * arru[j][i]) /
+                us = (cart->w[1][j] * arru[j - 1][i][ielem] + cart->w[1][j - 1] * arru[j][i][ielem]) /
                      (cart->w[1][j] + cart->w[1][j - 1]);
-                vs = (cart->w[1][j] * arrv[j - 1][i] + cart->w[1][j - 1] * arrv[j][i]) /
+                vs = (cart->w[1][j] * arrv[j - 1][i][ielem] + cart->w[1][j - 1] * arrv[j][i][ielem]) /
                      (cart->w[1][j] + cart->w[1][j - 1]);
             }
             /* Top wall. */
-            if (j == info.my - 1) {
+            if (j == N - 1) {
                 un = 0.0;
                 vn = 0.0;
             } else {
-                un = (cart->w[1][j] * arru[j + 1][i] + cart->w[1][j + 1] * arru[j][i]) /
+                un = (cart->w[1][j] * arru[j + 1][i][ielem] + cart->w[1][j + 1] * arru[j][i][ielem]) /
                      (cart->w[1][j] + cart->w[1][j + 1]);
-                vn = (cart->w[1][j] * arrv[j + 1][i] + cart->w[1][j + 1] * arrv[j][i]) /
+                vn = (cart->w[1][j] * arrv[j + 1][i][ielem] + cart->w[1][j + 1] * arrv[j][i][ielem]) /
                      (cart->w[1][j] + cart->w[1][j + 1]);
             }
 
-            arrNu[j][i] = (arrUV[j][i + 1][iU] * ue - arrUV[j][i][iU] * uw) / cart->w[0][i] +
-                          (arrUV[j + 1][i][iV] * un - arrUV[j][i][iV] * us) / cart->w[1][j];
-            arrNv[j][i] = (arrUV[j][i + 1][iU] * ve - arrUV[j][i][iU] * vw) / cart->w[0][i] +
-                          (arrUV[j + 1][i][iV] * vn - arrUV[j][i][iV] * vs) / cart->w[1][j];
+            arrNu[j][i][ielem] = (arrUV[j][i + 1][iU] * ue - arrUV[j][i][iU] * uw) / cart->w[0][i] +
+                                 (arrUV[j + 1][i][iV] * un - arrUV[j][i][iV] * us) / cart->w[1][j];
+            arrNv[j][i][ielem] = (arrUV[j][i + 1][iU] * ve - arrUV[j][i][iU] * vw) / cart->w[0][i] +
+                                 (arrUV[j + 1][i][iV] * vn - arrUV[j][i][iV] * vs) / cart->w[1][j];
         }
 
-    PetscCall(DMDAVecRestoreArray(cart->dm, solfsm->N[0], &arrNu));
-    PetscCall(DMDAVecRestoreArray(cart->dm, solfsm->N[1], &arrNv));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
+    PetscCall(DMStagVecRestoreArray(cart->dm, solfsm->N[0], &arrNu));
+    PetscCall(DMStagVecRestoreArray(cart->dm, solfsm->N[1], &arrNv));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
     PetscCall(DMStagVecRestoreArrayRead(cart->fdm, solfsm->fv, &arrUV));
 
     PetscFunctionReturn(PETSC_SUCCESS);
@@ -164,10 +167,10 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns) {
 
     PetscErrorCode (*rhs[2])(KSP, Vec, void *) = {ComputeRHSUStar2d, ComputeRHSVStar2d};
     Vec x;
-    DMDALocalInfo info;
-    PetscReal **arru_tilde, **arrv_tilde, ***arrUV_star;
-    const PetscReal **arru_star, **arrv_star, **arrp;
-    PetscInt iU, iV;
+    PetscInt M, N, xs, ys, xm, ym;
+    PetscReal ***arru_tilde, ***arrv_tilde, ***arrUV_star;
+    const PetscReal ***arru_star, ***arrv_star, ***arrp;
+    PetscInt iU, iV, ielem;
     PetscReal pw, pe, ps, pn, U_tilde, V_tilde, dpdx, dpdy;
     PetscInt d, i, j;
 
@@ -183,102 +186,100 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns) {
     }
 
     /* Calculate face-centered intermediate velocity. */
-    PetscCall(DMDAGetLocalInfo(cart->dm, &info));
+    PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
+    PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
-    PetscCall(DMDAVecGetArray(cart->dm, solfsm->v_tilde[0], &arru_tilde));
-    PetscCall(DMDAVecGetArray(cart->dm, solfsm->v_tilde[1], &arrv_tilde));
+    PetscCall(DMStagVecGetArray(cart->dm, solfsm->v_tilde[0], &arru_tilde));
+    PetscCall(DMStagVecGetArray(cart->dm, solfsm->v_tilde[1], &arrv_tilde));
     PetscCall(DMStagVecGetArray(cart->fdm, solfsm->fv_star, &arrUV_star));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
 
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &iU));
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &iV));
+    PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
 
-    for (j = info.ys; j < info.ys + info.ym; j++)
-        for (i = info.xs; i < info.xs + info.xm; i++) {
+    for (j = ys; j < ys + ym; j++)
+        for (i = xs; i < xs + xm; i++) {
             // TODO: below is temporary for cavity flow
             /* Left wall. */
             if (i == 0) {
-                pw = arrp[j][i];
+                pw = arrp[j][i][ielem];
             } else {
-                pw = arrp[j][i - 1];
+                pw = arrp[j][i - 1][ielem];
             }
             /* Right wall. */
-            if (i == info.mx - 1) {
-                pe = arrp[j][i];
+            if (i == M - 1) {
+                pe = arrp[j][i][ielem];
             } else {
-                pe = arrp[j][i + 1];
+                pe = arrp[j][i + 1][ielem];
             }
             /* Bottom wall. */
             if (j == 0) {
-                ps = arrp[j][i];
+                ps = arrp[j][i][ielem];
             } else {
-                ps = arrp[j - 1][i];
+                ps = arrp[j - 1][i][ielem];
             }
             /* Top wall. */
-            if (j == info.my - 1) {
-                pn = arrp[j][i];
+            if (j == N - 1) {
+                pn = arrp[j][i][ielem];
             } else {
-                pn = arrp[j + 1][i];
+                pn = arrp[j + 1][i][ielem];
             }
 
-            arru_tilde[j][i] = arru_star[j][i] + ns->dt / ns->rho * (pe - pw) / (cart->c[0][i + 1] - cart->c[0][i - 1]);
-            arrv_tilde[j][i] = arrv_star[j][i] + ns->dt / ns->rho * (pn - ps) / (cart->c[1][j + 1] - cart->c[1][j - 1]);
+            arru_tilde[j][i][ielem] =
+                arru_star[j][i][ielem] + ns->dt / ns->rho * (pe - pw) / (cart->c[0][i + 1] - cart->c[0][i - 1]);
+            arrv_tilde[j][i][ielem] =
+                arrv_star[j][i][ielem] + ns->dt / ns->rho * (pn - ps) / (cart->c[1][j + 1] - cart->c[1][j - 1]);
         }
-
-    // PetscCall(DMDAVecRestoreArray(cart->dm, solfsm->v_tilde[0], &arru_tilde));
-    // PetscCall(DMDAVecRestoreArray(cart->dm, solfsm->v_tilde[1], &arrv_tilde));
 
     PetscCall(DMLocalToLocalBegin(cart->dm, solfsm->v_tilde[0], INSERT_VALUES, solfsm->v_tilde[0]));
     PetscCall(DMLocalToLocalEnd(cart->dm, solfsm->v_tilde[0], INSERT_VALUES, solfsm->v_tilde[0]));
     PetscCall(DMLocalToLocalBegin(cart->dm, solfsm->v_tilde[1], INSERT_VALUES, solfsm->v_tilde[1]));
     PetscCall(DMLocalToLocalEnd(cart->dm, solfsm->v_tilde[1], INSERT_VALUES, solfsm->v_tilde[1]));
 
-    // PetscCall(DMDAVecGetArray(cart->dm, solfsm->v_tilde[0], &arru_tilde));
-    // PetscCall(DMDAVecGetArray(cart->dm, solfsm->v_tilde[1], &arrv_tilde));
-
-    for (j = info.ys; j < info.ys + info.ym; j++)
-        for (i = info.xs; i < info.xs + info.xm + 1; i++) {
+    for (j = ys; j < ys + ym; j++)
+        for (i = xs; i < xs + xm + 1; i++) {
             // TODO: below is temporary for cavity flow
             /* Left wall. */
             if (i == 0) {
                 arrUV_star[j][i][iU] = 0.0;
             }
             /* Right wall. */
-            else if (i == info.mx) {
+            else if (i == M) {
                 arrUV_star[j][i][iU] = 0.0;
             } else {
-                U_tilde = (cart->w[0][i] * arru_tilde[j][i - 1] + cart->w[0][i - 1] * arru_tilde[j][i]) /
+                U_tilde = (cart->w[0][i] * arru_tilde[j][i - 1][ielem] + cart->w[0][i - 1] * arru_tilde[j][i][ielem]) /
                           (cart->w[0][i] + cart->w[0][i - 1]);
-                dpdx = (arrp[j][i] - arrp[j][i - 1]) / (cart->c[0][i] - cart->c[0][i - 1]);
+                dpdx = (arrp[j][i][ielem] - arrp[j][i - 1][ielem]) / (cart->c[0][i] - cart->c[0][i - 1]);
                 arrUV_star[j][i][iU] = U_tilde - ns->dt / ns->rho * dpdx;
             }
         }
-    for (j = info.ys; j < info.ys + info.ym + 1; j++)
-        for (i = info.xs; i < info.xs + info.xm; i++) {
+    for (j = ys; j < ys + ym + 1; j++)
+        for (i = xs; i < xs + xm; i++) {
             // TODO: below is temporary for cavity flow
             /* Bottom wall. */
             if (j == 0) {
                 arrUV_star[j][i][iV] = 0.0;
             }
             /* Top wall. */
-            else if (j == info.my) {
+            else if (j == N) {
                 arrUV_star[j][i][iV] = 0.0;
             } else {
-                V_tilde = (cart->w[1][j] * arrv_tilde[j - 1][i] + cart->w[1][j - 1] * arrv_tilde[j][i]) /
+                V_tilde = (cart->w[1][j] * arrv_tilde[j - 1][i][ielem] + cart->w[1][j - 1] * arrv_tilde[j][i][ielem]) /
                           (cart->w[1][j] + cart->w[1][j - 1]);
-                dpdy = (arrp[j][i] - arrp[j - 1][i]) / (cart->c[1][j] - cart->c[1][j - 1]);
+                dpdy = (arrp[j][i][ielem] - arrp[j - 1][i][ielem]) / (cart->c[1][j] - cart->c[1][j - 1]);
                 arrUV_star[j][i][iV] = V_tilde - ns->dt / ns->rho * dpdy;
             }
         }
 
-    PetscCall(DMDAVecRestoreArray(cart->dm, solfsm->v_tilde[0], &arru_tilde));
-    PetscCall(DMDAVecRestoreArray(cart->dm, solfsm->v_tilde[1], &arrv_tilde));
+    PetscCall(DMStagVecRestoreArray(cart->dm, solfsm->v_tilde[0], &arru_tilde));
+    PetscCall(DMStagVecRestoreArray(cart->dm, solfsm->v_tilde[1], &arrv_tilde));
     PetscCall(DMStagVecRestoreArray(cart->fdm, solfsm->fv_star, &arrUV_star));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -309,100 +310,106 @@ PetscErrorCode NSFSMUpdate2d_MeshCartesian(NS ns) {
     Sol sol = ns->sol;
     Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
-    DMDALocalInfo info;
-    PetscReal **arru, **arrv, **arrp, ***arrUV;
-    const PetscReal **arru_star, **arrv_star, **arrp_prime, ***arrUV_star;
-    PetscInt iU, iV;
+    PetscInt M, N, xs, ys, xm, ym;
+    PetscReal ***arru, ***arrv, ***arrp, ***arrUV;
+    const PetscReal ***arru_star, ***arrv_star, ***arrp_prime, ***arrUV_star;
+    PetscInt iU, iV, ielem;
     PetscReal ppp, ppw, ppe, pps, ppn, pplap;
     PetscInt i, j;
 
     PetscFunctionBegin;
 
-    PetscCall(DMDAGetLocalInfo(cart->dm, &info));
+    PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
+    PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
     PetscCall(VecCopy(solfsm->p_half, solfsm->p_half_prev));
     PetscCall(VecCopy(solfsm->N[0], solfsm->N_prev[0]));
     PetscCall(VecCopy(solfsm->N[1], solfsm->N_prev[1]));
 
-    PetscCall(DMDAVecGetArray(cart->dm, sol->v[0], &arru));
-    PetscCall(DMDAVecGetArray(cart->dm, sol->v[1], &arrv));
-    PetscCall(DMDAVecGetArray(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecGetArray(cart->dm, sol->v[0], &arru));
+    PetscCall(DMStagVecGetArray(cart->dm, sol->v[1], &arrv));
+    PetscCall(DMStagVecGetArray(cart->dm, solfsm->p_half, &arrp));
     PetscCall(DMStagVecGetArray(cart->fdm, solfsm->fv, &arrUV));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->p_prime, &arrp_prime));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_prime, &arrp_prime));
     PetscCall(DMStagVecGetArrayRead(cart->fdm, solfsm->fv_star, &arrUV_star));
 
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &iU));
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &iV));
+    PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
 
-    for (j = info.ys; j < info.ys + info.ym; j++)
-        for (i = info.xs; i < info.xs + info.xm; i++) {
-            ppp = arrp_prime[j][i];
+    for (j = ys; j < ys + ym; j++)
+        for (i = xs; i < xs + xm; i++) {
+            ppp = arrp_prime[j][i][ielem];
 
             // TODO: below is temporary for cavity flow
             /* Left wall. */
             if (i == 0)
-                ppw = arrp_prime[j][i];
+                ppw = arrp_prime[j][i][ielem];
             else
-                ppw = arrp_prime[j][i - 1];
+                ppw = arrp_prime[j][i - 1][ielem];
             /* Right wall. */
-            if (i == info.mx)
-                ppe = arrp_prime[j][i];
+            if (i == M)
+                ppe = arrp_prime[j][i][ielem];
             else
-                ppe = arrp_prime[j][i + 1];
+                ppe = arrp_prime[j][i + 1][ielem];
             /* Bottom wall. */
             if (j == 0)
-                pps = arrp_prime[j][i];
+                pps = arrp_prime[j][i][ielem];
             else
-                pps = arrp_prime[j - 1][i];
+                pps = arrp_prime[j - 1][i][ielem];
             /* Top wall. */
-            if (j == info.my)
-                ppn = arrp_prime[j][i];
+            if (j == N)
+                ppn = arrp_prime[j][i][ielem];
             else
-                ppn = arrp_prime[j + 1][i];
+                ppn = arrp_prime[j + 1][i][ielem];
 
             pplap = DERIV2W * ppw + DERIV2E * ppe + DERIV2S * pps + DERIV2N * ppn -
                     (DERIV2W + DERIV2E + DERIV2S + DERIV2N) * ppp;
 
-            arru[j][i] = arru_star[j][i] - ns->dt / ns->rho * (ppe - ppw) / (cart->c[0][i + 1] - cart->c[0][i - 1]);
-            arrv[j][i] = arrv_star[j][i] - ns->dt / ns->rho * (ppn - pps) / (cart->c[1][j + 1] - cart->c[1][j - 1]);
-            arrp[j][i] += ppp - 0.5 * ns->mu * ns->dt / ns->rho * pplap;
+            arru[j][i][ielem] =
+                arru_star[j][i][ielem] - ns->dt / ns->rho * (ppe - ppw) / (cart->c[0][i + 1] - cart->c[0][i - 1]);
+            arrv[j][i][ielem] =
+                arrv_star[j][i][ielem] - ns->dt / ns->rho * (ppn - pps) / (cart->c[1][j + 1] - cart->c[1][j - 1]);
+            arrp[j][i][ielem] += ppp - 0.5 * ns->mu * ns->dt / ns->rho * pplap;
         }
 
-    for (j = info.ys; j < info.ys + info.ym; j++)
-        for (i = info.xs; i < info.xs + info.xm + 1; i++) {
+    for (j = ys; j < ys + ym; j++)
+        for (i = xs; i < xs + xm + 1; i++) {
             /* Left wall. */
             if (i == 0)
                 arrUV[j][i][iU] = 0.0;
             /* Right wall. */
-            else if (i == info.mx)
+            else if (i == M)
                 arrUV[j][i][iU] = 0.0;
             else
-                arrUV[j][i][iU] = arrUV_star[j][i][iU] - ns->dt / ns->rho * (arrp_prime[j][i] - arrp_prime[j][i - 1]) /
+                arrUV[j][i][iU] = arrUV_star[j][i][iU] - ns->dt / ns->rho *
+                                                             (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) /
                                                              (cart->c[0][i] - cart->c[0][i - 1]);
         }
 
-    for (j = info.ys; j < info.ys + info.ym + 1; j++)
-        for (i = info.xs; i < info.xs + info.xm; i++) {
+    for (j = ys; j < ys + ym + 1; j++)
+        for (i = xs; i < xs + xm; i++) {
             /* Bottom wall. */
             if (j == 0)
                 arrUV[j][i][iV] = 0.0;
             /* Top wall. */
-            else if (j == info.my)
+            else if (j == N)
                 arrUV[j][i][iV] = 0.0;
             else
-                arrUV[j][i][iV] = arrUV_star[j][i][iV] - ns->dt / ns->rho * (arrp_prime[j][i] - arrp_prime[j - 1][i]) /
+                arrUV[j][i][iV] = arrUV_star[j][i][iV] - ns->dt / ns->rho *
+                                                             (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) /
                                                              (cart->c[1][j] - cart->c[1][j - 1]);
         }
 
-    PetscCall(DMDAVecRestoreArray(cart->dm, sol->v[0], &arru));
-    PetscCall(DMDAVecRestoreArray(cart->dm, sol->v[1], &arrv));
-    PetscCall(DMDAVecRestoreArray(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecRestoreArray(cart->dm, sol->v[0], &arru));
+    PetscCall(DMStagVecRestoreArray(cart->dm, sol->v[1], &arrv));
+    PetscCall(DMStagVecRestoreArray(cart->dm, solfsm->p_half, &arrp));
     PetscCall(DMStagVecRestoreArray(cart->fdm, solfsm->fv, &arrUV));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->p_prime, &arrp_prime));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_prime, &arrp_prime));
     PetscCall(DMStagVecRestoreArrayRead(cart->fdm, solfsm->fv_star, &arrUV_star));
 
     PetscCall(DMLocalToLocalBegin(cart->dm, sol->v[0], INSERT_VALUES, sol->v[0]));
@@ -426,53 +433,62 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx) {
     Sol sol = ns->sol;
     Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
-    DMDALocalInfo info;
-    PetscReal **arrb;
-    const PetscReal **arrNu, **arrNu_prev, **arru, **arrv, **arrp;
+    PetscInt M, N, xs, ys, xm, ym;
+    DMStagStencil row;
+    PetscReal valb;
+    const PetscReal ***arrNu, ***arrNu_prev, ***arru, ***arrv, ***arrp;
     PetscReal up, uw, ue, us, un, pw, pe, dpdx, ulap;
+    PetscInt ielem;
     PetscInt i, j;
 
     PetscFunctionBegin;
 
-    PetscCall(DMDAGetLocalInfo(cart->dm, &info));
+    PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
+    PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
-    PetscCall(DMDAVecGetArray(cart->dm, b, &arrb));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->N[0], &arrNu));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->N_prev[0], &arrNu_prev));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, sol->v[0], &arru));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, sol->v[1], &arrv));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->N[0], &arrNu));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->N_prev[0], &arrNu_prev));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
 
-    for (j = info.ys; j < info.ys + info.ym; j++)
-        for (i = info.xs; i < info.xs + info.xm; i++) {
-            up = arru[j][i];
+    PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
+    row.loc = DMSTAG_ELEMENT;
+    row.c = 0;
+
+    for (j = ys; j < ys + ym; j++)
+        for (i = xs; i < xs + xm; i++) {
+            row.i = i;
+            row.j = j;
+
+            up = arru[j][i][ielem];
             // TODO: below is temporary for cavity flow
             /* Left wall. */
             if (i == 0) {
-                uw = -arru[j][i];
-                pw = arrp[j][i];
+                uw = -arru[j][i][ielem];
+                pw = arrp[j][i][ielem];
             } else {
-                uw = arru[j][i - 1];
-                pw = arrp[j][i - 1];
+                uw = arru[j][i - 1][ielem];
+                pw = arrp[j][i - 1][ielem];
             }
             /* Right wall. */
-            if (i == info.mx - 1) {
-                ue = -arru[j][i];
-                pe = arrp[j][i];
+            if (i == M - 1) {
+                ue = -arru[j][i][ielem];
+                pe = arrp[j][i][ielem];
             } else {
-                ue = arru[j][i + 1];
-                pe = arrp[j][i + 1];
+                ue = arru[j][i + 1][ielem];
+                pe = arrp[j][i + 1][ielem];
             }
             /* Bottom wall. */
             if (j == 0)
-                us = -arru[j][i];
+                us = -arru[j][i][ielem];
             else
-                us = arru[j - 1][i];
+                us = arru[j - 1][i][ielem];
             /* Top wall. */
-            if (j == info.my - 1)
-                un = 2.0 - arru[j][i];
+            if (j == N - 1)
+                un = 2.0 - arru[j][i][ielem];
             else
-                un = arru[j + 1][i];
+                un = arru[j + 1][i][ielem];
 
             /* Pressure gradient. */
             dpdx = (pe - pw) / (cart->c[0][i + 1] - cart->c[0][i - 1]);
@@ -480,19 +496,20 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx) {
             ulap = DERIV2W * uw + DERIV2E * ue + DERIV2S * us + DERIV2N * un -
                    (DERIV2W + DERIV2E + DERIV2S + DERIV2N) * up;
 
-            arrb[j][i] = up - 1.5 * ns->dt * arrNu[j][i] + 0.5 * ns->dt * arrNu_prev[j][i] - ns->dt / ns->rho * dpdx +
-                         0.5 * ns->mu * ns->dt / ns->rho * ulap;
+            valb = up - 1.5 * ns->dt * arrNu[j][i][ielem] + 0.5 * ns->dt * arrNu_prev[j][i][ielem] -
+                   ns->dt / ns->rho * dpdx + 0.5 * ns->mu * ns->dt / ns->rho * ulap;
             // TODO: below is temporary for cavity flow
-            if (j == info.my - 1)
-                arrb[j][i] += ns->mu * ns->dt / ns->rho * DERIV2N;
+            if (j == N - 1)
+                valb += ns->mu * ns->dt / ns->rho * DERIV2N;
+
+            PetscCall(DMStagVecSetValuesStencil(cart->dm, b, 1, &row, &valb, INSERT_VALUES));
         }
 
-    PetscCall(DMDAVecRestoreArray(cart->dm, b, &arrb));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->N[0], &arrNu));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->N_prev[0], &arrNu_prev));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->N[0], &arrNu));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->N_prev[0], &arrNu_prev));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
 
     PetscCall(VecAssemblyBegin(b));
     PetscCall(VecAssemblyEnd(b));
@@ -509,52 +526,61 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx) {
     Sol sol = ns->sol;
     Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
-    DMDALocalInfo info;
-    PetscReal **arrb;
-    const PetscReal **arrNv, **arrNv_prev, **arru, **arrv, **arrp;
+    PetscInt M, N, xs, ys, xm, ym;
+    DMStagStencil row;
+    PetscReal valb;
+    const PetscReal ***arrNv, ***arrNv_prev, ***arru, ***arrv, ***arrp;
     PetscReal vp, vw, ve, vs, vn, ps, pn, dpdy, vlap;
+    PetscInt ielem;
     PetscInt i, j;
 
     PetscFunctionBegin;
 
-    PetscCall(DMDAGetLocalInfo(cart->dm, &info));
+    PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
+    PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
-    PetscCall(DMDAVecGetArray(cart->dm, b, &arrb));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->N[1], &arrNv));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->N_prev[1], &arrNv_prev));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, sol->v[0], &arru));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, sol->v[1], &arrv));
-    PetscCall(DMDAVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->N[1], &arrNv));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->N_prev[1], &arrNv_prev));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
+    PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
 
-    for (j = info.ys; j < info.ys + info.ym; j++)
-        for (i = info.xs; i < info.xs + info.xm; i++) {
-            vp = arrv[j][i];
+    PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
+    row.loc = DMSTAG_ELEMENT;
+    row.c = 0;
+
+    for (j = ys; j < ys + ym; j++)
+        for (i = xs; i < xs + xm; i++) {
+            row.i = i;
+            row.j = j;
+
+            vp = arrv[j][i][ielem];
             // TODO: below is temporary for cavity flow
             /* Left wall. */
             if (i == 0)
-                vw = -arrv[j][i];
+                vw = -arrv[j][i][ielem];
             else
-                vw = arrv[j][i - 1];
+                vw = arrv[j][i - 1][ielem];
             /* Right wall. */
-            if (i == info.mx - 1)
-                ve = -arrv[j][i];
+            if (i == M - 1)
+                ve = -arrv[j][i][ielem];
             else
-                ve = arrv[j][i + 1];
+                ve = arrv[j][i + 1][ielem];
             /* Bottom wall. */
             if (j == 0) {
-                vs = -arrv[j][i];
-                ps = arrp[j][i];
+                vs = -arrv[j][i][ielem];
+                ps = arrp[j][i][ielem];
             } else {
-                vs = arrv[j - 1][i];
-                ps = arrp[j - 1][i];
+                vs = arrv[j - 1][i][ielem];
+                ps = arrp[j - 1][i][ielem];
             }
             /* Top wall. */
-            if (j == info.my - 1) {
-                vn = -arrv[j][i];
-                pn = arrp[j][i];
+            if (j == N - 1) {
+                vn = -arrv[j][i][ielem];
+                pn = arrp[j][i][ielem];
             } else {
-                vn = arrv[j + 1][i];
-                pn = arrp[j + 1][i];
+                vn = arrv[j + 1][i][ielem];
+                pn = arrp[j + 1][i][ielem];
             }
 
             /* Pressure gradient. */
@@ -563,16 +589,20 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx) {
             vlap = DERIV2W * vw + DERIV2E * ve + DERIV2S * vs + DERIV2N * vn -
                    (DERIV2W + DERIV2E + DERIV2S + DERIV2N) * vp;
 
-            arrb[j][i] = vp - 1.5 * ns->dt * arrNv[j][i] + 0.5 * ns->dt * arrNv_prev[j][i] - ns->dt / ns->rho * dpdy +
-                         0.5 * ns->mu * ns->dt / ns->rho * vlap;
+            valb = vp - 1.5 * ns->dt * arrNv[j][i][ielem] + 0.5 * ns->dt * arrNv_prev[j][i][ielem] -
+                   ns->dt / ns->rho * dpdy + 0.5 * ns->mu * ns->dt / ns->rho * vlap;
+
+            PetscCall(DMStagVecSetValuesStencil(cart->dm, b, 1, &row, &valb, INSERT_VALUES));
         }
 
-    PetscCall(DMDAVecRestoreArray(cart->dm, b, &arrb));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->N[1], &arrNv));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->N_prev[1], &arrNv_prev));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
-    PetscCall(DMDAVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->N[1], &arrNv));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->N_prev[1], &arrNv_prev));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
+    PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
+
+    PetscCall(VecAssemblyBegin(b));
+    PetscCall(VecAssemblyEnd(b));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -587,10 +617,11 @@ PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx) {
     Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
     MPI_Comm comm;
-    DMDALocalInfo info;
-    PetscReal **arrb;
+    PetscInt M, N, xs, ys, xm, ym;
+    DMStagStencil row;
+    PetscReal valb;
     const PetscReal ***arrUV_star;
-    PetscInt iU, iV;
+    PetscInt iU, iV, ielem;
     PetscReal divUV_star;
     MatNullSpace nullspace;
     PetscInt i, j;
@@ -599,22 +630,29 @@ PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx) {
 
     PetscCall(PetscObjectGetComm((PetscObject)ksp, &comm));
 
-    PetscCall(DMDAGetLocalInfo(cart->dm, &info));
+    PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
+    PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
-    PetscCall(DMDAVecGetArray(cart->dm, b, &arrb));
     PetscCall(DMStagVecGetArrayRead(cart->fdm, solfsm->fv_star, &arrUV_star));
 
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &iU));
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &iV));
+    PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
+    row.loc = DMSTAG_ELEMENT;
+    row.c = 0;
 
-    for (j = info.ys; j < info.ys + info.ym; j++)
-        for (i = info.xs; i < info.xs + info.xm; i++) {
+    for (j = ys; j < ys + ym; j++)
+        for (i = xs; i < xs + xm; i++) {
+            row.i = i;
+            row.j = j;
+
             divUV_star = (arrUV_star[j][i + 1][iU] - arrUV_star[j][i][iU]) / cart->w[0][i] +
                          (arrUV_star[j + 1][i][iV] - arrUV_star[j][i][iV]) / cart->w[1][j];
-            arrb[j][i] = -ns->rho / ns->dt * divUV_star / (DERIV2W + DERIV2E + DERIV2S + DERIV2N);
+            valb = -ns->rho / ns->dt * divUV_star / (DERIV2W + DERIV2E + DERIV2S + DERIV2N);
+
+            PetscCall(DMStagVecSetValuesStencil(cart->dm, b, 1, &row, &valb, INSERT_VALUES));
         }
 
-    PetscCall(DMDAVecRestoreArray(cart->dm, b, &arrb));
     PetscCall(DMStagVecRestoreArrayRead(cart->fdm, solfsm->fv_star, &arrUV_star));
 
     // TODO: below is temporary for cavity flow
@@ -623,31 +661,42 @@ PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx) {
     PetscCall(MatNullSpaceRemove(nullspace, b));
     PetscCall(MatNullSpaceDestroy(&nullspace));
 
+    PetscCall(VecAssemblyBegin(b));
+    PetscCall(VecAssemblyEnd(b));
+
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
+    (void)ksp;
     (void)J;
 
     NS ns = (NS)ctx;
     Mesh mesh = ns->mesh;
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
 
-    DM da;
-    DMDALocalInfo info;
-    MatStencil row, col[5];
+    PetscInt M, N, xs, ys, xm, ym;
+    DMStagStencil row, col[5];
     PetscReal v[5];
     PetscInt ncols;
     PetscInt i, j;
 
     PetscFunctionBegin;
 
-    // TODO: support multigrid method (da != cart->dm)
-    PetscCall(KSPGetDM(ksp, &da));
-    PetscCall(DMDAGetLocalInfo(da, &info));
+    // TODO: support multigrid method (dm of KSP != cart->dm)
 
-    for (j = info.ys; j < info.ys + info.ym; j++)
-        for (i = info.xs; i < info.xs + info.xm; i++) {
+    PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
+    PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
+
+    row.loc = DMSTAG_ELEMENT;
+    row.c = 0;
+    for (ncols = 0; ncols < 5; ncols++) {
+        col[ncols].loc = DMSTAG_ELEMENT;
+        col[ncols].c = 0;
+    }
+
+    for (j = ys; j < ys + ym; j++)
+        for (i = xs; i < xs + xm; i++) {
             row.i = col[0].i = i;
             row.j = col[0].j = j;
             v[0] = 1.0 + 0.5 * ns->mu * ns->dt / ns->rho * (DERIV2W + DERIV2E + DERIV2S + DERIV2N);
@@ -665,7 +714,7 @@ PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
                 ncols++;
             }
             /* Right wall. */
-            if (i == info.mx - 1) {
+            if (i == M - 1) {
                 v[0] += 0.5 * ns->mu * ns->dt / ns->rho * DERIV2E;
             } else {
                 col[ncols].i = i + 1;
@@ -683,7 +732,7 @@ PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
                 ncols++;
             }
             /* Top wall. */
-            if (j == info.my - 1) {
+            if (j == N - 1) {
                 v[0] += 0.5 * ns->mu * ns->dt / ns->rho * DERIV2N;
             } else {
                 col[ncols].i = i;
@@ -692,7 +741,7 @@ PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
                 ncols++;
             }
 
-            PetscCall(MatSetValuesStencil(Jpre, 1, &row, ncols, col, v, INSERT_VALUES));
+            PetscCall(DMStagMatSetValuesStencil(cart->dm, Jpre, 1, &row, ncols, col, v, INSERT_VALUES));
         }
 
     PetscCall(MatAssemblyBegin(Jpre, MAT_FINAL_ASSEMBLY));
@@ -707,9 +756,8 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
 
     MPI_Comm comm;
-    DM da;
-    DMDALocalInfo info;
-    MatStencil row, col[5];
+    PetscInt M, N, xs, ys, xm, ym;
+    DMStagStencil row, col[5];
     PetscReal v[5];
     PetscInt ncols;
     PetscReal asum;
@@ -720,12 +768,20 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
 
     PetscCall(PetscObjectGetComm((PetscObject)ksp, &comm));
 
-    // TODO: support multigrid method (da != cart->dm)
-    PetscCall(KSPGetDM(ksp, &da));
-    PetscCall(DMDAGetLocalInfo(da, &info));
+    // TODO: support multigrid method (dm of KSP != cart->dm)
 
-    for (j = info.ys; j < info.ys + info.ym; j++)
-        for (i = info.xs; i < info.xs + info.xm; i++) {
+    PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
+    PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
+
+    row.loc = DMSTAG_ELEMENT;
+    row.c = 0;
+    for (ncols = 0; ncols < 5; ncols++) {
+        col[ncols].loc = DMSTAG_ELEMENT;
+        col[ncols].c = 0;
+    }
+
+    for (j = ys; j < ys + ym; j++)
+        for (i = xs; i < xs + xm; i++) {
             row.i = col[0].i = i;
             row.j = col[0].j = j;
             v[0] = 1.0;
@@ -745,7 +801,7 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
                 ncols++;
             }
             /* Right wall. */
-            if (i == info.mx - 1) {
+            if (i == M - 1) {
                 v[0] -= DERIV2E / asum;
             } else {
                 col[ncols].i = i + 1;
@@ -763,7 +819,7 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
                 ncols++;
             }
             /* Top wall. */
-            if (j == info.my - 1) {
+            if (j == N - 1) {
                 v[0] -= DERIV2N / asum;
             } else {
                 col[ncols].i = i;
@@ -772,7 +828,7 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
                 ncols++;
             }
 
-            PetscCall(MatSetValuesStencil(Jpre, 1, &row, ncols, col, v, INSERT_VALUES));
+            PetscCall(DMStagMatSetValuesStencil(cart->dm, Jpre, 1, &row, ncols, col, v, INSERT_VALUES));
         }
 
     PetscCall(MatAssemblyBegin(Jpre, MAT_FINAL_ASSEMBLY));

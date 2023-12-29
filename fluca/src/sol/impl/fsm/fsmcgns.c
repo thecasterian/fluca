@@ -2,20 +2,21 @@
 #include <flucamap.h>
 #include <pcgnslib.h>
 #include <petsc/private/viewercgnsimpl.h>
-#include <petscdmda.h>
+#include <petscdmstag.h>
 
-static PetscErrorCode FlucaViewerCGNSWriteStructuredSolution_Private(DM da, Vec v, int file_num, int base, int zone,
+static PetscErrorCode FlucaViewerCGNSWriteStructuredSolution_Private(DM dm, Vec v, int file_num, int base, int zone,
                                                                      int sol, const char *name) {
-    PetscInt dim, xs[3], xm[3], d, cnt, i, j, k;
-    const PetscReal **arr2d, ***arr3d;
+    PetscInt dim, xs[3], xm[3], d, cnt, i, j, k, ielem;
+    const PetscReal ***arr2d, ****arr3d;
     cgsize_t rmin[3], rmax[3], rsize;
     int field;
     double *arrraw;
 
     PetscFunctionBegin;
 
-    PetscCall(DMGetDimension(da, &dim));
-    PetscCall(DMDAGetCorners(da, &xs[0], &xs[1], &xs[2], &xm[0], &xm[1], &xm[2]));
+    PetscCall(DMGetDimension(dm, &dim));
+    PetscCall(DMStagGetCorners(dm, &xs[0], &xs[1], &xs[2], &xm[0], &xm[1], &xm[2], NULL, NULL, NULL));
+    PetscCall(DMStagGetLocationSlot(dm, DMSTAG_ELEMENT, 0, &ielem));
 
     rsize = 1;
     for (d = 0; d < dim; d++) {
@@ -27,24 +28,24 @@ static PetscErrorCode FlucaViewerCGNSWriteStructuredSolution_Private(DM da, Vec 
     PetscCall(PetscMalloc1(rsize, &arrraw));
     switch (dim) {
         case 2:
-            PetscCall(DMDAVecGetArrayRead(da, v, &arr2d));
+            PetscCall(DMStagVecGetArrayRead(dm, v, &arr2d));
             cnt = 0;
             for (j = rmin[1] - 1; j <= rmax[1] - 1; j++)
                 for (i = rmin[0] - 1; i <= rmax[0] - 1; i++)
-                    arrraw[cnt++] = arr2d[j][i];
-            PetscCall(DMDAVecRestoreArrayRead(da, v, &arr2d));
+                    arrraw[cnt++] = arr2d[j][i][ielem];
+            PetscCall(DMStagVecRestoreArrayRead(dm, v, &arr2d));
             break;
         case 3:
-            PetscCall(DMDAVecGetArrayRead(da, v, &arr3d));
+            PetscCall(DMStagVecGetArrayRead(dm, v, &arr3d));
             cnt = 0;
             for (k = rmin[2] - 1; k <= rmax[2] - 1; k++)
                 for (j = rmin[1] - 1; j <= rmax[1] - 1; j++)
                     for (i = rmin[0] - 1; i <= rmax[0] - 1; i++)
-                        arrraw[cnt++] = arr3d[k][j][i];
-            PetscCall(DMDAVecRestoreArrayRead(da, v, &arr3d));
+                        arrraw[cnt++] = arr3d[k][j][i][ielem];
+            PetscCall(DMStagVecRestoreArrayRead(dm, v, &arr3d));
             break;
         default:
-            SETERRQ(PetscObjectComm((PetscObject)da), PETSC_ERR_SUP, "Unsupported mesh dimension");
+            SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
     }
     PetscCallCGNS(cgp_field_write(file_num, base, zone, sol, CGNS_ENUMV(RealDouble), name, &field));
     PetscCallCGNS(cgp_field_write_data(file_num, base, zone, sol, field, rmin, rmax, arrraw));

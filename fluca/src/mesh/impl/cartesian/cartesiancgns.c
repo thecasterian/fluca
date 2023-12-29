@@ -4,7 +4,6 @@
 #include <pcgnslib.h>
 #include <petsc/private/petscimpl.h>
 #include <petsc/private/viewercgnsimpl.h>
-#include <petscdmda.h>
 #include <petscdmstag.h>
 
 PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer viewer) {
@@ -47,7 +46,7 @@ PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer viewer) {
         const char *coordnames[3] = {"CoordinateX", "CoordinateY", "CoordinateZ"};
         int coord[3];
 
-        DMDAGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2]);
+        PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
 
         for (d = 0; d < mesh->dim; d++) {
             /* Vertex ownership; note that CGNS uses 1-based index */

@@ -3,7 +3,6 @@
 #include <flucasol.h>
 #include <flucasys.h>
 #include <math.h>
-#include <petscdmda.h>
 #include <petscviewer.h>
 
 const char *help = "mesh test\n";
@@ -49,19 +48,8 @@ int main(int argc, char **argv) {
         PetscCall(NSSetTimeStepSize(ns, 0.002));
         PetscCall(NSSetFromOptions(ns));
         PetscCall(NSSetUp(ns));
-        PetscCall(NSSolve(ns, 100));
+        PetscCall(NSSolve(ns, 20000));
     }
-
-    // {
-    //     PetscViewer viewer;
-
-    //     PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)mesh), &viewer));
-    //     PetscCall(PetscViewerSetType(viewer, PETSCVIEWERCGNS));
-    //     PetscCall(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
-    //     PetscCall(PetscViewerFileSetName(viewer, "fluca-%d.cgns"));
-    //     PetscCall(NSView(ns, viewer));
-    //     PetscCall(PetscViewerDestroy(&viewer));
-    // }
 
     PetscCall(MeshDestroy(&mesh));
     PetscCall(NSDestroy(&ns));

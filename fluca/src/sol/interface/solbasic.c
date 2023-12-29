@@ -1,5 +1,4 @@
 #include <fluca/private/solimpl.h>
-#include <petscdmda.h>
 #include <petscdraw.h>
 
 PetscClassId SOL_CLASSID = 0;

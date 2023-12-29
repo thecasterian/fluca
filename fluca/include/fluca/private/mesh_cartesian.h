@@ -12,7 +12,7 @@ typedef struct {
     PetscMPIInt rank[MESH_MAX_DIM]; /* location in grid of ranks */
     MPI_Comm subcomm[MESH_MAX_DIM]; /* communicator for each dimension */
 
-    DM dm;  /* DMDA for element-centered variables */
+    DM dm;  /* DMStag for element-centered variables */
     DM fdm; /* DMStag for face-centered variables */
 
     PetscReal *c[MESH_MAX_DIM];      /* element coordinates */
