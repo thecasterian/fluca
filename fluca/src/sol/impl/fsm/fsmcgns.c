@@ -72,7 +72,7 @@ PetscErrorCode SolView_FSMCGNS(Sol sol, PetscViewer viewer) {
 
     PetscFunctionBegin;
 
-    if (!cgns->base)
+    if (!cgns->file_num || !cgns->base)
         PetscCall(MeshView(sol->mesh, viewer));
 
     PetscCall(MeshGetDM(sol->mesh, &dm));

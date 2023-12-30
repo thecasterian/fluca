@@ -23,7 +23,8 @@ PetscErrorCode NSFSMInterpolateVelocity2d_MeshCartesian(NS ns) {
     PetscInt M, N, xs, ys, xm, ym;
     PetscReal ***arrUV;
     const PetscReal ***arru, ***arrv;
-    PetscInt iU, iV, ielem;
+    const PetscReal **arrwx, **arrwy;
+    PetscInt iU, iV, ielem, iw;
     PetscInt i, j;
 
     PetscFunctionBegin;
@@ -34,10 +35,13 @@ PetscErrorCode NSFSMInterpolateVelocity2d_MeshCartesian(NS ns) {
     PetscCall(DMStagVecGetArray(cart->fdm, solfsm->fv, &arrUV));
     PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
     PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[1], cart->width[1], &arrwy));
 
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &iU));
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &iV));
     PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
+    PetscCall(DMStagGetLocationSlot(cart->subdm[0], DMSTAG_ELEMENT, 0, &iw));
 
     for (j = ys; j < ys + ym; j++)
         for (i = xs; i < xs + xm + 1; i++) {
@@ -48,8 +52,8 @@ PetscErrorCode NSFSMInterpolateVelocity2d_MeshCartesian(NS ns) {
             else if (i == M)
                 arrUV[j][i][iU] = 0.0;
             else
-                arrUV[j][i][iU] = (cart->w[0][i] * arru[j][i - 1][ielem] + cart->w[0][i - 1] * arru[j][i][ielem]) /
-                                  (cart->w[0][i] + cart->w[0][i - 1]);
+                arrUV[j][i][iU] = (arrwx[i][iw] * arru[j][i - 1][ielem] + arrwx[i - 1][iw] * arru[j][i][ielem]) /
+                                  (arrwx[i][iw] + arrwx[i - 1][iw]);
         }
     for (j = ys; j < ys + ym + 1; j++)
         for (i = xs; i < xs + xm; i++) {
@@ -60,8 +64,8 @@ PetscErrorCode NSFSMInterpolateVelocity2d_MeshCartesian(NS ns) {
             else if (j == N)
                 arrUV[j][i][iV] = 0.0;
             else
-                arrUV[j][i][iV] = (cart->w[1][j] * arrv[j - 1][i][ielem] + cart->w[1][j - 1] * arrv[j][i][ielem]) /
-                                  (cart->w[1][j] + cart->w[1][j - 1]);
+                arrUV[j][i][iV] = (arrwy[j][iw] * arrv[j - 1][i][ielem] + arrwy[j - 1][iw] * arrv[j][i][ielem]) /
+                                  (arrwy[j][iw] + arrwy[j - 1][iw]);
         }
 
     PetscCall(DMStagVecRestoreArray(cart->fdm, solfsm->fv, &arrUV));
@@ -80,7 +84,8 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCartesian(NS ns) {
     PetscInt M, N, xs, ys, xm, ym;
     PetscReal ***arrNu, ***arrNv;
     const PetscReal ***arru, ***arrv, ***arrUV;
-    PetscInt iU, iV, ielem;
+    const PetscReal **arrwx, **arrwy;
+    PetscInt iU, iV, ielem, iw;
     PetscReal uw, ue, us, un, vw, ve, vs, vn;
     PetscInt i, j;
 
@@ -94,10 +99,13 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCartesian(NS ns) {
     PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
     PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
     PetscCall(DMStagVecGetArrayRead(cart->fdm, solfsm->fv, &arrUV));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[1], cart->width[1], &arrwy));
 
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &iU));
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &iV));
     PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
+    PetscCall(DMStagGetLocationSlot(cart->subdm[0], DMSTAG_ELEMENT, 0, &iw));
 
     for (j = ys; j < ys + ym; j++)
         for (i = xs; i < xs + xm; i++) {
@@ -107,46 +115,46 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCartesian(NS ns) {
                 uw = 0.0;
                 vw = 0.0;
             } else {
-                uw = (cart->w[0][i] * arru[j][i - 1][ielem] + cart->w[0][i - 1] * arru[j][i][ielem]) /
-                     (cart->w[0][i] + cart->w[0][i - 1]);
-                vw = (cart->w[0][i] * arrv[j][i - 1][ielem] + cart->w[0][i - 1] * arrv[j][i][ielem]) /
-                     (cart->w[0][i] + cart->w[0][i - 1]);
+                uw = (arrwx[i][iw] * arru[j][i - 1][ielem] + arrwx[i - 1][iw] * arru[j][i][ielem]) /
+                     (arrwx[i][iw] + arrwx[i - 1][iw]);
+                vw = (arrwx[i][iw] * arrv[j][i - 1][ielem] + arrwx[i - 1][iw] * arrv[j][i][ielem]) /
+                     (arrwx[i][iw] + arrwx[i - 1][iw]);
             }
             /* Right wall. */
             if (i == M - 1) {
                 ue = 0.0;
                 ve = 0.0;
             } else {
-                ue = (cart->w[0][i] * arru[j][i + 1][ielem] + cart->w[0][i + 1] * arru[j][i][ielem]) /
-                     (cart->w[0][i] + cart->w[0][i + 1]);
-                ve = (cart->w[0][i] * arrv[j][i + 1][ielem] + cart->w[0][i + 1] * arrv[j][i][ielem]) /
-                     (cart->w[0][i] + cart->w[0][i + 1]);
+                ue = (arrwx[i][iw] * arru[j][i + 1][ielem] + arrwx[i + 1][iw] * arru[j][i][ielem]) /
+                     (arrwx[i][iw] + arrwx[i + 1][iw]);
+                ve = (arrwx[i][iw] * arrv[j][i + 1][ielem] + arrwx[i + 1][iw] * arrv[j][i][ielem]) /
+                     (arrwx[i][iw] + arrwx[i + 1][iw]);
             }
             /* Bottom wall. */
             if (j == 0) {
                 us = 0.0;
                 vs = 0.0;
             } else {
-                us = (cart->w[1][j] * arru[j - 1][i][ielem] + cart->w[1][j - 1] * arru[j][i][ielem]) /
-                     (cart->w[1][j] + cart->w[1][j - 1]);
-                vs = (cart->w[1][j] * arrv[j - 1][i][ielem] + cart->w[1][j - 1] * arrv[j][i][ielem]) /
-                     (cart->w[1][j] + cart->w[1][j - 1]);
+                us = (arrwy[j][iw] * arru[j - 1][i][ielem] + arrwy[j - 1][iw] * arru[j][i][ielem]) /
+                     (arrwy[j][iw] + arrwy[j - 1][iw]);
+                vs = (arrwy[j][iw] * arrv[j - 1][i][ielem] + arrwy[j - 1][iw] * arrv[j][i][ielem]) /
+                     (arrwy[j][iw] + arrwy[j - 1][iw]);
             }
             /* Top wall. */
             if (j == N - 1) {
                 un = 0.0;
                 vn = 0.0;
             } else {
-                un = (cart->w[1][j] * arru[j + 1][i][ielem] + cart->w[1][j + 1] * arru[j][i][ielem]) /
-                     (cart->w[1][j] + cart->w[1][j + 1]);
-                vn = (cart->w[1][j] * arrv[j + 1][i][ielem] + cart->w[1][j + 1] * arrv[j][i][ielem]) /
-                     (cart->w[1][j] + cart->w[1][j + 1]);
+                un = (arrwy[j][iw] * arru[j + 1][i][ielem] + arrwy[j + 1][iw] * arru[j][i][ielem]) /
+                     (arrwy[j][iw] + arrwy[j + 1][iw]);
+                vn = (arrwy[j][iw] * arrv[j + 1][i][ielem] + arrwy[j + 1][iw] * arrv[j][i][ielem]) /
+                     (arrwy[j][iw] + arrwy[j + 1][iw]);
             }
 
-            arrNu[j][i][ielem] = (arrUV[j][i + 1][iU] * ue - arrUV[j][i][iU] * uw) / cart->w[0][i] +
-                                 (arrUV[j + 1][i][iV] * un - arrUV[j][i][iV] * us) / cart->w[1][j];
-            arrNv[j][i][ielem] = (arrUV[j][i + 1][iU] * ve - arrUV[j][i][iU] * vw) / cart->w[0][i] +
-                                 (arrUV[j + 1][i][iV] * vn - arrUV[j][i][iV] * vs) / cart->w[1][j];
+            arrNu[j][i][ielem] = (arrUV[j][i + 1][iU] * ue - arrUV[j][i][iU] * uw) / arrwx[i][iw] +
+                                 (arrUV[j + 1][i][iV] * un - arrUV[j][i][iV] * us) / arrwy[j][iw];
+            arrNv[j][i][ielem] = (arrUV[j][i + 1][iU] * ve - arrUV[j][i][iU] * vw) / arrwx[i][iw] +
+                                 (arrUV[j + 1][i][iV] * vn - arrUV[j][i][iV] * vs) / arrwy[j][iw];
         }
 
     PetscCall(DMStagVecRestoreArray(cart->dm, solfsm->N[0], &arrNu));
@@ -154,6 +162,8 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCartesian(NS ns) {
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
     PetscCall(DMStagVecRestoreArrayRead(cart->fdm, solfsm->fv, &arrUV));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[1], cart->width[1], &arrwy));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -170,7 +180,8 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns) {
     PetscInt M, N, xs, ys, xm, ym;
     PetscReal ***arru_tilde, ***arrv_tilde, ***arrUV_star;
     const PetscReal ***arru_star, ***arrv_star, ***arrp;
-    PetscInt iU, iV, ielem;
+    const PetscReal **arrwx, **arrwy, **arrcx, **arrcy;
+    PetscInt iU, iV, ielem, iw, ic;
     PetscReal pw, pe, ps, pn, U_tilde, V_tilde, dpdx, dpdy;
     PetscInt d, i, j;
 
@@ -195,10 +206,15 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns) {
     PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
     PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
     PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
 
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &iU));
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &iV));
     PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
+    PetscCall(DMStagGetLocationSlot(cart->subdm[0], DMSTAG_ELEMENT, 0, &iw));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ic));
 
     for (j = ys; j < ys + ym; j++)
         for (i = xs; i < xs + xm; i++) {
@@ -229,9 +245,9 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns) {
             }
 
             arru_tilde[j][i][ielem] =
-                arru_star[j][i][ielem] + ns->dt / ns->rho * (pe - pw) / (cart->c[0][i + 1] - cart->c[0][i - 1]);
+                arru_star[j][i][ielem] + ns->dt / ns->rho * (pe - pw) / (arrcx[i + 1][ic] - arrcx[i - 1][ic]);
             arrv_tilde[j][i][ielem] =
-                arrv_star[j][i][ielem] + ns->dt / ns->rho * (pn - ps) / (cart->c[1][j + 1] - cart->c[1][j - 1]);
+                arrv_star[j][i][ielem] + ns->dt / ns->rho * (pn - ps) / (arrcy[j + 1][ic] - arrcy[j - 1][ic]);
         }
 
     PetscCall(DMLocalToLocalBegin(cart->dm, solfsm->v_tilde[0], INSERT_VALUES, solfsm->v_tilde[0]));
@@ -250,9 +266,9 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns) {
             else if (i == M) {
                 arrUV_star[j][i][iU] = 0.0;
             } else {
-                U_tilde = (cart->w[0][i] * arru_tilde[j][i - 1][ielem] + cart->w[0][i - 1] * arru_tilde[j][i][ielem]) /
-                          (cart->w[0][i] + cart->w[0][i - 1]);
-                dpdx = (arrp[j][i][ielem] - arrp[j][i - 1][ielem]) / (cart->c[0][i] - cart->c[0][i - 1]);
+                U_tilde = (arrwx[i][iw] * arru_tilde[j][i - 1][ielem] + arrwx[i - 1][iw] * arru_tilde[j][i][ielem]) /
+                          (arrwx[i][iw] + arrwx[i - 1][iw]);
+                dpdx = (arrp[j][i][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i][ic] - arrcx[i - 1][ic]);
                 arrUV_star[j][i][iU] = U_tilde - ns->dt / ns->rho * dpdx;
             }
         }
@@ -267,9 +283,9 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns) {
             else if (j == N) {
                 arrUV_star[j][i][iV] = 0.0;
             } else {
-                V_tilde = (cart->w[1][j] * arrv_tilde[j - 1][i][ielem] + cart->w[1][j - 1] * arrv_tilde[j][i][ielem]) /
-                          (cart->w[1][j] + cart->w[1][j - 1]);
-                dpdy = (arrp[j][i][ielem] - arrp[j - 1][i][ielem]) / (cart->c[1][j] - cart->c[1][j - 1]);
+                V_tilde = (arrwy[j][iw] * arrv_tilde[j - 1][i][ielem] + arrwy[j - 1][iw] * arrv_tilde[j][i][ielem]) /
+                          (arrwy[j][iw] + arrwy[j - 1][iw]);
+                dpdy = (arrp[j][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j][ic] - arrcy[j - 1][ic]);
                 arrUV_star[j][i][iV] = V_tilde - ns->dt / ns->rho * dpdy;
             }
         }
@@ -280,6 +296,9 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns) {
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -313,8 +332,10 @@ PetscErrorCode NSFSMUpdate2d_MeshCartesian(NS ns) {
     PetscInt M, N, xs, ys, xm, ym;
     PetscReal ***arru, ***arrv, ***arrp, ***arrUV;
     const PetscReal ***arru_star, ***arrv_star, ***arrp_prime, ***arrUV_star;
-    PetscInt iU, iV, ielem;
+    const PetscReal **arrwx, **arrwy, **arrcx, **arrcy;
+    PetscInt iU, iV, ielem, iw, ic;
     PetscReal ppp, ppw, ppe, pps, ppn, pplap;
+    PetscReal aw, ae, as, an;
     PetscInt i, j;
 
     PetscFunctionBegin;
@@ -334,13 +355,23 @@ PetscErrorCode NSFSMUpdate2d_MeshCartesian(NS ns) {
     PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
     PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_prime, &arrp_prime));
     PetscCall(DMStagVecGetArrayRead(cart->fdm, solfsm->fv_star, &arrUV_star));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
 
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &iU));
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &iV));
     PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
+    PetscCall(DMStagGetLocationSlot(cart->subdm[0], DMSTAG_ELEMENT, 0, &iw));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ic));
 
     for (j = ys; j < ys + ym; j++)
         for (i = xs; i < xs + xm; i++) {
+            aw = 1.0 / (arrwx[i][iw] * (arrcx[i][ic] - arrcx[i - 1][ic]));
+            ae = 1.0 / (arrwx[i][iw] * (arrcx[i + 1][ic] - arrcx[i][ic]));
+            as = 1.0 / (arrwy[j][iw] * (arrcy[j][ic] - arrcy[j - 1][ic]));
+            an = 1.0 / (arrwy[j][iw] * (arrcy[j + 1][ic] - arrcy[j][ic]));
+
             ppp = arrp_prime[j][i][ielem];
 
             // TODO: below is temporary for cavity flow
@@ -365,13 +396,12 @@ PetscErrorCode NSFSMUpdate2d_MeshCartesian(NS ns) {
             else
                 ppn = arrp_prime[j + 1][i][ielem];
 
-            pplap = DERIV2W * ppw + DERIV2E * ppe + DERIV2S * pps + DERIV2N * ppn -
-                    (DERIV2W + DERIV2E + DERIV2S + DERIV2N) * ppp;
+            pplap = aw * ppw + ae * ppe + as * pps + an * ppn - (aw + ae + as + an) * ppp;
 
             arru[j][i][ielem] =
-                arru_star[j][i][ielem] - ns->dt / ns->rho * (ppe - ppw) / (cart->c[0][i + 1] - cart->c[0][i - 1]);
+                arru_star[j][i][ielem] - ns->dt / ns->rho * (ppe - ppw) / (arrcx[i + 1][ic] - arrcx[i - 1][ic]);
             arrv[j][i][ielem] =
-                arrv_star[j][i][ielem] - ns->dt / ns->rho * (ppn - pps) / (cart->c[1][j + 1] - cart->c[1][j - 1]);
+                arrv_star[j][i][ielem] - ns->dt / ns->rho * (ppn - pps) / (arrcy[j + 1][ic] - arrcy[j - 1][ic]);
             arrp[j][i][ielem] += ppp - 0.5 * ns->mu * ns->dt / ns->rho * pplap;
         }
 
@@ -386,7 +416,7 @@ PetscErrorCode NSFSMUpdate2d_MeshCartesian(NS ns) {
             else
                 arrUV[j][i][iU] = arrUV_star[j][i][iU] - ns->dt / ns->rho *
                                                              (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) /
-                                                             (cart->c[0][i] - cart->c[0][i - 1]);
+                                                             (arrcx[i][ic] - arrcx[i - 1][ic]);
         }
 
     for (j = ys; j < ys + ym + 1; j++)
@@ -400,7 +430,7 @@ PetscErrorCode NSFSMUpdate2d_MeshCartesian(NS ns) {
             else
                 arrUV[j][i][iV] = arrUV_star[j][i][iV] - ns->dt / ns->rho *
                                                              (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) /
-                                                             (cart->c[1][j] - cart->c[1][j - 1]);
+                                                             (arrcy[j][ic] - arrcy[j - 1][ic]);
         }
 
     PetscCall(DMStagVecRestoreArray(cart->dm, sol->v[0], &arru));
@@ -411,6 +441,9 @@ PetscErrorCode NSFSMUpdate2d_MeshCartesian(NS ns) {
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_prime, &arrp_prime));
     PetscCall(DMStagVecRestoreArrayRead(cart->fdm, solfsm->fv_star, &arrUV_star));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
 
     PetscCall(DMLocalToLocalBegin(cart->dm, sol->v[0], INSERT_VALUES, sol->v[0]));
     PetscCall(DMLocalToLocalEnd(cart->dm, sol->v[0], INSERT_VALUES, sol->v[0]));
@@ -437,8 +470,10 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx) {
     DMStagStencil row;
     PetscReal valb;
     const PetscReal ***arrNu, ***arrNu_prev, ***arru, ***arrv, ***arrp;
+    const PetscReal **arrwx, **arrwy, **arrcx, **arrcy;
     PetscReal up, uw, ue, us, un, pw, pe, dpdx, ulap;
-    PetscInt ielem;
+    PetscReal aw, ae, as, an;
+    PetscInt ielem, iw, ic;
     PetscInt i, j;
 
     PetscFunctionBegin;
@@ -451,13 +486,24 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx) {
     PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
     PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
     PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
 
     PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
+    PetscCall(DMStagGetLocationSlot(cart->subdm[0], DMSTAG_ELEMENT, 0, &iw));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ic));
+
     row.loc = DMSTAG_ELEMENT;
     row.c = 0;
 
     for (j = ys; j < ys + ym; j++)
         for (i = xs; i < xs + xm; i++) {
+            aw = 1.0 / (arrwx[i][iw] * (arrcx[i][ic] - arrcx[i - 1][ic]));
+            ae = 1.0 / (arrwx[i][iw] * (arrcx[i + 1][ic] - arrcx[i][ic]));
+            as = 1.0 / (arrwy[j][iw] * (arrcy[j][ic] - arrcy[j - 1][ic]));
+            an = 1.0 / (arrwy[j][iw] * (arrcy[j + 1][ic] - arrcy[j][ic]));
+
             row.i = i;
             row.j = j;
 
@@ -491,16 +537,15 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx) {
                 un = arru[j + 1][i][ielem];
 
             /* Pressure gradient. */
-            dpdx = (pe - pw) / (cart->c[0][i + 1] - cart->c[0][i - 1]);
+            dpdx = (pe - pw) / (arrcx[i + 1][ic] - arrcx[i - 1][ic]);
             /* Laplacian of u. */
-            ulap = DERIV2W * uw + DERIV2E * ue + DERIV2S * us + DERIV2N * un -
-                   (DERIV2W + DERIV2E + DERIV2S + DERIV2N) * up;
+            ulap = aw * uw + ae * ue + as * us + an * un - (aw + ae + as + an) * up;
 
             valb = up - 1.5 * ns->dt * arrNu[j][i][ielem] + 0.5 * ns->dt * arrNu_prev[j][i][ielem] -
                    ns->dt / ns->rho * dpdx + 0.5 * ns->mu * ns->dt / ns->rho * ulap;
             // TODO: below is temporary for cavity flow
             if (j == N - 1)
-                valb += ns->mu * ns->dt / ns->rho * DERIV2N;
+                valb += ns->mu * ns->dt / ns->rho * an;
 
             PetscCall(DMStagVecSetValuesStencil(cart->dm, b, 1, &row, &valb, INSERT_VALUES));
         }
@@ -510,6 +555,9 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx) {
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
 
     PetscCall(VecAssemblyBegin(b));
     PetscCall(VecAssemblyEnd(b));
@@ -530,8 +578,10 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx) {
     DMStagStencil row;
     PetscReal valb;
     const PetscReal ***arrNv, ***arrNv_prev, ***arru, ***arrv, ***arrp;
+    const PetscReal **arrwx, **arrwy, **arrcx, **arrcy;
     PetscReal vp, vw, ve, vs, vn, ps, pn, dpdy, vlap;
-    PetscInt ielem;
+    PetscReal aw, ae, as, an;
+    PetscInt ielem, iw, ic;
     PetscInt i, j;
 
     PetscFunctionBegin;
@@ -544,13 +594,24 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx) {
     PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
     PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
     PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
 
     PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
+    PetscCall(DMStagGetLocationSlot(cart->subdm[1], DMSTAG_ELEMENT, 0, &iw));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ic));
+
     row.loc = DMSTAG_ELEMENT;
     row.c = 0;
 
     for (j = ys; j < ys + ym; j++)
         for (i = xs; i < xs + xm; i++) {
+            aw = 1.0 / (arrwx[i][iw] * (arrcx[i][ic] - arrcx[i - 1][ic]));
+            ae = 1.0 / (arrwx[i][iw] * (arrcx[i + 1][ic] - arrcx[i][ic]));
+            as = 1.0 / (arrwy[j][iw] * (arrcy[j][ic] - arrcy[j - 1][ic]));
+            an = 1.0 / (arrwy[j][iw] * (arrcy[j + 1][ic] - arrcy[j][ic]));
+
             row.i = i;
             row.j = j;
 
@@ -584,10 +645,9 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx) {
             }
 
             /* Pressure gradient. */
-            dpdy = (pn - ps) / (cart->c[1][j + 1] - cart->c[1][j - 1]);
+            dpdy = (pn - ps) / (arrcy[j + 1][ic] - arrcy[j - 1][ic]);
             /* Laplacian of v. */
-            vlap = DERIV2W * vw + DERIV2E * ve + DERIV2S * vs + DERIV2N * vn -
-                   (DERIV2W + DERIV2E + DERIV2S + DERIV2N) * vp;
+            vlap = aw * vw + ae * ve + as * vs + an * vn - (aw + ae + as + an) * vp;
 
             valb = vp - 1.5 * ns->dt * arrNv[j][i][ielem] + 0.5 * ns->dt * arrNv_prev[j][i][ielem] -
                    ns->dt / ns->rho * dpdy + 0.5 * ns->mu * ns->dt / ns->rho * vlap;
@@ -600,6 +660,9 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx) {
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
     PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
 
     PetscCall(VecAssemblyBegin(b));
     PetscCall(VecAssemblyEnd(b));
@@ -621,7 +684,9 @@ PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx) {
     DMStagStencil row;
     PetscReal valb;
     const PetscReal ***arrUV_star;
-    PetscInt iU, iV, ielem;
+    const PetscReal **arrwx, **arrwy, **arrcx, **arrcy;
+    PetscReal aw, ae, as, an;
+    PetscInt iU, iV, ielem, iw, ic;
     PetscReal divUV_star;
     MatNullSpace nullspace;
     PetscInt i, j;
@@ -634,21 +699,32 @@ PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx) {
     PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
     PetscCall(DMStagVecGetArrayRead(cart->fdm, solfsm->fv_star, &arrUV_star));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
 
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &iU));
     PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &iV));
     PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
+    PetscCall(DMStagGetLocationSlot(cart->subdm[0], DMSTAG_ELEMENT, 0, &iw));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ic));
+
     row.loc = DMSTAG_ELEMENT;
     row.c = 0;
 
     for (j = ys; j < ys + ym; j++)
         for (i = xs; i < xs + xm; i++) {
+            aw = 1.0 / (arrwx[i][iw] * (arrcx[i][ic] - arrcx[i - 1][ic]));
+            ae = 1.0 / (arrwx[i][iw] * (arrcx[i + 1][ic] - arrcx[i][ic]));
+            as = 1.0 / (arrwy[j][iw] * (arrcy[j][ic] - arrcy[j - 1][ic]));
+            an = 1.0 / (arrwy[j][iw] * (arrcy[j + 1][ic] - arrcy[j][ic]));
+
             row.i = i;
             row.j = j;
 
-            divUV_star = (arrUV_star[j][i + 1][iU] - arrUV_star[j][i][iU]) / cart->w[0][i] +
-                         (arrUV_star[j + 1][i][iV] - arrUV_star[j][i][iV]) / cart->w[1][j];
-            valb = -ns->rho / ns->dt * divUV_star / (DERIV2W + DERIV2E + DERIV2S + DERIV2N);
+            divUV_star = (arrUV_star[j][i + 1][iU] - arrUV_star[j][i][iU]) / arrwx[i][iw] +
+                         (arrUV_star[j + 1][i][iV] - arrUV_star[j][i][iV]) / arrwy[j][iw];
+            valb = -ns->rho / ns->dt * divUV_star / (aw + ae + as + an);
 
             PetscCall(DMStagVecSetValuesStencil(cart->dm, b, 1, &row, &valb, INSERT_VALUES));
         }
@@ -679,6 +755,9 @@ PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
     DMStagStencil row, col[5];
     PetscReal v[5];
     PetscInt ncols;
+    const PetscReal **arrwx, **arrwy, **arrcx, **arrcy;
+    PetscReal aw, ae, as, an;
+    PetscInt iw, ic;
     PetscInt i, j;
 
     PetscFunctionBegin;
@@ -687,6 +766,13 @@ PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
 
     PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
     PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
+
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+
+    PetscCall(DMStagGetLocationSlot(cart->subdm[0], DMSTAG_ELEMENT, 0, &iw));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ic));
 
     row.loc = DMSTAG_ELEMENT;
     row.c = 0;
@@ -697,47 +783,52 @@ PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
 
     for (j = ys; j < ys + ym; j++)
         for (i = xs; i < xs + xm; i++) {
+            aw = 1.0 / (arrwx[i][iw] * (arrcx[i][ic] - arrcx[i - 1][ic]));
+            ae = 1.0 / (arrwx[i][iw] * (arrcx[i + 1][ic] - arrcx[i][ic]));
+            as = 1.0 / (arrwy[j][iw] * (arrcy[j][ic] - arrcy[j - 1][ic]));
+            an = 1.0 / (arrwy[j][iw] * (arrcy[j + 1][ic] - arrcy[j][ic]));
+
             row.i = col[0].i = i;
             row.j = col[0].j = j;
-            v[0] = 1.0 + 0.5 * ns->mu * ns->dt / ns->rho * (DERIV2W + DERIV2E + DERIV2S + DERIV2N);
+            v[0] = 1.0 + 0.5 * ns->mu * ns->dt / ns->rho * (aw + ae + as + an);
             v[1] = v[2] = v[3] = v[4] = 0;
             ncols = 1;
 
             // TODO: below is temporary for cavity flow
             /* Left wall. */
             if (i == 0) {
-                v[0] += 0.5 * ns->mu * ns->dt / ns->rho * DERIV2W;
+                v[0] += 0.5 * ns->mu * ns->dt / ns->rho * aw;
             } else {
                 col[ncols].i = i - 1;
                 col[ncols].j = j;
-                v[ncols] = -0.5 * ns->mu * ns->dt / ns->rho * DERIV2W;
+                v[ncols] = -0.5 * ns->mu * ns->dt / ns->rho * aw;
                 ncols++;
             }
             /* Right wall. */
             if (i == M - 1) {
-                v[0] += 0.5 * ns->mu * ns->dt / ns->rho * DERIV2E;
+                v[0] += 0.5 * ns->mu * ns->dt / ns->rho * ae;
             } else {
                 col[ncols].i = i + 1;
                 col[ncols].j = j;
-                v[ncols] = -0.5 * ns->mu * ns->dt / ns->rho * DERIV2E;
+                v[ncols] = -0.5 * ns->mu * ns->dt / ns->rho * ae;
                 ncols++;
             }
             /* Bottom wall. */
             if (j == 0) {
-                v[0] += 0.5 * ns->mu * ns->dt / ns->rho * DERIV2S;
+                v[0] += 0.5 * ns->mu * ns->dt / ns->rho * as;
             } else {
                 col[ncols].i = i;
                 col[ncols].j = j - 1;
-                v[ncols] = -0.5 * ns->mu * ns->dt / ns->rho * DERIV2S;
+                v[ncols] = -0.5 * ns->mu * ns->dt / ns->rho * as;
                 ncols++;
             }
             /* Top wall. */
             if (j == N - 1) {
-                v[0] += 0.5 * ns->mu * ns->dt / ns->rho * DERIV2N;
+                v[0] += 0.5 * ns->mu * ns->dt / ns->rho * an;
             } else {
                 col[ncols].i = i;
                 col[ncols].j = j + 1;
-                v[ncols] = -0.5 * ns->mu * ns->dt / ns->rho * DERIV2N;
+                v[ncols] = -0.5 * ns->mu * ns->dt / ns->rho * an;
                 ncols++;
             }
 
@@ -746,6 +837,10 @@ PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
 
     PetscCall(MatAssemblyBegin(Jpre, MAT_FINAL_ASSEMBLY));
     PetscCall(MatAssemblyEnd(Jpre, MAT_FINAL_ASSEMBLY));
+
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -760,8 +855,10 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
     DMStagStencil row, col[5];
     PetscReal v[5];
     PetscInt ncols;
-    PetscReal asum;
     MatNullSpace nullspace;
+    const PetscReal **arrwx, **arrwy, **arrcx, **arrcy;
+    PetscReal aw, ae, as, an, asum;
+    PetscInt iw, ic;
     PetscInt i, j;
 
     PetscFunctionBegin;
@@ -773,6 +870,13 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
     PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
     PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecGetArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+
+    PetscCall(DMStagGetLocationSlot(cart->subdm[0], DMSTAG_ELEMENT, 0, &iw));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ic));
+
     row.loc = DMSTAG_ELEMENT;
     row.c = 0;
     for (ncols = 0; ncols < 5; ncols++) {
@@ -782,49 +886,53 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
 
     for (j = ys; j < ys + ym; j++)
         for (i = xs; i < xs + xm; i++) {
+            aw = 1.0 / (arrwx[i][iw] * (arrcx[i][ic] - arrcx[i - 1][ic]));
+            ae = 1.0 / (arrwx[i][iw] * (arrcx[i + 1][ic] - arrcx[i][ic]));
+            as = 1.0 / (arrwy[j][iw] * (arrcy[j][ic] - arrcy[j - 1][ic]));
+            an = 1.0 / (arrwy[j][iw] * (arrcy[j + 1][ic] - arrcy[j][ic]));
+            asum = aw + ae + as + an;
+
             row.i = col[0].i = i;
             row.j = col[0].j = j;
             v[0] = 1.0;
             v[1] = v[2] = v[3] = v[4] = 0;
             ncols = 1;
 
-            asum = DERIV2W + DERIV2E + DERIV2S + DERIV2N;
-
             // TODO: below is temporary for cavity flow
             /* Left wall. */
             if (i == 0) {
-                v[0] -= DERIV2W / asum;
+                v[0] -= aw / asum;
             } else {
                 col[ncols].i = i - 1;
                 col[ncols].j = j;
-                v[ncols] = -DERIV2W / asum;
+                v[ncols] = -aw / asum;
                 ncols++;
             }
             /* Right wall. */
             if (i == M - 1) {
-                v[0] -= DERIV2E / asum;
+                v[0] -= ae / asum;
             } else {
                 col[ncols].i = i + 1;
                 col[ncols].j = j;
-                v[ncols] = -DERIV2E / asum;
+                v[ncols] = -ae / asum;
                 ncols++;
             }
             /* Bottom wall. */
             if (j == 0) {
-                v[0] -= DERIV2S / asum;
+                v[0] -= as / asum;
             } else {
                 col[ncols].i = i;
                 col[ncols].j = j - 1;
-                v[ncols] = -DERIV2S / asum;
+                v[ncols] = -as / asum;
                 ncols++;
             }
             /* Top wall. */
             if (j == N - 1) {
-                v[0] -= DERIV2N / asum;
+                v[0] -= an / asum;
             } else {
                 col[ncols].i = i;
                 col[ncols].j = j + 1;
-                v[ncols] = -DERIV2N / asum;
+                v[ncols] = -an / asum;
                 ncols++;
             }
 
@@ -839,6 +947,10 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx) {
     PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &nullspace));
     PetscCall(MatSetNullSpace(J, nullspace));
     PetscCall(MatNullSpaceDestroy(&nullspace));
+
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[0], cart->width[0], &arrwx));
+    PetscCall(DMStagVecRestoreArrayRead(cart->subdm[1], cart->width[1], &arrwy));
+    PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }

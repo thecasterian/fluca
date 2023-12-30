@@ -51,10 +51,10 @@ PetscErrorCode MeshSetFromOptions_Cartesian(Mesh mesh, PetscOptionItems *PetscOp
 PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     MPI_Comm comm;
-    PetscMPIInt rank;
-    DMBoundaryType bndTypes[3];
+    DMBoundaryType dmBndTypes[3];
     PetscInt dofElem = 1, dofFace = 1, stencilWidth = 1;
     const PetscInt *l[3];
+    DM cdm;
     PetscInt d;
 
     PetscFunctionBegin;
@@ -64,18 +64,18 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
     PetscCall(PetscObjectGetComm((PetscObject)mesh, &comm));
 
     for (d = 0; d < mesh->dim; d++)
-        PetscCall(MeshBoundaryTypeToDMBoundaryType(cart->bndTypes[d], &bndTypes[d]));
+        PetscCall(MeshBoundaryTypeToDMBoundaryType(cart->bndTypes[d], &dmBndTypes[d]));
 
     /* Allocate DMs */
     switch (mesh->dim) {
         case 2:
-            PetscCall(DMStagCreate2d(comm, bndTypes[0], bndTypes[1], cart->N[0], cart->N[1], cart->nRanks[0],
+            PetscCall(DMStagCreate2d(comm, dmBndTypes[0], dmBndTypes[1], cart->N[0], cart->N[1], cart->nRanks[0],
                                      cart->nRanks[1], 0, 0, dofElem, DMSTAG_STENCIL_STAR, stencilWidth, cart->l[0],
                                      cart->l[1], &cart->dm));
             break;
         case 3:
-            PetscCall(DMStagCreate3d(comm, bndTypes[0], bndTypes[1], bndTypes[2], cart->N[0], cart->N[1], cart->N[2],
-                                     cart->nRanks[0], cart->nRanks[1], cart->nRanks[2], 0, 0, 0, dofElem,
+            PetscCall(DMStagCreate3d(comm, dmBndTypes[0], dmBndTypes[1], dmBndTypes[2], cart->N[0], cart->N[1],
+                                     cart->N[2], cart->nRanks[0], cart->nRanks[1], cart->nRanks[2], 0, 0, 0, dofElem,
                                      DMSTAG_STENCIL_STAR, stencilWidth, cart->l[0], cart->l[1], cart->l[2], &cart->dm));
             break;
         default:
@@ -101,51 +101,19 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
     for (d = 0; d < mesh->dim; d++)
         PetscCall(PetscArraycpy(cart->l[d], l[d], cart->nRanks[d]));
 
-    PetscCallMPI(MPI_Comm_rank(comm, &rank));
-    switch (mesh->dim) {
-        case 2:
-            cart->rank[0] = rank % cart->nRanks[0];
-            cart->rank[1] = rank / cart->nRanks[0];
-            cart->rank[2] = 0;
-            break;
-        case 3:
-            cart->rank[0] = rank % cart->nRanks[0];
-            cart->rank[1] = (rank % (cart->nRanks[0] * cart->nRanks[1])) / cart->nRanks[0];
-            cart->rank[2] = rank / (cart->nRanks[0] * cart->nRanks[1]);
-            break;
-        default:
-            SETERRQ(comm, PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, mesh->dim);
-    }
-
+    PetscCall(DMStagSetUniformCoordinatesProduct(cart->dm, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0));
+    PetscCall(DMGetCoordinateDM(cart->dm, &cdm));
     for (d = 0; d < mesh->dim; d++) {
-        PetscMPIInt color, key = 0;
+        DM subdm;
+        MPI_Comm subcomm;
 
-        switch (d) {
-            case 0:
-                color = cart->rank[1] + (mesh->dim > 2 ? cart->nRanks[1] * cart->rank[2] : 0);
-                break;
-            case 1:
-                color = cart->rank[0] + (mesh->dim > 2 ? cart->nRanks[0] * cart->rank[2] : 0);
-                break;
-            case 2:
-                color = cart->rank[0] + cart->nRanks[0] * cart->rank[1];
-                break;
-            default:
-                SETERRQ(comm, PETSC_ERR_SUP, "Unsupported dimension index %" PetscInt_FMT, d);
-        }
-        PetscCallMPI(MPI_Comm_split(comm, color, key, &cart->subcomm[d]));
-    }
+        PetscCall(DMProductGetDM(cdm, d, &subdm));
+        PetscCall(PetscObjectGetComm((PetscObject)subdm, &subcomm));
 
-    for (d = 0; d < mesh->dim; d++) {
-        PetscReal *c, *w;
-
-        PetscMalloc1(cart->N[d] + 2, &c);
-        cart->c[d] = c + 1;
-        PetscMalloc1(cart->N[d] + 1, &cart->cf[d]);
-        PetscMalloc1(cart->N[d] + 2, &w);
-        cart->w[d] = w + 1;
-        PetscMalloc1(cart->N[d] + 1, &cart->rf[d]);
-        PetscMalloc1(cart->N[d], &cart->a[d]);
+        PetscCall(DMStagCreate1d(subcomm, dmBndTypes[d], cart->N[d], 0, dofElem, DMSTAG_STENCIL_BOX, stencilWidth,
+                                 cart->l[d], &cart->subdm[d]));
+        PetscCall(DMSetUp(cart->subdm[d]));
+        PetscCall(DMCreateLocalVector(cart->subdm[d], &cart->width[d]));
     }
 
     PetscFunctionReturn(PETSC_SUCCESS);
@@ -157,24 +125,13 @@ PetscErrorCode MeshDestroy_Cartesian(Mesh mesh) {
 
     PetscFunctionBegin;
 
-    for (d = 0; d < mesh->dim; d++) {
+    for (d = 0; d < mesh->dim; d++)
         PetscCall(PetscFree(cart->l[d]));
-        PetscCallMPI(MPI_Comm_free(&cart->subcomm[d]));
-    }
     PetscCall(DMDestroy(&cart->dm));
     PetscCall(DMDestroy(&cart->fdm));
     for (d = 0; d < mesh->dim; d++) {
-        PetscReal *dummy;
-
-        dummy = cart->c[d] - 1;
-        PetscCall(PetscFree(dummy));
-        cart->c[d] = NULL;
-        PetscCall(PetscFree(cart->cf[d]));
-        dummy = cart->w[d] - 1;
-        PetscCall(PetscFree(dummy));
-        cart->w[d] = NULL;
-        PetscCall(PetscFree(cart->rf[d]));
-        PetscCall(PetscFree(cart->a[d]));
+        PetscCall(DMDestroy(&cart->subdm[d]));
+        PetscCall(VecDestroy(&cart->width[d]));
     }
 
     PetscCall(PetscFree(mesh->data));
@@ -267,18 +224,13 @@ PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
         cart->nRanks[d] = PETSC_DECIDE;
         cart->l[d] = NULL;
         cart->bndTypes[d] = MESH_BOUNDARY_NOT_PERIODIC;
-        cart->rank[d] = -1;
-        cart->subcomm[d] = NULL;
     }
 
     cart->dm = NULL;
     cart->fdm = NULL;
     for (d = 0; d < MESH_MAX_DIM; d++) {
-        cart->c[d] = NULL;
-        cart->cf[d] = NULL;
-        cart->w[d] = NULL;
-        cart->rf[d] = NULL;
-        cart->a[d] = NULL;
+        cart->subdm[d] = NULL;
+        cart->width[d] = NULL;
     }
 
     mesh->ops->setfromoptions = MeshSetFromOptions_Cartesian;
@@ -366,8 +318,6 @@ PetscErrorCode MeshCartesianSetOwnershipRanges(Mesh mesh, const PetscInt *lx, co
 PetscErrorCode MeshCartesianSetUniformCoordinates(Mesh mesh, PetscReal xmin, PetscReal xmax, PetscReal ymin,
                                                   PetscReal ymax, PetscReal zmin, PetscReal zmax) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
-    PetscReal cmin[3] = {xmin, ymin, zmin}, cmax[3] = {xmax, ymax, zmax};
-    PetscInt d, i;
 
     PetscFunctionBegin;
 
@@ -375,188 +325,106 @@ PetscErrorCode MeshCartesianSetUniformCoordinates(Mesh mesh, PetscReal xmin, Pet
     PetscCheck(mesh->state >= MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "This function must be called after MeshSetUp()");
 
+    PetscCall(DMStagSetUniformCoordinatesProduct(cart->dm, xmin, xmax, ymin, ymax, zmin, zmax));
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartesianGetCoordinateArrays(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az) {
+    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+
+    PetscCall(DMStagGetProductCoordinateArrays(cart->dm, ax, ay, az));
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartesianGetCoordinateArraysRead(Mesh mesh, const PetscReal ***ax, const PetscReal ***ay,
+                                                    const PetscReal ***az) {
+    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+
+    PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, ax, ay, az));
+
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartesianRestoreCoordinateArrays(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az) {
+    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+    PetscReal ***a[3] = {ax, ay, az};
+    PetscInt s, m;
+    PetscInt i, d, iprev, inext, icenter;
+
+    PetscFunctionBegin;
+
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+
+    PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_LEFT, &iprev));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inext));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &icenter));
     for (d = 0; d < mesh->dim; d++) {
-        for (i = -1; i < cart->N[d] + 1; i++)
-            cart->c[d][i] = cmin[d] + (cmax[d] - cmin[d]) * (i + 0.5) / cart->N[d];
-        for (i = 0; i <= cart->N[d]; i++)
-            cart->cf[d][i] = cmin[d] + (cmax[d] - cmin[d]) * i / cart->N[d];
+        PetscReal **arrw;
+        PetscInt iw;
+
+        PetscCall(DMStagGetCorners(cart->subdm[d], &s, NULL, NULL, &m, NULL, NULL, NULL, NULL, NULL));
+        for (i = s; i < s + m; i++)
+            (*a[d])[i][icenter] = ((*a[d])[i][iprev] + (*a[d])[i][inext]) / 2.0;
+
+        PetscCall(DMStagVecGetArray(cart->subdm[d], cart->width[d], &arrw));
+        PetscCall(DMStagGetLocationSlot(cart->subdm[d], DMSTAG_ELEMENT, 0, &iw));
+        for (i = s; i < s + m; i++)
+            arrw[i][iw] = (*a[d])[i][inext] - (*a[d])[i][iprev];
+        PetscCall(DMStagVecRestoreArray(cart->subdm[d], cart->width[d], &arrw));
+        PetscCall(DMLocalToLocalBegin(cart->subdm[d], cart->width[d], INSERT_VALUES, cart->width[d]));
+        PetscCall(DMLocalToLocalEnd(cart->subdm[d], cart->width[d], INSERT_VALUES, cart->width[d]));
     }
 
+    // TODO: set widths and coordinates of ghosts
+
+    PetscCall(DMStagRestoreProductCoordinateArrays(cart->dm, ax, ay, az));
+
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianFaceCoordinateGetArray(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az) {
+PetscErrorCode MeshCartesianRestoreCoordinateArraysRead(Mesh mesh, const PetscReal ***arrx, const PetscReal ***arry,
+                                                        const PetscReal ***arrz) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
-    PetscReal ***arr[3] = {ax, ay, az};
-    PetscInt s[3], m[3], d;
 
     PetscFunctionBegin;
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
-    PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
-
-    for (d = 0; d < mesh->dim; d++)
-        if (arr[d]) {
-            PetscReal **a;
-            PetscInt i;
-
-            PetscCall(PetscMalloc1(m[d] + 1, &a));
-            for (i = 0; i <= m[d]; i++)
-                a[i] = cart->cf[d] + s[d] + i;
-            *arr[d] = a - s[d];
-        }
+    PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, arrx, arry, arrz));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianFaceCoordinateGetArrayRead(Mesh mesh, const PetscReal ***ax, const PetscReal ***ay,
-                                                       const PetscReal ***az) {
+PetscErrorCode MeshCartesianGetCoordinateLocationSlot(Mesh mesh, MeshCartesianCoordinateStencilLocation loc,
+                                                      PetscInt *slot) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
-    const PetscReal ***arr[3] = {ax, ay, az};
-    PetscInt s[3], m[3], d;
+    DMStagStencilLocation stagLoc;
 
     PetscFunctionBegin;
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
-    *ax = NULL;
-    *ay = NULL;
-    *az = NULL;
-
-    PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
-
-    for (d = 0; d < mesh->dim; d++)
-        if (arr[d]) {
-            const PetscReal **a;
-            PetscInt i;
-
-            PetscCall(PetscMalloc1(m[d] + 1, &a));
-            for (i = 0; i <= m[d]; i++)
-                a[i] = cart->cf[d] + s[d] + i;
-            *arr[d] = a - s[d];
-        }
-
-    PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode MeshCartesianFaceCoordinateRestoreArray(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
-    PetscReal ***arr[3] = {ax, ay, az};
-    PetscInt s[3], m[3], d;
-
-    PetscFunctionBegin;
-
-    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-
-    PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
-
-    for (d = 0; d < mesh->dim; d++)
-        if (arr[d]) {
-            void *dummy = (void *)(*arr[d] + s[d]);
-            PetscFree(dummy);
-            *arr[d] = NULL;
-        }
-
-    for (d = 0; d < mesh->dim; d++) {
-        /* All gather face coordinates */
-        PetscReal *sendbuf = cart->cf[d] + s[d];
-        PetscMPIInt sendcount = m[d] + (s[d] + m[d] >= cart->N[d]);
-        PetscMPIInt recvcounts[cart->nRanks[d]], displs[cart->nRanks[d]];
-        PetscInt i;
-
-        for (i = 0; i < cart->nRanks[d]; i++) {
-            recvcounts[i] = cart->l[d][i] + (i == cart->nRanks[d] - 1);
-            displs[i] = i > 0 ? displs[i - 1] + recvcounts[i - 1] : 0;
-        }
-
-        PetscCallMPI(MPI_Allgatherv(sendbuf, sendcount, MPIU_REAL, cart->cf[d], recvcounts, displs, MPIU_REAL,
-                                    cart->subcomm[d]));
-
-        for (i = 0; i < cart->N[d]; i++) {
-            cart->c[d][i] = 0.5 * (cart->cf[d][i] + cart->cf[d][i + 1]);
-            cart->w[d][i] = cart->cf[d][i + 1] - cart->cf[d][i];
-        }
-        /* Ghots elements */
-        switch (cart->bndTypes[d]) {
-            case MESH_BOUNDARY_NOT_PERIODIC:
-                cart->c[d][-1] = cart->cf[d][0] - 0.5 * cart->w[d][0];
-                cart->c[d][cart->N[d]] = cart->cf[d][cart->N[d]] + 0.5 * cart->w[d][cart->N[d] - 1];
-                cart->w[d][-1] = cart->w[d][0];
-                cart->w[d][cart->N[d]] = cart->w[d][cart->N[d] - 1];
-                break;
-            case MESH_BOUNDARY_PERIODIC:
-                cart->c[d][-1] = cart->cf[d][0] - 0.5 * cart->w[d][cart->N[d] - 1];
-                cart->c[d][cart->N[d]] = cart->cf[d][cart->N[d]] + 0.5 * cart->w[d][0];
-                cart->w[d][-1] = cart->w[d][cart->N[d] - 1];
-                cart->w[d][cart->N[d]] = cart->w[d][0];
-                break;
-            default:
-                SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_SUP, "Unsupported boundary type");
-        }
-        for (i = 0; i <= cart->N[d]; i++)
-            cart->rf[d][i] = cart->w[d][i] / (cart->w[d][i - 1] + cart->w[d][i]);
-        for (i = 0; i < cart->N[d]; i++) {
-            cart->a[d][i][0] = 1.0 / (cart->w[d][i] * (cart->c[d][i] - cart->c[d][i - 1]));
-            cart->a[d][i][1] = 1.0 / (cart->w[d][i] * (cart->c[d][i + 1] - cart->c[d][i]));
-        }
+    switch (loc) {
+        case MESHCARTESIAN_PREV:
+            stagLoc = DMSTAG_LEFT;
+            break;
+        case MESHCARTESIAN_NEXT:
+            stagLoc = DMSTAG_RIGHT;
+            break;
+        default:
+            SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONG, "Invalid coordinate stencil location");
     }
-
-    PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode MeshCartesianFaceCoordinateRestoreArrayRead(Mesh mesh, const PetscReal ***arrx, const PetscReal ***arry,
-                                                           const PetscReal ***arrz) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
-    const PetscReal ***arr[3] = {arrx, arry, arrz};
-    PetscInt s[3], d;
-
-    PetscFunctionBegin;
-
-    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-
-    PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], NULL, NULL, NULL, NULL, NULL, NULL));
-
-    for (d = 0; d < mesh->dim; d++)
-        if (arr[d]) {
-            void *dummy = (void *)(*arr[d] + s[d]);
-            PetscFree(dummy);
-            *arr[d] = NULL;
-        }
-
-    PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode MeshCartesianCoordinateGetArrayRead(Mesh mesh, const PetscReal **arrx, const PetscReal **arry,
-                                                   const PetscReal **arrz) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
-
-    const PetscReal **arr[3] = {arrx, arry, arrz};
-    PetscInt d;
-
-    PetscFunctionBegin;
-
-    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-
-    for (d = 0; d < mesh->dim; d++)
-        if (arr[d])
-            *arr[d] = cart->c[d];
-
-    PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode MeshCartesianCoordinateRestoreArrayRead(Mesh mesh, const PetscReal **arrx, const PetscReal **arry,
-                                                       const PetscReal **arrz) {
-    PetscFunctionBegin;
-
-    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-
-    if (arrx)
-        *arrx = NULL;
-    if (arry)
-        *arry = NULL;
-    if (arrz)
-        *arrz = NULL;
+    PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, stagLoc, slot));
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
