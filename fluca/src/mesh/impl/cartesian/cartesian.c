@@ -358,7 +358,6 @@ PetscErrorCode MeshCartesianGetCoordinateArraysRead(Mesh mesh, const PetscReal *
 PetscErrorCode MeshCartesianRestoreCoordinateArrays(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az) {
     Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
     PetscReal ***a[3] = {ax, ay, az};
-    PetscInt s, m;
     PetscInt i, d, iprev, inext, icenter;
 
     PetscFunctionBegin;
@@ -369,6 +368,7 @@ PetscErrorCode MeshCartesianRestoreCoordinateArrays(Mesh mesh, PetscReal ***ax, 
     PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inext));
     PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &icenter));
     for (d = 0; d < mesh->dim; d++) {
+        PetscInt s, m;
         PetscReal **arrw;
         PetscInt iw;
 
@@ -385,7 +385,23 @@ PetscErrorCode MeshCartesianRestoreCoordinateArrays(Mesh mesh, PetscReal ***ax, 
         PetscCall(DMLocalToLocalEnd(cart->subdm[d], cart->width[d], INSERT_VALUES, cart->width[d]));
     }
 
-    // TODO: set widths and coordinates of ghosts
+    // set widths and coordinates of ghosts
+    for (d = 0; d < mesh->dim; d++) {
+        PetscInt s, m;
+        PetscReal **arrw;
+        PetscInt iw;
+
+        PetscCall(DMStagGetCorners(cart->subdm[d], &s, NULL, NULL, &m, NULL, NULL, NULL, NULL, NULL));
+        PetscCall(DMStagVecGetArray(cart->subdm[d], cart->width[d], &arrw));
+        PetscCall(DMStagGetLocationSlot(cart->subdm[d], DMSTAG_ELEMENT, 0, &iw));
+        if (s == 0 && cart->bndTypes[d] != MESH_BOUNDARY_PERIODIC)
+            arrw[s - 1][iw] = arrw[s][iw];
+        if (s + m == cart->N[d] && cart->bndTypes[d] != MESH_BOUNDARY_PERIODIC)
+            arrw[s + m][iw] = arrw[s + m - 1][iw];
+        (*a[d])[s - 1][icenter] = (*a[d])[s][iprev] - arrw[s - 1][iw] / 2.0;
+        (*a[d])[s + m][icenter] = (*a[d])[s + m - 1][inext] + arrw[s + m][iw] / 2.0;
+        PetscCall(DMStagVecRestoreArray(cart->subdm[d], cart->width[d], &arrw));
+    }
 
     PetscCall(DMStagRestoreProductCoordinateArrays(cart->dm, ax, ay, az));
 
