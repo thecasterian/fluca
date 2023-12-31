@@ -83,7 +83,6 @@ PetscErrorCode NSMonitorSetFromOptions(NS ns, const char *name, const char *help
         PetscViewerAndFormat *vf;
 
         PetscCall(PetscViewerAndFormatCreate(viewer, format, &vf));
-        PetscCall(PetscObjectDereference((PetscObject)viewer));
         if (mon_setup)
             PetscCall((*mon_setup)(ns, vf));
         PetscCall(NSMonitorSet(ns, (PetscErrorCode(*)(NS, void *))mon, vf,

@@ -4,7 +4,6 @@
 #include <pcgnslib.h>
 #include <petsc/private/petscimpl.h>
 #include <petsc/private/viewercgnsimpl.h>
-#include <petscdmda.h>
 #include <petscdmstag.h>
 
 PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer viewer) {
@@ -15,7 +14,7 @@ PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer viewer) {
 
     if (mesh->state < MESH_STATE_SETUP)
         PetscFunctionReturn(PETSC_SUCCESS);
-    if (cgns->base)
+    if (cgns->file_num && cgns->base)
         PetscFunctionReturn(PETSC_SUCCESS);
 
     if (!cgns->file_num) {
@@ -42,24 +41,26 @@ PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer viewer) {
     {
         cgsize_t rmin[3], rmax[3], rsize;
         PetscInt s[3], m[3], d;
+        PetscBool isLastRank[3];
         const PetscReal **arrcf[3];
         PetscReal *x[3] = {0};
         const char *coordnames[3] = {"CoordinateX", "CoordinateY", "CoordinateZ"};
         int coord[3];
 
-        DMDAGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2]);
+        PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+        PetscCall(DMStagGetIsLastRank(cart->dm, &isLastRank[0], &isLastRank[1], &isLastRank[2]));
 
         for (d = 0; d < mesh->dim; d++) {
             /* Vertex ownership; note that CGNS uses 1-based index */
             rmin[d] = s[d] + 1;
-            rmax[d] = s[d] + m[d] + (cart->rank[d] == cart->nRanks[d] - 1);
+            rmax[d] = s[d] + m[d] + isLastRank[d];
         }
 
         rsize = 1;
         for (d = 0; d < mesh->dim; d++)
             rsize *= rmax[d] - rmin[d] + 1;
 
-        PetscCall(MeshCartesianFaceCoordinateGetArrayRead(mesh, &arrcf[0], &arrcf[1], &arrcf[2]));
+        PetscCall(MeshCartesianGetCoordinateArraysRead(mesh, &arrcf[0], &arrcf[1], &arrcf[2]));
 
         for (d = 0; d < mesh->dim; d++) {
             cgsize_t i[3];
@@ -85,7 +86,7 @@ PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer viewer) {
             }
         }
 
-        PetscCall(MeshCartesianFaceCoordinateRestoreArrayRead(mesh, &arrcf[0], &arrcf[1], &arrcf[2]));
+        PetscCall(MeshCartesianRestoreCoordinateArraysRead(mesh, &arrcf[0], &arrcf[1], &arrcf[2]));
 
         for (d = 0; d < mesh->dim; d++) {
             PetscCallCGNS(cgp_coord_write(cgns->file_num, cgns->base, cgns->zone, CGNS_ENUMV(RealDouble), coordnames[d],
