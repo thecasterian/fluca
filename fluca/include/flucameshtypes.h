@@ -6,7 +6,7 @@
 typedef struct _p_Mesh *Mesh;
 
 typedef const char *MeshType;
-#define MESHCARTESIAN "cartesian"
+#define MESHCART "cartesian"
 
 typedef enum {
     MESH_BOUNDARY_NOT_PERIODIC,

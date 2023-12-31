@@ -1,6 +1,6 @@
 #include <fluca/private/meshimpl.h>
 
-FLUCA_EXTERN PetscErrorCode MeshCreate_Cartesian(Mesh);
+FLUCA_EXTERN PetscErrorCode MeshCreate_Cart(Mesh);
 
 PetscErrorCode MeshRegister(const char *type, PetscErrorCode (*function)(Mesh)) {
     PetscFunctionBegin;
@@ -11,7 +11,7 @@ PetscErrorCode MeshRegister(const char *type, PetscErrorCode (*function)(Mesh)) 
 
 PetscErrorCode MeshRegisterAll(void) {
     PetscFunctionBegin;
-    PetscCall(MeshRegister(MESHCARTESIAN, MeshCreate_Cartesian));
+    PetscCall(MeshRegister(MESHCART, MeshCreate_Cart));
     MeshRegisterAllCalled = PETSC_TRUE;
     PetscFunctionReturn(PETSC_SUCCESS);
 }

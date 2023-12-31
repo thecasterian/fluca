@@ -15,6 +15,6 @@ typedef struct {
     DM subdm[MESH_MAX_DIM]; /* DMStag for element-centered variables in each dimension */
 
     Vec width[MESH_MAX_DIM]; /* element widths in each dimension */
-} Mesh_Cartesian;
+} Mesh_Cart;
 
 #endif

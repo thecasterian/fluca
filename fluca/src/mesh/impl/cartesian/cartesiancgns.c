@@ -6,8 +6,8 @@
 #include <petsc/private/viewercgnsimpl.h>
 #include <petscdmstag.h>
 
-PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer viewer) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
     PetscViewer_CGNS *cgns = (PetscViewer_CGNS *)viewer->data;
 
     PetscFunctionBegin;
@@ -60,7 +60,7 @@ PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer viewer) {
         for (d = 0; d < mesh->dim; d++)
             rsize *= rmax[d] - rmin[d] + 1;
 
-        PetscCall(MeshCartesianGetCoordinateArraysRead(mesh, &arrcf[0], &arrcf[1], &arrcf[2]));
+        PetscCall(MeshCartGetCoordinateArraysRead(mesh, &arrcf[0], &arrcf[1], &arrcf[2]));
 
         for (d = 0; d < mesh->dim; d++) {
             cgsize_t i[3];
@@ -86,7 +86,7 @@ PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer viewer) {
             }
         }
 
-        PetscCall(MeshCartesianRestoreCoordinateArraysRead(mesh, &arrcf[0], &arrcf[1], &arrcf[2]));
+        PetscCall(MeshCartRestoreCoordinateArraysRead(mesh, &arrcf[0], &arrcf[1], &arrcf[2]));
 
         for (d = 0; d < mesh->dim; d++) {
             PetscCallCGNS(cgp_coord_write(cgns->file_num, cgns->base, cgns->zone, CGNS_ENUMV(RealDouble), coordnames[d],

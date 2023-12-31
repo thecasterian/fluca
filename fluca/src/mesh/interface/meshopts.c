@@ -31,14 +31,13 @@ PetscErrorCode MeshSetFromOptions(Mesh mesh) {
 
     PetscObjectOptionsBegin((PetscObject)mesh);
 
-    PetscCall(
-        PetscOptionsFList("-mesh_type", "Mesh type", "MeshSetType", MeshList,
-                          (char *)(((PetscObject)mesh)->type_name ? ((PetscObject)mesh)->type_name : MESHCARTESIAN),
-                          type, sizeof(type), &flg));
+    PetscCall(PetscOptionsFList("-mesh_type", "Mesh type", "MeshSetType", MeshList,
+                                (char *)(((PetscObject)mesh)->type_name ? ((PetscObject)mesh)->type_name : MESHCART),
+                                type, sizeof(type), &flg));
     if (flg)
         PetscCall(MeshSetType(mesh, type));
     else if (!((PetscObject)mesh)->type_name)
-        PetscCall(MeshSetType(mesh, MESHCARTESIAN));
+        PetscCall(MeshSetType(mesh, MESHCART));
 
     PetscCall(
         PetscOptionsBoundedInt("-mesh_dim", "Mesh dimension", "MeshSetDim", mesh->dim, &mesh->dim, NULL, MESH_MIN_DIM));

@@ -32,26 +32,26 @@ FLUCA_EXTERN PetscErrorCode MeshRegister(const char *, PetscErrorCode (*)(Mesh))
 typedef enum {
     MESHCARTESIAN_PREV,
     MESHCARTESIAN_NEXT,
-} MeshCartesianCoordinateStencilLocation;
+} MeshCartCoordinateStencilLocation;
+FLUCA_EXTERN const char *MeshCartCoordinateStencilLocations[];
 
-FLUCA_EXTERN PetscErrorCode MeshCartesianSetSizes(Mesh, PetscInt, PetscInt, PetscInt);
-FLUCA_EXTERN PetscErrorCode MeshCartesianSetNumProcs(Mesh, PetscInt, PetscInt, PetscInt);
-FLUCA_EXTERN PetscErrorCode MeshCartesianSetBoundaryType(Mesh, MeshBoundaryType, MeshBoundaryType, MeshBoundaryType);
-FLUCA_EXTERN PetscErrorCode MeshCartesianSetOwnershipRanges(Mesh, const PetscInt *, const PetscInt *, const PetscInt *);
-FLUCA_EXTERN PetscErrorCode MeshCartesianSetUniformCoordinates(Mesh, PetscReal, PetscReal, PetscReal, PetscReal,
-                                                               PetscReal, PetscReal);
-FLUCA_EXTERN PetscErrorCode MeshCartesianGetCoordinateArrays(Mesh, PetscReal ***, PetscReal ***, PetscReal ***);
-FLUCA_EXTERN PetscErrorCode MeshCartesianGetCoordinateArraysRead(Mesh, const PetscReal ***, const PetscReal ***,
-                                                                 const PetscReal ***);
-FLUCA_EXTERN PetscErrorCode MeshCartesianRestoreCoordinateArrays(Mesh, PetscReal ***, PetscReal ***, PetscReal ***);
-FLUCA_EXTERN PetscErrorCode MeshCartesianRestoreCoordinateArraysRead(Mesh, const PetscReal ***, const PetscReal ***,
-                                                                     const PetscReal ***);
-FLUCA_EXTERN PetscErrorCode MeshCartesianGetCoordinateLocationSlot(Mesh, MeshCartesianCoordinateStencilLocation,
-                                                                   PetscInt *);
-FLUCA_EXTERN PetscErrorCode MeshCartesianGetInfo(Mesh, PetscInt *, PetscInt *, PetscInt *, PetscInt *, PetscInt *,
-                                                 PetscInt *, PetscInt *, MeshBoundaryType *, MeshBoundaryType *,
-                                                 MeshBoundaryType *);
-FLUCA_EXTERN PetscErrorCode MeshCartesianGetCorners(Mesh, PetscInt *, PetscInt *, PetscInt *, PetscInt *, PetscInt *,
-                                                    PetscInt *);
+FLUCA_EXTERN PetscErrorCode MeshCartSetSizes(Mesh, PetscInt, PetscInt, PetscInt);
+FLUCA_EXTERN PetscErrorCode MeshCartSetNumProcs(Mesh, PetscInt, PetscInt, PetscInt);
+FLUCA_EXTERN PetscErrorCode MeshCartSetBoundaryType(Mesh, MeshBoundaryType, MeshBoundaryType, MeshBoundaryType);
+FLUCA_EXTERN PetscErrorCode MeshCartSetOwnershipRanges(Mesh, const PetscInt *, const PetscInt *, const PetscInt *);
+FLUCA_EXTERN PetscErrorCode MeshCartSetUniformCoordinates(Mesh, PetscReal, PetscReal, PetscReal, PetscReal, PetscReal,
+                                                          PetscReal);
+FLUCA_EXTERN PetscErrorCode MeshCartGetCoordinateArrays(Mesh, PetscReal ***, PetscReal ***, PetscReal ***);
+FLUCA_EXTERN PetscErrorCode MeshCartGetCoordinateArraysRead(Mesh, const PetscReal ***, const PetscReal ***,
+                                                            const PetscReal ***);
+FLUCA_EXTERN PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh, PetscReal ***, PetscReal ***, PetscReal ***);
+FLUCA_EXTERN PetscErrorCode MeshCartRestoreCoordinateArraysRead(Mesh, const PetscReal ***, const PetscReal ***,
+                                                                const PetscReal ***);
+FLUCA_EXTERN PetscErrorCode MeshCartGetCoordinateLocationSlot(Mesh, MeshCartCoordinateStencilLocation, PetscInt *);
+FLUCA_EXTERN PetscErrorCode MeshCartGetInfo(Mesh, PetscInt *, PetscInt *, PetscInt *, PetscInt *, PetscInt *,
+                                            PetscInt *, PetscInt *, MeshBoundaryType *, MeshBoundaryType *,
+                                            MeshBoundaryType *);
+FLUCA_EXTERN PetscErrorCode MeshCartGetCorners(Mesh, PetscInt *, PetscInt *, PetscInt *, PetscInt *, PetscInt *,
+                                               PetscInt *);
 
 #endif

@@ -77,7 +77,7 @@ PetscErrorCode MeshSetUp(Mesh mesh) {
 
     /* Set default type */
     if (!((PetscObject)mesh)->type_name)
-        PetscCall(MeshSetType(mesh, MESHCARTESIAN));
+        PetscCall(MeshSetType(mesh, MESHCART));
 
     /* Validate */
     PetscCheck(MESH_MIN_DIM <= mesh->dim && mesh->dim <= MESH_MAX_DIM, PetscObjectComm((PetscObject)mesh),

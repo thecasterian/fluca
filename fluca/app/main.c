@@ -15,11 +15,11 @@ int main(int argc, char **argv) {
 
     {
         PetscCall(MeshCreate(PETSC_COMM_WORLD, &mesh));
-        PetscCall(MeshSetType(mesh, MESHCARTESIAN));
+        PetscCall(MeshSetType(mesh, MESHCART));
         PetscCall(MeshSetDim(mesh, 2));
-        PetscCall(MeshCartesianSetSizes(mesh, 8, 8, 1));
-        PetscCall(MeshCartesianSetBoundaryType(mesh, MESH_BOUNDARY_NOT_PERIODIC, MESH_BOUNDARY_NOT_PERIODIC,
-                                               MESH_BOUNDARY_NOT_PERIODIC));
+        PetscCall(MeshCartSetSizes(mesh, 8, 8, 1));
+        PetscCall(MeshCartSetBoundaryType(mesh, MESH_BOUNDARY_NOT_PERIODIC, MESH_BOUNDARY_NOT_PERIODIC,
+                                          MESH_BOUNDARY_NOT_PERIODIC));
         PetscCall(MeshSetFromOptions(mesh));
         PetscCall(MeshSetUp(mesh));
     }
@@ -29,15 +29,15 @@ int main(int argc, char **argv) {
         PetscReal **arrcx, **arrcy;
         PetscInt i, j, iprev;
 
-        PetscCall(MeshCartesianGetInfo(mesh, NULL, &M, &N, NULL, NULL, NULL, NULL, NULL, NULL, NULL));
-        PetscCall(MeshCartesianGetCorners(mesh, &xs, &ys, NULL, &xm, &ym, NULL));
-        PetscCall(MeshCartesianGetCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
-        PetscCall(MeshCartesianGetCoordinateLocationSlot(mesh, MESHCARTESIAN_PREV, &iprev));
+        PetscCall(MeshCartGetInfo(mesh, NULL, &M, &N, NULL, NULL, NULL, NULL, NULL, NULL, NULL));
+        PetscCall(MeshCartGetCorners(mesh, &xs, &ys, NULL, &xm, &ym, NULL));
+        PetscCall(MeshCartGetCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
+        PetscCall(MeshCartGetCoordinateLocationSlot(mesh, MESHCARTESIAN_PREV, &iprev));
         for (i = xs; i <= xs + xm; i++)
             arrcx[i][iprev] = (PetscReal)i / M;
         for (j = ys; j <= ys + ym; j++)
             arrcy[j][iprev] = (PetscReal)j / N;
-        PetscCall(MeshCartesianRestoreCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
+        PetscCall(MeshCartRestoreCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
     }
 
     {
