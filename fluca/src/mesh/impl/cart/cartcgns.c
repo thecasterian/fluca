@@ -1,6 +1,4 @@
 #include <fluca/private/mesh_cart.h>
-#include <fluca/private/meshimpl.h>
-#include <flucamap.h>
 #include <pcgnslib.h>
 #include <petsc/private/petscimpl.h>
 #include <petsc/private/viewercgnsimpl.h>

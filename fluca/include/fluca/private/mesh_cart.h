@@ -2,6 +2,7 @@
 #define FLUCA_PRIVATE_MESH_CART_H
 
 #include <fluca/private/meshimpl.h>
+#include <flucameshcart.h>
 
 typedef struct {
     PetscInt N[MESH_MAX_DIM];                /* global number of elements */

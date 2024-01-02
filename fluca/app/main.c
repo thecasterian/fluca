@@ -1,11 +1,9 @@
-#include <flucamesh.h>
+#include <flucameshcart.h>
 #include <flucans.h>
-#include <flucasol.h>
 #include <flucasys.h>
 #include <math.h>
-#include <petscviewer.h>
 
-const char *help = "mesh test\n";
+const char *help = "lid-driven cavity flow test\n";
 
 int main(int argc, char **argv) {
     Mesh mesh;
