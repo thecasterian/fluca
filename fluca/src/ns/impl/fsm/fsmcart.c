@@ -1,12 +1,7 @@
-#include <fluca/private/mesh_cartesian.h>
+#include <fluca/private/mesh_cart.h>
 #include <fluca/private/ns_fsm.h>
 #include <fluca/private/sol_fsm.h>
 #include <petscdmstag.h>
-
-#define DERIV2W (cart->a[0][i][0])
-#define DERIV2E (cart->a[0][i][1])
-#define DERIV2S (cart->a[1][j][0])
-#define DERIV2N (cart->a[1][j][1])
 
 extern PetscErrorCode ComputeRHSUStar2d(KSP, Vec, void *);
 extern PetscErrorCode ComputeRHSVStar2d(KSP, Vec, void *);

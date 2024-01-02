@@ -1,4 +1,4 @@
-#include <fluca/private/mesh_cartesian.h>
+#include <fluca/private/mesh_cart.h>
 #include <fluca/private/meshimpl.h>
 #include <petsc/private/petscimpl.h>
 #include <petscdmstag.h>
