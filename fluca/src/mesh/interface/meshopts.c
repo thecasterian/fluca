@@ -39,9 +39,6 @@ PetscErrorCode MeshSetFromOptions(Mesh mesh) {
     else if (!((PetscObject)mesh)->type_name)
         PetscCall(MeshSetType(mesh, MESHCART));
 
-    PetscCall(
-        PetscOptionsBoundedInt("-mesh_dim", "Mesh dimension", "MeshSetDim", mesh->dim, &mesh->dim, NULL, MESH_MIN_DIM));
-
     PetscTryTypeMethod(mesh, setfromoptions, PetscOptionsObject);
 
     PetscOptionsEnd();

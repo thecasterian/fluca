@@ -160,7 +160,7 @@ PetscErrorCode MeshBoundaryTypeToDMBoundaryType(MeshBoundaryType type, DMBoundar
     PetscFunctionBegin;
 
     switch (type) {
-        case MESH_BOUNDARY_NOT_PERIODIC:
+        case MESH_BOUNDARY_NONE:
             *dmtype = DM_BOUNDARY_GHOSTED;
             break;
         case MESH_BOUNDARY_PERIODIC:

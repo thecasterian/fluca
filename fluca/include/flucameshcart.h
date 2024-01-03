@@ -9,6 +9,12 @@ typedef enum {
 } MeshCartCoordinateStencilLocation;
 FLUCA_EXTERN const char *MeshCartCoordinateStencilLocations[];
 
+FLUCA_EXTERN PetscErrorCode MeshCartCreate2d(MPI_Comm, MeshBoundaryType, MeshBoundaryType, PetscInt, PetscInt, PetscInt,
+                                             PetscInt, const PetscInt *, const PetscInt *, Mesh *);
+FLUCA_EXTERN PetscErrorCode MeshCartCreate3d(MPI_Comm, MeshBoundaryType, MeshBoundaryType, MeshBoundaryType, PetscInt,
+                                             PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, const PetscInt *,
+                                             const PetscInt *, const PetscInt *, Mesh *);
+
 FLUCA_EXTERN PetscErrorCode MeshCartSetGlobalSizes(Mesh, PetscInt, PetscInt, PetscInt);
 FLUCA_EXTERN PetscErrorCode MeshCartGetGlobalSizes(Mesh, PetscInt *, PetscInt *, PetscInt *);
 FLUCA_EXTERN PetscErrorCode MeshCartSetNumRanks(Mesh, PetscInt, PetscInt, PetscInt);

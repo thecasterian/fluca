@@ -215,7 +215,7 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh) {
         cart->N[d] = -1;
         cart->nRanks[d] = PETSC_DECIDE;
         cart->l[d] = NULL;
-        cart->bndTypes[d] = MESH_BOUNDARY_NOT_PERIODIC;
+        cart->bndTypes[d] = MESH_BOUNDARY_NONE;
     }
 
     cart->dm = NULL;
@@ -232,6 +232,33 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh) {
     mesh->ops->getfacedm = MeshGetFaceDM_Cart;
     mesh->ops->view = MeshView_Cart;
 
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartCreate2d(MPI_Comm comm, MeshBoundaryType bndx, MeshBoundaryType bndy, PetscInt M, PetscInt N,
+                                PetscInt m, PetscInt n, const PetscInt *lx, const PetscInt *ly, Mesh *mesh) {
+    PetscFunctionBegin;
+    PetscCall(MeshCreate(comm, mesh));
+    PetscCall(MeshSetType(*mesh, MESHCART));
+    PetscCall(MeshSetDim(*mesh, 2));
+    PetscCall(MeshCartSetBoundaryTypes(*mesh, bndx, bndy, MESH_BOUNDARY_NONE));
+    PetscCall(MeshCartSetGlobalSizes(*mesh, M, N, 1));
+    PetscCall(MeshCartSetNumRanks(*mesh, m, n, PETSC_DECIDE));
+    PetscCall(MeshCartSetOwnershipRanges(*mesh, lx, ly, NULL));
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartCreate3d(MPI_Comm comm, MeshBoundaryType bndx, MeshBoundaryType bndy, MeshBoundaryType bndz,
+                                PetscInt M, PetscInt N, PetscInt P, PetscInt m, PetscInt n, PetscInt p,
+                                const PetscInt *lx, const PetscInt *ly, const PetscInt *lz, Mesh *mesh) {
+    PetscFunctionBegin;
+    PetscCall(MeshCreate(comm, mesh));
+    PetscCall(MeshSetType(*mesh, MESHCART));
+    PetscCall(MeshSetDim(*mesh, 3));
+    PetscCall(MeshCartSetBoundaryTypes(*mesh, bndx, bndy, bndz));
+    PetscCall(MeshCartSetGlobalSizes(*mesh, M, N, P));
+    PetscCall(MeshCartSetNumRanks(*mesh, m, n, p));
+    PetscCall(MeshCartSetOwnershipRanges(*mesh, lx, ly, lz));
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -264,17 +291,17 @@ PetscErrorCode MeshCartGetGlobalSizes(Mesh mesh, PetscInt *M, PetscInt *N, Petsc
 
 PetscErrorCode MeshCartSetNumRanks(Mesh mesh, PetscInt m, PetscInt n, PetscInt p) {
     Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
+    PetscInt nRanks[3] = {m, n, p};
+    PetscInt d;
 
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
     PetscCheck(mesh->state < MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "This function must be called before MeshSetUp()");
-    PetscCheck(cart->nRanks[0] != m && cart->l[0], PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
-               "Cannot set number of procs after setting ownership ranges, or reset ownership ranges");
-    PetscCheck(cart->nRanks[1] != n && cart->l[1], PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
-               "Cannot set number of procs after setting ownership ranges, or reset ownership ranges");
-    PetscCheck(cart->nRanks[2] != p && cart->l[2], PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
-               "Cannot set number of procs after setting ownership ranges, or reset ownership ranges");
+    for (d = 0; d < mesh->dim; d++)
+        if (cart->l[d])
+            PetscCheck(cart->nRanks[d] != nRanks[d], PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
+                       "Cannot set number of procs after setting ownership ranges, or reset ownership ranges");
     cart->nRanks[0] = m;
     cart->nRanks[1] = n;
     cart->nRanks[2] = p;

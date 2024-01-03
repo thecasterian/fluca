@@ -12,12 +12,8 @@ int main(int argc, char **argv) {
     PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
     {
-        PetscCall(MeshCreate(PETSC_COMM_WORLD, &mesh));
-        PetscCall(MeshSetType(mesh, MESHCART));
-        PetscCall(MeshSetDim(mesh, 2));
-        PetscCall(MeshCartSetGlobalSizes(mesh, 8, 8, 1));
-        PetscCall(MeshCartSetBoundaryTypes(mesh, MESH_BOUNDARY_NOT_PERIODIC, MESH_BOUNDARY_NOT_PERIODIC,
-                                           MESH_BOUNDARY_NOT_PERIODIC));
+        PetscCall(MeshCartCreate2d(PETSC_COMM_WORLD, MESH_BOUNDARY_NONE, MESH_BOUNDARY_NONE, 8, 8, PETSC_DECIDE,
+                                   PETSC_DECIDE, NULL, NULL, &mesh));
         PetscCall(MeshSetFromOptions(mesh));
         PetscCall(MeshSetUp(mesh));
     }
