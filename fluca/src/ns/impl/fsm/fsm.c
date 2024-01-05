@@ -1,10 +1,10 @@
 #include <fluca/private/ns_fsm.h>
 
-extern PetscErrorCode NSFSMInterpolateVelocity2d_MeshCartesian(NS ns);
-extern PetscErrorCode NSFSMCalculateConvection2d_MeshCartesian(NS ns);
-extern PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCartesian(NS ns);
-extern PetscErrorCode NSFSMCalculatePressureCorrection2d_MeshCartesian(NS ns);
-extern PetscErrorCode NSFSMUpdate2d_MeshCartesian(NS ns);
+extern PetscErrorCode NSFSMInterpolateVelocity2d_MeshCart(NS ns);
+extern PetscErrorCode NSFSMCalculateConvection2d_MeshCart(NS ns);
+extern PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCart(NS ns);
+extern PetscErrorCode NSFSMCalculatePressureCorrection2d_MeshCart(NS ns);
+extern PetscErrorCode NSFSMUpdate2d_MeshCart(NS ns);
 
 PetscErrorCode NSSetFromOptions_FSM(NS ns, PetscOptionItems *PetscOptionsObject) {
     NS_FSM *fsm = (NS_FSM *)ns->data;
@@ -59,8 +59,8 @@ PetscErrorCode NSSolveInit_FSM(NS ns) {
     PetscCall(MeshGetDim(ns->mesh, &dim));
     switch (dim) {
         case 2:
-            PetscCall(NSFSMInterpolateVelocity2d_MeshCartesian(ns));
-            PetscCall(NSFSMCalculateConvection2d_MeshCartesian(ns));
+            PetscCall(NSFSMInterpolateVelocity2d_MeshCart(ns));
+            PetscCall(NSFSMCalculateConvection2d_MeshCart(ns));
             break;
 
         default:
@@ -78,9 +78,9 @@ PetscErrorCode NSSolveIter_FSM(NS ns) {
     PetscCall(MeshGetDim(ns->mesh, &dim));
     switch (dim) {
         case 2:
-            PetscCall(NSFSMCalculateIntermediateVelocity2d_MeshCartesian(ns));
-            PetscCall(NSFSMCalculatePressureCorrection2d_MeshCartesian(ns));
-            PetscCall(NSFSMUpdate2d_MeshCartesian(ns));
+            PetscCall(NSFSMCalculateIntermediateVelocity2d_MeshCart(ns));
+            PetscCall(NSFSMCalculatePressureCorrection2d_MeshCart(ns));
+            PetscCall(NSFSMUpdate2d_MeshCart(ns));
             break;
 
         default:

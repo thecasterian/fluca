@@ -1,7 +1,8 @@
-#if !defined(FLUCA_PRIVATE_MESH_CARTESIAN_H)
-#define FLUCA_PRIVATE_MESH_CARTESIAN_H
+#if !defined(FLUCA_PRIVATE_MESH_CART_H)
+#define FLUCA_PRIVATE_MESH_CART_H
 
 #include <fluca/private/meshimpl.h>
+#include <flucameshcart.h>
 
 typedef struct {
     PetscInt N[MESH_MAX_DIM];                /* global number of elements */
@@ -15,6 +16,6 @@ typedef struct {
     DM subdm[MESH_MAX_DIM]; /* DMStag for element-centered variables in each dimension */
 
     Vec width[MESH_MAX_DIM]; /* element widths in each dimension */
-} Mesh_Cartesian;
+} Mesh_Cart;
 
 #endif

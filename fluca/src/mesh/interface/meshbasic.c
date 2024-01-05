@@ -77,7 +77,7 @@ PetscErrorCode MeshSetUp(Mesh mesh) {
 
     /* Set default type */
     if (!((PetscObject)mesh)->type_name)
-        PetscCall(MeshSetType(mesh, MESHCARTESIAN));
+        PetscCall(MeshSetType(mesh, MESHCART));
 
     /* Validate */
     PetscCheck(MESH_MIN_DIM <= mesh->dim && mesh->dim <= MESH_MAX_DIM, PetscObjectComm((PetscObject)mesh),
@@ -160,7 +160,7 @@ PetscErrorCode MeshBoundaryTypeToDMBoundaryType(MeshBoundaryType type, DMBoundar
     PetscFunctionBegin;
 
     switch (type) {
-        case MESH_BOUNDARY_NOT_PERIODIC:
+        case MESH_BOUNDARY_NONE:
             *dmtype = DM_BOUNDARY_GHOSTED;
             break;
         case MESH_BOUNDARY_PERIODIC:

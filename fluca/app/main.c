@@ -1,11 +1,9 @@
-#include <flucamesh.h>
+#include <flucameshcart.h>
 #include <flucans.h>
-#include <flucasol.h>
 #include <flucasys.h>
 #include <math.h>
-#include <petscviewer.h>
 
-const char *help = "mesh test\n";
+const char *help = "lid-driven cavity flow test\n";
 
 int main(int argc, char **argv) {
     Mesh mesh;
@@ -14,12 +12,8 @@ int main(int argc, char **argv) {
     PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
     {
-        PetscCall(MeshCreate(PETSC_COMM_WORLD, &mesh));
-        PetscCall(MeshSetType(mesh, MESHCARTESIAN));
-        PetscCall(MeshSetDim(mesh, 2));
-        PetscCall(MeshCartesianSetSizes(mesh, 8, 8, 1));
-        PetscCall(MeshCartesianSetBoundaryType(mesh, MESH_BOUNDARY_NOT_PERIODIC, MESH_BOUNDARY_NOT_PERIODIC,
-                                               MESH_BOUNDARY_NOT_PERIODIC));
+        PetscCall(MeshCartCreate2d(PETSC_COMM_WORLD, MESH_BOUNDARY_NONE, MESH_BOUNDARY_NONE, 8, 8, PETSC_DECIDE,
+                                   PETSC_DECIDE, NULL, NULL, &mesh));
         PetscCall(MeshSetFromOptions(mesh));
         PetscCall(MeshSetUp(mesh));
     }
@@ -29,15 +23,15 @@ int main(int argc, char **argv) {
         PetscReal **arrcx, **arrcy;
         PetscInt i, j, iprev;
 
-        PetscCall(MeshCartesianGetInfo(mesh, NULL, &M, &N, NULL, NULL, NULL, NULL, NULL, NULL, NULL));
-        PetscCall(MeshCartesianGetCorners(mesh, &xs, &ys, NULL, &xm, &ym, NULL));
-        PetscCall(MeshCartesianGetCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
-        PetscCall(MeshCartesianGetCoordinateLocationSlot(mesh, MESHCARTESIAN_PREV, &iprev));
+        PetscCall(MeshCartGetGlobalSizes(mesh, &M, &N, NULL));
+        PetscCall(MeshCartGetCorners(mesh, &xs, &ys, NULL, &xm, &ym, NULL));
+        PetscCall(MeshCartGetCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
+        PetscCall(MeshCartGetCoordinateLocationSlot(mesh, MESHCART_PREV, &iprev));
         for (i = xs; i <= xs + xm; i++)
             arrcx[i][iprev] = (PetscReal)i / M;
         for (j = ys; j <= ys + ym; j++)
             arrcy[j][iprev] = (PetscReal)j / N;
-        PetscCall(MeshCartesianRestoreCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
+        PetscCall(MeshCartRestoreCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
     }
 
     {

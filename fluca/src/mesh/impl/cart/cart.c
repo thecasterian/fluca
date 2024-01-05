@@ -1,55 +1,47 @@
-#include <fluca/private/mesh_cartesian.h>
+#include <fluca/private/mesh_cart.h>
 #include <fluca/private/meshimpl.h>
 #include <petsc/private/petscimpl.h>
 #include <petscdmstag.h>
 
-extern PetscErrorCode MeshView_CartesianCGNS(Mesh mesh, PetscViewer v);
+extern PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer v);
 
-const char *MeshCartesianCoordinateStencilLocations[] = {
-    "LEFT", "RIGHT", "BOTTOM", "TOP", "BACK", "FRONT", "MeshCartesianCoordinateStencilLocation", "", NULL};
+const char *MeshCartCoordinateStencilLocations[] = {"PREV", "NEXT", "MeshCartCoordinateStencilLocation", "", NULL};
 
-PetscErrorCode MeshSetFromOptions_Cartesian(Mesh mesh, PetscOptionItems *PetscOptionsObject) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshSetFromOptions_Cart(Mesh mesh, PetscOptionItems *PetscOptionsObject) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
+    char opt[PETSC_MAX_OPTION_NAME];
+    char text[PETSC_MAX_PATH_LEN];
+    PetscInt d;
 
     PetscFunctionBegin;
 
-    PetscOptionsHeadBegin(PetscOptionsObject, "MeshCartesian Options");
+    PetscOptionsHeadBegin(PetscOptionsObject, "MeshCart Options");
 
-    PetscCall(PetscOptionsBoundedInt("-cartesian_grid_x", "Number of grid elements in x direction",
-                                     "MeshCartesianSetSizes", cart->N[0], &cart->N[0], NULL, 1));
-    PetscCall(PetscOptionsBoundedInt("-cartesian_grid_y", "Number of grid elements in y direction",
-                                     "MeshCartesianSetSizes", cart->N[1], &cart->N[1], NULL, 1));
-    if (mesh->dim > 2)
-        PetscCall(PetscOptionsBoundedInt("-cartesian_grid_z", "Number of grid elements in z direction",
-                                         "MeshCartesianSetSizes", cart->N[2], &cart->N[2], NULL, 1));
-
-    PetscCall(PetscOptionsBoundedInt("-cartesian_processors_x", "Number of processors in x direction",
-                                     "MeshCartesianSetNumProcs", cart->nRanks[0], &cart->nRanks[0], NULL,
-                                     PETSC_DECIDE));
-    PetscCall(PetscOptionsBoundedInt("-cartesian_processors_y", "Number of processors in y direction",
-                                     "MeshCartesianSetNumProcs", cart->nRanks[1], &cart->nRanks[1], NULL,
-                                     PETSC_DECIDE));
-    if (mesh->dim > 2)
-        PetscCall(PetscOptionsBoundedInt("-cartesian_processors_z", "Number of processors in z direction",
-                                         "MeshCartesianSetNumProcs", cart->nRanks[2], &cart->nRanks[2], NULL,
+    for (d = 0; d < mesh->dim; d++) {
+        PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-cart_grid_%c", 'x' + d));
+        PetscCall(PetscSNPrintf(text, PETSC_MAX_PATH_LEN, "Number of elements in the %c direction", 'x' + d));
+        PetscCall(PetscOptionsBoundedInt(opt, text, "MeshCartSetGlobalSizes", cart->N[d], &cart->N[d], NULL, 1));
+    }
+    for (d = 0; d < mesh->dim; d++) {
+        PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-cart_ranks_%c", 'x' + d));
+        PetscCall(PetscSNPrintf(text, PETSC_MAX_PATH_LEN, "Number of ranks in the %c direction", 'x' + d));
+        PetscCall(PetscOptionsBoundedInt(opt, text, "MeshCartSetNumRanks", cart->nRanks[d], &cart->nRanks[d], NULL,
                                          PETSC_DECIDE));
-
-    PetscCall(PetscOptionsEnum("-cartesian_boundary_x", "Boundary type in x direction", "MeshCartesianSetBoundaryType",
-                               MeshBoundaryTypes, (PetscEnum)cart->bndTypes[0], (PetscEnum *)&cart->bndTypes[0], NULL));
-    PetscCall(PetscOptionsEnum("-cartesian_boundary_y", "Boundary type in y direction", "MeshCartesianSetBoundaryType",
-                               MeshBoundaryTypes, (PetscEnum)cart->bndTypes[1], (PetscEnum *)&cart->bndTypes[1], NULL));
-    if (mesh->dim > 2)
-        PetscCall(PetscOptionsEnum("-cartesian_boundary_z", "Boundary type in z direction",
-                                   "MeshCartesianSetBoundaryType", MeshBoundaryTypes, (PetscEnum)cart->bndTypes[2],
-                                   (PetscEnum *)&cart->bndTypes[2], NULL));
+    }
+    for (d = 0; d < mesh->dim; d++) {
+        PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-cart_boundary_type_%c", 'x' + d));
+        PetscCall(PetscSNPrintf(text, PETSC_MAX_PATH_LEN, "Boundary type in the %c direction", 'x' + d));
+        PetscCall(PetscOptionsEnum(opt, text, "MeshCartSetBoundaryTypes", MeshBoundaryTypes,
+                                   (PetscEnum)cart->bndTypes[d], (PetscEnum *)&cart->bndTypes[d], NULL));
+    }
 
     PetscOptionsHeadEnd();
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshSetUp_Cart(Mesh mesh) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
     MPI_Comm comm;
     DMBoundaryType dmBndTypes[3];
     PetscInt dofElem = 1, dofFace = 1, stencilWidth = 1;
@@ -119,8 +111,8 @@ PetscErrorCode MeshSetUp_Cartesian(Mesh mesh) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshDestroy_Cartesian(Mesh mesh) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshDestroy_Cart(Mesh mesh) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
     PetscInt d;
 
     PetscFunctionBegin;
@@ -139,8 +131,8 @@ PetscErrorCode MeshDestroy_Cartesian(Mesh mesh) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshView_Cart(Mesh mesh, PetscViewer v) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
     PetscMPIInt rank;
     PetscBool isascii, iscgns, isdraw;
 
@@ -186,7 +178,7 @@ PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
         PetscCall(PetscViewerFlush(v));
         PetscCall(PetscViewerASCIIPopSynchronized(v));
     } else if (iscgns) {
-        PetscCall(MeshView_CartesianCGNS(mesh, v));
+        PetscCall(MeshView_CartCGNS(mesh, v));
     } else if (isdraw) {
         PetscCall(DMView(cart->dm, v));
     }
@@ -194,24 +186,24 @@ PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer v) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshGetDM_Cartesian(Mesh mesh, DM *dm) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshGetDM_Cart(Mesh mesh, DM *dm) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
     PetscFunctionBegin;
     *dm = cart->dm;
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshGetFaceDM_Cartesian(Mesh mesh, DM *dm) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshGetFaceDM_Cart(Mesh mesh, DM *dm) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
     PetscFunctionBegin;
     *dm = cart->fdm;
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
-    Mesh_Cartesian *cart;
+PetscErrorCode MeshCreate_Cart(Mesh mesh) {
+    Mesh_Cart *cart;
     PetscInt d;
 
     PetscFunctionBegin;
@@ -223,7 +215,7 @@ PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
         cart->N[d] = -1;
         cart->nRanks[d] = PETSC_DECIDE;
         cart->l[d] = NULL;
-        cart->bndTypes[d] = MESH_BOUNDARY_NOT_PERIODIC;
+        cart->bndTypes[d] = MESH_BOUNDARY_NONE;
     }
 
     cart->dm = NULL;
@@ -233,18 +225,45 @@ PetscErrorCode MeshCreate_Cartesian(Mesh mesh) {
         cart->width[d] = NULL;
     }
 
-    mesh->ops->setfromoptions = MeshSetFromOptions_Cartesian;
-    mesh->ops->setup = MeshSetUp_Cartesian;
-    mesh->ops->destroy = MeshDestroy_Cartesian;
-    mesh->ops->getdm = MeshGetDM_Cartesian;
-    mesh->ops->getfacedm = MeshGetFaceDM_Cartesian;
-    mesh->ops->view = MeshView_Cartesian;
+    mesh->ops->setfromoptions = MeshSetFromOptions_Cart;
+    mesh->ops->setup = MeshSetUp_Cart;
+    mesh->ops->destroy = MeshDestroy_Cart;
+    mesh->ops->getdm = MeshGetDM_Cart;
+    mesh->ops->getfacedm = MeshGetFaceDM_Cart;
+    mesh->ops->view = MeshView_Cart;
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianSetSizes(Mesh mesh, PetscInt M, PetscInt N, PetscInt P) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartCreate2d(MPI_Comm comm, MeshBoundaryType bndx, MeshBoundaryType bndy, PetscInt M, PetscInt N,
+                                PetscInt m, PetscInt n, const PetscInt *lx, const PetscInt *ly, Mesh *mesh) {
+    PetscFunctionBegin;
+    PetscCall(MeshCreate(comm, mesh));
+    PetscCall(MeshSetType(*mesh, MESHCART));
+    PetscCall(MeshSetDim(*mesh, 2));
+    PetscCall(MeshCartSetBoundaryTypes(*mesh, bndx, bndy, MESH_BOUNDARY_NONE));
+    PetscCall(MeshCartSetGlobalSizes(*mesh, M, N, 1));
+    PetscCall(MeshCartSetNumRanks(*mesh, m, n, PETSC_DECIDE));
+    PetscCall(MeshCartSetOwnershipRanges(*mesh, lx, ly, NULL));
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartCreate3d(MPI_Comm comm, MeshBoundaryType bndx, MeshBoundaryType bndy, MeshBoundaryType bndz,
+                                PetscInt M, PetscInt N, PetscInt P, PetscInt m, PetscInt n, PetscInt p,
+                                const PetscInt *lx, const PetscInt *ly, const PetscInt *lz, Mesh *mesh) {
+    PetscFunctionBegin;
+    PetscCall(MeshCreate(comm, mesh));
+    PetscCall(MeshSetType(*mesh, MESHCART));
+    PetscCall(MeshSetDim(*mesh, 3));
+    PetscCall(MeshCartSetBoundaryTypes(*mesh, bndx, bndy, bndz));
+    PetscCall(MeshCartSetGlobalSizes(*mesh, M, N, P));
+    PetscCall(MeshCartSetNumRanks(*mesh, m, n, p));
+    PetscCall(MeshCartSetOwnershipRanges(*mesh, lx, ly, lz));
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartSetGlobalSizes(Mesh mesh, PetscInt M, PetscInt N, PetscInt P) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
@@ -256,28 +275,56 @@ PetscErrorCode MeshCartesianSetSizes(Mesh mesh, PetscInt M, PetscInt N, PetscInt
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianSetNumProcs(Mesh mesh, PetscInt m, PetscInt n, PetscInt p) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartGetGlobalSizes(Mesh mesh, PetscInt *M, PetscInt *N, PetscInt *P) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
+
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    if (M)
+        *M = cart->N[0];
+    if (N)
+        *N = cart->N[1];
+    if (P)
+        *P = cart->N[2];
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartSetNumRanks(Mesh mesh, PetscInt m, PetscInt n, PetscInt p) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
+    PetscInt nRanks[3] = {m, n, p};
+    PetscInt d;
 
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
     PetscCheck(mesh->state < MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
                "This function must be called before MeshSetUp()");
-    PetscCheck(cart->nRanks[0] != m && cart->l[0], PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
-               "Cannot set number of procs after setting ownership ranges, or reset ownership ranges");
-    PetscCheck(cart->nRanks[1] != n && cart->l[1], PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
-               "Cannot set number of procs after setting ownership ranges, or reset ownership ranges");
-    PetscCheck(cart->nRanks[2] != p && cart->l[2], PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
-               "Cannot set number of procs after setting ownership ranges, or reset ownership ranges");
+    for (d = 0; d < mesh->dim; d++)
+        if (cart->l[d])
+            PetscCheck(cart->nRanks[d] != nRanks[d], PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE,
+                       "Cannot set number of procs after setting ownership ranges, or reset ownership ranges");
     cart->nRanks[0] = m;
     cart->nRanks[1] = n;
     cart->nRanks[2] = p;
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianSetBoundaryType(Mesh mesh, MeshBoundaryType bndx, MeshBoundaryType bndy,
-                                            MeshBoundaryType bndz) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartGetNumRanks(Mesh mesh, PetscInt *m, PetscInt *n, PetscInt *p) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
+
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    if (m)
+        *m = cart->nRanks[0];
+    if (n)
+        *n = cart->nRanks[1];
+    if (p)
+        *p = cart->nRanks[2];
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartSetBoundaryTypes(Mesh mesh, MeshBoundaryType bndx, MeshBoundaryType bndy,
+                                        MeshBoundaryType bndz) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
     PetscFunctionBegin;
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
@@ -289,8 +336,23 @@ PetscErrorCode MeshCartesianSetBoundaryType(Mesh mesh, MeshBoundaryType bndx, Me
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianSetOwnershipRanges(Mesh mesh, const PetscInt *lx, const PetscInt *ly, const PetscInt *lz) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartGetBoundaryTypes(Mesh mesh, MeshBoundaryType *bndx, MeshBoundaryType *bndy,
+                                        MeshBoundaryType *bndz) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
+
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    if (bndx)
+        *bndx = cart->bndTypes[0];
+    if (bndy)
+        *bndy = cart->bndTypes[1];
+    if (bndz)
+        *bndz = cart->bndTypes[2];
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartSetOwnershipRanges(Mesh mesh, const PetscInt *lx, const PetscInt *ly, const PetscInt *lz) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
     const PetscInt *lin[3] = {lx, ly, lz};
     PetscInt d;
 
@@ -315,9 +377,23 @@ PetscErrorCode MeshCartesianSetOwnershipRanges(Mesh mesh, const PetscInt *lx, co
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianSetUniformCoordinates(Mesh mesh, PetscReal xmin, PetscReal xmax, PetscReal ymin,
-                                                  PetscReal ymax, PetscReal zmin, PetscReal zmax) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartGetOwnershipRanges(Mesh mesh, const PetscInt **lx, const PetscInt **ly, const PetscInt **lz) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
+
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    if (lx)
+        *lx = cart->l[0];
+    if (ly)
+        *ly = cart->l[1];
+    if (lz)
+        *lz = cart->l[2];
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartSetUniformCoordinates(Mesh mesh, PetscReal xmin, PetscReal xmax, PetscReal ymin, PetscReal ymax,
+                                             PetscReal zmin, PetscReal zmax) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
     PetscFunctionBegin;
 
@@ -330,8 +406,8 @@ PetscErrorCode MeshCartesianSetUniformCoordinates(Mesh mesh, PetscReal xmin, Pet
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianGetCoordinateArrays(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartGetCoordinateArrays(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
     PetscFunctionBegin;
 
@@ -342,9 +418,9 @@ PetscErrorCode MeshCartesianGetCoordinateArrays(Mesh mesh, PetscReal ***ax, Pets
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianGetCoordinateArraysRead(Mesh mesh, const PetscReal ***ax, const PetscReal ***ay,
-                                                    const PetscReal ***az) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartGetCoordinateArraysRead(Mesh mesh, const PetscReal ***ax, const PetscReal ***ay,
+                                               const PetscReal ***az) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
     PetscFunctionBegin;
 
@@ -355,8 +431,8 @@ PetscErrorCode MeshCartesianGetCoordinateArraysRead(Mesh mesh, const PetscReal *
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianRestoreCoordinateArrays(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
     PetscReal ***a[3] = {ax, ay, az};
     PetscInt i, d, iprev, inext, icenter;
 
@@ -408,9 +484,9 @@ PetscErrorCode MeshCartesianRestoreCoordinateArrays(Mesh mesh, PetscReal ***ax, 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianRestoreCoordinateArraysRead(Mesh mesh, const PetscReal ***arrx, const PetscReal ***arry,
-                                                        const PetscReal ***arrz) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartRestoreCoordinateArraysRead(Mesh mesh, const PetscReal ***arrx, const PetscReal ***arry,
+                                                   const PetscReal ***arrz) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
     PetscFunctionBegin;
 
@@ -421,9 +497,8 @@ PetscErrorCode MeshCartesianRestoreCoordinateArraysRead(Mesh mesh, const PetscRe
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianGetCoordinateLocationSlot(Mesh mesh, MeshCartesianCoordinateStencilLocation loc,
-                                                      PetscInt *slot) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartGetCoordinateLocationSlot(Mesh mesh, MeshCartCoordinateStencilLocation loc, PetscInt *slot) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
     DMStagStencilLocation stagLoc;
 
     PetscFunctionBegin;
@@ -431,10 +506,10 @@ PetscErrorCode MeshCartesianGetCoordinateLocationSlot(Mesh mesh, MeshCartesianCo
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
     switch (loc) {
-        case MESHCARTESIAN_PREV:
+        case MESHCART_PREV:
             stagLoc = DMSTAG_LEFT;
             break;
-        case MESHCARTESIAN_NEXT:
+        case MESHCART_NEXT:
             stagLoc = DMSTAG_RIGHT;
             break;
         default:
@@ -445,46 +520,41 @@ PetscErrorCode MeshCartesianGetCoordinateLocationSlot(Mesh mesh, MeshCartesianCo
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianGetInfo(Mesh mesh, PetscInt *dim, PetscInt *M, PetscInt *N, PetscInt *P, PetscInt *m,
-                                    PetscInt *n, PetscInt *p, MeshBoundaryType *bndx, MeshBoundaryType *bndy,
-                                    MeshBoundaryType *bndz) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartGetLocalSizes(Mesh mesh, PetscInt *m, PetscInt *n, PetscInt *p) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
     PetscFunctionBegin;
-
-    if (dim)
-        *dim = mesh->dim;
-    if (M)
-        *M = cart->N[0];
-    if (N)
-        *N = cart->N[1];
-    if (P)
-        *P = cart->N[2];
-    if (m)
-        *m = cart->nRanks[0];
-    if (n)
-        *n = cart->nRanks[1];
-    if (p)
-        *p = cart->nRanks[2];
-    if (bndx)
-        *bndx = cart->bndTypes[0];
-    if (bndy)
-        *bndy = cart->bndTypes[1];
-    if (bndz)
-        *bndz = cart->bndTypes[2];
-
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    PetscCall(DMStagGetLocalSizes(cart->dm, m, n, p));
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartesianGetCorners(Mesh mesh, PetscInt *xs, PetscInt *ys, PetscInt *zs, PetscInt *xm, PetscInt *ym,
-                                       PetscInt *zm) {
-    Mesh_Cartesian *cart = (Mesh_Cartesian *)mesh->data;
+PetscErrorCode MeshCartGetCorners(Mesh mesh, PetscInt *xs, PetscInt *ys, PetscInt *zs, PetscInt *xm, PetscInt *ym,
+                                  PetscInt *zm) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
     PetscFunctionBegin;
-
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-
     PetscCall(DMStagGetCorners(cart->dm, xs, ys, zs, xm, ym, zm, NULL, NULL, NULL));
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
 
+PetscErrorCode MeshCartGetIsFirstRank(Mesh mesh, PetscBool *isFirstRankX, PetscBool *isFirstRankY,
+                                      PetscBool *isFirstRankZ) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
+
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    PetscCall(DMStagGetIsFirstRank(cart->dm, isFirstRankX, isFirstRankY, isFirstRankZ));
+    PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartGetIsLastRank(Mesh mesh, PetscBool *isLastRankX, PetscBool *isLastRankY,
+                                     PetscBool *isLastRankZ) {
+    Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
+
+    PetscFunctionBegin;
+    PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+    PetscCall(DMStagGetIsLastRank(cart->dm, isLastRankX, isLastRankY, isLastRankZ));
     PetscFunctionReturn(PETSC_SUCCESS);
 }

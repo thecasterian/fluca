@@ -95,7 +95,7 @@ PetscErrorCode SolView_FSMCGNS(Sol sol, PetscViewer viewer) {
     PetscCallCGNS(
         cg_sol_write(cgns->file_num, cgns->base, cgns->zone, solution_name, CGNS_ENUMV(CellCenter), &solution));
 
-    PetscCall(PetscObjectTypeCompare((PetscObject)sol->mesh, MESHCARTESIAN, &iscart));
+    PetscCall(PetscObjectTypeCompare((PetscObject)sol->mesh, MESHCART, &iscart));
 
     if (iscart) {
         for (d = 0; d < dim; d++) {
