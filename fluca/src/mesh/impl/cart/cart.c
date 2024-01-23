@@ -46,7 +46,6 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh) {
     DMBoundaryType dmBndTypes[3];
     PetscInt dofElem = 1, dofFace = 1, stencilWidth = 1;
     const PetscInt *l[3];
-    DM cdm;
     PetscInt d;
 
     PetscFunctionBegin;
@@ -94,19 +93,6 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh) {
         PetscCall(PetscArraycpy(cart->l[d], l[d], cart->nRanks[d]));
 
     PetscCall(DMStagSetUniformCoordinatesProduct(cart->dm, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0));
-    PetscCall(DMGetCoordinateDM(cart->dm, &cdm));
-    for (d = 0; d < mesh->dim; d++) {
-        DM subdm;
-        MPI_Comm subcomm;
-
-        PetscCall(DMProductGetDM(cdm, d, &subdm));
-        PetscCall(PetscObjectGetComm((PetscObject)subdm, &subcomm));
-
-        PetscCall(DMStagCreate1d(subcomm, dmBndTypes[d], cart->N[d], 0, dofElem, DMSTAG_STENCIL_BOX, stencilWidth,
-                                 cart->l[d], &cart->subdm[d]));
-        PetscCall(DMSetUp(cart->subdm[d]));
-        PetscCall(DMCreateLocalVector(cart->subdm[d], &cart->width[d]));
-    }
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -121,10 +107,6 @@ PetscErrorCode MeshDestroy_Cart(Mesh mesh) {
         PetscCall(PetscFree(cart->l[d]));
     PetscCall(DMDestroy(&cart->dm));
     PetscCall(DMDestroy(&cart->fdm));
-    for (d = 0; d < mesh->dim; d++) {
-        PetscCall(DMDestroy(&cart->subdm[d]));
-        PetscCall(VecDestroy(&cart->width[d]));
-    }
 
     PetscCall(PetscFree(mesh->data));
 
@@ -220,10 +202,6 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh) {
 
     cart->dm = NULL;
     cart->fdm = NULL;
-    for (d = 0; d < MESH_MAX_DIM; d++) {
-        cart->subdm[d] = NULL;
-        cart->width[d] = NULL;
-    }
 
     mesh->ops->setfromoptions = MeshSetFromOptions_Cart;
     mesh->ops->setup = MeshSetUp_Cart;
@@ -434,50 +412,20 @@ PetscErrorCode MeshCartGetCoordinateArraysRead(Mesh mesh, const PetscReal ***ax,
 PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az) {
     Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
     PetscReal ***a[3] = {ax, ay, az};
+    PetscInt s[3], m[3];
     PetscInt i, d, iprev, inext, icenter;
 
     PetscFunctionBegin;
 
     PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
+    PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
     PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_LEFT, &iprev));
     PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inext));
     PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &icenter));
-    for (d = 0; d < mesh->dim; d++) {
-        PetscInt s, m;
-        PetscReal **arrw;
-        PetscInt iw;
-
-        PetscCall(DMStagGetCorners(cart->subdm[d], &s, NULL, NULL, &m, NULL, NULL, NULL, NULL, NULL));
-        for (i = s; i < s + m; i++)
+    for (d = 0; d < mesh->dim; d++)
+        for (i = s[d]; i < s[d] + m[d]; i++)
             (*a[d])[i][icenter] = ((*a[d])[i][iprev] + (*a[d])[i][inext]) / 2.0;
-
-        PetscCall(DMStagVecGetArray(cart->subdm[d], cart->width[d], &arrw));
-        PetscCall(DMStagGetLocationSlot(cart->subdm[d], DMSTAG_ELEMENT, 0, &iw));
-        for (i = s; i < s + m; i++)
-            arrw[i][iw] = (*a[d])[i][inext] - (*a[d])[i][iprev];
-        PetscCall(DMStagVecRestoreArray(cart->subdm[d], cart->width[d], &arrw));
-        PetscCall(DMLocalToLocalBegin(cart->subdm[d], cart->width[d], INSERT_VALUES, cart->width[d]));
-        PetscCall(DMLocalToLocalEnd(cart->subdm[d], cart->width[d], INSERT_VALUES, cart->width[d]));
-    }
-
-    // set widths and coordinates of ghosts
-    for (d = 0; d < mesh->dim; d++) {
-        PetscInt s, m;
-        PetscReal **arrw;
-        PetscInt iw;
-
-        PetscCall(DMStagGetCorners(cart->subdm[d], &s, NULL, NULL, &m, NULL, NULL, NULL, NULL, NULL));
-        PetscCall(DMStagVecGetArray(cart->subdm[d], cart->width[d], &arrw));
-        PetscCall(DMStagGetLocationSlot(cart->subdm[d], DMSTAG_ELEMENT, 0, &iw));
-        if (s == 0 && cart->bndTypes[d] != MESH_BOUNDARY_PERIODIC)
-            arrw[s - 1][iw] = arrw[s][iw];
-        if (s + m == cart->N[d] && cart->bndTypes[d] != MESH_BOUNDARY_PERIODIC)
-            arrw[s + m][iw] = arrw[s + m - 1][iw];
-        (*a[d])[s - 1][icenter] = (*a[d])[s][iprev] - arrw[s - 1][iw] / 2.0;
-        (*a[d])[s + m][icenter] = (*a[d])[s + m - 1][inext] + arrw[s + m][iw] / 2.0;
-        PetscCall(DMStagVecRestoreArray(cart->subdm[d], cart->width[d], &arrw));
-    }
 
     PetscCall(DMStagRestoreProductCoordinateArrays(cart->dm, ax, ay, az));
 
