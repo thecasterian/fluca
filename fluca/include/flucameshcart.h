@@ -23,6 +23,8 @@ FLUCA_EXTERN PetscErrorCode MeshCartSetBoundaryTypes(Mesh, MeshBoundaryType, Mes
 FLUCA_EXTERN PetscErrorCode MeshCartGetBoundaryTypes(Mesh, MeshBoundaryType *, MeshBoundaryType *, MeshBoundaryType *);
 FLUCA_EXTERN PetscErrorCode MeshCartSetOwnershipRanges(Mesh, const PetscInt *, const PetscInt *, const PetscInt *);
 FLUCA_EXTERN PetscErrorCode MeshCartGetOwnershipRanges(Mesh, const PetscInt **, const PetscInt **, const PetscInt **);
+FLUCA_EXTERN PetscErrorCode MeshCartSetRefinementFactor(Mesh, PetscInt, PetscInt, PetscInt);
+FLUCA_EXTERN PetscErrorCode MeshCartGetRefinementFactor(Mesh, PetscInt *, PetscInt *, PetscInt *);
 FLUCA_EXTERN PetscErrorCode MeshCartSetUniformCoordinates(Mesh, PetscReal, PetscReal, PetscReal, PetscReal, PetscReal,
                                                           PetscReal);
 FLUCA_EXTERN PetscErrorCode MeshCartGetCoordinateArrays(Mesh, PetscReal ***, PetscReal ***, PetscReal ***);
