@@ -28,7 +28,7 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
     cgsize_t size[9] = {0};
     PetscInt d;
 
-    for (d = 0; d < mesh->dim; d++) {
+    for (d = 0; d < mesh->dim; ++d) {
       size[d]             = cart->N[d] + 1; /* Number of vertices */
       size[mesh->dim + d] = cart->N[d];     /* Number of elements */
     }
@@ -47,18 +47,18 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
     PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
     PetscCall(DMStagGetIsLastRank(cart->dm, &isLastRank[0], &isLastRank[1], &isLastRank[2]));
 
-    for (d = 0; d < mesh->dim; d++) {
+    for (d = 0; d < mesh->dim; ++d) {
       /* Vertex ownership; note that CGNS uses 1-based index */
       rmin[d] = s[d] + 1;
       rmax[d] = s[d] + m[d] + isLastRank[d];
     }
 
     rsize = 1;
-    for (d = 0; d < mesh->dim; d++) rsize *= rmax[d] - rmin[d] + 1;
+    for (d = 0; d < mesh->dim; ++d) rsize *= rmax[d] - rmin[d] + 1;
 
     PetscCall(MeshCartGetCoordinateArraysRead(mesh, &arrcf[0], &arrcf[1], &arrcf[2]));
 
-    for (d = 0; d < mesh->dim; d++) {
+    for (d = 0; d < mesh->dim; ++d) {
       cgsize_t i[3];
       PetscInt cnt;
 
@@ -66,14 +66,20 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
       switch (mesh->dim) {
       case 2:
         cnt = 0;
-        for (i[1] = rmin[1] - 1; i[1] < rmax[1]; i[1]++)
-          for (i[0] = rmin[0] - 1; i[0] < rmax[0]; i[0]++) x[d][cnt++] = arrcf[d][i[d]][0];
+        for (i[1] = rmin[1] - 1; i[1] < rmax[1]; ++i[1])
+          for (i[0] = rmin[0] - 1; i[0] < rmax[0]; ++i[0]) {
+            x[d][cnt] = arrcf[d][i[d]][0];
+            ++cnt;
+          }
         break;
       case 3:
         cnt = 0;
-        for (i[2] = rmin[2] - 1; i[2] < rmax[2]; i[2]++)
-          for (i[1] = rmin[1] - 1; i[1] < rmax[1]; i[1]++)
-            for (i[0] = rmin[0] - 1; i[0] < rmax[0]; i[0]++) x[d][cnt++] = arrcf[d][i[d]][0];
+        for (i[2] = rmin[2] - 1; i[2] < rmax[2]; ++i[2])
+          for (i[1] = rmin[1] - 1; i[1] < rmax[1]; ++i[1])
+            for (i[0] = rmin[0] - 1; i[0] < rmax[0]; ++i[0]) {
+              x[d][cnt] = arrcf[d][i[d]][0];
+              ++cnt;
+            }
         break;
       default:
         SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_SUP, "Unsupported mesh dimension");
@@ -82,7 +88,7 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
 
     PetscCall(MeshCartRestoreCoordinateArraysRead(mesh, &arrcf[0], &arrcf[1], &arrcf[2]));
 
-    for (d = 0; d < mesh->dim; d++) {
+    for (d = 0; d < mesh->dim; ++d) {
       PetscCallCGNS(cgp_coord_write(cgns->file_num, cgns->base, cgns->zone, CGNS_ENUMV(RealDouble), coordnames[d], &coord[d]));
       PetscCallCGNS(cgp_coord_write_data(cgns->file_num, cgns->base, cgns->zone, coord[d], rmin, rmax, x[d]));
       PetscCall(PetscFree(x[d]));

@@ -157,9 +157,9 @@ PetscErrorCode NSSolve(NS ns, PetscInt num_iters)
   t_init = ns->t;
   PetscTryTypeMethod(ns, solve_init);
 
-  for (i = 0; i < num_iters; i++) {
+  for (i = 0; i < num_iters; ++i) {
     PetscTryTypeMethod(ns, solve_iter);
-    ns->step++;
+    ++ns->step;
     ns->t = t_init + (i + 1) * ns->dt;
 
     if (ns->step % ns->mon_freq == 0) PetscCall(NSMonitor(ns));

@@ -15,7 +15,7 @@ static PetscErrorCode FlucaMapCreateBuckets(FlucaMap map, PetscInt bucketsize)
   PetscCheck(bucketsize > 0, PetscObjectComm((PetscObject)map), PETSC_ERR_ARG_OUTOFRANGE, "bucketsize must be positive");
 
   PetscCall(PetscMalloc1(bucketsize, &map->buckets));
-  for (i = 0; i < bucketsize; i++) {
+  for (i = 0; i < bucketsize; ++i) {
     map->buckets[i].front = NULL;
     map->buckets[i].back  = NULL;
   }
@@ -101,7 +101,7 @@ PetscErrorCode FlucaMapInsert(FlucaMap map, PetscObject key, PetscObject value)
 
   index = kv->hash % map->bucketsize;
   PetscCall(FlucaMapKVListInsert(&map->buckets[index], kv));
-  map->size++;
+  ++map->size;
 
   if (map->size > FLUCA_MAP_LOAD_FACTOR * map->bucketsize) {
     struct _FlucaMapKVList *oldbuckets    = map->buckets;
@@ -110,7 +110,7 @@ PetscErrorCode FlucaMapInsert(FlucaMap map, PetscObject key, PetscObject value)
     PetscCall(FlucaMapCreateBuckets(map, FLUCA_MAP_GROWTH_FACTOR * oldbucketsize));
     map->bucketsize = FLUCA_MAP_GROWTH_FACTOR * oldbucketsize;
 
-    for (PetscInt i = 0; i < oldbucketsize; i++) {
+    for (PetscInt i = 0; i < oldbucketsize; ++i) {
       struct _FlucaMapKV *curr, *next;
 
       for (curr = oldbuckets[i].front; curr; curr = next) {
@@ -199,7 +199,7 @@ PetscErrorCode FlucaMapDestroy(FlucaMap *map)
     PetscFunctionReturn(PETSC_SUCCESS);
   }
 
-  for (PetscInt i = 0; i < (*map)->bucketsize; i++) {
+  for (PetscInt i = 0; i < (*map)->bucketsize; ++i) {
     struct _FlucaMapKV *curr, *next;
 
     for (curr = (*map)->buckets[i].front; curr; curr = next) {

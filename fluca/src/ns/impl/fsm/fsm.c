@@ -44,7 +44,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
   /* Create KSP */
   PetscCall(MeshGetDM(ns->mesh, &dm));
   PetscCall(MeshGetDim(ns->mesh, &dim));
-  for (d = 0; d < dim; d++) {
+  for (d = 0; d < dim; ++d) {
     PetscCall(KSPCreate(comm, &fsm->kspv[d]));
     PetscCall(KSPSetDM(fsm->kspv[d], dm));
     PetscCall(KSPGetPC(fsm->kspv[d], &pc));
@@ -110,7 +110,7 @@ PetscErrorCode NSDestroy_FSM(NS ns)
 
   PetscFunctionBegin;
 
-  for (d = 0; d < 3; d++) PetscCall(KSPDestroy(&fsm->kspv[d]));
+  for (d = 0; d < 3; ++d) PetscCall(KSPDestroy(&fsm->kspv[d]));
   PetscCall(KSPDestroy(&fsm->kspp));
 
   PetscCall(PetscFree(ns->data));
@@ -137,7 +137,7 @@ PetscErrorCode NSCreate_FSM(NS ns)
   PetscCall(PetscNew(&fsm));
   ns->data = (void *)fsm;
 
-  for (d = 0; d < 3; d++) fsm->kspv[d] = NULL;
+  for (d = 0; d < 3; ++d) fsm->kspv[d] = NULL;
   fsm->kspp = NULL;
 
   ns->ops->setup      = NSSetup_FSM;

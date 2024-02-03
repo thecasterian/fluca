@@ -18,22 +18,22 @@ PetscErrorCode MeshSetFromOptions_Cart(Mesh mesh, PetscOptionItems *PetscOptions
 
   PetscOptionsHeadBegin(PetscOptionsObject, "MeshCart Options");
 
-  for (d = 0; d < mesh->dim; d++) {
+  for (d = 0; d < mesh->dim; ++d) {
     PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-cart_grid_%c", 'x' + d));
     PetscCall(PetscSNPrintf(text, PETSC_MAX_PATH_LEN, "Number of elements in the %c direction", 'x' + d));
     PetscCall(PetscOptionsBoundedInt(opt, text, "MeshCartSetGlobalSizes", cart->N[d], &cart->N[d], NULL, 1));
   }
-  for (d = 0; d < mesh->dim; d++) {
+  for (d = 0; d < mesh->dim; ++d) {
     PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-cart_ranks_%c", 'x' + d));
     PetscCall(PetscSNPrintf(text, PETSC_MAX_PATH_LEN, "Number of ranks in the %c direction", 'x' + d));
     PetscCall(PetscOptionsBoundedInt(opt, text, "MeshCartSetNumRanks", cart->nRanks[d], &cart->nRanks[d], NULL, PETSC_DECIDE));
   }
-  for (d = 0; d < mesh->dim; d++) {
+  for (d = 0; d < mesh->dim; ++d) {
     PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-cart_boundary_type_%c", 'x' + d));
     PetscCall(PetscSNPrintf(text, PETSC_MAX_PATH_LEN, "Boundary type in the %c direction", 'x' + d));
     PetscCall(PetscOptionsEnum(opt, text, "MeshCartSetBoundaryTypes", MeshBoundaryTypes, (PetscEnum)cart->bndTypes[d], (PetscEnum *)&cart->bndTypes[d], NULL));
   }
-  for (d = 0; d < mesh->dim; d++) {
+  for (d = 0; d < mesh->dim; ++d) {
     PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-cart_refine_%c", 'x' + d));
     PetscCall(PetscSNPrintf(text, PETSC_MAX_PATH_LEN, "Refinement factor in the %c direction", 'x' + d));
     PetscCall(PetscOptionsBoundedInt(opt, text, "MeshCartSetRefinementFactor", cart->refineFactor[d], &cart->refineFactor[d], NULL, 1));
@@ -42,13 +42,13 @@ PetscErrorCode MeshSetFromOptions_Cart(Mesh mesh, PetscOptionItems *PetscOptions
 
   PetscOptionsHeadEnd();
 
-  for (d = 0; d < mesh->dim; d++) {
+  for (d = 0; d < mesh->dim; ++d) {
     PetscInt refineFactorTotal = 1;
 
-    for (i = 0; i < nRefine; i++) refineFactorTotal *= cart->refineFactor[d];
+    for (i = 0; i < nRefine; ++i) refineFactorTotal *= cart->refineFactor[d];
     cart->N[d] *= refineFactorTotal;
     if (cart->l[d])
-      for (i = 0; i < cart->nRanks[d]; i++) cart->l[d][i] *= refineFactorTotal;
+      for (i = 0; i < cart->nRanks[d]; ++i) cart->l[d][i] *= refineFactorTotal;
   }
 
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -69,7 +69,7 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
 
   PetscCall(PetscObjectGetComm((PetscObject)mesh, &comm));
 
-  for (d = 0; d < mesh->dim; d++) PetscCall(MeshBoundaryTypeToDMBoundaryType(cart->bndTypes[d], &dmBndTypes[d]));
+  for (d = 0; d < mesh->dim; ++d) PetscCall(MeshBoundaryTypeToDMBoundaryType(cart->bndTypes[d], &dmBndTypes[d]));
 
   /* Allocate DMs */
   switch (mesh->dim) {
@@ -97,10 +97,10 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   }
 
   PetscCall(DMStagGetNumRanks(cart->dm, &cart->nRanks[0], &cart->nRanks[1], &cart->nRanks[2]));
-  for (d = 0; d < mesh->dim; d++)
+  for (d = 0; d < mesh->dim; ++d)
     if (!cart->l[d]) PetscCall(PetscMalloc1(cart->nRanks[d], &cart->l[d]));
   PetscCall(DMStagGetOwnershipRanges(cart->dm, &l[0], &l[1], &l[2]));
-  for (d = 0; d < mesh->dim; d++) PetscCall(PetscArraycpy(cart->l[d], l[d], cart->nRanks[d]));
+  for (d = 0; d < mesh->dim; ++d) PetscCall(PetscArraycpy(cart->l[d], l[d], cart->nRanks[d]));
 
   PetscCall(DMStagSetUniformCoordinatesProduct(cart->dm, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0));
 
@@ -114,7 +114,7 @@ PetscErrorCode MeshDestroy_Cart(Mesh mesh)
 
   PetscFunctionBegin;
 
-  for (d = 0; d < mesh->dim; d++) PetscCall(PetscFree(cart->l[d]));
+  for (d = 0; d < mesh->dim; ++d) PetscCall(PetscFree(cart->l[d]));
   PetscCall(DMDestroy(&cart->dm));
   PetscCall(DMDestroy(&cart->fdm));
 
@@ -193,7 +193,7 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh)
   PetscCall(PetscNew(&cart));
   mesh->data = (void *)cart;
 
-  for (d = 0; d < MESH_MAX_DIM; d++) {
+  for (d = 0; d < MESH_MAX_DIM; ++d) {
     cart->N[d]            = -1;
     cart->nRanks[d]       = PETSC_DECIDE;
     cart->l[d]            = NULL;
@@ -274,7 +274,7 @@ PetscErrorCode MeshCartSetNumRanks(Mesh mesh, PetscInt m, PetscInt n, PetscInt p
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscCheck(mesh->state < MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "This function must be called before MeshSetUp()");
-  for (d = 0; d < mesh->dim; d++)
+  for (d = 0; d < mesh->dim; ++d)
     if (cart->l[d]) PetscCheck(cart->nRanks[d] != nRanks[d], PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Cannot set number of procs after setting ownership ranges, or reset ownership ranges");
   cart->nRanks[0] = m;
   cart->nRanks[1] = n;
@@ -330,7 +330,7 @@ PetscErrorCode MeshCartSetOwnershipRanges(Mesh mesh, const PetscInt *lx, const P
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscCheck(mesh->state < MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "This function must be called before MeshSetUp()");
 
-  for (d = 0; d < mesh->dim; d++) {
+  for (d = 0; d < mesh->dim; ++d) {
     if (lin[d]) {
       PetscCheck(cart->nRanks[d] >= 0, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Cannot set ownership ranges before setting number of procs");
       if (!cart->l[d]) PetscCall(PetscMalloc1(cart->nRanks[d], &cart->l[d]));
@@ -439,8 +439,8 @@ PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh mesh, PetscReal ***ax, Petsc
   PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_LEFT, &iprev));
   PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inext));
   PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &icenter));
-  for (d = 0; d < mesh->dim; d++)
-    for (i = s[d]; i < s[d] + m[d]; i++) (*a[d])[i][icenter] = ((*a[d])[i][iprev] + (*a[d])[i][inext]) / 2.0;
+  for (d = 0; d < mesh->dim; ++d)
+    for (i = s[d]; i < s[d] + m[d]; ++i) (*a[d])[i][icenter] = ((*a[d])[i][iprev] + (*a[d])[i][inext]) / 2.0;
 
   PetscCall(DMStagRestoreProductCoordinateArrays(cart->dm, ax, ay, az));
 

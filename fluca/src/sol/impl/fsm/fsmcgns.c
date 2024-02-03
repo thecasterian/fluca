@@ -19,7 +19,7 @@ static PetscErrorCode FlucaViewerCGNSWriteStructuredSolution_Private(DM dm, Vec 
   PetscCall(DMStagGetLocationSlot(dm, DMSTAG_ELEMENT, 0, &ielem));
 
   rsize = 1;
-  for (d = 0; d < dim; d++) {
+  for (d = 0; d < dim; ++d) {
     rmin[d] = xs[d] + 1;
     rmax[d] = xs[d] + xm[d];
     rsize *= xm[d];
@@ -30,16 +30,22 @@ static PetscErrorCode FlucaViewerCGNSWriteStructuredSolution_Private(DM dm, Vec 
   case 2:
     PetscCall(DMStagVecGetArrayRead(dm, v, &arr2d));
     cnt = 0;
-    for (j = rmin[1] - 1; j <= rmax[1] - 1; j++)
-      for (i = rmin[0] - 1; i <= rmax[0] - 1; i++) arrraw[cnt++] = arr2d[j][i][ielem];
+    for (j = rmin[1] - 1; j <= rmax[1] - 1; ++j)
+      for (i = rmin[0] - 1; i <= rmax[0] - 1; ++i) {
+        arrraw[cnt] = arr2d[j][i][ielem];
+        ++cnt;
+      }
     PetscCall(DMStagVecRestoreArrayRead(dm, v, &arr2d));
     break;
   case 3:
     PetscCall(DMStagVecGetArrayRead(dm, v, &arr3d));
     cnt = 0;
-    for (k = rmin[2] - 1; k <= rmax[2] - 1; k++)
-      for (j = rmin[1] - 1; j <= rmax[1] - 1; j++)
-        for (i = rmin[0] - 1; i <= rmax[0] - 1; i++) arrraw[cnt++] = arr3d[k][j][i][ielem];
+    for (k = rmin[2] - 1; k <= rmax[2] - 1; ++k)
+      for (j = rmin[1] - 1; j <= rmax[1] - 1; ++j)
+        for (i = rmin[0] - 1; i <= rmax[0] - 1; ++i) {
+          arrraw[cnt] = arr3d[k][j][i][ielem];
+          ++cnt;
+        }
     PetscCall(DMStagVecRestoreArrayRead(dm, v, &arr3d));
     break;
   default:
@@ -93,7 +99,7 @@ PetscErrorCode SolView_FSMCGNS(Sol sol, PetscViewer viewer)
   PetscCall(PetscObjectTypeCompare((PetscObject)sol->mesh, MESHCART, &iscart));
 
   if (iscart) {
-    for (d = 0; d < dim; d++) {
+    for (d = 0; d < dim; ++d) {
       PetscCall(FlucaViewerCGNSWriteStructuredSolution_Private(dm, sol->v[d], cgns->file_num, cgns->base, cgns->zone, solution, velnames[d]));
       PetscCall(FlucaViewerCGNSWriteStructuredSolution_Private(dm, fsm->v_star[d], cgns->file_num, cgns->base, cgns->zone, solution, intervelnames[d]));
       PetscCall(FlucaViewerCGNSWriteStructuredSolution_Private(dm, fsm->N[d], cgns->file_num, cgns->base, cgns->zone, solution, convecnames[d]));

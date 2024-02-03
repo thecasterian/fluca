@@ -77,7 +77,7 @@ PetscErrorCode SolSetMesh(Sol sol, Mesh mesh)
   if (sol->mesh == mesh) PetscFunctionReturn(PETSC_SUCCESS);
 
   PetscCall(MeshDestroy(&sol->mesh));
-  for (d = 0; d < 3; d++) PetscCall(VecDestroy(&sol->v[d]));
+  for (d = 0; d < 3; ++d) PetscCall(VecDestroy(&sol->v[d]));
   PetscCall(VecDestroy(&sol->p));
 
   sol->mesh = mesh;
@@ -86,7 +86,7 @@ PetscErrorCode SolSetMesh(Sol sol, Mesh mesh)
   PetscCall(MeshGetDM(mesh, &dm));
   PetscCall(MeshGetDim(mesh, &dim));
 
-  for (d = 0; d < dim; d++) PetscCall(DMCreateLocalVector(dm, &sol->v[d]));
+  for (d = 0; d < dim; ++d) PetscCall(DMCreateLocalVector(dm, &sol->v[d]));
   PetscCall(DMCreateLocalVector(dm, &sol->p));
 
   PetscTryTypeMethod(sol, setmesh, mesh);
@@ -160,7 +160,7 @@ PetscErrorCode SolDestroy(Sol *sol)
   }
 
   PetscCall(MeshDestroy(&(*sol)->mesh));
-  for (d = 0; d < 3; d++) PetscCall(VecDestroy(&(*sol)->v[d]));
+  for (d = 0; d < 3; ++d) PetscCall(VecDestroy(&(*sol)->v[d]));
   PetscCall(VecDestroy(&(*sol)->p));
 
   PetscTryTypeMethod((*sol), destroy);

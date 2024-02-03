@@ -27,8 +27,8 @@ int main(int argc, char **argv)
     PetscCall(MeshCartGetCorners(mesh, &xs, &ys, NULL, &xm, &ym, NULL));
     PetscCall(MeshCartGetCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
     PetscCall(MeshCartGetCoordinateLocationSlot(mesh, MESHCART_PREV, &iprev));
-    for (i = xs; i <= xs + xm; i++) arrcx[i][iprev] = (PetscReal)i / M;
-    for (j = ys; j <= ys + ym; j++) arrcy[j][iprev] = (PetscReal)j / N;
+    for (i = xs; i <= xs + xm; ++i) arrcx[i][iprev] = (PetscReal)i / M;
+    for (j = ys; j <= ys + ym; ++j) arrcy[j][iprev] = (PetscReal)j / N;
     PetscCall(MeshCartRestoreCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
   }
 

@@ -9,7 +9,7 @@ PetscErrorCode NSMonitorSet(NS ns, PetscErrorCode (*mon)(NS, void *), void *mon_
 
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
 
-  for (i = 0; i < ns->num_mons; i++) {
+  for (i = 0; i < ns->num_mons; ++i) {
     PetscCall(PetscMonitorCompare((PetscErrorCode(*)(void))mon, mon_ctx, mon_ctx_destroy, (PetscErrorCode(*)(void))ns->mons[i], ns->mon_ctxs[i], ns->mon_ctx_destroys[i], &identical));
     if (identical) PetscFunctionReturn(PETSC_SUCCESS);
   }
@@ -18,7 +18,7 @@ PetscErrorCode NSMonitorSet(NS ns, PetscErrorCode (*mon)(NS, void *), void *mon_
   ns->mons[ns->num_mons]             = mon;
   ns->mon_ctxs[ns->num_mons]         = mon_ctx;
   ns->mon_ctx_destroys[ns->num_mons] = mon_ctx_destroy;
-  ns->num_mons++;
+  ++ns->num_mons;
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -31,7 +31,7 @@ PetscErrorCode NSMonitorCancel(NS ns)
 
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
 
-  for (i = 0; i < ns->num_mons; i++)
+  for (i = 0; i < ns->num_mons; ++i)
     if (ns->mon_ctx_destroys[i]) PetscCall((*ns->mon_ctx_destroys[i])(&ns->mon_ctxs[i]));
   ns->num_mons = 0;
 
@@ -50,7 +50,7 @@ PetscErrorCode NSMonitor(NS ns)
   PetscCall(MeshGetDM(ns->mesh, &dm));
   PetscCall(DMSetOutputSequenceNumber(dm, ns->step, ns->t));
 
-  for (i = 0; i < ns->num_mons; i++) PetscCall((*ns->mons[i])(ns, ns->mon_ctxs[i]));
+  for (i = 0; i < ns->num_mons; ++i) PetscCall((*ns->mons[i])(ns, ns->mon_ctxs[i]));
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -11,7 +11,7 @@ PetscErrorCode SolSetMesh_FSM(Sol sol, Mesh mesh)
 
   PetscFunctionBegin;
 
-  for (d = 0; d < 3; d++) {
+  for (d = 0; d < 3; ++d) {
     PetscCall(VecDestroy(&fsm->v_star[d]));
     PetscCall(VecDestroy(&fsm->v_tilde[d]));
     PetscCall(VecDestroy(&fsm->N[d]));
@@ -27,7 +27,7 @@ PetscErrorCode SolSetMesh_FSM(Sol sol, Mesh mesh)
   PetscCall(MeshGetFaceDM(mesh, &fdm));
   PetscCall(MeshGetDim(mesh, &dim));
 
-  for (d = 0; d < dim; d++) {
+  for (d = 0; d < dim; ++d) {
     PetscCall(DMCreateLocalVector(dm, &fsm->v_star[d]));
     PetscCall(DMCreateLocalVector(dm, &fsm->v_tilde[d]));
     PetscCall(DMCreateLocalVector(dm, &fsm->N[d]));
@@ -49,7 +49,7 @@ PetscErrorCode SolDestroy_FSM(Sol sol)
 
   PetscFunctionBegin;
 
-  for (d = 0; d < 3; d++) {
+  for (d = 0; d < 3; ++d) {
     PetscCall(VecDestroy(&fsm->v_star[d]));
     PetscCall(VecDestroy(&fsm->v_tilde[d]));
     PetscCall(VecDestroy(&fsm->N[d]));
@@ -88,7 +88,7 @@ PetscErrorCode SolCreate_FSM(Sol sol)
   PetscCall(PetscNew(&fsm));
   sol->data = (void *)fsm;
 
-  for (d = 0; d < 3; d++) {
+  for (d = 0; d < 3; ++d) {
     fsm->v_star[d]  = NULL;
     fsm->v_tilde[d] = NULL;
     fsm->N[d]       = NULL;
