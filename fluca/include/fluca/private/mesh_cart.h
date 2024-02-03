@@ -10,12 +10,10 @@ typedef struct {
     PetscInt *l[MESH_MAX_DIM];               /* ownership range */
     MeshBoundaryType bndTypes[MESH_MAX_DIM]; /* boundary types */
 
+    PetscInt refineFactor[MESH_MAX_DIM]; /* refinement factor */
+
     DM dm;  /* DMStag for element-centered variables */
     DM fdm; /* DMStag for face-centered variables */
-
-    DM subdm[MESH_MAX_DIM]; /* DMStag for element-centered variables in each dimension */
-
-    Vec width[MESH_MAX_DIM]; /* element widths in each dimension */
 } Mesh_Cart;
 
 #endif

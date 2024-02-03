@@ -26,6 +26,7 @@ PetscErrorCode NSSetup_FSM(NS ns) {
     MPI_Comm comm;
     DM dm;
     PC pc;
+    PetscInt dim, d;
 
     PetscFunctionBegin;
 
@@ -40,11 +41,19 @@ PetscErrorCode NSSetup_FSM(NS ns) {
 
     /* Create KSP */
     PetscCall(MeshGetDM(ns->mesh, &dm));
-    PetscCall(KSPCreate(comm, &fsm->ksp));
-    PetscCall(KSPSetDM(fsm->ksp, dm));
-    PetscCall(KSPGetPC(fsm->ksp, &pc));
+    PetscCall(MeshGetDim(ns->mesh, &dim));
+    for (d = 0; d < dim; d++) {
+        PetscCall(KSPCreate(comm, &fsm->kspv[d]));
+        PetscCall(KSPSetDM(fsm->kspv[d], dm));
+        PetscCall(KSPGetPC(fsm->kspv[d], &pc));
+        PetscCall(PCSetType(pc, PCMG));
+        PetscCall(KSPSetFromOptions(fsm->kspv[d]));
+    }
+    PetscCall(KSPCreate(comm, &fsm->kspp));
+    PetscCall(KSPSetDM(fsm->kspp, dm));
+    PetscCall(KSPGetPC(fsm->kspp, &pc));
     PetscCall(PCSetType(pc, PCMG));
-    PetscCall(KSPSetFromOptions(fsm->ksp));
+    PetscCall(KSPSetFromOptions(fsm->kspp));
 
     ns->state = NS_STATE_SETUP;
 
@@ -92,10 +101,13 @@ PetscErrorCode NSSolveIter_FSM(NS ns) {
 
 PetscErrorCode NSDestroy_FSM(NS ns) {
     NS_FSM *fsm = (NS_FSM *)ns->data;
+    PetscInt d;
 
     PetscFunctionBegin;
 
-    PetscCall(KSPDestroy(&fsm->ksp));
+    for (d = 0; d < 3; d++)
+        PetscCall(KSPDestroy(&fsm->kspv[d]));
+    PetscCall(KSPDestroy(&fsm->kspp));
 
     PetscCall(PetscFree(ns->data));
 
@@ -112,13 +124,16 @@ PetscErrorCode NSView_FSM(NS ns, PetscViewer v) {
 
 PetscErrorCode NSCreate_FSM(NS ns) {
     NS_FSM *fsm;
+    PetscInt d;
 
     PetscFunctionBegin;
 
     PetscCall(PetscNew(&fsm));
     ns->data = (void *)fsm;
 
-    fsm->ksp = NULL;
+    for (d = 0; d < 3; d++)
+        fsm->kspv[d] = NULL;
+    fsm->kspp = NULL;
 
     ns->ops->setup = NSSetup_FSM;
     ns->ops->solve_init = NSSolveInit_FSM;
