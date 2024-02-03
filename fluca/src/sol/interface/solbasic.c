@@ -11,7 +11,6 @@ PetscErrorCode SolCreate(MPI_Comm comm, Sol *sol)
   Sol s;
 
   PetscFunctionBegin;
-
   *sol = NULL;
   PetscCall(SolInitializePackage());
 
@@ -21,7 +20,6 @@ PetscErrorCode SolCreate(MPI_Comm comm, Sol *sol)
   s->data = NULL;
 
   *sol = s;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -32,7 +30,6 @@ PetscErrorCode SolSetType(Sol sol, SolType type)
   PetscBool match;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
 
   PetscCall(SolGetType(sol, &old_type));
@@ -50,7 +47,6 @@ PetscErrorCode SolSetType(Sol sol, SolType type)
 
   PetscCall(PetscObjectChangeTypeName((PetscObject)sol, type));
   PetscCall((*impl_create)(sol));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -69,11 +65,9 @@ PetscErrorCode SolSetMesh(Sol sol, Mesh mesh)
   PetscInt dim, d;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 2);
   PetscCheckSameComm(sol, 1, mesh, 2);
-
   if (sol->mesh == mesh) PetscFunctionReturn(PETSC_SUCCESS);
 
   PetscCall(MeshDestroy(&sol->mesh));
@@ -92,7 +86,6 @@ PetscErrorCode SolSetMesh(Sol sol, Mesh mesh)
   PetscTryTypeMethod(sol, setmesh, mesh);
 
   PetscCall(SolViewFromOptions(sol, NULL, "-sol_view"));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -125,7 +118,6 @@ PetscErrorCode SolGetPressure(Sol sol, Vec *p)
 PetscErrorCode SolView(Sol sol, PetscViewer viewer)
 {
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
   if (!viewer) PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)sol), &viewer));
   PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
@@ -133,7 +125,6 @@ PetscErrorCode SolView(Sol sol, PetscViewer viewer)
 
   PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)sol, viewer));
   PetscTryTypeMethod(sol, view, viewer);
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -150,7 +141,6 @@ PetscErrorCode SolDestroy(Sol *sol)
   PetscInt d;
 
   PetscFunctionBegin;
-
   if (!*sol) PetscFunctionReturn(PETSC_SUCCESS);
   PetscValidHeaderSpecific(*sol, SOL_CLASSID, 1);
 
@@ -165,6 +155,5 @@ PetscErrorCode SolDestroy(Sol *sol)
 
   PetscTryTypeMethod((*sol), destroy);
   PetscCall(PetscHeaderDestroy(sol));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }

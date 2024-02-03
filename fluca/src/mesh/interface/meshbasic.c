@@ -13,7 +13,6 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh)
   Mesh m;
 
   PetscFunctionBegin;
-
   *mesh = NULL;
   PetscCall(MeshInitializePackage());
 
@@ -24,7 +23,6 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh)
   m->state = MESH_STATE_INITIAL;
 
   *mesh = m;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -35,11 +33,9 @@ PetscErrorCode MeshSetType(Mesh mesh, MeshType type)
   PetscBool match;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
   PetscCall(MeshGetType(mesh, &old_type));
-
   PetscCall(PetscObjectTypeCompare((PetscObject)mesh, type, &match));
   if (match) PetscFunctionReturn(PETSC_SUCCESS);
 
@@ -54,7 +50,6 @@ PetscErrorCode MeshSetType(Mesh mesh, MeshType type)
   mesh->state = MESH_STATE_INITIAL;
   PetscCall(PetscObjectChangeTypeName((PetscObject)mesh, type));
   PetscCall((*impl_create)(mesh));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -70,10 +65,8 @@ PetscErrorCode MeshGetType(Mesh mesh, MeshType *type)
 PetscErrorCode MeshSetUp(Mesh mesh)
 {
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   if (mesh->state >= MESH_STATE_SETUP) PetscFunctionReturn(PETSC_SUCCESS);
-
   PetscCall(PetscLogEventBegin(MESH_SetUp, (PetscObject)mesh, 0, 0, 0));
 
   /* Set default type */
@@ -91,14 +84,12 @@ PetscErrorCode MeshSetUp(Mesh mesh)
   PetscCall(MeshViewFromOptions(mesh, NULL, "-mesh_view"));
 
   mesh->state = MESH_STATE_SETUP;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode MeshView(Mesh mesh, PetscViewer v)
 {
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   if (!v) PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)mesh), &v));
   PetscValidHeaderSpecific(v, PETSC_VIEWER_CLASSID, 2);
@@ -106,7 +97,6 @@ PetscErrorCode MeshView(Mesh mesh, PetscViewer v)
 
   PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)mesh, v));
   PetscTryTypeMethod(mesh, view, v);
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -121,7 +111,6 @@ PetscErrorCode MeshViewFromOptions(Mesh mesh, PetscObject obj, const char name[]
 PetscErrorCode MeshDestroy(Mesh *mesh)
 {
   PetscFunctionBegin;
-
   if (!*mesh) PetscFunctionReturn(PETSC_SUCCESS);
   PetscValidHeaderSpecific((*mesh), MESH_CLASSID, 1);
 
@@ -132,7 +121,6 @@ PetscErrorCode MeshDestroy(Mesh *mesh)
 
   PetscTryTypeMethod((*mesh), destroy);
   PetscCall(PetscHeaderDestroy(mesh));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -159,7 +147,6 @@ PetscErrorCode MeshGetFaceDM(Mesh mesh, DM *dm)
 PetscErrorCode MeshBoundaryTypeToDMBoundaryType(MeshBoundaryType type, DMBoundaryType *dmtype)
 {
   PetscFunctionBegin;
-
   switch (type) {
   case MESH_BOUNDARY_NONE:
     *dmtype = DM_BOUNDARY_GHOSTED;
@@ -170,6 +157,5 @@ PetscErrorCode MeshBoundaryTypeToDMBoundaryType(MeshBoundaryType type, DMBoundar
   default:
     SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Invalid boundary type %d", type);
   }
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }

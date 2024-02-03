@@ -25,7 +25,6 @@ PetscErrorCode NSFSMInterpolateVelocity2d_MeshCart(NS ns)
   PetscInt             i, j;
 
   PetscFunctionBegin;
-
   PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
   PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, &nExtrax, &nExtray, NULL));
 
@@ -79,7 +78,6 @@ PetscErrorCode NSFSMInterpolateVelocity2d_MeshCart(NS ns)
 
   PetscCall(DMLocalToLocalBegin(cart->fdm, solfsm->fv, INSERT_VALUES, solfsm->fv));
   PetscCall(DMLocalToLocalEnd(cart->fdm, solfsm->fv, INSERT_VALUES, solfsm->fv));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -101,7 +99,6 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCart(NS ns)
   PetscInt             i, j;
 
   PetscFunctionBegin;
-
   PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
   PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, &nExtrax, &nExtray, NULL));
 
@@ -187,7 +184,6 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCart(NS ns)
 
   PetscCall(DMRestoreLocalVector(cart->fdm, &u_interp));
   PetscCall(DMRestoreLocalVector(cart->fdm, &v_interp));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -211,7 +207,6 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCart(NS ns)
   PetscInt             d, i, j;
 
   PetscFunctionBegin;
-
   /* Solve for cell-centered intermediate velocity. */
   for (d = 0; d < 2; ++d) {
     PetscCall(KSPSetComputeRHS(nsfsm->kspv[d], rhs[d], ns));
@@ -324,7 +319,6 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCart(NS ns)
 
   PetscCall(DMLocalToLocalBegin(cart->fdm, solfsm->fv_star, INSERT_VALUES, solfsm->fv_star));
   PetscCall(DMLocalToLocalEnd(cart->fdm, solfsm->fv_star, INSERT_VALUES, solfsm->fv_star));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -339,13 +333,11 @@ PetscErrorCode NSFSMCalculatePressureCorrection2d_MeshCart(NS ns)
   Vec x;
 
   PetscFunctionBegin;
-
   PetscCall(KSPSetComputeRHS(nsfsm->kspp, ComputeRHSPprime2d, ns));
   PetscCall(KSPSetComputeOperators(nsfsm->kspp, ComputeOperatorPprime2d, ns));
   PetscCall(KSPSolve(nsfsm->kspp, NULL, NULL));
   PetscCall(KSPGetSolution(nsfsm->kspp, &x));
   PetscCall(DMGlobalToLocal(cart->dm, x, INSERT_VALUES, solfsm->p_prime));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -366,7 +358,6 @@ PetscErrorCode NSFSMUpdate2d_MeshCart(NS ns)
   PetscInt             i, j;
 
   PetscFunctionBegin;
-
   PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
   PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
@@ -459,7 +450,6 @@ PetscErrorCode NSFSMUpdate2d_MeshCart(NS ns)
   PetscCall(DMLocalToLocalEnd(cart->dm, solfsm->p_half, INSERT_VALUES, solfsm->p_half));
 
   PetscCall(NSFSMCalculateConvection2d_MeshCart(ns));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -484,7 +474,6 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx)
   PetscInt             i, j;
 
   PetscFunctionBegin;
-
   PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
   PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
@@ -561,7 +550,6 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx)
 
   PetscCall(VecAssemblyBegin(b));
   PetscCall(VecAssemblyEnd(b));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -586,7 +574,6 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx)
   PetscInt             i, j;
 
   PetscFunctionBegin;
-
   PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
   PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
 
@@ -661,7 +648,6 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx)
 
   PetscCall(VecAssemblyBegin(b));
   PetscCall(VecAssemblyEnd(b));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -688,7 +674,6 @@ PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx)
   PetscInt             i, j;
 
   PetscFunctionBegin;
-
   PetscCall(PetscObjectGetComm((PetscObject)ksp, &comm));
 
   PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
@@ -735,7 +720,6 @@ PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx)
 
   PetscCall(VecAssemblyBegin(b));
   PetscCall(VecAssemblyEnd(b));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -756,7 +740,6 @@ PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx)
   PetscInt            i, j;
 
   PetscFunctionBegin;
-
   PetscCall(KSPGetDM(ksp, &dm));
   PetscCall(DMStagGetGlobalSizes(dm, &M, &N, NULL));
   PetscCall(DMStagGetCorners(dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
@@ -833,7 +816,6 @@ PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx)
   PetscCall(MatAssemblyEnd(Jpre, MAT_FINAL_ASSEMBLY));
 
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -855,7 +837,6 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx)
   PetscInt            i, j;
 
   PetscFunctionBegin;
-
   PetscCall(PetscObjectGetComm((PetscObject)ksp, &comm));
 
   PetscCall(KSPGetDM(ksp, &dm));
@@ -941,6 +922,5 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx)
   PetscCall(MatNullSpaceDestroy(&nullspace));
 
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }

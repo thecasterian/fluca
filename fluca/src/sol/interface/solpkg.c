@@ -9,7 +9,6 @@ PetscErrorCode SolInitializePackage(void)
   PetscClassId classids[1];
 
   PetscFunctionBegin;
-
   if (SolPackageInitialized) PetscFunctionReturn(PETSC_SUCCESS);
   SolPackageInitialized = PETSC_TRUE;
 
@@ -29,7 +28,6 @@ PetscErrorCode SolInitializePackage(void)
   }
   /* Register package finalizer */
   PetscCall(PetscRegisterFinalize(SolFinalizePackage));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

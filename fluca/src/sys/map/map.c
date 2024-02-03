@@ -11,7 +11,6 @@ static PetscErrorCode FlucaMapCreateBuckets(FlucaMap map, PetscInt bucketsize)
   PetscInt i;
 
   PetscFunctionBegin;
-
   PetscCheck(bucketsize > 0, PetscObjectComm((PetscObject)map), PETSC_ERR_ARG_OUTOFRANGE, "bucketsize must be positive");
 
   PetscCall(PetscMalloc1(bucketsize, &map->buckets));
@@ -19,32 +18,27 @@ static PetscErrorCode FlucaMapCreateBuckets(FlucaMap map, PetscInt bucketsize)
     map->buckets[i].front = NULL;
     map->buckets[i].back  = NULL;
   }
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode FlucaMapKVListInsert(struct _FlucaMapKVList *list, struct _FlucaMapKV *kv)
 {
   PetscFunctionBegin;
-
   kv->prev = list->back;
   kv->next = NULL;
   if (list->back) list->back->next = kv;
   else list->front = kv;
   list->back = kv;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode FlucaMapKVListRemove(struct _FlucaMapKVList *list, struct _FlucaMapKV *kv)
 {
   PetscFunctionBegin;
-
   if (kv->prev) kv->prev->next = kv->next;
   else list->front = kv->next;
   if (kv->next) kv->next->prev = kv->prev;
   else list->back = kv->prev;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -53,7 +47,6 @@ PetscErrorCode FlucaMapCreate(MPI_Comm comm, FlucaMap *map, PetscErrorCode (*has
   FlucaMap m;
 
   PetscFunctionBegin;
-
   *map = NULL;
   PetscCall(FlucaSysInitializePackage());
 
@@ -66,7 +59,6 @@ PetscErrorCode FlucaMapCreate(MPI_Comm comm, FlucaMap *map, PetscErrorCode (*has
   m->eq         = eq;
 
   *map = m;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -84,7 +76,6 @@ PetscErrorCode FlucaMapInsert(FlucaMap map, PetscObject key, PetscObject value)
   struct _FlucaMapKV *kv;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(map, FLUCA_MAP_CLASSID, 1);
   PetscValidHeader(key, 2);
   PetscValidHeader(value, 3);
@@ -121,7 +112,6 @@ PetscErrorCode FlucaMapInsert(FlucaMap map, PetscObject key, PetscObject value)
     }
     PetscCall(PetscFree(oldbuckets));
   }
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -132,7 +122,6 @@ PetscErrorCode FlucaMapRemove(FlucaMap map, PetscObject key)
   PetscBool           eq;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(map, FLUCA_MAP_CLASSID, 1);
   PetscValidHeader(key, 2);
 
@@ -153,7 +142,6 @@ PetscErrorCode FlucaMapRemove(FlucaMap map, PetscObject key)
       break;
     }
   }
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -164,7 +152,6 @@ PetscErrorCode FlucaMapGetValue(FlucaMap map, PetscObject key, PetscObject *valu
   PetscBool           eq;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(map, FLUCA_MAP_CLASSID, 1);
   PetscValidHeader(key, 2);
 
@@ -183,14 +170,12 @@ PetscErrorCode FlucaMapGetValue(FlucaMap map, PetscObject key, PetscObject *valu
   }
 
   *value = NULL;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode FlucaMapDestroy(FlucaMap *map)
 {
   PetscFunctionBegin;
-
   if (!*map) PetscFunctionReturn(PETSC_SUCCESS);
   PetscValidHeaderSpecific(*map, FLUCA_MAP_CLASSID, 1);
 
@@ -212,6 +197,5 @@ PetscErrorCode FlucaMapDestroy(FlucaMap *map)
   PetscCall(PetscFree((*map)->buckets));
 
   PetscCall(PetscHeaderDestroy(map));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }

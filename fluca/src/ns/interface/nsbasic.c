@@ -12,7 +12,6 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns)
   NS n;
 
   PetscFunctionBegin;
-
   *ns = NULL;
   PetscCall(NSInitializePackage());
 
@@ -34,7 +33,6 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns)
   n->mon_freq = 1;
 
   *ns = n;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -45,11 +43,9 @@ PetscErrorCode NSSetType(NS ns, NSType type)
   PetscBool match;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
 
   PetscCall(NSGetType(ns, &old_type));
-
   PetscCall(PetscObjectTypeCompare((PetscObject)ns, type, &match));
   if (match) PetscFunctionReturn(PETSC_SUCCESS);
 
@@ -64,7 +60,6 @@ PetscErrorCode NSSetType(NS ns, NSType type)
   ns->state = NS_STATE_INITIAL;
   PetscCall(PetscObjectChangeTypeName((PetscObject)ns, type));
   PetscCall((*impl_create)(ns));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -83,7 +78,6 @@ PetscErrorCode NSSetFromOptions(NS ns)
   PetscBool flg, opt;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   PetscCall(NSRegisterAll());
 
@@ -103,21 +97,17 @@ PetscErrorCode NSSetFromOptions(NS ns)
   flg = PETSC_FALSE;
   PetscCall(PetscOptionsBool("-ns_monitor_cancel", "Remove all monitors", "NSMonitorCancel", flg, &flg, &opt));
   if (opt && flg) PetscCall(NSMonitorCancel(ns));
-
   PetscTryTypeMethod(ns, setfromoptions, PetscOptionsObject);
 
   PetscOptionsEnd();
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSSetUp(NS ns)
 {
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   if (ns->state >= NS_STATE_SETUP) PetscFunctionReturn(PETSC_SUCCESS);
-
   PetscCall(PetscLogEventBegin(NS_SetUp, (PetscObject)ns, 0, 0, 0));
 
   /* Set default type */
@@ -135,7 +125,6 @@ PetscErrorCode NSSetUp(NS ns)
   /* NSViewFromOptions() is called in NSSolve(). */
 
   ns->state = NS_STATE_SETUP;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -145,11 +134,8 @@ PetscErrorCode NSSolve(NS ns, PetscInt num_iters)
   PetscInt  i;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-
   if (ns->state < NS_STATE_SETUP) PetscCall(NSSetUp(ns));
-
   PetscCall(PetscLogEventBegin(NS_Solve, (PetscObject)ns, 0, 0, 0));
 
   PetscCall(NSViewFromOptions(ns, NULL, "-ns_view_pre"));
@@ -169,27 +155,21 @@ PetscErrorCode NSSolve(NS ns, PetscInt num_iters)
   PetscCall(SolViewFromOptions(ns->sol, NULL, "-ns_view_solution"));
 
   PetscCall(PetscLogEventEnd(NS_Solve, (PetscObject)ns, 0, 0, 0));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSGetSol(NS ns, Sol *sol)
 {
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-
   PetscCheck(ns->state >= NS_STATE_SETUP, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "NS not set up");
-
   if (sol) *sol = ns->sol;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSDestroy(NS *ns)
 {
   PetscFunctionBegin;
-
   if (!*ns) PetscFunctionReturn(PETSC_SUCCESS);
   PetscValidHeaderSpecific((*ns), NS_CLASSID, 1);
 
@@ -200,28 +180,24 @@ PetscErrorCode NSDestroy(NS *ns)
 
   PetscCall(MeshDestroy(&(*ns)->mesh));
   PetscCall(SolDestroy(&(*ns)->sol));
-
   PetscCall(NSMonitorCancel(*ns));
 
   PetscTryTypeMethod((*ns), destroy);
   PetscCall(PetscHeaderDestroy(ns));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSView(NS ns, PetscViewer v)
 {
-  PetscBool isascii, iscgns;
+  PetscBool isascii;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   if (!v) PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)ns), &v));
   PetscValidHeaderSpecific(v, PETSC_VIEWER_CLASSID, 2);
   PetscCheckSameComm(ns, 1, v, 2);
 
   PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERASCII, &isascii));
-  PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
 
   if (isascii) {
     PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)ns, v));
@@ -231,7 +207,6 @@ PetscErrorCode NSView(NS ns, PetscViewer v)
     PetscTryTypeMethod(ns, view, v);
     PetscCall(PetscViewerASCIIPopTab(v));
   }
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

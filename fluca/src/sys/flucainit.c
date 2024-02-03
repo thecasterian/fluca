@@ -9,8 +9,7 @@ PetscErrorCode FlucaInitialize(int *argc, char ***args, const char file[], const
   PetscBool flg;
 
   PetscFunctionBegin;
-
-  if (FlucaInitializeCalled) { PetscFunctionReturn(PETSC_SUCCESS); }
+  if (FlucaInitializeCalled) PetscFunctionReturn(PETSC_SUCCESS);
 
   PetscCall(PetscInitialized(&flg));
   if (!flg) {
@@ -21,7 +20,6 @@ PetscErrorCode FlucaInitialize(int *argc, char ***args, const char file[], const
   FlucaInitializeCalled = PETSC_TRUE;
   FlucaFinalizeCalled   = PETSC_FALSE;
   PetscCall(PetscInfo(NULL, "Fluca successfully started\n"));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -40,7 +38,6 @@ PetscErrorCode FlucaFinalize(void)
   PetscBool flg;
 
   PetscFunctionBegin;
-
   PetscCheck(FlucaInitializeCalled, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "FlucaInitialize() must be called before FlucaFinalize()");
 
   PetscCall(PetscInfo(NULL, "FlucaFinalize() called\n"));
@@ -54,7 +51,6 @@ PetscErrorCode FlucaFinalize(void)
 
   FlucaInitializeCalled = PETSC_FALSE;
   FlucaFinalizeCalled   = PETSC_TRUE;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

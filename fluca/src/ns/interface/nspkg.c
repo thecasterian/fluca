@@ -9,7 +9,6 @@ PetscErrorCode NSInitializePackage(void)
   PetscClassId classids[1];
 
   PetscFunctionBegin;
-
   if (NSPackageInitialized) PetscFunctionReturn(PETSC_SUCCESS);
   NSPackageInitialized = PETSC_TRUE;
 
@@ -32,7 +31,6 @@ PetscErrorCode NSInitializePackage(void)
   }
   /* Register package finalizer */
   PetscCall(PetscRegisterFinalize(NSFinalizePackage));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

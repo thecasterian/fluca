@@ -10,7 +10,6 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
   PetscViewer_CGNS *cgns = (PetscViewer_CGNS *)viewer->data;
 
   PetscFunctionBegin;
-
   if (mesh->state < MESH_STATE_SETUP) PetscFunctionReturn(PETSC_SUCCESS);
   if (cgns->file_num && cgns->base) PetscFunctionReturn(PETSC_SUCCESS);
 
@@ -94,6 +93,5 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
       PetscCall(PetscFree(x[d]));
     }
   }
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }

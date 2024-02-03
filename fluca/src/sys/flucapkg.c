@@ -7,7 +7,6 @@ PetscErrorCode FlucaSysInitializePackage(void)
   PetscClassId classids[1];
 
   PetscFunctionBegin;
-
   if (FlucaSysPackageInitialized) PetscFunctionReturn(PETSC_SUCCESS);
   FlucaSysPackageInitialized = PETSC_TRUE;
 
@@ -19,7 +18,6 @@ PetscErrorCode FlucaSysInitializePackage(void)
   PetscCall(PetscInfoProcessClass("map", 1, classids));
   /* Register package finalizer */
   PetscCall(PetscRegisterFinalize(FlucaSysFinalizePackage));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

@@ -9,7 +9,6 @@ PetscErrorCode MeshInitializePackage(void)
   PetscClassId classids[1];
 
   PetscFunctionBegin;
-
   if (MeshPackageInitialized) PetscFunctionReturn(PETSC_SUCCESS);
   MeshPackageInitialized = PETSC_TRUE;
 
@@ -31,7 +30,6 @@ PetscErrorCode MeshInitializePackage(void)
   }
   /* Register package finalizer */
   PetscCall(PetscRegisterFinalize(MeshFinalizePackage));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

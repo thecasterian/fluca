@@ -13,7 +13,6 @@ static PetscErrorCode FlucaViewerCGNSWriteStructuredSolution_Private(DM dm, Vec 
   double              *arrraw;
 
   PetscFunctionBegin;
-
   PetscCall(DMGetDimension(dm, &dim));
   PetscCall(DMStagGetCorners(dm, &xs[0], &xs[1], &xs[2], &xm[0], &xm[1], &xm[2], NULL, NULL, NULL));
   PetscCall(DMStagGetLocationSlot(dm, DMSTAG_ELEMENT, 0, &ielem));
@@ -54,7 +53,6 @@ static PetscErrorCode FlucaViewerCGNSWriteStructuredSolution_Private(DM dm, Vec 
   PetscCallCGNS(cgp_field_write(file_num, base, zone, sol, CGNS_ENUMV(RealDouble), name, &field));
   PetscCallCGNS(cgp_field_write_data(file_num, base, zone, sol, field, rmin, rmax, arrraw));
   PetscCall(PetscFree(arrraw));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -76,7 +74,6 @@ PetscErrorCode SolView_FSMCGNS(Sol sol, PetscViewer viewer)
   const char *const convecnames[3]   = {"ConvectionX", "ConvectionY", "ConvectionZ"};
 
   PetscFunctionBegin;
-
   if (!cgns->file_num || !cgns->base) PetscCall(MeshView(sol->mesh, viewer));
 
   PetscCall(MeshGetDM(sol->mesh, &dm));
@@ -97,7 +94,6 @@ PetscErrorCode SolView_FSMCGNS(Sol sol, PetscViewer viewer)
   PetscCallCGNS(cg_sol_write(cgns->file_num, cgns->base, cgns->zone, solution_name, CGNS_ENUMV(CellCenter), &solution));
 
   PetscCall(PetscObjectTypeCompare((PetscObject)sol->mesh, MESHCART, &iscart));
-
   if (iscart) {
     for (d = 0; d < dim; ++d) {
       PetscCall(FlucaViewerCGNSWriteStructuredSolution_Private(dm, sol->v[d], cgns->file_num, cgns->base, cgns->zone, solution, velnames[d]));
@@ -110,6 +106,5 @@ PetscErrorCode SolView_FSMCGNS(Sol sol, PetscViewer viewer)
   }
 
   PetscCall(PetscViewerCGNSCheckBatch_Internal(viewer));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }

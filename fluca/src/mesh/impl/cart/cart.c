@@ -15,9 +15,7 @@ PetscErrorCode MeshSetFromOptions_Cart(Mesh mesh, PetscOptionItems *PetscOptions
   PetscInt   nRefine = 0, i, d;
 
   PetscFunctionBegin;
-
   PetscOptionsHeadBegin(PetscOptionsObject, "MeshCart Options");
-
   for (d = 0; d < mesh->dim; ++d) {
     PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-cart_grid_%c", 'x' + d));
     PetscCall(PetscSNPrintf(text, PETSC_MAX_PATH_LEN, "Number of elements in the %c direction", 'x' + d));
@@ -39,7 +37,6 @@ PetscErrorCode MeshSetFromOptions_Cart(Mesh mesh, PetscOptionItems *PetscOptions
     PetscCall(PetscOptionsBoundedInt(opt, text, "MeshCartSetRefinementFactor", cart->refineFactor[d], &cart->refineFactor[d], NULL, 1));
   }
   PetscCall(PetscOptionsBoundedInt("-cart_refine", "Refine grid one or more times", "None", nRefine, &nRefine, NULL, 0));
-
   PetscOptionsHeadEnd();
 
   for (d = 0; d < mesh->dim; ++d) {
@@ -50,7 +47,6 @@ PetscErrorCode MeshSetFromOptions_Cart(Mesh mesh, PetscOptionItems *PetscOptions
     if (cart->l[d])
       for (i = 0; i < cart->nRanks[d]; ++i) cart->l[d][i] *= refineFactorTotal;
   }
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -59,14 +55,12 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   Mesh_Cart      *cart = (Mesh_Cart *)mesh->data;
   MPI_Comm        comm;
   DMBoundaryType  dmBndTypes[3];
-  PetscInt        dofElem = 1, dofFace = 1, stencilWidth = 1;
   const PetscInt *l[3];
   PetscInt        d;
+  const PetscInt  dofElem = 1, dofFace = 1, stencilWidth = 1;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-
   PetscCall(PetscObjectGetComm((PetscObject)mesh, &comm));
 
   for (d = 0; d < mesh->dim; ++d) PetscCall(MeshBoundaryTypeToDMBoundaryType(cart->bndTypes[d], &dmBndTypes[d]));
@@ -103,7 +97,6 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   for (d = 0; d < mesh->dim; ++d) PetscCall(PetscArraycpy(cart->l[d], l[d], cart->nRanks[d]));
 
   PetscCall(DMStagSetUniformCoordinatesProduct(cart->dm, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -113,13 +106,10 @@ PetscErrorCode MeshDestroy_Cart(Mesh mesh)
   PetscInt   d;
 
   PetscFunctionBegin;
-
   for (d = 0; d < mesh->dim; ++d) PetscCall(PetscFree(cart->l[d]));
   PetscCall(DMDestroy(&cart->dm));
   PetscCall(DMDestroy(&cart->fdm));
-
   PetscCall(PetscFree(mesh->data));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -130,7 +120,6 @@ PetscErrorCode MeshView_Cart(Mesh mesh, PetscViewer v)
   PetscBool   isascii, iscgns, isdraw;
 
   PetscFunctionBegin;
-
   PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)mesh), &rank));
   PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERASCII, &isascii));
   PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
@@ -161,7 +150,6 @@ PetscErrorCode MeshView_Cart(Mesh mesh, PetscViewer v)
   } else if (isdraw) {
     PetscCall(DMView(cart->dm, v));
   }
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -189,7 +177,6 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh)
   PetscInt   d;
 
   PetscFunctionBegin;
-
   PetscCall(PetscNew(&cart));
   mesh->data = (void *)cart;
 
@@ -210,7 +197,6 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh)
   mesh->ops->getdm          = MeshGetDM_Cart;
   mesh->ops->getfacedm      = MeshGetFaceDM_Cart;
   mesh->ops->view           = MeshView_Cart;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -326,7 +312,6 @@ PetscErrorCode MeshCartSetOwnershipRanges(Mesh mesh, const PetscInt lx[], const 
   PetscInt        d;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscCheck(mesh->state < MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "This function must be called before MeshSetUp()");
 
@@ -339,7 +324,6 @@ PetscErrorCode MeshCartSetOwnershipRanges(Mesh mesh, const PetscInt lx[], const 
       PetscCall(PetscFree(cart->l[d]));
     }
   }
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -374,13 +358,10 @@ PetscErrorCode MeshCartGetRefinementFactor(Mesh mesh, PetscInt *refine_x, PetscI
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-
   if (refine_x) *refine_x = cart->refineFactor[0];
   if (refine_y) *refine_y = cart->refineFactor[1];
   if (refine_z) *refine_z = cart->refineFactor[2];
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -389,12 +370,10 @@ PetscErrorCode MeshCartSetUniformCoordinates(Mesh mesh, PetscReal xmin, PetscRea
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscCheck(mesh->state >= MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "This function must be called after MeshSetUp()");
 
   PetscCall(DMStagSetUniformCoordinatesProduct(cart->dm, xmin, xmax, ymin, ymax, zmin, zmax));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -403,11 +382,8 @@ PetscErrorCode MeshCartGetCoordinateArrays(Mesh mesh, PetscScalar ***ax, PetscSc
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-
   PetscCall(DMStagGetProductCoordinateArrays(cart->dm, ax, ay, az));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -416,11 +392,8 @@ PetscErrorCode MeshCartGetCoordinateArraysRead(Mesh mesh, const PetscScalar ***a
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-
   PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, ax, ay, az));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -432,7 +405,6 @@ PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh mesh, PetscScalar ***ax, Pet
   PetscInt       i, d, iprev, inext, icenter;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
   PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
@@ -443,7 +415,6 @@ PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh mesh, PetscScalar ***ax, Pet
     for (i = s[d]; i < s[d] + m[d]; ++i) (*a[d])[i][icenter] = ((*a[d])[i][iprev] + (*a[d])[i][inext]) / 2.0;
 
   PetscCall(DMStagRestoreProductCoordinateArrays(cart->dm, ax, ay, az));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -452,11 +423,8 @@ PetscErrorCode MeshCartRestoreCoordinateArraysRead(Mesh mesh, const PetscScalar 
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-
   PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, arrx, arry, arrz));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -466,9 +434,7 @@ PetscErrorCode MeshCartGetCoordinateLocationSlot(Mesh mesh, MeshCartCoordinateSt
   DMStagStencilLocation stagLoc;
 
   PetscFunctionBegin;
-
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-
   switch (loc) {
   case MESHCART_PREV:
     stagLoc = DMSTAG_LEFT;
@@ -480,7 +446,6 @@ PetscErrorCode MeshCartGetCoordinateLocationSlot(Mesh mesh, MeshCartCoordinateSt
     SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONG, "Invalid coordinate stencil location");
   }
   PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, stagLoc, slot));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

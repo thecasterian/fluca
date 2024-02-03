@@ -10,7 +10,6 @@ PetscErrorCode SolSetMesh_FSM(Sol sol, Mesh mesh)
   PetscInt dim, d;
 
   PetscFunctionBegin;
-
   for (d = 0; d < 3; ++d) {
     PetscCall(VecDestroy(&fsm->v_star[d]));
     PetscCall(VecDestroy(&fsm->v_tilde[d]));
@@ -38,7 +37,6 @@ PetscErrorCode SolSetMesh_FSM(Sol sol, Mesh mesh)
   PetscCall(DMCreateLocalVector(dm, &fsm->p_half));
   PetscCall(DMCreateLocalVector(dm, &fsm->p_prime));
   PetscCall(DMCreateLocalVector(dm, &fsm->p_half_prev));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -48,7 +46,6 @@ PetscErrorCode SolDestroy_FSM(Sol sol)
   PetscInt d;
 
   PetscFunctionBegin;
-
   for (d = 0; d < 3; ++d) {
     PetscCall(VecDestroy(&fsm->v_star[d]));
     PetscCall(VecDestroy(&fsm->v_tilde[d]));
@@ -62,7 +59,6 @@ PetscErrorCode SolDestroy_FSM(Sol sol)
   PetscCall(VecDestroy(&fsm->p_half_prev));
 
   PetscCall(PetscFree(sol->data));
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -71,10 +67,8 @@ PetscErrorCode SolView_FSM(Sol sol, PetscViewer v)
   PetscBool iscgns;
 
   PetscFunctionBegin;
-
   PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
   if (iscgns) { PetscCall(SolView_FSMCGNS(sol, v)); }
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -84,7 +78,6 @@ PetscErrorCode SolCreate_FSM(Sol sol)
   PetscInt d;
 
   PetscFunctionBegin;
-
   PetscCall(PetscNew(&fsm));
   sol->data = (void *)fsm;
 
@@ -103,6 +96,5 @@ PetscErrorCode SolCreate_FSM(Sol sol)
   sol->ops->setmesh = SolSetMesh_FSM;
   sol->ops->destroy = SolDestroy_FSM;
   sol->ops->view    = SolView_FSM;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
