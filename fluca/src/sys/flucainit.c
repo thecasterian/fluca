@@ -4,7 +4,7 @@ PetscBool FlucaBeganPetsc       = PETSC_FALSE;
 PetscBool FlucaInitializeCalled = PETSC_FALSE;
 PetscBool FlucaFinalizeCalled   = PETSC_FALSE;
 
-PetscErrorCode FlucaInitialize(int *argc, char ***args, const char *file, const char *help)
+PetscErrorCode FlucaInitialize(int *argc, char ***args, const char file[], const char help[])
 {
   PetscBool flg;
 

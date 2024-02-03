@@ -319,7 +319,7 @@ PetscErrorCode MeshCartGetBoundaryTypes(Mesh mesh, MeshBoundaryType *bndx, MeshB
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartSetOwnershipRanges(Mesh mesh, const PetscInt *lx, const PetscInt *ly, const PetscInt *lz)
+PetscErrorCode MeshCartSetOwnershipRanges(Mesh mesh, const PetscInt lx[], const PetscInt ly[], const PetscInt lz[])
 {
   Mesh_Cart      *cart   = (Mesh_Cart *)mesh->data;
   const PetscInt *lin[3] = {lx, ly, lz};
@@ -343,7 +343,7 @@ PetscErrorCode MeshCartSetOwnershipRanges(Mesh mesh, const PetscInt *lx, const P
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartGetOwnershipRanges(Mesh mesh, const PetscInt **lx, const PetscInt **ly, const PetscInt **lz)
+PetscErrorCode MeshCartGetOwnershipRanges(Mesh mesh, const PetscInt *lx[], const PetscInt *ly[], const PetscInt *lz[])
 {
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
@@ -398,7 +398,7 @@ PetscErrorCode MeshCartSetUniformCoordinates(Mesh mesh, PetscReal xmin, PetscRea
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartGetCoordinateArrays(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az)
+PetscErrorCode MeshCartGetCoordinateArrays(Mesh mesh, PetscScalar ***ax, PetscScalar ***ay, PetscScalar ***az)
 {
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
@@ -411,7 +411,7 @@ PetscErrorCode MeshCartGetCoordinateArrays(Mesh mesh, PetscReal ***ax, PetscReal
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartGetCoordinateArraysRead(Mesh mesh, const PetscReal ***ax, const PetscReal ***ay, const PetscReal ***az)
+PetscErrorCode MeshCartGetCoordinateArraysRead(Mesh mesh, const PetscScalar ***ax, const PetscScalar ***ay, const PetscScalar ***az)
 {
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
@@ -424,12 +424,12 @@ PetscErrorCode MeshCartGetCoordinateArraysRead(Mesh mesh, const PetscReal ***ax,
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh mesh, PetscReal ***ax, PetscReal ***ay, PetscReal ***az)
+PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh mesh, PetscScalar ***ax, PetscScalar ***ay, PetscScalar ***az)
 {
-  Mesh_Cart   *cart = (Mesh_Cart *)mesh->data;
-  PetscReal ***a[3] = {ax, ay, az};
-  PetscInt     s[3], m[3];
-  PetscInt     i, d, iprev, inext, icenter;
+  Mesh_Cart     *cart = (Mesh_Cart *)mesh->data;
+  PetscScalar ***a[3] = {ax, ay, az};
+  PetscInt       s[3], m[3];
+  PetscInt       i, d, iprev, inext, icenter;
 
   PetscFunctionBegin;
 
@@ -447,7 +447,7 @@ PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh mesh, PetscReal ***ax, Petsc
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartRestoreCoordinateArraysRead(Mesh mesh, const PetscReal ***arrx, const PetscReal ***arry, const PetscReal ***arrz)
+PetscErrorCode MeshCartRestoreCoordinateArraysRead(Mesh mesh, const PetscScalar ***arrx, const PetscScalar ***arry, const PetscScalar ***arrz)
 {
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 

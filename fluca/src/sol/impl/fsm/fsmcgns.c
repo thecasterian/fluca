@@ -6,11 +6,11 @@
 
 static PetscErrorCode FlucaViewerCGNSWriteStructuredSolution_Private(DM dm, Vec v, int file_num, int base, int zone, int sol, const char *name)
 {
-  PetscInt           dim, xs[3], xm[3], d, cnt, i, j, k, ielem;
-  const PetscReal ***arr2d, ****arr3d;
-  cgsize_t           rmin[3], rmax[3], rsize;
-  int                field;
-  double            *arrraw;
+  PetscInt             dim, xs[3], xm[3], d, cnt, i, j, k, ielem;
+  const PetscScalar ***arr2d, ****arr3d;
+  cgsize_t             rmin[3], rmax[3], rsize;
+  int                  field;
+  double              *arrraw;
 
   PetscFunctionBegin;
 

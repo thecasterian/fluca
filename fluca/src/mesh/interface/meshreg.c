@@ -2,7 +2,7 @@
 
 FLUCA_EXTERN PetscErrorCode MeshCreate_Cart(Mesh);
 
-PetscErrorCode MeshRegister(const char *type, PetscErrorCode (*function)(Mesh))
+PetscErrorCode MeshRegister(const char type[], PetscErrorCode (*function)(Mesh))
 {
   PetscFunctionBegin;
   PetscCall(MeshInitializePackage());

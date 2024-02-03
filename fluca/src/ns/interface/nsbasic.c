@@ -235,7 +235,7 @@ PetscErrorCode NSView(NS ns, PetscViewer v)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSViewFromOptions(NS ns, PetscObject obj, const char *name)
+PetscErrorCode NSViewFromOptions(NS ns, PetscObject obj, const char name[])
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);

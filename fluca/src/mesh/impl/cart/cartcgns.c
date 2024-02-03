@@ -36,13 +36,13 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
   }
 
   {
-    cgsize_t          rmin[3], rmax[3], rsize;
-    PetscInt          s[3], m[3], d;
-    PetscBool         isLastRank[3];
-    const PetscReal **arrcf[3];
-    PetscReal        *x[3]          = {0};
-    const char       *coordnames[3] = {"CoordinateX", "CoordinateY", "CoordinateZ"};
-    int               coord[3];
+    cgsize_t            rmin[3], rmax[3], rsize;
+    PetscInt            s[3], m[3], d;
+    PetscBool           isLastRank[3];
+    const PetscScalar **arrcf[3];
+    PetscScalar        *x[3]          = {0};
+    const char         *coordnames[3] = {"CoordinateX", "CoordinateY", "CoordinateZ"};
+    int                 coord[3];
 
     PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
     PetscCall(DMStagGetIsLastRank(cart->dm, &isLastRank[0], &isLastRank[1], &isLastRank[2]));

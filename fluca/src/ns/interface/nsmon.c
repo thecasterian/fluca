@@ -63,7 +63,7 @@ PetscErrorCode NSMonitorSetFrequency(NS ns, PetscInt freq)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSMonitorSetFromOptions(NS ns, const char *name, const char *help, const char *manual, PetscErrorCode (*mon)(NS, PetscViewerAndFormat *), PetscErrorCode (*mon_setup)(NS, PetscViewerAndFormat *))
+PetscErrorCode NSMonitorSetFromOptions(NS ns, const char name[], const char help[], const char manual[], PetscErrorCode (*mon)(NS, PetscViewerAndFormat *), PetscErrorCode (*mon_setup)(NS, PetscViewerAndFormat *))
 {
   (void)help;
   (void)manual;

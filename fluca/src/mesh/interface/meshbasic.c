@@ -110,7 +110,7 @@ PetscErrorCode MeshView(Mesh mesh, PetscViewer v)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshViewFromOptions(Mesh mesh, PetscObject obj, const char *name)
+PetscErrorCode MeshViewFromOptions(Mesh mesh, PetscObject obj, const char name[])
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);

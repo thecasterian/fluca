@@ -2,7 +2,7 @@
 
 extern PetscErrorCode NSCreate_FSM(NS);
 
-PetscErrorCode NSRegister(const char *type, PetscErrorCode (*function)(NS))
+PetscErrorCode NSRegister(const char type[], PetscErrorCode (*function)(NS))
 {
   PetscFunctionBegin;
   PetscCall(NSInitializePackage());

@@ -16,7 +16,7 @@
 FLUCA_EXTERN PetscBool FlucaInitializeCalled;
 FLUCA_EXTERN PetscBool FlucaFinalizeCalled;
 
-FLUCA_EXTERN PetscErrorCode FlucaInitialize(int *, char ***, const char *, const char *);
+FLUCA_EXTERN PetscErrorCode FlucaInitialize(int *, char ***, const char[], const char[]);
 FLUCA_EXTERN PetscErrorCode FlucaInitializeNoArguments(void);
 FLUCA_EXTERN PetscErrorCode FlucaFinalize(void);
 FLUCA_EXTERN PetscErrorCode FlucaInitialized(PetscBool *);

@@ -16,13 +16,13 @@ PetscErrorCode NSFSMInterpolateVelocity2d_MeshCart(NS ns)
   Sol        sol    = ns->sol;
   Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
 
-  PetscInt           M, N, xs, ys, xm, ym, nExtrax, nExtray;
-  PetscReal       ***arrUV;
-  const PetscReal ***arru, ***arrv;
-  const PetscReal  **arrcx, **arrcy;
-  PetscInt           ileft, idown, ielem, iprevc, inextc, ielemc;
-  PetscReal          wx_left, wx_right, wy_down, wy_up;
-  PetscInt           i, j;
+  PetscInt             M, N, xs, ys, xm, ym, nExtrax, nExtray;
+  PetscScalar       ***arrUV;
+  const PetscScalar ***arru, ***arrv;
+  const PetscScalar  **arrcx, **arrcy;
+  PetscInt             ileft, idown, ielem, iprevc, inextc, ielemc;
+  PetscScalar          wx_left, wx_right, wy_down, wy_up;
+  PetscInt             i, j;
 
   PetscFunctionBegin;
 
@@ -90,15 +90,15 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCart(NS ns)
   Sol        sol    = ns->sol;
   Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
 
-  PetscInt           M, N, xs, ys, xm, ym, nExtrax, nExtray;
-  Vec                u_interp, v_interp;
-  PetscReal       ***arrNu, ***arrNv;
-  PetscReal       ***arru_interp, ***arrv_interp;
-  const PetscReal ***arru, ***arrv, ***arrUV;
-  const PetscReal  **arrcx, **arrcy;
-  PetscInt           ileft, iright, idown, iup, ielem, iprevc, inextc, ielemc;
-  PetscReal          wx_left, wx_right, wy_down, wy_up, wx, wy;
-  PetscInt           i, j;
+  PetscInt             M, N, xs, ys, xm, ym, nExtrax, nExtray;
+  Vec                  u_interp, v_interp;
+  PetscScalar       ***arrNu, ***arrNv;
+  PetscScalar       ***arru_interp, ***arrv_interp;
+  const PetscScalar ***arru, ***arrv, ***arrUV;
+  const PetscScalar  **arrcx, **arrcy;
+  PetscInt             ileft, iright, idown, iup, ielem, iprevc, inextc, ielemc;
+  PetscScalar          wx_left, wx_right, wy_down, wy_up, wx, wy;
+  PetscInt             i, j;
 
   PetscFunctionBegin;
 
@@ -200,15 +200,15 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCart(NS ns)
   Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
 
   PetscErrorCode (*rhs[2])(KSP, Vec, void *) = {ComputeRHSUStar2d, ComputeRHSVStar2d};
-  Vec                x;
-  PetscInt           M, N, xs, ys, xm, ym, nExtrax, nExtray;
-  PetscReal       ***arru_tilde, ***arrv_tilde, ***arrUV_star;
-  const PetscReal ***arru_star, ***arrv_star, ***arrp;
-  const PetscReal  **arrcx, **arrcy;
-  PetscInt           ileft, idown, ielem, iprevc, inextc, ielemc;
-  PetscReal          pw, pe, ps, pn, U_tilde, V_tilde, dpdx, dpdy;
-  PetscReal          wx_left, wx_right, wy_down, wy_up;
-  PetscInt           d, i, j;
+  Vec                  x;
+  PetscInt             M, N, xs, ys, xm, ym, nExtrax, nExtray;
+  PetscScalar       ***arru_tilde, ***arrv_tilde, ***arrUV_star;
+  const PetscScalar ***arru_star, ***arrv_star, ***arrp;
+  const PetscScalar  **arrcx, **arrcy;
+  PetscInt             ileft, idown, ielem, iprevc, inextc, ielemc;
+  PetscScalar          pw, pe, ps, pn, U_tilde, V_tilde, dpdx, dpdy;
+  PetscScalar          wx_left, wx_right, wy_down, wy_up;
+  PetscInt             d, i, j;
 
   PetscFunctionBegin;
 
@@ -356,14 +356,14 @@ PetscErrorCode NSFSMUpdate2d_MeshCart(NS ns)
   Sol        sol    = ns->sol;
   Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
 
-  PetscInt           M, N, xs, ys, xm, ym;
-  PetscReal       ***arru, ***arrv, ***arrp, ***arrUV;
-  const PetscReal ***arru_star, ***arrv_star, ***arrp_prime, ***arrUV_star;
-  const PetscReal  **arrcx, **arrcy;
-  PetscInt           ileft, idown, ielem, iprevc, inextc, ielemc;
-  PetscReal          ppp, ppw, ppe, pps, ppn, pplap;
-  PetscReal          wx, wy, aw, ae, as, an;
-  PetscInt           i, j;
+  PetscInt             M, N, xs, ys, xm, ym;
+  PetscScalar       ***arru, ***arrv, ***arrp, ***arrUV;
+  const PetscScalar ***arru_star, ***arrv_star, ***arrp_prime, ***arrUV_star;
+  const PetscScalar  **arrcx, **arrcy;
+  PetscInt             ileft, idown, ielem, iprevc, inextc, ielemc;
+  PetscScalar          ppp, ppw, ppe, pps, ppn, pplap;
+  PetscScalar          wx, wy, aw, ae, as, an;
+  PetscInt             i, j;
 
   PetscFunctionBegin;
 
@@ -473,15 +473,15 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx)
   Sol        sol    = ns->sol;
   Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
 
-  PetscInt           M, N, xs, ys, xm, ym;
-  DMStagStencil      row;
-  PetscReal          valb;
-  const PetscReal ***arrNu, ***arrNu_prev, ***arru, ***arrv, ***arrp;
-  const PetscReal  **arrcx, **arrcy;
-  PetscReal          up, uw, ue, us, un, pw, pe, dpdx, ulap;
-  PetscReal          wx, wy, aw, ae, as, an;
-  PetscInt           ielem, iprevc, inextc, ielemc;
-  PetscInt           i, j;
+  PetscInt             M, N, xs, ys, xm, ym;
+  DMStagStencil        row;
+  PetscScalar          valb;
+  const PetscScalar ***arrNu, ***arrNu_prev, ***arru, ***arrv, ***arrp;
+  const PetscScalar  **arrcx, **arrcy;
+  PetscScalar          up, uw, ue, us, un, pw, pe, dpdx, ulap;
+  PetscScalar          wx, wy, aw, ae, as, an;
+  PetscInt             ielem, iprevc, inextc, ielemc;
+  PetscInt             i, j;
 
   PetscFunctionBegin;
 
@@ -575,15 +575,15 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx)
   Sol        sol    = ns->sol;
   Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
 
-  PetscInt           M, N, xs, ys, xm, ym;
-  DMStagStencil      row;
-  PetscReal          valb;
-  const PetscReal ***arrNv, ***arrNv_prev, ***arru, ***arrv, ***arrp;
-  const PetscReal  **arrcx, **arrcy;
-  PetscReal          vp, vw, ve, vs, vn, ps, pn, dpdy, vlap;
-  PetscReal          wx, wy, aw, ae, as, an;
-  PetscInt           ielem, iprevc, inextc, ielemc;
-  PetscInt           i, j;
+  PetscInt             M, N, xs, ys, xm, ym;
+  DMStagStencil        row;
+  PetscScalar          valb;
+  const PetscScalar ***arrNv, ***arrNv_prev, ***arru, ***arrv, ***arrp;
+  const PetscScalar  **arrcx, **arrcy;
+  PetscScalar          vp, vw, ve, vs, vn, ps, pn, dpdy, vlap;
+  PetscScalar          wx, wy, aw, ae, as, an;
+  PetscInt             ielem, iprevc, inextc, ielemc;
+  PetscInt             i, j;
 
   PetscFunctionBegin;
 
@@ -675,17 +675,17 @@ PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx)
   Sol        sol    = ns->sol;
   Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
 
-  MPI_Comm           comm;
-  PetscInt           M, N, xs, ys, xm, ym;
-  DMStagStencil      row;
-  PetscReal          valb;
-  const PetscReal ***arrUV_star;
-  const PetscReal  **arrcx, **arrcy;
-  PetscReal          wx, wy, aw, ae, as, an;
-  PetscInt           ileft, idown, ielem, iprevc, inextc, ielemc;
-  PetscReal          divUV_star;
-  MatNullSpace       nullspace;
-  PetscInt           i, j;
+  MPI_Comm             comm;
+  PetscInt             M, N, xs, ys, xm, ym;
+  DMStagStencil        row;
+  PetscScalar          valb;
+  const PetscScalar ***arrUV_star;
+  const PetscScalar  **arrcx, **arrcy;
+  PetscScalar          wx, wy, aw, ae, as, an;
+  PetscInt             ileft, idown, ielem, iprevc, inextc, ielemc;
+  PetscScalar          divUV_star;
+  MatNullSpace         nullspace;
+  PetscInt             i, j;
 
   PetscFunctionBegin;
 
@@ -745,15 +745,15 @@ PetscErrorCode ComputeOperatorsUVstar2d(KSP ksp, Mat J, Mat Jpre, void *ctx)
 
   NS ns = (NS)ctx;
 
-  DM                dm;
-  PetscInt          M, N, xs, ys, xm, ym;
-  DMStagStencil     row, col[5];
-  PetscReal         v[5];
-  PetscInt          ncols;
-  const PetscReal **arrcx, **arrcy;
-  PetscReal         wx, wy, aw, ae, as, an;
-  PetscInt          iprevc, inextc, ielemc;
-  PetscInt          i, j;
+  DM                  dm;
+  PetscInt            M, N, xs, ys, xm, ym;
+  DMStagStencil       row, col[5];
+  PetscScalar         v[5];
+  PetscInt            ncols;
+  const PetscScalar **arrcx, **arrcy;
+  PetscScalar         wx, wy, aw, ae, as, an;
+  PetscInt            iprevc, inextc, ielemc;
+  PetscInt            i, j;
 
   PetscFunctionBegin;
 
@@ -842,17 +842,17 @@ PetscErrorCode ComputeOperatorPprime2d(KSP ksp, Mat J, Mat Jpre, void *ctx)
   NS ns = (NS)ctx;
   (void)ns;
 
-  MPI_Comm          comm;
-  DM                dm;
-  PetscInt          M, N, xs, ys, xm, ym;
-  DMStagStencil     row, col[5];
-  PetscReal         v[5];
-  PetscInt          ncols;
-  MatNullSpace      nullspace;
-  const PetscReal **arrcx, **arrcy;
-  PetscReal         wx, wy, aw, ae, as, an, asum;
-  PetscInt          iprevc, inextc, ielemc;
-  PetscInt          i, j;
+  MPI_Comm            comm;
+  DM                  dm;
+  PetscInt            M, N, xs, ys, xm, ym;
+  DMStagStencil       row, col[5];
+  PetscScalar         v[5];
+  PetscInt            ncols;
+  MatNullSpace        nullspace;
+  const PetscScalar **arrcx, **arrcy;
+  PetscScalar         wx, wy, aw, ae, as, an, asum;
+  PetscInt            iprevc, inextc, ielemc;
+  PetscInt            i, j;
 
   PetscFunctionBegin;
 

@@ -2,7 +2,7 @@
 
 FLUCA_EXTERN PetscErrorCode SolCreate_FSM(Sol);
 
-PetscErrorCode SolRegister(const char *type, PetscErrorCode (*function)(Sol))
+PetscErrorCode SolRegister(const char type[], PetscErrorCode (*function)(Sol))
 {
   PetscFunctionBegin;
   PetscCall(SolInitializePackage());

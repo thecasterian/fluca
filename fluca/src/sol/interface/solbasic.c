@@ -137,7 +137,7 @@ PetscErrorCode SolView(Sol sol, PetscViewer viewer)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode SolViewFromOptions(Sol sol, PetscObject obj, const char *name)
+PetscErrorCode SolViewFromOptions(Sol sol, PetscObject obj, const char name[])
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
