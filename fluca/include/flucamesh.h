@@ -1,5 +1,4 @@
-#if !defined(FLUCAMESH_H)
-#define FLUCAMESH_H
+#pragma once
 
 #include <flucameshtypes.h>
 #include <flucasol.h>
@@ -25,6 +24,4 @@ FLUCA_EXTERN PetscErrorCode MeshGetDM(Mesh, DM *);
 FLUCA_EXTERN PetscErrorCode MeshGetFaceDM(Mesh, DM *);
 
 FLUCA_EXTERN PetscFunctionList MeshList;
-FLUCA_EXTERN PetscErrorCode MeshRegister(const char *, PetscErrorCode (*)(Mesh));
-
-#endif
+FLUCA_EXTERN PetscErrorCode    MeshRegister(const char *, PetscErrorCode (*)(Mesh));
