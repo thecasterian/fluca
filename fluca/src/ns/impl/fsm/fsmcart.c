@@ -398,13 +398,13 @@ PetscErrorCode NSFSMUpdate2d_MeshCart(NS ns)
       if (i == 0) ppw = arrp_prime[j][i][ielem];
       else ppw = arrp_prime[j][i - 1][ielem];
       /* Right wall. */
-      if (i == M) ppe = arrp_prime[j][i][ielem];
+      if (i == M - 1) ppe = arrp_prime[j][i][ielem];
       else ppe = arrp_prime[j][i + 1][ielem];
       /* Bottom wall. */
       if (j == 0) pps = arrp_prime[j][i][ielem];
       else pps = arrp_prime[j - 1][i][ielem];
       /* Top wall. */
-      if (j == N) ppn = arrp_prime[j][i][ielem];
+      if (j == N - 1) ppn = arrp_prime[j][i][ielem];
       else ppn = arrp_prime[j + 1][i][ielem];
 
       pplap = aw * ppw + ae * ppe + as * pps + an * ppn - (aw + ae + as + an) * ppp;
