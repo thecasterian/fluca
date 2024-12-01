@@ -14,6 +14,5 @@ target_include_directories(fluca_sol PUBLIC
 target_link_libraries(fluca_sol PUBLIC
     fluca::mesh
     fluca::sys
-    cgns
 )
 add_library(fluca::sol ALIAS fluca_sol)

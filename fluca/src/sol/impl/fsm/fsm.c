@@ -1,5 +1,6 @@
 #include <fluca/private/meshimpl.h>
 #include <fluca/private/sol_fsm.h>
+#include <flucaviewer.h>
 
 extern PetscErrorCode SolView_FSMCGNS(Sol, PetscViewer);
 
@@ -67,8 +68,10 @@ PetscErrorCode SolView_FSM(Sol sol, PetscViewer v)
   PetscBool iscgns;
 
   PetscFunctionBegin;
-  PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
+  PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERFLUCACGNS, &iscgns));
+
   if (iscgns) { PetscCall(SolView_FSMCGNS(sol, v)); }
+
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

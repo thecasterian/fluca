@@ -1,21 +1,19 @@
-#include <flucamap.h>
+#include <flucasys.h>
+#include <flucaviewer.h>
+
+PETSC_EXTERN PetscErrorCode PetscViewerCreate_FlucaCGNS(PetscViewer);
 
 static PetscBool FlucaSysPackageInitialized = PETSC_FALSE;
 
 PetscErrorCode FlucaSysInitializePackage(void)
 {
-  PetscClassId classids[1];
-
   PetscFunctionBegin;
   if (FlucaSysPackageInitialized) PetscFunctionReturn(PETSC_SUCCESS);
   FlucaSysPackageInitialized = PETSC_TRUE;
 
-  /* Register classes */
-  PetscCall(PetscClassIdRegister("Map", &FLUCA_MAP_CLASSID));
+  /* Register PETSc extensions */
+  PetscCall(PetscViewerRegister(PETSCVIEWERFLUCACGNS, PetscViewerCreate_FlucaCGNS));
 
-  /* Process Info */
-  classids[0] = FLUCA_MAP_CLASSID;
-  PetscCall(PetscInfoProcessClass("map", 1, classids));
   /* Register package finalizer */
   PetscCall(PetscRegisterFinalize(FlucaSysFinalizePackage));
   PetscFunctionReturn(PETSC_SUCCESS);

@@ -1,6 +1,7 @@
 #include <fluca/private/mesh_cart.h>
 #include <fluca/private/meshimpl.h>
 #include <petsc/private/petscimpl.h>
+#include <flucaviewer.h>
 #include <petscdmstag.h>
 
 extern PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer v);
@@ -122,7 +123,7 @@ PetscErrorCode MeshView_Cart(Mesh mesh, PetscViewer v)
   PetscFunctionBegin;
   PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)mesh), &rank));
   PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERASCII, &isascii));
-  PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERCGNS, &iscgns));
+  PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERFLUCACGNS, &iscgns));
   PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERDRAW, &isdraw));
 
   if (isascii) {

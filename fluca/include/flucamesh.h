@@ -1,7 +1,6 @@
 #pragma once
 
 #include <flucameshtypes.h>
-#include <flucasol.h>
 #include <petscdm.h>
 
 FLUCA_EXTERN PetscClassId MESH_CLASSID;
