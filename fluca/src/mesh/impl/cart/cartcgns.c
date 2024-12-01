@@ -1,27 +1,26 @@
 #include <fluca/private/mesh_cart.h>
+#include <fluca/private/flucaviewer_cgns.h>
 #include <pcgnslib.h>
-#include <petsc/private/petscimpl.h>
-#include <petsc/private/viewercgnsimpl.h>
 #include <petscdmstag.h>
 
 PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
 {
-  Mesh_Cart        *cart = (Mesh_Cart *)mesh->data;
-  PetscViewer_CGNS *cgns = (PetscViewer_CGNS *)viewer->data;
+  Mesh_Cart             *cart = (Mesh_Cart *)mesh->data;
+  PetscViewer_FlucaCGNS *cgv  = (PetscViewer_FlucaCGNS *)viewer->data;
 
   PetscFunctionBegin;
   if (mesh->state < MESH_STATE_SETUP) PetscFunctionReturn(PETSC_SUCCESS);
-  if (cgns->file_num && cgns->base) PetscFunctionReturn(PETSC_SUCCESS);
+  if (cgv->file_num && cgv->base) PetscFunctionReturn(PETSC_SUCCESS);
 
-  if (!cgns->file_num) {
+  if (!cgv->file_num) {
     DM       dm;
     PetscInt timestep;
 
     PetscCall(MeshGetDM(mesh, &dm));
     PetscCall(DMGetOutputSequenceNumber(dm, &timestep, NULL));
-    PetscCall(PetscViewerCGNSFileOpen_Internal(viewer, timestep));
+    PetscCall(PetscViewerFileOpen_FlucaCGNS_Internal(viewer, timestep));
   }
-  PetscCallCGNS(cg_base_write(cgns->file_num, "Base", mesh->dim, mesh->dim, &cgns->base));
+  CGNSCall(cg_base_write(cgv->file_num, "Base", mesh->dim, mesh->dim, &cgv->base));
 
   {
     cgsize_t size[9] = {0};
@@ -31,7 +30,7 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
       size[d]             = cart->N[d] + 1; /* Number of vertices */
       size[mesh->dim + d] = cart->N[d];     /* Number of elements */
     }
-    PetscCallCGNS(cg_zone_write(cgns->file_num, cgns->base, "Zone", size, CGNS_ENUMV(Structured), &cgns->zone));
+    CGNSCall(cg_zone_write(cgv->file_num, cgv->base, "Zone", size, CGNS_ENUMV(Structured), &cgv->zone));
   }
 
   {
@@ -88,8 +87,8 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
     PetscCall(MeshCartRestoreCoordinateArraysRead(mesh, &arrcf[0], &arrcf[1], &arrcf[2]));
 
     for (d = 0; d < mesh->dim; ++d) {
-      PetscCallCGNS(cgp_coord_write(cgns->file_num, cgns->base, cgns->zone, CGNS_ENUMV(RealDouble), coordnames[d], &coord[d]));
-      PetscCallCGNS(cgp_coord_write_data(cgns->file_num, cgns->base, cgns->zone, coord[d], rmin, rmax, x[d]));
+      CGNSCall(cgp_coord_write(cgv->file_num, cgv->base, cgv->zone, CGNS_ENUMV(RealDouble), coordnames[d], &coord[d]));
+      CGNSCall(cgp_coord_write_data(cgv->file_num, cgv->base, cgv->zone, coord[d], rmin, rmax, x[d]));
       PetscCall(PetscFree(x[d]));
     }
   }

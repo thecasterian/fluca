@@ -1,4 +1,5 @@
 #include <fluca/private/nsimpl.h>
+#include <flucaviewer.h>
 
 PetscErrorCode NSMonitorSet(NS ns, PetscErrorCode (*mon)(NS, void *), void *mon_ctx, PetscErrorCode (*mon_ctx_destroy)(void **))
 {
@@ -63,12 +64,12 @@ PetscErrorCode NSMonitorSetFromOptions(NS ns, const char name[], const char help
   PetscBool         flg;
 
   PetscFunctionBegin;
-  PetscCall(PetscOptionsGetViewer(PetscObjectComm((PetscObject)ns), ((PetscObject)ns)->options, ((PetscObject)ns)->prefix, name, &viewer, &format, &flg));
+  PetscCall(FlucaOptionsCreateViewer(PetscObjectComm((PetscObject)ns), ((PetscObject)ns)->options, ((PetscObject)ns)->prefix, name, &viewer, &format, &flg));
   if (flg) {
     PetscViewerAndFormat *vf;
 
     PetscCall(PetscViewerAndFormatCreate(viewer, format, &vf));
-    PetscCall(PetscOptionsRestoreViewer(&viewer));
+    PetscCall(PetscViewerDestroy(&viewer));
     if (mon_setup) PetscCall((*mon_setup)(ns, vf));
     PetscCall(NSMonitorSet(ns, (PetscErrorCode(*)(NS, void *))mon, vf, (PetscErrorCode(*)(void **))PetscViewerAndFormatDestroy));
   }

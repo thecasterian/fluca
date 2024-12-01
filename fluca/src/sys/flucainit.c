@@ -17,6 +17,8 @@ PetscErrorCode FlucaInitialize(int *argc, char ***args, const char file[], const
     FlucaBeganPetsc = PETSC_TRUE;
   }
 
+  PetscCall(FlucaSysInitializePackage());
+
   FlucaInitializeCalled = PETSC_TRUE;
   FlucaFinalizeCalled   = PETSC_FALSE;
   PetscCall(PetscInfo(NULL, "Fluca successfully started\n"));
