@@ -6,10 +6,14 @@ add_library(fluca_viewer SHARED
 )
 
 target_include_directories(fluca_viewer PUBLIC
+    ${PETSc_INCLUDE_DIRS}
+    ${HDF5_INCLUDE_DIRS}
+    ${CGNS_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/fluca/include
 )
 target_link_libraries(fluca_viewer PUBLIC
-    hdf5
-    cgns
+    ${PETSc_LIBRARIES}
+    ${HDF5_LIBRARIES}
+    ${CGNS_LIBRARIES}
 )
 add_library(fluca::viewer ALIAS fluca_viewer)
