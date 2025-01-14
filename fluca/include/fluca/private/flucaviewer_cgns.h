@@ -12,10 +12,6 @@ typedef struct {
   int file_num;
   int base, zone, sol;
 
-  /* A range of indices is half-open, i.e., [Start, End). */
-  PetscInt nStart[CGNS_MAX_DIM], nEnd[CGNS_MAX_DIM]; /* Range of indices of local nodes */
-  PetscInt eStart[CGNS_MAX_DIM], eEnd[CGNS_MAX_DIM]; /* Range of indices of local elements */
-
   PetscSegBuffer output_steps;
   PetscSegBuffer output_times;
   PetscInt       last_step;

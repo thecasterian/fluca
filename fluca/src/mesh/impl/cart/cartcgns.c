@@ -92,5 +92,32 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
       PetscCall(PetscFree(x[d]));
     }
   }
+
+  /* Cell info */
+  {
+    DM          dm;
+    PetscInt    xs[3], xm[3], d, i;
+    int         solution, field;
+    PetscMPIInt rank;
+    cgsize_t    rmin[3], rmax[3], rsize;
+    int        *e;
+
+    PetscCall(MeshGetDM(mesh, &dm));
+    PetscCall(DMStagGetCorners(dm, &xs[0], &xs[1], &xs[2], &xm[0], &xm[1], &xm[2], NULL, NULL, NULL));
+    PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)dm), &rank));
+
+    rsize = 1;
+    for (d = 0; d < mesh->dim; ++d) {
+      rmin[d] = xs[d] + 1;
+      rmax[d] = xs[d] + xm[d];
+      rsize *= rmax[d] - rmin[d] + 1;
+    }
+    PetscCall(PetscMalloc1(rsize, &e));
+    for (i = 0; i < rsize; ++i) e[i] = rank;
+
+    CGNSCall(cg_sol_write(cgv->file_num, cgv->base, cgv->zone, "CellInfo", CGNS_ENUMV(CellCenter), &solution));
+    CGNSCall(cgp_field_write(cgv->file_num, cgv->base, cgv->zone, solution, CGNS_ENUMV(Integer), "Rank", &field));
+    CGNSCall(cgp_field_write_data(cgv->file_num, cgv->base, cgv->zone, solution, field, rmin, rmax, e));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
