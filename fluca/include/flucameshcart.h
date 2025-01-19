@@ -31,3 +31,7 @@ FLUCA_EXTERN PetscErrorCode MeshCartGetLocalSizes(Mesh, PetscInt *, PetscInt *, 
 FLUCA_EXTERN PetscErrorCode MeshCartGetCorners(Mesh, PetscInt *, PetscInt *, PetscInt *, PetscInt *, PetscInt *, PetscInt *);
 FLUCA_EXTERN PetscErrorCode MeshCartGetIsFirstRank(Mesh, PetscBool *, PetscBool *, PetscBool *);
 FLUCA_EXTERN PetscErrorCode MeshCartGetIsLastRank(Mesh, PetscBool *, PetscBool *, PetscBool *);
+
+FLUCA_EXTERN PetscErrorCode MeshCartCreateFromFile(MPI_Comm, const char[], const char[], Mesh *);
+FLUCA_EXTERN PetscErrorCode MeshCartCreateCGNS(MPI_Comm, PetscInt, Mesh *);
+FLUCA_EXTERN PetscErrorCode MeshCartCreateCGNSFromFile(MPI_Comm, const char[], Mesh *);

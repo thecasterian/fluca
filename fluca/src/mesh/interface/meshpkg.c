@@ -1,4 +1,5 @@
 #include <fluca/private/meshimpl.h>
+#include <fluca/private/mesh_cart.h>
 
 static PetscBool MeshPackageInitialized = PETSC_FALSE;
 
@@ -18,6 +19,7 @@ PetscErrorCode MeshInitializePackage(void)
   PetscCall(MeshRegisterAll());
   /* Register events */
   PetscCall(PetscLogEventRegister("MeshSetUp", MESH_CLASSID, &MESH_SetUp));
+  PetscCall(PetscLogEventRegister("MeshCartCreateFromFile", MESH_CLASSID, &MESHCART_CreateFromFile));
 
   /* Process Info */
   classids[0] = MESH_CLASSID;
