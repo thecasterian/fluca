@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fluca/private/flucaviewerimpl.h>
+#include <pcgnslib.h>
 
 #define CGNS_MAX_DIM 3
 
@@ -18,6 +19,7 @@ typedef struct {
   PetscInt       batch_size;
 } PetscViewer_FlucaCGNS;
 
+FLUCA_EXTERN PetscErrorCode FlucaGetCGNSDataType_Internal(PetscDataType, CGNS_ENUMT(DataType_t) *);
 FLUCA_EXTERN PetscErrorCode PetscViewerFileOpen_FlucaCGNS_Internal(PetscViewer, PetscInt);
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSCheckBatch_Internal(PetscViewer);
 

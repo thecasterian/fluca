@@ -3,6 +3,22 @@
 
 PetscMPIInt Petsc_Viewer_FlucaCGNS_keyval = MPI_KEYVAL_INVALID;
 
+PetscErrorCode FlucaGetCGNSDataType_Internal(PetscDataType petsc_dtype, CGNS_ENUMT(DataType_t) *cgns_dtype)
+{
+  PetscFunctionBegin;
+  switch (petsc_dtype) {
+  case PETSC_DOUBLE:
+    *cgns_dtype = CGNS_ENUMV(RealDouble);
+    break;
+  case PETSC_FLOAT:
+    *cgns_dtype = CGNS_ENUMV(RealSingle);
+    break;
+  default:
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported data type");
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode PetscViewerFileClose_FlucaCGNS_Private(PetscViewer viewer)
 {
   PetscViewer_FlucaCGNS *cgv = (PetscViewer_FlucaCGNS *)viewer->data;

@@ -3,6 +3,8 @@
 #include <fluca/private/meshimpl.h>
 #include <flucameshcart.h>
 
+FLUCA_EXTERN PetscLogEvent MESHCART_CreateFromFile;
+
 typedef struct {
   PetscInt         N[MESH_MAX_DIM];        /* global number of elements */
   PetscInt         nRanks[MESH_MAX_DIM];   /* number of processes */

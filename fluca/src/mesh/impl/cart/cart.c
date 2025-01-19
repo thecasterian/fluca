@@ -8,6 +8,8 @@ extern PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer v);
 
 const char *MeshCartCoordinateStencilLocations[] = {"PREV", "NEXT", "MeshCartCoordinateStencilLocation", "", NULL};
 
+PetscLogEvent MESHCART_CreateFromFile;
+
 PetscErrorCode MeshSetFromOptions_Cart(Mesh mesh, PetscOptionItems PetscOptionsObject)
 {
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
@@ -127,19 +129,19 @@ PetscErrorCode MeshView_Cart(Mesh mesh, PetscViewer v)
   PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERDRAW, &isdraw));
 
   if (isascii) {
-    PetscInt xs, ys, zs, xm, ym, zm;
+    PetscInt x, y, z, m, n, p;
 
-    PetscCall(DMStagGetCorners(cart->dm, &xs, &ys, &zs, &xm, &ym, &zm, NULL, NULL, NULL));
+    PetscCall(DMStagGetCorners(cart->dm, &x, &y, &z, &m, &n, &p, NULL, NULL, NULL));
     PetscCall(PetscViewerASCIIPushSynchronized(v));
     switch (mesh->dim) {
     case 2:
       PetscCall(PetscViewerASCIISynchronizedPrintf(v, "Processor [%d] M %" PetscInt_FMT " N %" PetscInt_FMT " m %" PetscInt_FMT " n %" PetscInt_FMT "\n", rank, cart->N[0], cart->N[1], cart->nRanks[0], cart->nRanks[1]));
-      PetscCall(PetscViewerASCIISynchronizedPrintf(v, "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT ", Y range of indices: %" PetscInt_FMT " %" PetscInt_FMT "\n", xs, xs + xm, ys, ys + ym));
+      PetscCall(PetscViewerASCIISynchronizedPrintf(v, "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT ", Y range of indices: %" PetscInt_FMT " %" PetscInt_FMT "\n", x, x + m, y, y + n));
       break;
     case 3:
       PetscCall(PetscViewerASCIISynchronizedPrintf(v, "Processor [%d] M %" PetscInt_FMT " N %" PetscInt_FMT " P %" PetscInt_FMT " m %" PetscInt_FMT " n %" PetscInt_FMT " p %" PetscInt_FMT "\n", rank, cart->N[0], cart->N[1], cart->N[1], cart->nRanks[0],
                                                    cart->nRanks[1], cart->nRanks[2]));
-      PetscCall(PetscViewerASCIISynchronizedPrintf(v, "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT ", Y range of indices: %" PetscInt_FMT " %" PetscInt_FMT ", Z range of indices: %" PetscInt_FMT " %" PetscInt_FMT "\n", xs, xs + xm, ys, ys + ym, zs, zs + zm));
+      PetscCall(PetscViewerASCIISynchronizedPrintf(v, "X range of indices: %" PetscInt_FMT " %" PetscInt_FMT ", Y range of indices: %" PetscInt_FMT " %" PetscInt_FMT ", Z range of indices: %" PetscInt_FMT " %" PetscInt_FMT "\n", x, x + m, y, y + n, z, z + p));
       break;
     default:
       SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_SUP, "Unsupported mesh dimension");
@@ -402,18 +404,18 @@ PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh mesh, PetscScalar ***ax, Pet
 {
   Mesh_Cart     *cart = (Mesh_Cart *)mesh->data;
   PetscScalar ***a[3] = {ax, ay, az};
-  PetscInt       s[3], m[3];
+  PetscInt       x[3], m[3];
   PetscInt       i, d, iprev, inext, icenter;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
-  PetscCall(DMStagGetCorners(cart->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+  PetscCall(DMStagGetCorners(cart->dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
   PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_LEFT, &iprev));
   PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inext));
   PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &icenter));
   for (d = 0; d < mesh->dim; ++d)
-    for (i = s[d]; i < s[d] + m[d]; ++i) (*a[d])[i][icenter] = ((*a[d])[i][iprev] + (*a[d])[i][inext]) / 2.0;
+    for (i = x[d]; i < x[d] + m[d]; ++i) (*a[d])[i][icenter] = ((*a[d])[i][iprev] + (*a[d])[i][inext]) / 2.0;
 
   PetscCall(DMStagRestoreProductCoordinateArrays(cart->dm, ax, ay, az));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -460,13 +462,13 @@ PetscErrorCode MeshCartGetLocalSizes(Mesh mesh, PetscInt *m, PetscInt *n, PetscI
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartGetCorners(Mesh mesh, PetscInt *xs, PetscInt *ys, PetscInt *zs, PetscInt *xm, PetscInt *ym, PetscInt *zm)
+PetscErrorCode MeshCartGetCorners(Mesh mesh, PetscInt *x, PetscInt *y, PetscInt *z, PetscInt *m, PetscInt *n, PetscInt *p)
 {
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscCall(DMStagGetCorners(cart->dm, xs, ys, zs, xm, ym, zm, NULL, NULL, NULL));
+  PetscCall(DMStagGetCorners(cart->dm, x, y, z, m, n, p, NULL, NULL, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -487,5 +489,45 @@ PetscErrorCode MeshCartGetIsLastRank(Mesh mesh, PetscBool *isLastRankX, PetscBoo
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscCall(DMStagGetIsLastRank(cart->dm, isLastRankX, isLastRankY, isLastRankZ));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode CheckExtension_Private(const char filename[], const char extension[], PetscBool *is_extension)
+{
+  size_t len_filename, len_extension;
+
+  PetscFunctionBegin;
+  PetscCall(PetscStrlen(filename, &len_filename));
+  PetscCall(PetscStrlen(extension, &len_extension));
+  if (len_filename < len_extension) {
+    *is_extension = PETSC_FALSE;
+  } else {
+    PetscCall(PetscStrcmp(filename + len_filename - len_extension, extension, is_extension));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartCreateFromFile(MPI_Comm comm, const char filename[], const char meshname[], Mesh *mesh)
+{
+  const char *ext_cgns = ".cgns";
+  PetscBool   is_cgns;
+  size_t      len = 0;
+
+  PetscFunctionBegin;
+  PetscAssertPointer(filename, 2);
+  if (meshname) PetscAssertPointer(meshname, 3);
+  PetscAssertPointer(mesh, 4);
+
+  PetscCall(MeshInitializePackage());
+  PetscCall(PetscLogEventBegin(MESHCART_CreateFromFile, 0, 0, 0, 0));
+
+  PetscCall(CheckExtension_Private(filename, ext_cgns, &is_cgns));
+  if (is_cgns) PetscCall(MeshCartCreateCGNSFromFile(comm, filename, mesh));
+  else SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot load file %s: unrecognized extension", filename);
+
+  PetscCall(PetscStrlen(meshname, &len));
+  if (len) PetscCall(PetscObjectSetName((PetscObject)*mesh, meshname));
+
+  PetscCall(PetscLogEventEnd(MESHCART_CreateFromFile, 0, 0, 0, 0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

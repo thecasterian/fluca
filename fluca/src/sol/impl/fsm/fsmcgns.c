@@ -1,23 +1,6 @@
 #include <fluca/private/flucaviewer_cgns.h>
 #include <fluca/private/sol_fsm.h>
-#include <pcgnslib.h>
 #include <petscdmstag.h>
-
-static PetscErrorCode GetCGNSDataType_Private(PetscDataType petsc_dtype, CGNS_ENUMT(DataType_t) *cgns_dtype)
-{
-  PetscFunctionBegin;
-  switch (petsc_dtype) {
-  case PETSC_DOUBLE:
-    *cgns_dtype = CGNS_ENUMV(RealDouble);
-    break;
-  case PETSC_FLOAT:
-    *cgns_dtype = CGNS_ENUMV(RealSingle);
-    break;
-  default:
-    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported data type");
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
 
 static PetscErrorCode GetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
 {
@@ -63,7 +46,7 @@ static PetscErrorCode GetLocalEntries3d_Private(DM dm, Vec v, DMStagStencilLocat
 
 static PetscErrorCode WriteCellCenteredSolution_Private(DM dm, Vec v, int file_num, int base, int zone, int solution, const char *name)
 {
-  PetscInt               dim, xs[3], xm[3], d;
+  PetscInt               dim, x[3], m[3], d;
   cgsize_t               rmin[3], rmax[3], rsize;
   int                    field;
   PetscScalar           *e;
@@ -71,13 +54,13 @@ static PetscErrorCode WriteCellCenteredSolution_Private(DM dm, Vec v, int file_n
 
   PetscFunctionBegin;
   PetscCall(DMGetDimension(dm, &dim));
-  PetscCall(DMStagGetCorners(dm, &xs[0], &xs[1], &xs[2], &xm[0], &xm[1], &xm[2], NULL, NULL, NULL));
-  PetscCall(GetCGNSDataType_Private(PETSC_SCALAR, &datatype));
+  PetscCall(DMStagGetCorners(dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+  PetscCall(FlucaGetCGNSDataType_Internal(PETSC_SCALAR, &datatype));
 
   rsize = 1;
   for (d = 0; d < dim; ++d) {
-    rmin[d] = xs[d] + 1;
-    rmax[d] = xs[d] + xm[d];
+    rmin[d] = x[d] + 1;
+    rmax[d] = x[d] + m[d];
     rsize *= rmax[d] - rmin[d] + 1;
   }
 
@@ -100,7 +83,7 @@ static PetscErrorCode WriteCellCenteredSolution_Private(DM dm, Vec v, int file_n
 
 static PetscErrorCode WriteFaceCenteredSolution_Private(DM dm, Vec v, int file_num, int base, int zone, int solution, const char *const names[])
 {
-  PetscInt                    dim, M[3], xs[3], xm[3], nExtra[3], d, l;
+  PetscInt                    dim, M[3], x[3], m[3], nExtra[3], d, l;
   PetscBool                   isLastRank[3];
   cgsize_t                    array_size[3], rmin[3], rmax[3], rsize;
   int                         array;
@@ -111,17 +94,17 @@ static PetscErrorCode WriteFaceCenteredSolution_Private(DM dm, Vec v, int file_n
   PetscFunctionBegin;
   PetscCall(DMGetDimension(dm, &dim));
   PetscCall(DMStagGetGlobalSizes(dm, &M[0], &M[1], &M[2]));
-  PetscCall(DMStagGetCorners(dm, &xs[0], &xs[1], &xs[2], &xm[0], &xm[1], &xm[2], NULL, NULL, NULL));
+  PetscCall(DMStagGetCorners(dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
   PetscCall(DMStagGetIsLastRank(dm, &isLastRank[0], &isLastRank[1], &isLastRank[2]));
   for (d = 0; d < dim; ++d) nExtra[d] = isLastRank[d] ? 1 : 0;
-  PetscCall(GetCGNSDataType_Private(PETSC_SCALAR, &datatype));
+  PetscCall(FlucaGetCGNSDataType_Internal(PETSC_SCALAR, &datatype));
 
   for (l = 0; l < dim; ++l) {
     rsize = 1;
     for (d = 0; d < dim; ++d) {
       array_size[d] = M[d] + (d == l ? 1 : 0);
-      rmin[d]       = xs[d] + 1;
-      rmax[d]       = xs[d] + xm[d] + (d == l ? nExtra[d] : 0);
+      rmin[d]       = x[d] + 1;
+      rmax[d]       = x[d] + m[d] + (d == l ? nExtra[d] : 0);
       rsize *= rmax[d] - rmin[d] + 1;
     }
 
