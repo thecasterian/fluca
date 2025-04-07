@@ -1,7 +1,9 @@
 #include <fluca/private/solimpl.h>
+#include <flucaviewer.h>
 #include <petscdraw.h>
 
-PetscClassId SOL_CLASSID = 0;
+PetscClassId  SOL_CLASSID      = 0;
+PetscLogEvent SOL_LoadFromFile = 0;
 
 PetscFunctionList SolList              = NULL;
 PetscBool         SolRegisterAllCalled = PETSC_FALSE;
@@ -38,7 +40,7 @@ PetscErrorCode SolSetType(Sol sol, SolType type)
   if (match) PetscFunctionReturn(PETSC_SUCCESS);
 
   PetscCall(PetscFunctionListFind(SolList, type, &impl_create));
-  PetscCheck(impl_create, PetscObjectComm((PetscObject)sol), PETSC_ERR_ARG_UNKNOWN_TYPE, "Unknown mesh type: %s", type);
+  PetscCheck(impl_create, PetscObjectComm((PetscObject)sol), PETSC_ERR_ARG_UNKNOWN_TYPE, "Unknown sol type: %s", type);
 
   if (old_type) {
     PetscTryTypeMethod(sol, destroy);
@@ -132,7 +134,7 @@ PetscErrorCode SolViewFromOptions(Sol sol, PetscObject obj, const char name[])
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
-  PetscCall(PetscObjectViewFromOptions((PetscObject)sol, obj, name));
+  PetscCall(FlucaObjectViewFromOptions((PetscObject)sol, obj, name));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -155,5 +157,38 @@ PetscErrorCode SolDestroy(Sol *sol)
 
   PetscTryTypeMethod((*sol), destroy);
   PetscCall(PetscHeaderDestroy(sol));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode CheckExtension_Private(const char filename[], const char extension[], PetscBool *is_extension)
+{
+  size_t len_filename, len_extension;
+
+  PetscFunctionBegin;
+  PetscCall(PetscStrlen(filename, &len_filename));
+  PetscCall(PetscStrlen(extension, &len_extension));
+  if (len_filename < len_extension) {
+    *is_extension = PETSC_FALSE;
+  } else {
+    PetscCall(PetscStrcmp(filename + len_filename - len_extension, extension, is_extension));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode SolLoadFromFile(Sol sol, const char filename[])
+{
+  const char *ext_cgns = ".cgns";
+  PetscBool   is_cgns;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(sol, SOL_CLASSID, 1);
+  PetscAssertPointer(filename, 2);
+  PetscCall(PetscLogEventBegin(SOL_LoadFromFile, sol, 0, 0, 0));
+
+  PetscCall(CheckExtension_Private(filename, ext_cgns, &is_cgns));
+  if (is_cgns) PetscCall(SolLoadCGNSFromFile(sol, filename));
+  else SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot load file %s: unrecognized extension", filename);
+
+  PetscCall(PetscLogEventEnd(SOL_LoadFromFile, sol, 0, 0, 0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

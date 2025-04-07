@@ -16,6 +16,8 @@ PetscErrorCode SolInitializePackage(void)
   PetscCall(PetscClassIdRegister("Sol", &SOL_CLASSID));
   /* Register constructors */
   PetscCall(SolRegisterAll());
+  /* Register events */
+  PetscCall(PetscLogEventRegister("SolLoadFromFile", SOL_CLASSID, &SOL_LoadFromFile));
 
   /* Process Info */
   classids[0] = SOL_CLASSID;

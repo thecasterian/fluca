@@ -143,3 +143,25 @@ PetscErrorCode FlucaOptionsCreateViewer(MPI_Comm comm, PetscOptions options, con
   if (set) *set = set_internal;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode FlucaObjectViewFromOptions(PetscObject obj, PetscObject bobj, const char optionname[])
+{
+  PetscViewer       viewer;
+  PetscBool         flg;
+  PetscViewerFormat format;
+  const char       *prefix;
+
+  PetscFunctionBegin;
+  PetscValidHeader(obj, 1);
+  if (bobj) PetscValidHeader(bobj, 2);
+  prefix = bobj ? bobj->prefix : obj->prefix;
+  PetscCall(FlucaOptionsCreateViewer(PetscObjectComm(obj), obj->options, prefix, optionname, &viewer, &format, &flg));
+  if (flg) {
+    PetscCall(PetscViewerPushFormat(viewer, format));
+    PetscCall(PetscObjectView(obj, viewer));
+    PetscCall(PetscViewerFlush(viewer));
+    PetscCall(PetscViewerPopFormat(viewer));
+    PetscCall(PetscViewerDestroy(&viewer));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}

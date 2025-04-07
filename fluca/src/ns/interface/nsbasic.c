@@ -1,8 +1,11 @@
 #include <fluca/private/nsimpl.h>
+#include <flucaviewer.h>
 
-PetscClassId  NS_CLASSID = 0;
-PetscLogEvent NS_SetUp   = 0;
-PetscLogEvent NS_Solve   = 0;
+PetscClassId  NS_CLASSID            = 0;
+PetscLogEvent NS_SetUp              = 0;
+PetscLogEvent NS_Initialize         = 0;
+PetscLogEvent NS_InitializeFromFile = 0;
+PetscLogEvent NS_Solve              = 0;
 
 PetscFunctionList NSList              = NULL;
 PetscBool         NSRegisterAllCalled = PETSC_FALSE;
@@ -128,6 +131,35 @@ PetscErrorCode NSSetUp(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode NSInitialize(NS ns)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscCheck(ns->state >= NS_STATE_SETUP, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "This function must be called after NSSetUp()");
+  PetscCall(PetscLogEventBegin(NS_Initialize, (PetscObject)ns, 0, 0, 0));
+
+  PetscTryTypeMethod(ns, initialize);
+
+  PetscCall(PetscLogEventEnd(NS_Initialize, (PetscObject)ns, 0, 0, 0));
+  ns->state = NS_STATE_SOLUTION_INITIALIZED;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSInitializeFromFile(NS ns, const char filename[])
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscAssertPointer(filename, 2);
+  PetscCheck(ns->state >= NS_STATE_SETUP, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "This function must be called after NSSetUp()");
+  PetscCall(PetscLogEventBegin(NS_InitializeFromFile, (PetscObject)ns, 0, 0, 0));
+
+  PetscCall(SolLoadFromFile(ns->sol, filename));
+
+  PetscCall(PetscLogEventEnd(NS_InitializeFromFile, (PetscObject)ns, 0, 0, 0));
+  ns->state = NS_STATE_SOLUTION_INITIALIZED;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSolve(NS ns, PetscInt num_iters)
 {
   PetscReal t_init;
@@ -135,14 +167,12 @@ PetscErrorCode NSSolve(NS ns, PetscInt num_iters)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  if (ns->state < NS_STATE_SETUP) PetscCall(NSSetUp(ns));
+  PetscCheck(ns->state >= NS_STATE_SOLUTION_INITIALIZED, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "This function must be called after NSInitialize()");
   PetscCall(PetscLogEventBegin(NS_Solve, (PetscObject)ns, 0, 0, 0));
 
   PetscCall(NSViewFromOptions(ns, NULL, "-ns_view_pre"));
 
   t_init = ns->t;
-  PetscTryTypeMethod(ns, solve_init);
-
   for (i = 0; i < num_iters; ++i) {
     PetscTryTypeMethod(ns, solve_iter);
     ++ns->step;
@@ -164,26 +194,6 @@ PetscErrorCode NSGetSol(NS ns, Sol *sol)
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   PetscCheck(ns->state >= NS_STATE_SETUP, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "NS not set up");
   if (sol) *sol = ns->sol;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode NSDestroy(NS *ns)
-{
-  PetscFunctionBegin;
-  if (!*ns) PetscFunctionReturn(PETSC_SUCCESS);
-  PetscValidHeaderSpecific((*ns), NS_CLASSID, 1);
-
-  if (--((PetscObject)(*ns))->refct > 0) {
-    *ns = NULL;
-    PetscFunctionReturn(PETSC_SUCCESS);
-  }
-
-  PetscCall(MeshDestroy(&(*ns)->mesh));
-  PetscCall(SolDestroy(&(*ns)->sol));
-  PetscCall(NSMonitorCancel(*ns));
-
-  PetscTryTypeMethod((*ns), destroy);
-  PetscCall(PetscHeaderDestroy(ns));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -214,6 +224,26 @@ PetscErrorCode NSViewFromOptions(NS ns, PetscObject obj, const char name[])
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  PetscCall(PetscObjectViewFromOptions((PetscObject)ns, obj, name));
+  PetscCall(FlucaObjectViewFromOptions((PetscObject)ns, obj, name));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSDestroy(NS *ns)
+{
+  PetscFunctionBegin;
+  if (!*ns) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscValidHeaderSpecific((*ns), NS_CLASSID, 1);
+
+  if (--((PetscObject)(*ns))->refct > 0) {
+    *ns = NULL;
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
+
+  PetscCall(MeshDestroy(&(*ns)->mesh));
+  PetscCall(SolDestroy(&(*ns)->sol));
+  PetscCall(NSMonitorCancel(*ns));
+
+  PetscTryTypeMethod((*ns), destroy);
+  PetscCall(PetscHeaderDestroy(ns));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

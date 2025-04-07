@@ -1,4 +1,5 @@
 #include <fluca/private/meshimpl.h>
+#include <flucaviewer.h>
 
 const char *MeshBoundaryTypes[] = {"NOT_PERIODIC", "PERIODIC", "MeshBoundaryType", "", NULL};
 
@@ -104,7 +105,7 @@ PetscErrorCode MeshViewFromOptions(Mesh mesh, PetscObject obj, const char name[]
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscCall(PetscObjectViewFromOptions((PetscObject)mesh, obj, name));
+  PetscCall(FlucaObjectViewFromOptions((PetscObject)mesh, obj, name));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

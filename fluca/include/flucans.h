@@ -29,11 +29,13 @@ FLUCA_EXTERN PetscErrorCode NSSetTime(NS, PetscReal);
 FLUCA_EXTERN PetscErrorCode NSGetTime(NS, PetscReal *);
 FLUCA_EXTERN PetscErrorCode NSSetFromOptions(NS);
 FLUCA_EXTERN PetscErrorCode NSSetUp(NS);
+FLUCA_EXTERN PetscErrorCode NSInitialize(NS);
+FLUCA_EXTERN PetscErrorCode NSInitializeFromFile(NS, const char[]);
 FLUCA_EXTERN PetscErrorCode NSSolve(NS, PetscInt);
 FLUCA_EXTERN PetscErrorCode NSGetSol(NS, Sol *);
-FLUCA_EXTERN PetscErrorCode NSDestroy(NS *);
 FLUCA_EXTERN PetscErrorCode NSView(NS, PetscViewer);
 FLUCA_EXTERN PetscErrorCode NSViewFromOptions(NS, PetscObject, const char[]);
+FLUCA_EXTERN PetscErrorCode NSDestroy(NS *);
 
 FLUCA_EXTERN PetscErrorCode NSMonitorSet(NS, PetscErrorCode (*)(NS, void *), void *, PetscErrorCode (*)(void **));
 FLUCA_EXTERN PetscErrorCode NSMonitorCancel(NS);

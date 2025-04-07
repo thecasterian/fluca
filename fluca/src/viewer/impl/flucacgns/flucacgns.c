@@ -47,7 +47,7 @@ static PetscErrorCode PetscViewerFileClose_FlucaCGNS_Private(PetscViewer viewer)
     PetscCall(PetscMalloc(size * width + 1, &solnames));
     PetscCall(PetscSegBufferExtractInPlace(cgv->output_steps, &steps));
     cgsize_t shape[2] = {(cgsize_t)width, (cgsize_t)size};
-    for (PetscCount i = 0; i < size; i++) PetscCall(PetscSNPrintf(&solnames[i * width], width + 1, "FlowSolution%-20zu", (size_t)steps[i]));
+    for (PetscCount i = 0; i < size; i++) PetscCall(PetscSNPrintf(&solnames[i * width], width + 1, "FlowSolution%-20" PetscCount_FMT, steps[i]));
     CGNSCall(cg_array_write("FlowSolutionPointers", CGNS_ENUMV(Character), 2, shape, solnames));
     PetscCall(PetscSegBufferDestroy(&cgv->output_steps));
     for (PetscCount i = 0; i < size; i++) PetscCall(PetscSNPrintf(&solnames[i * width], width + 1, "%-32s", "CellInfo"));

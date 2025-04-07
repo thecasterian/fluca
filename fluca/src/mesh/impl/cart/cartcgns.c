@@ -1,7 +1,5 @@
 #include <fluca/private/mesh_cart.h>
 #include <fluca/private/flucaviewer_cgns.h>
-#include <pcgnslib.h>
-#include <cgns_io.h>
 #include <petscdmstag.h>
 
 PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
