@@ -9,12 +9,16 @@ int main(int argc, char **argv)
 {
   Mesh      mesh;
   NS        ns;
-  PetscBool mesh_cart_create_from_file;
+  PetscBool mesh_cart_create_from_file, ns_initialize_from_file;
   char      mesh_cart_filename[PETSC_MAX_PATH_LEN];
+  char      ns_filename[PETSC_MAX_PATH_LEN];
+  PetscInt  ns_steps = 10;
 
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
   PetscCall(PetscOptionsGetString(NULL, NULL, "-mesh_cart_create_from_file", mesh_cart_filename, PETSC_MAX_PATH_LEN, &mesh_cart_create_from_file));
+  PetscCall(PetscOptionsGetString(NULL, NULL, "-ns_initialize_from_file", ns_filename, PETSC_MAX_PATH_LEN, &ns_initialize_from_file));
+  PetscCall(PetscOptionsGetInt(NULL, NULL, "-ns_steps", &ns_steps, NULL));
 
   if (!mesh_cart_create_from_file) {
     PetscCall(MeshCartCreate2d(PETSC_COMM_WORLD, MESH_BOUNDARY_NONE, MESH_BOUNDARY_NONE, 8, 8, PETSC_DECIDE, PETSC_DECIDE, NULL, NULL, &mesh));
@@ -47,7 +51,9 @@ int main(int argc, char **argv)
     PetscCall(NSSetTimeStepSize(ns, 0.002));
     PetscCall(NSSetFromOptions(ns));
     PetscCall(NSSetUp(ns));
-    PetscCall(NSSolve(ns, 10));
+    if (ns_initialize_from_file) PetscCall(NSInitializeFromFile(ns, ns_filename));
+    else PetscCall(NSInitialize(ns));
+    PetscCall(NSSolve(ns, ns_steps));
   }
 
   PetscCall(MeshDestroy(&mesh));

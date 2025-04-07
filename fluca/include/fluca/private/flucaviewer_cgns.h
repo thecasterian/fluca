@@ -2,6 +2,7 @@
 
 #include <fluca/private/flucaviewerimpl.h>
 #include <pcgnslib.h>
+#include <cgns_io.h>
 
 #define CGNS_MAX_DIM 3
 

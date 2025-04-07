@@ -25,5 +25,9 @@ FLUCA_EXTERN PetscErrorCode SolView(Sol, PetscViewer);
 FLUCA_EXTERN PetscErrorCode SolViewFromOptions(Sol, PetscObject, const char[]);
 FLUCA_EXTERN PetscErrorCode SolDestroy(Sol *);
 
+FLUCA_EXTERN PetscErrorCode SolLoadFromFile(Sol, const char[]);
+FLUCA_EXTERN PetscErrorCode SolLoadCGNS(Sol, PetscInt);
+FLUCA_EXTERN PetscErrorCode SolLoadCGNSFromFile(Sol, const char[]);
+
 FLUCA_EXTERN PetscFunctionList SolList;
 FLUCA_EXTERN PetscErrorCode    SolRegister(const char[], PetscErrorCode (*)(Sol));

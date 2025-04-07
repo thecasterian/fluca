@@ -55,7 +55,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSSolveInit_FSM(NS ns)
+PetscErrorCode NSInitialize_FSM(NS ns)
 {
   PetscInt dim;
 
@@ -125,7 +125,7 @@ PetscErrorCode NSCreate_FSM(NS ns)
 
   ns->ops->setfromoptions = NSSetFromOptions_FSM;
   ns->ops->setup          = NSSetup_FSM;
-  ns->ops->solve_init     = NSSolveInit_FSM;
+  ns->ops->initialize     = NSInitialize_FSM;
   ns->ops->solve_iter     = NSSolveIter_FSM;
   ns->ops->destroy        = NSDestroy_FSM;
   ns->ops->view           = NSView_FSM;

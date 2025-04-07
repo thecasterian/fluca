@@ -10,6 +10,8 @@
 FLUCA_EXTERN PetscBool      NSRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode NSRegisterAll(void);
 FLUCA_EXTERN PetscLogEvent  NS_SetUp;
+FLUCA_EXTERN PetscLogEvent  NS_Initialize;
+FLUCA_EXTERN PetscLogEvent  NS_InitializeFromFile;
 FLUCA_EXTERN PetscLogEvent  NS_Solve;
 
 typedef struct _NSOps *NSOps;
@@ -17,7 +19,7 @@ typedef struct _NSOps *NSOps;
 struct _NSOps {
   PetscErrorCode (*setfromoptions)(NS, PetscOptionItems);
   PetscErrorCode (*setup)(NS);
-  PetscErrorCode (*solve_init)(NS);
+  PetscErrorCode (*initialize)(NS);
   PetscErrorCode (*solve_iter)(NS);
   PetscErrorCode (*destroy)(NS);
   PetscErrorCode (*view)(NS, PetscViewer);

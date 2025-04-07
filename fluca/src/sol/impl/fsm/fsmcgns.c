@@ -1,8 +1,20 @@
 #include <fluca/private/flucaviewer_cgns.h>
+#include <flucameshcart.h>
 #include <fluca/private/sol_fsm.h>
 #include <petscdmstag.h>
 
-static PetscErrorCode GetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
+static const char *const presname             = "Pressure";
+static const char *const preshalfname         = "PressureHalfStep";
+static const char *const prevpreshalfname     = "PrevPressureHalfStep";
+static const char *const prescorrecname       = "PressureCorrection";
+static const char *const velnames[3]          = {"VelocityX", "VelocityY", "VelocityZ"};
+static const char *const intervelnames[3]     = {"IntermediateVelocityX", "IntermediateVelocityY", "IntermediateVelocityZ"};
+static const char *const convecnames[3]       = {"ConvectionX", "ConvectionY", "ConvectionZ"};
+static const char *const prevconvecnames[3]   = {"PrevConvectionX", "PrevConvectionY", "PrevConvectionZ"};
+static const char *const facevelnames[3]      = {"FaceVelocityX", "FaceVelocityY", "FaceVelocityZ"};
+static const char *const faceintervelnames[3] = {"FaceIntermediateVelocityX", "FaceIntermediateVelocityY", "FaceIntermediateVelocityZ"};
+
+static PetscErrorCode DMStagGetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
 {
   PetscInt       x, y, m, n, nExtrax, nExtray;
   PetscBool      isLastRankx, isLastRanky;
@@ -22,7 +34,7 @@ static PetscErrorCode GetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocat
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode GetLocalEntries3d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
+static PetscErrorCode DMStagGetLocalEntries3d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
 {
   PetscInt        x, y, z, m, n, p, nExtrax, nExtray, nExtraz;
   PetscBool       isLastRankx, isLastRanky, isLastRankz;
@@ -44,7 +56,7 @@ static PetscErrorCode GetLocalEntries3d_Private(DM dm, Vec v, DMStagStencilLocat
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode WriteCellCenteredSolution_Private(DM dm, Vec v, int file_num, int base, int zone, int solution, const char *name)
+static PetscErrorCode DMStagWriteCellCenteredSolution_Private(DM dm, Vec v, int file_num, int base, int zone, int solution, const char *name)
 {
   PetscInt               dim, x[3], m[3], d;
   cgsize_t               rmin[3], rmax[3], rsize;
@@ -67,10 +79,10 @@ static PetscErrorCode WriteCellCenteredSolution_Private(DM dm, Vec v, int file_n
   PetscCall(PetscMalloc1(rsize, &e));
   switch (dim) {
   case 2:
-    PetscCall(GetLocalEntries2d_Private(dm, v, DMSTAG_ELEMENT, 0, e));
+    PetscCall(DMStagGetLocalEntries2d_Private(dm, v, DMSTAG_ELEMENT, 0, e));
     break;
   case 3:
-    PetscCall(GetLocalEntries3d_Private(dm, v, DMSTAG_ELEMENT, 0, e));
+    PetscCall(DMStagGetLocalEntries3d_Private(dm, v, DMSTAG_ELEMENT, 0, e));
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
@@ -81,7 +93,7 @@ static PetscErrorCode WriteCellCenteredSolution_Private(DM dm, Vec v, int file_n
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode WriteFaceCenteredSolution_Private(DM dm, Vec v, int file_num, int base, int zone, int solution, const char *const names[])
+static PetscErrorCode DMStagWriteFaceCenteredSolution_Private(DM dm, Vec v, int file_num, int base, int zone, int solution, const char *const names[])
 {
   PetscInt                    dim, M[3], x[3], m[3], nExtra[3], d, l;
   PetscBool                   isLastRank[3];
@@ -111,10 +123,10 @@ static PetscErrorCode WriteFaceCenteredSolution_Private(DM dm, Vec v, int file_n
     PetscCall(PetscMalloc1(rsize, &e));
     switch (dim) {
     case 2:
-      PetscCall(GetLocalEntries2d_Private(dm, v, locs[l], 0, e));
+      PetscCall(DMStagGetLocalEntries2d_Private(dm, v, locs[l], 0, e));
       break;
     case 3:
-      PetscCall(GetLocalEntries3d_Private(dm, v, locs[l], 0, e));
+      PetscCall(DMStagGetLocalEntries3d_Private(dm, v, locs[l], 0, e));
       break;
     default:
       SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
@@ -140,12 +152,6 @@ PetscErrorCode SolView_FSMCGNS(Sol sol, PetscViewer viewer)
   char                   solution_name[PETSC_MAX_PATH_LEN];
   int                    solution;
   PetscBool              iscart;
-  const char *const      velnames[3]          = {"VelocityX", "VelocityY", "VelocityZ"};
-  const char *const      intervelnames[3]     = {"IntermediateVelocityX", "IntermediateVelocityY", "IntermediateVelocityZ"};
-  const char *const      convecnames[3]       = {"ConvectionX", "ConvectionY", "ConvectionZ"};
-  const char *const      prevconvecnames[3]   = {"PrevConvectionX", "PrevConvectionY", "PrevConvectionZ"};
-  const char *const      facevelnames[3]      = {"FaceVelocityX", "FaceVelocityY", "FaceVelocityZ"};
-  const char *const      faceintervelnames[3] = {"FaceIntermediateVelocityX", "FaceIntermediateVelocityY", "FaceIntermediateVelocityZ"};
 
   PetscFunctionBegin;
   if (!cgv->file_num || !cgv->base) PetscCall(MeshView(sol->mesh, viewer));
@@ -173,15 +179,15 @@ PetscErrorCode SolView_FSMCGNS(Sol sol, PetscViewer viewer)
   /* Write cell-centered solutions */
   if (iscart) {
     for (d = 0; d < dim; ++d) {
-      PetscCall(WriteCellCenteredSolution_Private(dm, sol->v[d], cgv->file_num, cgv->base, cgv->zone, solution, velnames[d]));
-      PetscCall(WriteCellCenteredSolution_Private(dm, fsm->v_star[d], cgv->file_num, cgv->base, cgv->zone, solution, intervelnames[d]));
-      PetscCall(WriteCellCenteredSolution_Private(dm, fsm->N[d], cgv->file_num, cgv->base, cgv->zone, solution, convecnames[d]));
-      PetscCall(WriteCellCenteredSolution_Private(dm, fsm->N_prev[d], cgv->file_num, cgv->base, cgv->zone, solution, prevconvecnames[d]));
+      PetscCall(DMStagWriteCellCenteredSolution_Private(dm, sol->v[d], cgv->file_num, cgv->base, cgv->zone, solution, velnames[d]));
+      PetscCall(DMStagWriteCellCenteredSolution_Private(dm, fsm->v_star[d], cgv->file_num, cgv->base, cgv->zone, solution, intervelnames[d]));
+      PetscCall(DMStagWriteCellCenteredSolution_Private(dm, fsm->N[d], cgv->file_num, cgv->base, cgv->zone, solution, convecnames[d]));
+      PetscCall(DMStagWriteCellCenteredSolution_Private(dm, fsm->N_prev[d], cgv->file_num, cgv->base, cgv->zone, solution, prevconvecnames[d]));
     }
-    PetscCall(WriteCellCenteredSolution_Private(dm, sol->p, cgv->file_num, cgv->base, cgv->zone, solution, "Pressure"));
-    PetscCall(WriteCellCenteredSolution_Private(dm, fsm->p_half, cgv->file_num, cgv->base, cgv->zone, solution, "PressureHalfStep"));
-    PetscCall(WriteCellCenteredSolution_Private(dm, fsm->p_half_prev, cgv->file_num, cgv->base, cgv->zone, solution, "PrevPressureHalfStep"));
-    PetscCall(WriteCellCenteredSolution_Private(dm, fsm->p_prime, cgv->file_num, cgv->base, cgv->zone, solution, "PressureCorrection"));
+    PetscCall(DMStagWriteCellCenteredSolution_Private(dm, sol->p, cgv->file_num, cgv->base, cgv->zone, solution, presname));
+    PetscCall(DMStagWriteCellCenteredSolution_Private(dm, fsm->p_half, cgv->file_num, cgv->base, cgv->zone, solution, preshalfname));
+    PetscCall(DMStagWriteCellCenteredSolution_Private(dm, fsm->p_half_prev, cgv->file_num, cgv->base, cgv->zone, solution, prevpreshalfname));
+    PetscCall(DMStagWriteCellCenteredSolution_Private(dm, fsm->p_prime, cgv->file_num, cgv->base, cgv->zone, solution, prescorrecname));
   }
 
   /* Write face-centered solutions */
@@ -201,10 +207,192 @@ PetscErrorCode SolView_FSMCGNS(Sol sol, PetscViewer viewer)
       CGNSCall(cg_gridlocation_write(CGNS_ENUMV(KFaceCenter)));
     }
 
-    PetscCall(WriteFaceCenteredSolution_Private(fdm, fsm->fv, cgv->file_num, cgv->base, cgv->zone, solution, facevelnames));
-    PetscCall(WriteFaceCenteredSolution_Private(fdm, fsm->fv_star, cgv->file_num, cgv->base, cgv->zone, solution, faceintervelnames));
+    PetscCall(DMStagWriteFaceCenteredSolution_Private(fdm, fsm->fv, cgv->file_num, cgv->base, cgv->zone, solution, facevelnames));
+    PetscCall(DMStagWriteFaceCenteredSolution_Private(fdm, fsm->fv_star, cgv->file_num, cgv->base, cgv->zone, solution, faceintervelnames));
   }
 
   PetscCall(PetscViewerFlucaCGNSCheckBatch_Internal(viewer));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMStagSetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
+{
+  PetscInt       x, y, m, n, nExtrax, nExtray;
+  PetscBool      isLastRankx, isLastRanky;
+  PetscScalar ***arr;
+  PetscInt       iloc, i, j, cnt = 0;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetIsLastRank(dm, &isLastRankx, &isLastRanky, NULL));
+  nExtrax = (loc == DMSTAG_LEFT && isLastRankx) ? 1 : 0;
+  nExtray = (loc == DMSTAG_DOWN && isLastRanky) ? 1 : 0;
+  PetscCall(DMStagVecGetArray(dm, v, &arr));
+  PetscCall(DMStagGetLocationSlot(dm, loc, d, &iloc));
+  for (j = y; j < y + n + nExtray; ++j)
+    for (i = x; i < x + m + nExtrax; ++i) arr[j][i][iloc] = e[cnt++];
+  PetscCall(DMStagVecRestoreArray(dm, v, &arr));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMStagSetLocalEntries3d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
+{
+  PetscInt        x, y, z, m, n, p, nExtrax, nExtray, nExtraz;
+  PetscBool       isLastRankx, isLastRanky, isLastRankz;
+  PetscScalar ****arr;
+  PetscInt        iloc, i, j, k, cnt = 0;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetCorners(dm, &x, &y, &z, &m, &n, &p, NULL, NULL, NULL));
+  PetscCall(DMStagGetIsLastRank(dm, &isLastRankx, &isLastRanky, &isLastRankz));
+  nExtrax = (loc == DMSTAG_LEFT && isLastRankx) ? 1 : 0;
+  nExtray = (loc == DMSTAG_DOWN && isLastRanky) ? 1 : 0;
+  nExtraz = (loc == DMSTAG_BACK && isLastRankz) ? 1 : 0;
+  PetscCall(DMStagVecGetArray(dm, v, &arr));
+  PetscCall(DMStagGetLocationSlot(dm, loc, d, &iloc));
+  for (k = z; k < z + p + nExtraz; ++k)
+    for (j = y; j < y + n + nExtray; ++j)
+      for (i = x; i < x + m + nExtrax; ++i) arr[k][j][i][iloc] = e[cnt++];
+  PetscCall(DMStagVecRestoreArray(dm, v, &arr));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode FindFieldInfoFromName_Private(int file_num, int base, int zone, int solution, const char *field_name, int *field, CGNS_ENUMT(DataType_t) *data_type, PetscBool *flg)
+{
+  int                    num_fields, f;
+  char                   field_name_read[CGIO_MAX_NAME_LENGTH + 1];
+  CGNS_ENUMT(DataType_t) data_type_read;
+  PetscBool              flg_name;
+
+  PetscFunctionBegin;
+  *flg = PETSC_FALSE;
+  CGNSCall(cg_nfields(file_num, base, zone, solution, &num_fields));
+  for (f = 1; f <= num_fields; ++f) {
+    CGNSCall(cg_field_info(file_num, base, zone, solution, f, &data_type_read, field_name_read));
+    PetscCall(PetscStrcmp(field_name_read, field_name, &flg_name));
+    if (flg_name) {
+      *field     = f;
+      *data_type = data_type_read;
+      *flg       = PETSC_TRUE;
+      break;
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMStagLoadCellCenteredSolution_Private(DM dm, Vec v, int file_num, int base, int zone, int solution, const char *name)
+{
+  int                    field;
+  CGNS_ENUMT(DataType_t) data_type;
+  PetscBool              flg;
+  PetscInt               dim, x[3], m[3], d, i;
+  cgsize_t               rmin[3], rmax[3], rsize;
+  float                 *e_float;
+  double                *e_double;
+  PetscScalar           *e;
+
+  PetscFunctionBegin;
+  PetscCall(FindFieldInfoFromName_Private(file_num, base, zone, solution, name, &field, &data_type, &flg));
+  PetscCheck(flg, PETSC_COMM_SELF, PETSC_ERR_LIB, "Cannot find field %s in base %d zone %d", name, base, zone);
+
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(DMStagGetCorners(dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+
+  rsize = 1;
+  for (d = 0; d < dim; ++d) {
+    rmin[d] = x[d] + 1;
+    rmax[d] = x[d] + m[d];
+    rsize *= rmax[d] - rmin[d] + 1;
+  }
+
+  PetscCall(PetscMalloc1(rsize, &e));
+  switch (data_type) {
+  case CGNS_ENUMV(RealSingle):
+    PetscCall(PetscMalloc1(rsize, &e_float));
+    CGNSCall(cgp_field_read_data(file_num, base, zone, solution, field, rmin, rmax, e_float));
+    for (i = 0; i < rsize; ++i) e[i] = e_float[i];
+    PetscCall(PetscFree(e_float));
+    break;
+  case CGNS_ENUMV(RealDouble):
+    PetscCall(PetscMalloc1(rsize, &e_double));
+    CGNSCall(cgp_field_read_data(file_num, base, zone, solution, field, rmin, rmax, e_double));
+    for (i = 0; i < rsize; ++i) e[i] = e_double[i];
+    PetscCall(PetscFree(e_double));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported data type: %s", DataTypeName[data_type]);
+  }
+
+  switch (dim) {
+  case 2:
+    PetscCall(DMStagSetLocalEntries2d_Private(dm, v, DMSTAG_ELEMENT, 0, e));
+    break;
+  case 3:
+    PetscCall(DMStagSetLocalEntries3d_Private(dm, v, DMSTAG_ELEMENT, 0, e));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
+  }
+  PetscCall(PetscFree(e));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode SolLoadCGNS_FSM(Sol sol, PetscInt file_num)
+{
+  Sol_FSM               *fsm = (Sol_FSM *)sol->data;
+  DM                     dm, fdm;
+  PetscInt               dim, d;
+  PetscBool              iscart;
+  const int              base = 1, zone = 1;
+  int                    solution;
+  int                    num_bases, num_zones, num_solutions, num_fields;
+  int                    cell_dim, phys_dim;
+  char                   base_name[CGIO_MAX_NAME_LENGTH + 1];
+  char                   zone_name[CGIO_MAX_NAME_LENGTH + 1];
+  CGNS_ENUMT(ZoneType_t) zone_type;
+  cgsize_t               sizes[9];
+
+  PetscFunctionBegin;
+  PetscCall(MeshGetDM(sol->mesh, &dm));
+  PetscCall(MeshGetFaceDM(sol->mesh, &fdm));
+  PetscCall(MeshGetDim(sol->mesh, &dim));
+  PetscCall(PetscObjectTypeCompare((PetscObject)sol->mesh, MESHCART, &iscart));
+
+  /* Read CGNS file info */
+  CGNSCall(cg_nbases(file_num, &num_bases));
+  PetscCheck(num_bases == 1, PETSC_COMM_SELF, PETSC_ERR_LIB, "Only one base is supported");
+  CGNSCall(cg_base_read(file_num, base, base_name, &cell_dim, &phys_dim));
+  PetscCheck(cell_dim == dim, PETSC_COMM_SELF, PETSC_ERR_LIB, "Mesh dimension %" PetscInt_FMT " does not match CGNS cell dimension %d", dim, cell_dim);
+  CGNSCall(cg_nzones(file_num, base, &num_zones));
+  PetscCheck(num_zones == 1, PETSC_COMM_SELF, PETSC_ERR_LIB, "Only one zone is supported");
+  CGNSCall(cg_zone_read(file_num, base, zone, zone_name, sizes));
+  CGNSCall(cg_zone_type(file_num, base, zone, &zone_type));
+  if (iscart) {
+    PetscInt M[3];
+
+    PetscCall(MeshCartGetGlobalSizes(sol->mesh, &M[0], &M[1], &M[2]));
+    PetscCheck(zone_type == CGNS_ENUMV(Structured), PETSC_COMM_SELF, PETSC_ERR_LIB, "Only structured zone is supported for Cartesian mesh");
+    for (d = 0; d < dim; ++d) PetscCheck(M[d] == sizes[dim + d], PETSC_COMM_SELF, PETSC_ERR_LIB, "Mesh size %" PetscInt_FMT " does not match CGNS zone size %ld", M[d], (long)sizes[dim + d]);
+  }
+  CGNSCall(cg_nsols(file_num, base, zone, &num_solutions));
+  solution = num_solutions; /* Assume that the last solution is the one we want */
+  CGNSCall(cg_nfields(file_num, base, zone, solution, &num_fields));
+
+  /* Load cell-centered solutions */
+  if (iscart) {
+    for (d = 0; d < dim; ++d) {
+      PetscCall(DMStagLoadCellCenteredSolution_Private(dm, sol->v[d], file_num, base, zone, solution, velnames[d]));
+      PetscCall(DMStagLoadCellCenteredSolution_Private(dm, fsm->v_star[d], file_num, base, zone, solution, intervelnames[d]));
+      PetscCall(DMStagLoadCellCenteredSolution_Private(dm, fsm->N[d], file_num, base, zone, solution, convecnames[d]));
+      PetscCall(DMStagLoadCellCenteredSolution_Private(dm, fsm->N_prev[d], file_num, base, zone, solution, prevconvecnames[d]));
+    }
+    PetscCall(DMStagLoadCellCenteredSolution_Private(dm, sol->p, file_num, base, zone, solution, presname));
+    PetscCall(DMStagLoadCellCenteredSolution_Private(dm, fsm->p_half, file_num, base, zone, solution, preshalfname));
+    PetscCall(DMStagLoadCellCenteredSolution_Private(dm, fsm->p_half_prev, file_num, base, zone, solution, prevpreshalfname));
+    PetscCall(DMStagLoadCellCenteredSolution_Private(dm, fsm->p_prime, file_num, base, zone, solution, prescorrecname));
+  }
+
+  // TODO: Load face-centered solutions
+
   PetscFunctionReturn(PETSC_SUCCESS);
 }
