@@ -12,5 +12,9 @@ find_package(PETSc REQUIRED)
 find_package(HDF5 REQUIRED)
 find_package(CGNS REQUIRED)
 
+if (${PETSc_VERSION} VERSION_LESS "3.23")
+    message(FATAL_ERROR "PETSc version 3.23 or higher is required.")
+endif()
+
 add_subdirectory(app)
 add_subdirectory(src)
