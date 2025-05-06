@@ -120,7 +120,7 @@ static PetscErrorCode PetscViewerView_FlucaCGNS(PetscViewer v, PetscViewer viewe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode PetscViewerSetFromOptions_FlucaCGNS(PetscViewer viewer, PetscOptionItems *PetscOptionsObject)
+static PetscErrorCode PetscViewerSetFromOptions_FlucaCGNS(PetscViewer viewer, PetscOptionItems PetscOptionsObject)
 {
   PetscViewer_FlucaCGNS *cgv = (PetscViewer_FlucaCGNS *)viewer->data;
 

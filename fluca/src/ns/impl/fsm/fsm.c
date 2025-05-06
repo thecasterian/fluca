@@ -6,7 +6,7 @@ extern PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCart(NS ns);
 extern PetscErrorCode NSFSMCalculatePressureCorrection2d_MeshCart(NS ns);
 extern PetscErrorCode NSFSMUpdate2d_MeshCart(NS ns);
 
-PetscErrorCode NSSetFromOptions_FSM(NS ns, PetscOptionItems *PetscOptionsObject)
+PetscErrorCode NSSetFromOptions_FSM(NS ns, PetscOptionItems PetscOptionsObject)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
 
@@ -123,10 +123,11 @@ PetscErrorCode NSCreate_FSM(NS ns)
   for (d = 0; d < 3; ++d) fsm->kspv[d] = NULL;
   fsm->kspp = NULL;
 
-  ns->ops->setup      = NSSetup_FSM;
-  ns->ops->solve_init = NSSolveInit_FSM;
-  ns->ops->solve_iter = NSSolveIter_FSM;
-  ns->ops->destroy    = NSDestroy_FSM;
-  ns->ops->view       = NSView_FSM;
+  ns->ops->setfromoptions = NSSetFromOptions_FSM;
+  ns->ops->setup          = NSSetup_FSM;
+  ns->ops->solve_init     = NSSolveInit_FSM;
+  ns->ops->solve_iter     = NSSolveIter_FSM;
+  ns->ops->destroy        = NSDestroy_FSM;
+  ns->ops->view           = NSView_FSM;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
