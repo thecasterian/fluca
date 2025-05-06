@@ -14,7 +14,7 @@ FLUCA_EXTERN PetscLogEvent  MESH_SetUp;
 typedef struct _MeshOps *MeshOps;
 
 struct _MeshOps {
-  PetscErrorCode (*setfromoptions)(Mesh, PetscOptionItems *);
+  PetscErrorCode (*setfromoptions)(Mesh, PetscOptionItems);
   PetscErrorCode (*setup)(Mesh);
   PetscErrorCode (*destroy)(Mesh);
   PetscErrorCode (*getdm)(Mesh, DM *);

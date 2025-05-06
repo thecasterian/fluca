@@ -8,7 +8,7 @@ extern PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer v);
 
 const char *MeshCartCoordinateStencilLocations[] = {"PREV", "NEXT", "MeshCartCoordinateStencilLocation", "", NULL};
 
-PetscErrorCode MeshSetFromOptions_Cart(Mesh mesh, PetscOptionItems *PetscOptionsObject)
+PetscErrorCode MeshSetFromOptions_Cart(Mesh mesh, PetscOptionItems PetscOptionsObject)
 {
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
   char       opt[PETSC_MAX_OPTION_NAME];
