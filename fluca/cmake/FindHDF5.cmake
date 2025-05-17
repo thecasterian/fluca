@@ -19,12 +19,15 @@ find_library(HDF5_LIBRARY NAMES hdf5
 )
 mark_as_advanced(HDF5_LIBRARY)
 
-function (find_hdf5_version)
-    file(STRINGS ${HDF5_INCLUDE_DIR}/H5public.h HDF5_VERSION_H REGEX "#define H5_VERS_STR ")
-    string(REGEX REPLACE ".*H5_VERS_STR[ \t]*\"([0-9.]+)\".*" "\\1" HDF5_VERSION ${HDF5_VERSION_H})
-    set(HDF5_VERSION ${HDF5_VERSION} PARENT_SCOPE)
-endfunction()
-find_hdf5_version()
+if (HDF5_INCLUDE_DIR)
+    if (EXISTS ${HDF5_INCLUDE_DIR}/H5public.h)
+        file(STRINGS ${HDF5_INCLUDE_DIR}/H5public.h HDF5_VERSION_H REGEX "#define H5_VERS_STR ")
+        string(REGEX REPLACE ".*H5_VERS_STR[ \t]*\"([0-9.]+)\".*" "\\1" HDF5_VERSION ${HDF5_VERSION_H})
+        set(HDF5_VERSION ${HDF5_VERSION} CACHE INTERNAL "HDF5 version")
+    else()
+        message(SEND_ERROR "Cannot find ${HDF5_INCLUDE_DIR}/H5public.h")
+    endif()
+endif()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(HDF5
@@ -36,5 +39,4 @@ find_package_handle_standard_args(HDF5
 if (HDF5_FOUND)
     set(HDF5_INCLUDE_DIRS ${HDF5_INCLUDE_DIR})
     set(HDF5_LIBRARIES ${HDF5_LIBRARY})
-    set(HDF5_VERSION ${HDF5_VERSION})
 endif()
