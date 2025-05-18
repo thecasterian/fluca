@@ -6,6 +6,7 @@
 #define PETSCVIEWERFLUCACGNS "flucacgns"
 
 FLUCA_EXTERN PetscErrorCode FlucaOptionsCreateViewer(MPI_Comm, PetscOptions, const char[], const char[], PetscViewer *, PetscViewerFormat *, PetscBool *);
+PETSC_EXTERN PetscErrorCode FlucaObjectViewFromOptions(PetscObject, PetscObject, const char[]);
 
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSOpen(MPI_Comm, const char[], PetscFileMode, PetscViewer *);
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSSetBatchSize(PetscViewer, PetscInt);

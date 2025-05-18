@@ -3,6 +3,7 @@
 #include <flucaviewer.h>
 
 extern PetscErrorCode SolView_FSMCGNS(Sol, PetscViewer);
+extern PetscErrorCode SolLoadCGNS_FSM(Sol, PetscInt);
 
 PetscErrorCode SolSetMesh_FSM(Sol sol, Mesh mesh)
 {
@@ -70,7 +71,7 @@ PetscErrorCode SolView_FSM(Sol sol, PetscViewer v)
   PetscFunctionBegin;
   PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERFLUCACGNS, &iscgns));
 
-  if (iscgns) { PetscCall(SolView_FSMCGNS(sol, v)); }
+  if (iscgns) PetscCall(SolView_FSMCGNS(sol, v));
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -96,8 +97,9 @@ PetscErrorCode SolCreate_FSM(Sol sol)
   fsm->p_prime     = NULL;
   fsm->p_half_prev = NULL;
 
-  sol->ops->setmesh = SolSetMesh_FSM;
-  sol->ops->destroy = SolDestroy_FSM;
-  sol->ops->view    = SolView_FSM;
+  sol->ops->setmesh  = SolSetMesh_FSM;
+  sol->ops->destroy  = SolDestroy_FSM;
+  sol->ops->view     = SolView_FSM;
+  sol->ops->loadcgns = SolLoadCGNS_FSM;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

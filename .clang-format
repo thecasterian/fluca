@@ -146,4 +146,5 @@ UseTab: Never
 WhitespaceSensitiveMacros:
 TypenameMacros:
   - cgsize_t
+  - CGNS_ENUMT
 InsertNewlineAtEOF: true
