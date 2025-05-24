@@ -1,4 +1,4 @@
-#include <fluca/private/mesh_cart.h>
+#include <fluca/private/meshcartimpl.h>
 #include <fluca/private/ns_fsm.h>
 #include <fluca/private/sol_fsm.h>
 #include <petscdmstag.h>
@@ -11,10 +11,9 @@ extern PetscErrorCode ComputeOperatorPprime2d(KSP, Mat, Mat, void *);
 
 PetscErrorCode NSFSMInterpolateVelocity2d_MeshCart(NS ns)
 {
-  Mesh       mesh   = ns->mesh;
-  Mesh_Cart *cart   = (Mesh_Cart *)mesh->data;
-  Sol        sol    = ns->sol;
-  Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
+  Mesh     mesh   = ns->mesh;
+  Sol      sol    = ns->sol;
+  Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
   PetscInt             M, N, x, y, m, n, nExtrax, nExtray;
   PetscScalar       ***arrUV;
@@ -25,20 +24,20 @@ PetscErrorCode NSFSMInterpolateVelocity2d_MeshCart(NS ns)
   PetscInt             i, j;
 
   PetscFunctionBegin;
-  PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(cart->dm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
+  PetscCall(DMStagGetGlobalSizes(mesh->dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(mesh->dm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
 
-  PetscCall(DMStagVecGetArray(cart->fdm, solfsm->fv, &arrUV));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
-  PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecGetArray(mesh->fdm, solfsm->fv, &arrUV));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, sol->v[0], &arru));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, sol->v[1], &arrv));
+  PetscCall(DMStagGetProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &ileft));
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &idown));
-  PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inextc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ielemc));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_LEFT, 0, &ileft));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_DOWN, 0, &idown));
+  PetscCall(DMStagGetLocationSlot(mesh->dm, DMSTAG_ELEMENT, 0, &ielem));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_ELEMENT, &ielemc));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m + nExtrax; ++i) {
@@ -71,22 +70,21 @@ PetscErrorCode NSFSMInterpolateVelocity2d_MeshCart(NS ns)
       }
     }
 
-  PetscCall(DMStagVecRestoreArray(cart->fdm, solfsm->fv, &arrUV));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecRestoreArray(mesh->fdm, solfsm->fv, &arrUV));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, sol->v[0], &arru));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, sol->v[1], &arrv));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMLocalToLocalBegin(cart->fdm, solfsm->fv, INSERT_VALUES, solfsm->fv));
-  PetscCall(DMLocalToLocalEnd(cart->fdm, solfsm->fv, INSERT_VALUES, solfsm->fv));
+  PetscCall(DMLocalToLocalBegin(mesh->fdm, solfsm->fv, INSERT_VALUES, solfsm->fv));
+  PetscCall(DMLocalToLocalEnd(mesh->fdm, solfsm->fv, INSERT_VALUES, solfsm->fv));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSFSMCalculateConvection2d_MeshCart(NS ns)
 {
-  Mesh       mesh   = ns->mesh;
-  Mesh_Cart *cart   = (Mesh_Cart *)mesh->data;
-  Sol        sol    = ns->sol;
-  Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
+  Mesh     mesh   = ns->mesh;
+  Sol      sol    = ns->sol;
+  Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
   PetscInt             M, N, x, y, m, n, nExtrax, nExtray;
   Vec                  u_interp, v_interp;
@@ -99,29 +97,29 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCart(NS ns)
   PetscInt             i, j;
 
   PetscFunctionBegin;
-  PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(cart->dm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
+  PetscCall(DMStagGetGlobalSizes(mesh->dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(mesh->dm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
 
-  PetscCall(DMGetLocalVector(cart->fdm, &u_interp));
-  PetscCall(DMGetLocalVector(cart->fdm, &v_interp));
+  PetscCall(DMGetLocalVector(mesh->fdm, &u_interp));
+  PetscCall(DMGetLocalVector(mesh->fdm, &v_interp));
 
-  PetscCall(DMStagVecGetArray(cart->dm, solfsm->N[0], &arrNu));
-  PetscCall(DMStagVecGetArray(cart->dm, solfsm->N[1], &arrNv));
-  PetscCall(DMStagVecGetArray(cart->fdm, u_interp, &arru_interp));
-  PetscCall(DMStagVecGetArray(cart->fdm, v_interp, &arrv_interp));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
-  PetscCall(DMStagVecGetArrayRead(cart->fdm, solfsm->fv, &arrUV));
-  PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecGetArray(mesh->dm, solfsm->N[0], &arrNu));
+  PetscCall(DMStagVecGetArray(mesh->dm, solfsm->N[1], &arrNv));
+  PetscCall(DMStagVecGetArray(mesh->fdm, u_interp, &arru_interp));
+  PetscCall(DMStagVecGetArray(mesh->fdm, v_interp, &arrv_interp));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, sol->v[0], &arru));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, sol->v[1], &arrv));
+  PetscCall(DMStagVecGetArrayRead(mesh->fdm, solfsm->fv, &arrUV));
+  PetscCall(DMStagGetProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &ileft));
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_RIGHT, 0, &iright));
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &idown));
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_UP, 0, &iup));
-  PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inextc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ielemc));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_LEFT, 0, &ileft));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_RIGHT, 0, &iright));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_DOWN, 0, &idown));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_UP, 0, &iup));
+  PetscCall(DMStagGetLocationSlot(mesh->dm, DMSTAG_ELEMENT, 0, &ielem));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_ELEMENT, &ielemc));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m + nExtrax; ++i) {
@@ -160,10 +158,10 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCart(NS ns)
       }
     }
 
-  PetscCall(DMLocalToLocalBegin(cart->fdm, u_interp, INSERT_VALUES, u_interp));
-  PetscCall(DMLocalToLocalEnd(cart->fdm, u_interp, INSERT_VALUES, u_interp));
-  PetscCall(DMLocalToLocalBegin(cart->fdm, v_interp, INSERT_VALUES, v_interp));
-  PetscCall(DMLocalToLocalEnd(cart->fdm, v_interp, INSERT_VALUES, v_interp));
+  PetscCall(DMLocalToLocalBegin(mesh->fdm, u_interp, INSERT_VALUES, u_interp));
+  PetscCall(DMLocalToLocalEnd(mesh->fdm, u_interp, INSERT_VALUES, u_interp));
+  PetscCall(DMLocalToLocalBegin(mesh->fdm, v_interp, INSERT_VALUES, v_interp));
+  PetscCall(DMLocalToLocalEnd(mesh->fdm, v_interp, INSERT_VALUES, v_interp));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
@@ -173,27 +171,26 @@ PetscErrorCode NSFSMCalculateConvection2d_MeshCart(NS ns)
       arrNv[j][i][ielem] = (arrUV[j][i][iright] * arrv_interp[j][i][iright] - arrUV[j][i][ileft] * arrv_interp[j][i][ileft]) / wx + (arrUV[j][i][iup] * arrv_interp[j][i][iup] - arrUV[j][i][idown] * arrv_interp[j][i][idown]) / wy;
     }
 
-  PetscCall(DMStagVecRestoreArray(cart->dm, solfsm->N[0], &arrNu));
-  PetscCall(DMStagVecRestoreArray(cart->dm, solfsm->N[1], &arrNv));
-  PetscCall(DMStagVecRestoreArray(cart->fdm, u_interp, &arru_interp));
-  PetscCall(DMStagVecRestoreArray(cart->fdm, v_interp, &arrv_interp));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
-  PetscCall(DMStagVecRestoreArrayRead(cart->fdm, solfsm->fv, &arrUV));
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecRestoreArray(mesh->dm, solfsm->N[0], &arrNu));
+  PetscCall(DMStagVecRestoreArray(mesh->dm, solfsm->N[1], &arrNv));
+  PetscCall(DMStagVecRestoreArray(mesh->fdm, u_interp, &arru_interp));
+  PetscCall(DMStagVecRestoreArray(mesh->fdm, v_interp, &arrv_interp));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, sol->v[0], &arru));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, sol->v[1], &arrv));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->fdm, solfsm->fv, &arrUV));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMRestoreLocalVector(cart->fdm, &u_interp));
-  PetscCall(DMRestoreLocalVector(cart->fdm, &v_interp));
+  PetscCall(DMRestoreLocalVector(mesh->fdm, &u_interp));
+  PetscCall(DMRestoreLocalVector(mesh->fdm, &v_interp));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCart(NS ns)
 {
-  NS_FSM    *nsfsm  = (NS_FSM *)ns->data;
-  Mesh       mesh   = ns->mesh;
-  Mesh_Cart *cart   = (Mesh_Cart *)mesh->data;
-  Sol        sol    = ns->sol;
-  Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
+  NS_FSM  *nsfsm  = (NS_FSM *)ns->data;
+  Mesh     mesh   = ns->mesh;
+  Sol      sol    = ns->sol;
+  Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
   PetscErrorCode (*rhs[2])(KSP, Vec, void *) = {ComputeRHSUStar2d, ComputeRHSVStar2d};
   Vec                  v;
@@ -213,27 +210,27 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCart(NS ns)
     PetscCall(KSPSetComputeOperators(nsfsm->kspv[d], ComputeOperatorsUVstar2d, ns));
     PetscCall(KSPSolve(nsfsm->kspv[d], NULL, NULL));
     PetscCall(KSPGetSolution(nsfsm->kspv[d], &v));
-    PetscCall(DMGlobalToLocal(cart->dm, v, INSERT_VALUES, solfsm->v_star[d]));
+    PetscCall(DMGlobalToLocal(mesh->dm, v, INSERT_VALUES, solfsm->v_star[d]));
   }
 
   /* Calculate face-centered intermediate velocity. */
-  PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(cart->dm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
+  PetscCall(DMStagGetGlobalSizes(mesh->dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(mesh->dm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
 
-  PetscCall(DMStagVecGetArray(cart->dm, solfsm->v_tilde[0], &arru_tilde));
-  PetscCall(DMStagVecGetArray(cart->dm, solfsm->v_tilde[1], &arrv_tilde));
-  PetscCall(DMStagVecGetArray(cart->fdm, solfsm->fv_star, &arrUV_star));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
-  PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecGetArray(mesh->dm, solfsm->v_tilde[0], &arru_tilde));
+  PetscCall(DMStagVecGetArray(mesh->dm, solfsm->v_tilde[1], &arrv_tilde));
+  PetscCall(DMStagVecGetArray(mesh->fdm, solfsm->fv_star, &arrUV_star));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->v_star[0], &arru_star));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->v_star[1], &arrv_star));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->p_half, &arrp));
+  PetscCall(DMStagGetProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &ileft));
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &idown));
-  PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inextc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ielemc));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_LEFT, 0, &ileft));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_DOWN, 0, &idown));
+  PetscCall(DMStagGetLocationSlot(mesh->dm, DMSTAG_ELEMENT, 0, &ielem));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_ELEMENT, &ielemc));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
@@ -267,10 +264,10 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCart(NS ns)
       arrv_tilde[j][i][ielem] = arrv_star[j][i][ielem] + ns->dt / ns->rho * (pn - ps) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
     }
 
-  PetscCall(DMLocalToLocalBegin(cart->dm, solfsm->v_tilde[0], INSERT_VALUES, solfsm->v_tilde[0]));
-  PetscCall(DMLocalToLocalEnd(cart->dm, solfsm->v_tilde[0], INSERT_VALUES, solfsm->v_tilde[0]));
-  PetscCall(DMLocalToLocalBegin(cart->dm, solfsm->v_tilde[1], INSERT_VALUES, solfsm->v_tilde[1]));
-  PetscCall(DMLocalToLocalEnd(cart->dm, solfsm->v_tilde[1], INSERT_VALUES, solfsm->v_tilde[1]));
+  PetscCall(DMLocalToLocalBegin(mesh->dm, solfsm->v_tilde[0], INSERT_VALUES, solfsm->v_tilde[0]));
+  PetscCall(DMLocalToLocalEnd(mesh->dm, solfsm->v_tilde[0], INSERT_VALUES, solfsm->v_tilde[0]));
+  PetscCall(DMLocalToLocalBegin(mesh->dm, solfsm->v_tilde[1], INSERT_VALUES, solfsm->v_tilde[1]));
+  PetscCall(DMLocalToLocalEnd(mesh->dm, solfsm->v_tilde[1], INSERT_VALUES, solfsm->v_tilde[1]));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m + nExtrax; ++i) {
@@ -309,26 +306,25 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_MeshCart(NS ns)
       }
     }
 
-  PetscCall(DMStagVecRestoreArray(cart->dm, solfsm->v_tilde[0], &arru_tilde));
-  PetscCall(DMStagVecRestoreArray(cart->dm, solfsm->v_tilde[1], &arrv_tilde));
-  PetscCall(DMStagVecRestoreArray(cart->fdm, solfsm->fv_star, &arrUV_star));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecRestoreArray(mesh->dm, solfsm->v_tilde[0], &arru_tilde));
+  PetscCall(DMStagVecRestoreArray(mesh->dm, solfsm->v_tilde[1], &arrv_tilde));
+  PetscCall(DMStagVecRestoreArray(mesh->fdm, solfsm->fv_star, &arrUV_star));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->v_star[0], &arru_star));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->v_star[1], &arrv_star));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->p_half, &arrp));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMLocalToLocalBegin(cart->fdm, solfsm->fv_star, INSERT_VALUES, solfsm->fv_star));
-  PetscCall(DMLocalToLocalEnd(cart->fdm, solfsm->fv_star, INSERT_VALUES, solfsm->fv_star));
+  PetscCall(DMLocalToLocalBegin(mesh->fdm, solfsm->fv_star, INSERT_VALUES, solfsm->fv_star));
+  PetscCall(DMLocalToLocalEnd(mesh->fdm, solfsm->fv_star, INSERT_VALUES, solfsm->fv_star));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSFSMCalculatePressureCorrection2d_MeshCart(NS ns)
 {
-  NS_FSM    *nsfsm  = (NS_FSM *)ns->data;
-  Mesh       mesh   = ns->mesh;
-  Mesh_Cart *cart   = (Mesh_Cart *)mesh->data;
-  Sol        sol    = ns->sol;
-  Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
+  NS_FSM  *nsfsm  = (NS_FSM *)ns->data;
+  Mesh     mesh   = ns->mesh;
+  Sol      sol    = ns->sol;
+  Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
   Vec v;
 
@@ -337,16 +333,15 @@ PetscErrorCode NSFSMCalculatePressureCorrection2d_MeshCart(NS ns)
   PetscCall(KSPSetComputeOperators(nsfsm->kspp, ComputeOperatorPprime2d, ns));
   PetscCall(KSPSolve(nsfsm->kspp, NULL, NULL));
   PetscCall(KSPGetSolution(nsfsm->kspp, &v));
-  PetscCall(DMGlobalToLocal(cart->dm, v, INSERT_VALUES, solfsm->p_prime));
+  PetscCall(DMGlobalToLocal(mesh->dm, v, INSERT_VALUES, solfsm->p_prime));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSFSMUpdate2d_MeshCart(NS ns)
 {
-  Mesh       mesh   = ns->mesh;
-  Mesh_Cart *cart   = (Mesh_Cart *)mesh->data;
-  Sol        sol    = ns->sol;
-  Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
+  Mesh     mesh   = ns->mesh;
+  Sol      sol    = ns->sol;
+  Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
   PetscInt             M, N, x, y, m, n;
   PetscScalar       ***arru, ***arrv, ***arrp, ***arrUV;
@@ -358,29 +353,29 @@ PetscErrorCode NSFSMUpdate2d_MeshCart(NS ns)
   PetscInt             i, j;
 
   PetscFunctionBegin;
-  PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(cart->dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetGlobalSizes(mesh->dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(mesh->dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
 
   PetscCall(VecCopy(solfsm->p_half, solfsm->p_half_prev));
   PetscCall(VecCopy(solfsm->N[0], solfsm->N_prev[0]));
   PetscCall(VecCopy(solfsm->N[1], solfsm->N_prev[1]));
 
-  PetscCall(DMStagVecGetArray(cart->dm, sol->v[0], &arru));
-  PetscCall(DMStagVecGetArray(cart->dm, sol->v[1], &arrv));
-  PetscCall(DMStagVecGetArray(cart->dm, solfsm->p_half, &arrp));
-  PetscCall(DMStagVecGetArray(cart->fdm, solfsm->fv, &arrUV));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_prime, &arrp_prime));
-  PetscCall(DMStagVecGetArrayRead(cart->fdm, solfsm->fv_star, &arrUV_star));
-  PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecGetArray(mesh->dm, sol->v[0], &arru));
+  PetscCall(DMStagVecGetArray(mesh->dm, sol->v[1], &arrv));
+  PetscCall(DMStagVecGetArray(mesh->dm, solfsm->p_half, &arrp));
+  PetscCall(DMStagVecGetArray(mesh->fdm, solfsm->fv, &arrUV));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->v_star[0], &arru_star));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->v_star[1], &arrv_star));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->p_prime, &arrp_prime));
+  PetscCall(DMStagVecGetArrayRead(mesh->fdm, solfsm->fv_star, &arrUV_star));
+  PetscCall(DMStagGetProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &ileft));
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &idown));
-  PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inextc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ielemc));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_LEFT, 0, &ileft));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_DOWN, 0, &idown));
+  PetscCall(DMStagGetLocationSlot(mesh->dm, DMSTAG_ELEMENT, 0, &ielem));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_ELEMENT, &ielemc));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
@@ -432,22 +427,22 @@ PetscErrorCode NSFSMUpdate2d_MeshCart(NS ns)
       else arrUV[j][i][idown] = arrUV_star[j][i][idown] - ns->dt / ns->rho * (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
     }
 
-  PetscCall(DMStagVecRestoreArray(cart->dm, sol->v[0], &arru));
-  PetscCall(DMStagVecRestoreArray(cart->dm, sol->v[1], &arrv));
-  PetscCall(DMStagVecRestoreArray(cart->dm, solfsm->p_half, &arrp));
-  PetscCall(DMStagVecRestoreArray(cart->fdm, solfsm->fv, &arrUV));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->v_star[0], &arru_star));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->v_star[1], &arrv_star));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_prime, &arrp_prime));
-  PetscCall(DMStagVecRestoreArrayRead(cart->fdm, solfsm->fv_star, &arrUV_star));
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecRestoreArray(mesh->dm, sol->v[0], &arru));
+  PetscCall(DMStagVecRestoreArray(mesh->dm, sol->v[1], &arrv));
+  PetscCall(DMStagVecRestoreArray(mesh->dm, solfsm->p_half, &arrp));
+  PetscCall(DMStagVecRestoreArray(mesh->fdm, solfsm->fv, &arrUV));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->v_star[0], &arru_star));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->v_star[1], &arrv_star));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->p_prime, &arrp_prime));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->fdm, solfsm->fv_star, &arrUV_star));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMLocalToLocalBegin(cart->dm, sol->v[0], INSERT_VALUES, sol->v[0]));
-  PetscCall(DMLocalToLocalEnd(cart->dm, sol->v[0], INSERT_VALUES, sol->v[0]));
-  PetscCall(DMLocalToLocalBegin(cart->dm, sol->v[1], INSERT_VALUES, sol->v[1]));
-  PetscCall(DMLocalToLocalEnd(cart->dm, sol->v[1], INSERT_VALUES, sol->v[1]));
-  PetscCall(DMLocalToLocalBegin(cart->dm, solfsm->p_half, INSERT_VALUES, solfsm->p_half));
-  PetscCall(DMLocalToLocalEnd(cart->dm, solfsm->p_half, INSERT_VALUES, solfsm->p_half));
+  PetscCall(DMLocalToLocalBegin(mesh->dm, sol->v[0], INSERT_VALUES, sol->v[0]));
+  PetscCall(DMLocalToLocalEnd(mesh->dm, sol->v[0], INSERT_VALUES, sol->v[0]));
+  PetscCall(DMLocalToLocalBegin(mesh->dm, sol->v[1], INSERT_VALUES, sol->v[1]));
+  PetscCall(DMLocalToLocalEnd(mesh->dm, sol->v[1], INSERT_VALUES, sol->v[1]));
+  PetscCall(DMLocalToLocalBegin(mesh->dm, solfsm->p_half, INSERT_VALUES, solfsm->p_half));
+  PetscCall(DMLocalToLocalEnd(mesh->dm, solfsm->p_half, INSERT_VALUES, solfsm->p_half));
 
   PetscCall(NSFSMCalculateConvection2d_MeshCart(ns));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -457,11 +452,10 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx)
 {
   (void)ksp;
 
-  NS         ns     = (NS)ctx;
-  Mesh       mesh   = ns->mesh;
-  Mesh_Cart *cart   = (Mesh_Cart *)mesh->data;
-  Sol        sol    = ns->sol;
-  Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
+  NS       ns     = (NS)ctx;
+  Mesh     mesh   = ns->mesh;
+  Sol      sol    = ns->sol;
+  Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
   PetscInt             M, N, x, y, m, n;
   DMStagStencil        row;
@@ -474,20 +468,20 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx)
   PetscInt             i, j;
 
   PetscFunctionBegin;
-  PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(cart->dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetGlobalSizes(mesh->dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(mesh->dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
 
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->N[0], &arrNu));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->N_prev[0], &arrNu_prev));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
-  PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->N[0], &arrNu));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->N_prev[0], &arrNu_prev));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, sol->v[0], &arru));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, sol->v[1], &arrv));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->p_half, &arrp));
+  PetscCall(DMStagGetProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inextc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ielemc));
+  PetscCall(DMStagGetLocationSlot(mesh->dm, DMSTAG_ELEMENT, 0, &ielem));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_ELEMENT, &ielemc));
 
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
@@ -538,15 +532,15 @@ PetscErrorCode ComputeRHSUStar2d(KSP ksp, Vec b, void *ctx)
       // TODO: below is temporary for cavity flow
       if (j == N - 1) valb += ns->mu * ns->dt / ns->rho * an;
 
-      PetscCall(DMStagVecSetValuesStencil(cart->dm, b, 1, &row, &valb, INSERT_VALUES));
+      PetscCall(DMStagVecSetValuesStencil(mesh->dm, b, 1, &row, &valb, INSERT_VALUES));
     }
 
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->N[0], &arrNu));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->N_prev[0], &arrNu_prev));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->N[0], &arrNu));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->N_prev[0], &arrNu_prev));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, sol->v[0], &arru));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, sol->v[1], &arrv));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->p_half, &arrp));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
   PetscCall(VecAssemblyBegin(b));
   PetscCall(VecAssemblyEnd(b));
@@ -557,11 +551,10 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx)
 {
   (void)ksp;
 
-  NS         ns     = (NS)ctx;
-  Mesh       mesh   = ns->mesh;
-  Mesh_Cart *cart   = (Mesh_Cart *)mesh->data;
-  Sol        sol    = ns->sol;
-  Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
+  NS       ns     = (NS)ctx;
+  Mesh     mesh   = ns->mesh;
+  Sol      sol    = ns->sol;
+  Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
   PetscInt             M, N, x, y, m, n;
   DMStagStencil        row;
@@ -574,20 +567,20 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx)
   PetscInt             i, j;
 
   PetscFunctionBegin;
-  PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(cart->dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetGlobalSizes(mesh->dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(mesh->dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
 
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->N[1], &arrNv));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->N_prev[1], &arrNv_prev));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[0], &arru));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, sol->v[1], &arrv));
-  PetscCall(DMStagVecGetArrayRead(cart->dm, solfsm->p_half, &arrp));
-  PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->N[1], &arrNv));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->N_prev[1], &arrNv_prev));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, sol->v[0], &arru));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, sol->v[1], &arrv));
+  PetscCall(DMStagVecGetArrayRead(mesh->dm, solfsm->p_half, &arrp));
+  PetscCall(DMStagGetProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inextc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ielemc));
+  PetscCall(DMStagGetLocationSlot(mesh->dm, DMSTAG_ELEMENT, 0, &ielem));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_ELEMENT, &ielemc));
 
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
@@ -636,15 +629,15 @@ PetscErrorCode ComputeRHSVStar2d(KSP ksp, Vec b, void *ctx)
 
       valb = vp - 1.5 * ns->dt * arrNv[j][i][ielem] + 0.5 * ns->dt * arrNv_prev[j][i][ielem] - ns->dt / ns->rho * dpdy + 0.5 * ns->mu * ns->dt / ns->rho * vlap;
 
-      PetscCall(DMStagVecSetValuesStencil(cart->dm, b, 1, &row, &valb, INSERT_VALUES));
+      PetscCall(DMStagVecSetValuesStencil(mesh->dm, b, 1, &row, &valb, INSERT_VALUES));
     }
 
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->N[1], &arrNv));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->N_prev[1], &arrNv_prev));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[0], &arru));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, sol->v[1], &arrv));
-  PetscCall(DMStagVecRestoreArrayRead(cart->dm, solfsm->p_half, &arrp));
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->N[1], &arrNv));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->N_prev[1], &arrNv_prev));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, sol->v[0], &arru));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, sol->v[1], &arrv));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->dm, solfsm->p_half, &arrp));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
   PetscCall(VecAssemblyBegin(b));
   PetscCall(VecAssemblyEnd(b));
@@ -655,11 +648,10 @@ PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx)
 {
   (void)ksp;
 
-  NS         ns     = (NS)ctx;
-  Mesh       mesh   = ns->mesh;
-  Mesh_Cart *cart   = (Mesh_Cart *)mesh->data;
-  Sol        sol    = ns->sol;
-  Sol_FSM   *solfsm = (Sol_FSM *)sol->data;
+  NS       ns     = (NS)ctx;
+  Mesh     mesh   = ns->mesh;
+  Sol      sol    = ns->sol;
+  Sol_FSM *solfsm = (Sol_FSM *)sol->data;
 
   MPI_Comm             comm;
   PetscInt             M, N, x, y, m, n;
@@ -676,18 +668,18 @@ PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx)
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)ksp, &comm));
 
-  PetscCall(DMStagGetGlobalSizes(cart->dm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(cart->dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetGlobalSizes(mesh->dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(mesh->dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
 
-  PetscCall(DMStagVecGetArrayRead(cart->fdm, solfsm->fv_star, &arrUV_star));
-  PetscCall(DMStagGetProductCoordinateArraysRead(cart->dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagVecGetArrayRead(mesh->fdm, solfsm->fv_star, &arrUV_star));
+  PetscCall(DMStagGetProductCoordinateArraysRead(mesh->dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_LEFT, 0, &ileft));
-  PetscCall(DMStagGetLocationSlot(cart->fdm, DMSTAG_DOWN, 0, &idown));
-  PetscCall(DMStagGetLocationSlot(cart->dm, DMSTAG_ELEMENT, 0, &ielem));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_RIGHT, &inextc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(cart->dm, DMSTAG_ELEMENT, &ielemc));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_LEFT, 0, &ileft));
+  PetscCall(DMStagGetLocationSlot(mesh->fdm, DMSTAG_DOWN, 0, &idown));
+  PetscCall(DMStagGetLocationSlot(mesh->dm, DMSTAG_ELEMENT, 0, &ielem));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_ELEMENT, &ielemc));
 
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
@@ -707,10 +699,10 @@ PetscErrorCode ComputeRHSPprime2d(KSP ksp, Vec b, void *ctx)
       divUV_star = (arrUV_star[j][i + 1][ileft] - arrUV_star[j][i][ileft]) / wx + (arrUV_star[j + 1][i][idown] - arrUV_star[j][i][idown]) / wy;
       valb       = -ns->rho / ns->dt * divUV_star / (aw + ae + as + an);
 
-      PetscCall(DMStagVecSetValuesStencil(cart->dm, b, 1, &row, &valb, INSERT_VALUES));
+      PetscCall(DMStagVecSetValuesStencil(mesh->dm, b, 1, &row, &valb, INSERT_VALUES));
     }
 
-  PetscCall(DMStagVecRestoreArrayRead(cart->fdm, solfsm->fv_star, &arrUV_star));
+  PetscCall(DMStagVecRestoreArrayRead(mesh->fdm, solfsm->fv_star, &arrUV_star));
 
   // TODO: below is temporary for cavity flow
   /* Remove null space. */

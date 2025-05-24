@@ -80,7 +80,7 @@ PetscErrorCode SolSetMesh(Sol sol, Mesh mesh)
   PetscCall(PetscObjectReference((PetscObject)mesh));
 
   PetscCall(MeshGetDM(mesh, &dm));
-  PetscCall(MeshGetDim(mesh, &dim));
+  PetscCall(MeshGetDimension(mesh, &dim));
 
   for (d = 0; d < dim; ++d) PetscCall(DMCreateLocalVector(dm, &sol->v[d]));
   PetscCall(DMCreateLocalVector(dm, &sol->p));

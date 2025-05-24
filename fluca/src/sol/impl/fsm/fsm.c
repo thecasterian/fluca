@@ -26,7 +26,7 @@ PetscErrorCode SolSetMesh_FSM(Sol sol, Mesh mesh)
 
   PetscCall(MeshGetDM(mesh, &dm));
   PetscCall(MeshGetFaceDM(mesh, &fdm));
-  PetscCall(MeshGetDim(mesh, &dim));
+  PetscCall(MeshGetDimension(mesh, &dim));
 
   for (d = 0; d < dim; ++d) {
     PetscCall(DMCreateLocalVector(dm, &fsm->v_star[d]));

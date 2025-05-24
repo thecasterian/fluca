@@ -37,7 +37,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
 
   /* Create KSP */
   PetscCall(MeshGetDM(ns->mesh, &dm));
-  PetscCall(MeshGetDim(ns->mesh, &dim));
+  PetscCall(MeshGetDimension(ns->mesh, &dim));
   for (d = 0; d < dim; ++d) {
     PetscCall(KSPCreate(comm, &fsm->kspv[d]));
     PetscCall(KSPSetDM(fsm->kspv[d], dm));
@@ -60,7 +60,7 @@ PetscErrorCode NSInitialize_FSM(NS ns)
   PetscInt dim;
 
   PetscFunctionBegin;
-  PetscCall(MeshGetDim(ns->mesh, &dim));
+  PetscCall(MeshGetDimension(ns->mesh, &dim));
   switch (dim) {
   case 2:
     PetscCall(NSFSMInterpolateVelocity2d_MeshCart(ns));
@@ -77,7 +77,7 @@ PetscErrorCode NSSolveIter_FSM(NS ns)
   PetscInt dim;
 
   PetscFunctionBegin;
-  PetscCall(MeshGetDim(ns->mesh, &dim));
+  PetscCall(MeshGetDimension(ns->mesh, &dim));
   switch (dim) {
   case 2:
     PetscCall(NSFSMCalculateIntermediateVelocity2d_MeshCart(ns));

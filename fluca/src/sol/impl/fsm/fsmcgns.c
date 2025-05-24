@@ -161,7 +161,7 @@ PetscErrorCode SolView_FSMCGNS(Sol sol, PetscViewer viewer)
 
   PetscCall(MeshGetDM(sol->mesh, &dm));
   PetscCall(MeshGetFaceDM(sol->mesh, &fdm));
-  PetscCall(MeshGetDim(sol->mesh, &dim));
+  PetscCall(MeshGetDimension(sol->mesh, &dim));
 
   if (!cgv->output_times) PetscCall(PetscSegBufferCreate(sizeof(PetscReal), 20, &cgv->output_times));
   if (!cgv->output_steps) PetscCall(PetscSegBufferCreate(sizeof(size_t), 20, &cgv->output_steps));
@@ -488,7 +488,7 @@ PetscErrorCode SolLoadCGNS_FSM(Sol sol, PetscInt file_num)
   PetscFunctionBegin;
   PetscCall(MeshGetDM(sol->mesh, &dm));
   PetscCall(MeshGetFaceDM(sol->mesh, &fdm));
-  PetscCall(MeshGetDim(sol->mesh, &dim));
+  PetscCall(MeshGetDimension(sol->mesh, &dim));
   PetscCall(PetscObjectTypeCompare((PetscObject)sol->mesh, MESHCART, &iscart));
 
   /* Read CGNS file info */

@@ -1,7 +1,7 @@
 #include <fluca/private/meshimpl.h>
 #include <flucaviewer.h>
 
-const char *MeshBoundaryTypes[] = {"NOT_PERIODIC", "PERIODIC", "MeshBoundaryType", "", NULL};
+const char *MeshBoundaryTypes[] = {"NONE", "PERIODIC", "MeshBoundaryType", "", NULL};
 
 PetscClassId  MESH_CLASSID = 0;
 PetscLogEvent MESH_SetUp   = 0;
@@ -14,14 +14,15 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh)
   Mesh m;
 
   PetscFunctionBegin;
-  *mesh = NULL;
+  PetscAssertPointer(mesh, 2);
+
   PetscCall(MeshInitializePackage());
-
   PetscCall(FlucaHeaderCreate(m, MESH_CLASSID, "Mesh", "Mesh", "Mesh", comm, MeshDestroy, MeshView));
-
-  m->dim   = -1;
-  m->data  = NULL;
-  m->state = MESH_STATE_INITIAL;
+  m->dim         = PETSC_DETERMINE;
+  m->dm          = NULL;
+  m->fdm         = NULL;
+  m->data        = NULL;
+  m->setupcalled = PETSC_FALSE;
 
   *mesh = m;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -48,7 +49,6 @@ PetscErrorCode MeshSetType(Mesh mesh, MeshType type)
     PetscCall(PetscMemzero(mesh->ops, sizeof(struct _MeshOps)));
   }
 
-  mesh->state = MESH_STATE_INITIAL;
   PetscCall(PetscObjectChangeTypeName((PetscObject)mesh, type));
   PetscCall((*impl_create)(mesh));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -67,7 +67,7 @@ PetscErrorCode MeshSetUp(Mesh mesh)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  if (mesh->state >= MESH_STATE_SETUP) PetscFunctionReturn(PETSC_SUCCESS);
+  if (mesh->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
   PetscCall(PetscLogEventBegin(MESH_SetUp, (PetscObject)mesh, 0, 0, 0));
 
   /* Set default type */
@@ -84,7 +84,7 @@ PetscErrorCode MeshSetUp(Mesh mesh)
   /* Viewers */
   PetscCall(MeshViewFromOptions(mesh, NULL, "-mesh_view"));
 
-  mesh->state = MESH_STATE_SETUP;
+  mesh->setupcalled = PETSC_TRUE;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -130,8 +130,8 @@ PetscErrorCode MeshGetDM(Mesh mesh, DM *dm)
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscAssertPointer(dm, 2);
-  PetscCheck(mesh->state >= MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
-  PetscTryTypeMethod(mesh, getdm, dm);
+  PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
+  *dm = mesh->dm;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -140,23 +140,7 @@ PetscErrorCode MeshGetFaceDM(Mesh mesh, DM *dm)
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscAssertPointer(dm, 2);
-  PetscCheck(mesh->state >= MESH_STATE_SETUP, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
-  PetscTryTypeMethod(mesh, getfacedm, dm);
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode MeshBoundaryTypeToDMBoundaryType(MeshBoundaryType type, DMBoundaryType *dmtype)
-{
-  PetscFunctionBegin;
-  switch (type) {
-  case MESH_BOUNDARY_NONE:
-    *dmtype = DM_BOUNDARY_GHOSTED;
-    break;
-  case MESH_BOUNDARY_PERIODIC:
-    *dmtype = DM_BOUNDARY_PERIODIC;
-    break;
-  default:
-    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Invalid boundary type %d", type);
-  }
+  PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
+  *dm = mesh->fdm;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -17,15 +17,8 @@ struct _MeshOps {
   PetscErrorCode (*setfromoptions)(Mesh, PetscOptionItems);
   PetscErrorCode (*setup)(Mesh);
   PetscErrorCode (*destroy)(Mesh);
-  PetscErrorCode (*getdm)(Mesh, DM *);
-  PetscErrorCode (*getfacedm)(Mesh, DM *);
   PetscErrorCode (*view)(Mesh, PetscViewer);
 };
-
-typedef enum {
-  MESH_STATE_INITIAL,
-  MESH_STATE_SETUP,
-} MeshStateType;
 
 struct _p_Mesh {
   PETSCHEADER(struct _MeshOps);
@@ -34,10 +27,11 @@ struct _p_Mesh {
   PetscInt dim; /* dimension */
 
   /* Data ----------------------------------------------------------------- */
+  DM dm;  /* DM for cell-centered variables */
+  DM fdm; /* DM for face-centered variables */
+
   void *data; /* implementation-specific data */
 
   /* Status --------------------------------------------------------------- */
-  MeshStateType state;
+  PetscBool setupcalled; /* whether MeshSetUp() has been called */
 };
-
-PetscErrorCode MeshBoundaryTypeToDMBoundaryType(MeshBoundaryType type, DMBoundaryType *dmtype);

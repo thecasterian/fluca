@@ -1,5 +1,5 @@
 #include <fluca/private/meshimpl.h>
-#include <fluca/private/mesh_cart.h>
+#include <fluca/private/meshcartimpl.h>
 
 static PetscBool MeshPackageInitialized = PETSC_FALSE;
 
