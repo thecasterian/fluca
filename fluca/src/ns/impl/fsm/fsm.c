@@ -161,11 +161,12 @@ PetscErrorCode NSCreate_FSM(NS ns)
   for (d = 0; d < 3; ++d) fsm->kspv[d] = NULL;
   fsm->kspp = NULL;
 
-  ns->ops->setfromoptions = NSSetFromOptions_FSM;
-  ns->ops->setup          = NSSetup_FSM;
-  ns->ops->iterate        = NSIterate_FSM;
-  ns->ops->destroy        = NSDestroy_FSM;
-  ns->ops->view           = NSView_FSM;
-  ns->ops->viewsolution   = NSViewSolution_FSM;
+  ns->ops->setfromoptions   = NSSetFromOptions_FSM;
+  ns->ops->setup            = NSSetup_FSM;
+  ns->ops->iterate          = NSIterate_FSM;
+  ns->ops->destroy          = NSDestroy_FSM;
+  ns->ops->view             = NSView_FSM;
+  ns->ops->viewsolution     = NSViewSolution_FSM;
+  ns->ops->loadsolutioncgns = NSLoadSolutionCGNS_FSM;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
