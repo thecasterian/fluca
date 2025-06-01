@@ -18,8 +18,7 @@ PetscErrorCode NSInitializePackage(void)
   PetscCall(NSRegisterAll());
   /* Register events */
   PetscCall(PetscLogEventRegister("NSSetUp", NS_CLASSID, &NS_SetUp));
-  PetscCall(PetscLogEventRegister("NSInitialize", NS_CLASSID, &NS_Initialize));
-  PetscCall(PetscLogEventRegister("NSInitializeFromFile", NS_CLASSID, &NS_InitializeFromFile));
+  PetscCall(PetscLogEventRegister("NSLoadSolutionFromFile", NS_CLASSID, &NS_LoadSolutionFromFile));
   PetscCall(PetscLogEventRegister("NSSolve", NS_CLASSID, &NS_Solve));
 
   /* Process Info */

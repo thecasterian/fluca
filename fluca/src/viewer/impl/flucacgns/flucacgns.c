@@ -1,4 +1,4 @@
-#include <fluca/private/flucaviewer_cgns.h>
+#include <fluca/private/flucaviewercgnsimpl.h>
 #include <pcgnslib.h>
 
 PetscMPIInt Petsc_Viewer_FlucaCGNS_keyval = MPI_KEYVAL_INVALID;

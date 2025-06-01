@@ -3,15 +3,13 @@
 #include <fluca/private/flucaimpl.h>
 #include <flucamesh.h>
 #include <flucans.h>
-#include <flucasol.h>
 
 #define MAXNSMONITORS 10
 
 FLUCA_EXTERN PetscBool      NSRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode NSRegisterAll(void);
 FLUCA_EXTERN PetscLogEvent  NS_SetUp;
-FLUCA_EXTERN PetscLogEvent  NS_Initialize;
-FLUCA_EXTERN PetscLogEvent  NS_InitializeFromFile;
+FLUCA_EXTERN PetscLogEvent  NS_LoadSolutionFromFile;
 FLUCA_EXTERN PetscLogEvent  NS_Solve;
 
 typedef struct _NSOps *NSOps;
@@ -19,17 +17,12 @@ typedef struct _NSOps *NSOps;
 struct _NSOps {
   PetscErrorCode (*setfromoptions)(NS, PetscOptionItems);
   PetscErrorCode (*setup)(NS);
-  PetscErrorCode (*initialize)(NS);
-  PetscErrorCode (*solve_iter)(NS);
+  PetscErrorCode (*iterate)(NS);
   PetscErrorCode (*destroy)(NS);
   PetscErrorCode (*view)(NS, PetscViewer);
+  PetscErrorCode (*viewsolution)(NS, PetscViewer);
+  PetscErrorCode (*loadsolutioncgns)(NS, PetscInt);
 };
-
-typedef enum {
-  NS_STATE_INITIAL,
-  NS_STATE_SETUP,
-  NS_STATE_SOLUTION_INITIALIZED,
-} NSStateType;
 
 struct _p_NS {
   PETSCHEADER(struct _NSOps);
@@ -42,12 +35,11 @@ struct _p_NS {
   /* Data ----------------------------------------------------------------- */
   PetscInt  step; /* current time step */
   PetscReal t;    /* current time */
-  Mesh      mesh;
-  Sol       sol;
+  Mesh      mesh; /* mesh */
   void     *data; /* implementation-specific data */
 
   /* State ---------------------------------------------------------------- */
-  NSStateType state;
+  PetscBool setupcalled; /* whether NSSetUp() has been called */
 
   /* Monitor -------------------------------------------------------------- */
   PetscInt num_mons;

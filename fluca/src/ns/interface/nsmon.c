@@ -101,7 +101,7 @@ PetscErrorCode NSMonitorSolution(NS ns, PetscViewerAndFormat *vf)
 
   PetscFunctionBegin;
   PetscCall(PetscViewerPushFormat(viewer, format));
-  PetscCall(SolView(ns->sol, viewer));
+  PetscCall(NSViewSolution(ns, viewer));
   PetscCall(PetscViewerPopFormat(viewer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
