@@ -2,6 +2,8 @@
 
 PetscErrorCode NSSetMesh(NS ns, Mesh mesh)
 {
+  PetscInt nb;
+
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 2);
@@ -9,9 +11,12 @@ PetscErrorCode NSSetMesh(NS ns, Mesh mesh)
   if (ns->mesh == mesh) PetscFunctionReturn(PETSC_SUCCESS);
 
   PetscCall(MeshDestroy(&ns->mesh));
+  PetscCall(PetscFree(ns->bcs));
 
   ns->mesh = mesh;
   PetscCall(PetscObjectReference((PetscObject)mesh));
+  PetscCall(MeshGetNumberBoundaries(mesh, &nb));
+  if (nb > 0) PetscCall(PetscCalloc1(nb, &ns->bcs));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

@@ -164,6 +164,13 @@ PetscErrorCode MeshView_Cart(Mesh mesh, PetscViewer v)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode MeshGetNumberBoundaries_Cart(Mesh mesh, PetscInt *nb)
+{
+  PetscFunctionBegin;
+  if (nb) *nb = 2 * mesh->dim;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode MeshCreate_Cart(Mesh mesh)
 {
   Mesh_Cart *cart;
@@ -180,10 +187,11 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh)
     cart->bndTypes[d]     = MESH_BOUNDARY_NONE;
     cart->refineFactor[d] = 2;
   }
-  mesh->ops->setfromoptions = MeshSetFromOptions_Cart;
-  mesh->ops->setup          = MeshSetUp_Cart;
-  mesh->ops->destroy        = MeshDestroy_Cart;
-  mesh->ops->view           = MeshView_Cart;
+  mesh->ops->setfromoptions      = MeshSetFromOptions_Cart;
+  mesh->ops->setup               = MeshSetUp_Cart;
+  mesh->ops->destroy             = MeshDestroy_Cart;
+  mesh->ops->view                = MeshView_Cart;
+  mesh->ops->getnumberboundaries = MeshGetNumberBoundaries_Cart;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

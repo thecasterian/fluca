@@ -3,6 +3,7 @@
 #include <fluca/private/flucaimpl.h>
 #include <flucamesh.h>
 #include <flucans.h>
+#include <flucansbc.h>
 
 #define MAXNSMONITORS 10
 
@@ -33,10 +34,11 @@ struct _p_NS {
   PetscReal dt;  /* time step size */
 
   /* Data ----------------------------------------------------------------- */
-  PetscInt  step; /* current time step */
-  PetscReal t;    /* current time */
-  Mesh      mesh; /* mesh */
-  void     *data; /* implementation-specific data */
+  PetscInt             step; /* current time step */
+  PetscReal            t;    /* current time */
+  Mesh                 mesh; /* mesh */
+  NSBoundaryCondition *bcs;  /* boundary conditions */
+  void                *data; /* implementation-specific data */
 
   /* State ---------------------------------------------------------------- */
   PetscBool setupcalled; /* whether NSSetUp() has been called */

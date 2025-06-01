@@ -144,3 +144,13 @@ PetscErrorCode MeshGetFaceDM(Mesh mesh, DM *dm)
   *dm = mesh->fdm;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode MeshGetNumberBoundaries(Mesh mesh, PetscInt *nb)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+  PetscAssertPointer(nb, 2);
+  PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
+  PetscTryTypeMethod(mesh, getnumberboundaries, nb);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
