@@ -1,7 +1,12 @@
 #pragma once
 
-#include <flucameshtypes.h>
+#include <flucasys.h>
 #include <petscdm.h>
+
+typedef struct _p_Mesh *Mesh;
+
+typedef const char *MeshType;
+#define MESHCART "cart"
 
 FLUCA_EXTERN PetscClassId MESH_CLASSID;
 

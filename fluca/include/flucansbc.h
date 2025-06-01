@@ -3,10 +3,15 @@
 #include <flucasys.h>
 
 typedef enum {
-  NS_BOUNDARY_NONE,
+  NS_BC_NONE,
+  NS_BC_VELOCITY,
 } NSBoundaryConditionType;
 FLUCA_EXTERN const char *NSBoundaryConditionTypes[];
 
+typedef PetscErrorCode (*NSBoundaryConditionFunction)(PetscInt, PetscReal, const PetscReal[], PetscScalar[], void *);
+
 typedef struct {
-  NSBoundaryConditionType type;
+  NSBoundaryConditionType     type;
+  NSBoundaryConditionFunction velocity;
+  void                       *ctx_velocity;
 } NSBoundaryCondition;

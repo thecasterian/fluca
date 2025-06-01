@@ -1,6 +1,7 @@
 #pragma once
 
 #include <flucamesh.h>
+#include <flucansbc.h>
 
 typedef struct _p_NS *NS;
 
@@ -27,6 +28,8 @@ FLUCA_EXTERN PetscErrorCode NSSetTimeStep(NS, PetscInt);
 FLUCA_EXTERN PetscErrorCode NSGetTimeStep(NS, PetscInt *);
 FLUCA_EXTERN PetscErrorCode NSSetTime(NS, PetscReal);
 FLUCA_EXTERN PetscErrorCode NSGetTime(NS, PetscReal *);
+FLUCA_EXTERN PetscErrorCode NSSetBoundaryCondition(NS, PetscInt, NSBoundaryCondition);
+FLUCA_EXTERN PetscErrorCode NSGetBoundaryCondition(NS, PetscInt, NSBoundaryCondition *);
 FLUCA_EXTERN PetscErrorCode NSSetFromOptions(NS);
 FLUCA_EXTERN PetscErrorCode NSSetUp(NS);
 FLUCA_EXTERN PetscErrorCode NSSolve(NS, PetscInt);

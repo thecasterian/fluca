@@ -108,6 +108,30 @@ PetscErrorCode NSGetTime(NS ns, PetscReal *t)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode NSSetBoundaryCondition(NS ns, PetscInt index, NSBoundaryCondition bc)
+{
+  PetscInt nb;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscCall(MeshGetNumberBoundaries(ns->mesh, &nb));
+  PetscCheck(0 <= index && index < nb, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_OUTOFRANGE, "Invalid boundary index %" PetscInt_FMT ", must be in [0, %" PetscInt_FMT ")", index, nb);
+  ns->bcs[index] = bc;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSGetBoundaryCondition(NS ns, PetscInt index, NSBoundaryCondition *bc)
+{
+  PetscInt nb;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscCall(MeshGetNumberBoundaries(ns->mesh, &nb));
+  PetscCheck(0 <= index && index < nb, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_OUTOFRANGE, "Invalid boundary index %" PetscInt_FMT ", must be in [0, %" PetscInt_FMT ")", index, nb);
+  if (bc) *bc = ns->bcs[index];
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetFromOptions(NS ns)
 {
   char      type[256];

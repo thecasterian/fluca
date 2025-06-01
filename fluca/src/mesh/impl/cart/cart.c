@@ -6,6 +6,8 @@
 
 extern PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer v);
 
+const char *MeshCartBoundaryTypes[]              = {"NONE", "PERIODIC", "MeshCartBoundaryType", "", NULL};
+const char *MeshCartBoundaryLocations[]          = {"LEFT", "RIGHT", "DOWN", "UP", "BACK", "FRONT", "MeshCartBoundaryLocation", "", NULL};
 const char *MeshCartCoordinateStencilLocations[] = {"PREV", "NEXT", "MeshCartCoordinateStencilLocation", "", NULL};
 
 PetscLogEvent MESHCART_CreateFromFile;
@@ -32,7 +34,7 @@ PetscErrorCode MeshSetFromOptions_Cart(Mesh mesh, PetscOptionItems PetscOptionsO
   for (d = 0; d < mesh->dim; ++d) {
     PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-cart_boundary_type_%c", 'x' + d));
     PetscCall(PetscSNPrintf(text, PETSC_MAX_PATH_LEN, "Boundary type in the %c direction", 'x' + d));
-    PetscCall(PetscOptionsEnum(opt, text, "MeshCartSetBoundaryTypes", MeshBoundaryTypes, (PetscEnum)cart->bndTypes[d], (PetscEnum *)&cart->bndTypes[d], NULL));
+    PetscCall(PetscOptionsEnum(opt, text, "MeshCartSetBoundaryTypes", MeshCartBoundaryTypes, (PetscEnum)cart->bndTypes[d], (PetscEnum *)&cart->bndTypes[d], NULL));
   }
   for (d = 0; d < mesh->dim; ++d) {
     PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-cart_refine_%c", 'x' + d));
@@ -68,10 +70,10 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
 
   for (d = 0; d < mesh->dim; ++d) {
     switch (cart->bndTypes[d]) {
-    case MESH_BOUNDARY_NONE:
+    case MESHCART_BOUNDARY_NONE:
       dmBndTypes[d] = DM_BOUNDARY_GHOSTED;
       break;
-    case MESH_BOUNDARY_PERIODIC:
+    case MESHCART_BOUNDARY_PERIODIC:
       dmBndTypes[d] = DM_BOUNDARY_PERIODIC;
       break;
     default:
@@ -184,7 +186,7 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh)
     cart->N[d]            = -1;
     cart->nRanks[d]       = PETSC_DECIDE;
     cart->l[d]            = NULL;
-    cart->bndTypes[d]     = MESH_BOUNDARY_NONE;
+    cart->bndTypes[d]     = MESHCART_BOUNDARY_NONE;
     cart->refineFactor[d] = 2;
   }
   mesh->ops->setfromoptions      = MeshSetFromOptions_Cart;
@@ -195,20 +197,20 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartCreate2d(MPI_Comm comm, MeshBoundaryType bndx, MeshBoundaryType bndy, PetscInt M, PetscInt N, PetscInt m, PetscInt n, const PetscInt *lx, const PetscInt *ly, Mesh *mesh)
+PetscErrorCode MeshCartCreate2d(MPI_Comm comm, MeshCartBoundaryType bndx, MeshCartBoundaryType bndy, PetscInt M, PetscInt N, PetscInt m, PetscInt n, const PetscInt *lx, const PetscInt *ly, Mesh *mesh)
 {
   PetscFunctionBegin;
   PetscCall(MeshCreate(comm, mesh));
   PetscCall(MeshSetType(*mesh, MESHCART));
   PetscCall(MeshSetDimension(*mesh, 2));
-  PetscCall(MeshCartSetBoundaryTypes(*mesh, bndx, bndy, MESH_BOUNDARY_NONE));
+  PetscCall(MeshCartSetBoundaryTypes(*mesh, bndx, bndy, MESHCART_BOUNDARY_NONE));
   PetscCall(MeshCartSetGlobalSizes(*mesh, M, N, 1));
   PetscCall(MeshCartSetNumRanks(*mesh, m, n, PETSC_DECIDE));
   PetscCall(MeshCartSetOwnershipRanges(*mesh, lx, ly, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartCreate3d(MPI_Comm comm, MeshBoundaryType bndx, MeshBoundaryType bndy, MeshBoundaryType bndz, PetscInt M, PetscInt N, PetscInt P, PetscInt m, PetscInt n, PetscInt p, const PetscInt *lx, const PetscInt *ly, const PetscInt *lz, Mesh *mesh)
+PetscErrorCode MeshCartCreate3d(MPI_Comm comm, MeshCartBoundaryType bndx, MeshCartBoundaryType bndy, MeshCartBoundaryType bndz, PetscInt M, PetscInt N, PetscInt P, PetscInt m, PetscInt n, PetscInt p, const PetscInt *lx, const PetscInt *ly, const PetscInt *lz, Mesh *mesh)
 {
   PetscFunctionBegin;
   PetscCall(MeshCreate(comm, mesh));
@@ -275,7 +277,7 @@ PetscErrorCode MeshCartGetNumRanks(Mesh mesh, PetscInt *m, PetscInt *n, PetscInt
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartSetBoundaryTypes(Mesh mesh, MeshBoundaryType bndx, MeshBoundaryType bndy, MeshBoundaryType bndz)
+PetscErrorCode MeshCartSetBoundaryTypes(Mesh mesh, MeshCartBoundaryType bndx, MeshCartBoundaryType bndy, MeshCartBoundaryType bndz)
 {
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
@@ -288,7 +290,7 @@ PetscErrorCode MeshCartSetBoundaryTypes(Mesh mesh, MeshBoundaryType bndx, MeshBo
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartGetBoundaryTypes(Mesh mesh, MeshBoundaryType *bndx, MeshBoundaryType *bndy, MeshBoundaryType *bndz)
+PetscErrorCode MeshCartGetBoundaryTypes(Mesh mesh, MeshCartBoundaryType *bndx, MeshCartBoundaryType *bndy, MeshCartBoundaryType *bndz)
 {
   Mesh_Cart *cart = (Mesh_Cart *)mesh->data;
 
@@ -463,6 +465,35 @@ PetscErrorCode MeshCartGetIsLastRank(Mesh mesh, PetscBool *isLastRankX, PetscBoo
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscCall(DMStagGetIsLastRank(mesh->dm, isLastRankX, isLastRankY, isLastRankZ));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCartGetBoundaryIndex(Mesh mesh, MeshCartBoundaryLocation loc, PetscInt *index)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+  switch (loc) {
+  case MESHCART_LEFT:
+    *index = 0;
+    break;
+  case MESHCART_RIGHT:
+    *index = 1;
+    break;
+  case MESHCART_DOWN:
+    *index = 2;
+    break;
+  case MESHCART_UP:
+    *index = 3;
+    break;
+  case MESHCART_BACK:
+    *index = 4;
+    break;
+  case MESHCART_FRONT:
+    *index = 5;
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONG, "Invalid boundary location");
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

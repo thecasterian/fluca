@@ -1,8 +1,6 @@
 #include <fluca/private/meshimpl.h>
 #include <flucaviewer.h>
 
-const char *MeshBoundaryTypes[] = {"NONE", "PERIODIC", "MeshBoundaryType", "", NULL};
-
 PetscClassId  MESH_CLASSID = 0;
 PetscLogEvent MESH_SetUp   = 0;
 
