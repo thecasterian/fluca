@@ -1,5 +1,5 @@
-#include <fluca/private/mesh_cart.h>
-#include <fluca/private/flucaviewer_cgns.h>
+#include <fluca/private/meshcartimpl.h>
+#include <fluca/private/flucaviewercgnsimpl.h>
 #include <petscdmstag.h>
 
 PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
@@ -8,15 +8,13 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
   PetscViewer_FlucaCGNS *cgv  = (PetscViewer_FlucaCGNS *)viewer->data;
 
   PetscFunctionBegin;
-  if (mesh->state < MESH_STATE_SETUP) PetscFunctionReturn(PETSC_SUCCESS);
+  if (!mesh->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
   if (cgv->file_num && cgv->base) PetscFunctionReturn(PETSC_SUCCESS);
 
   if (!cgv->file_num) {
-    DM       dm;
     PetscInt timestep;
 
-    PetscCall(MeshGetDM(mesh, &dm));
-    PetscCall(DMGetOutputSequenceNumber(dm, &timestep, NULL));
+    PetscCall(DMGetOutputSequenceNumber(mesh->dm, &timestep, NULL));
     PetscCall(PetscViewerFileOpen_FlucaCGNS_Internal(viewer, timestep));
   }
   CGNSCall(cg_base_write(cgv->file_num, "Base", mesh->dim, mesh->dim, &cgv->base));
@@ -42,8 +40,8 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
     const char            *coordnames[3] = {"CoordinateX", "CoordinateY", "CoordinateZ"};
     int                    coord[3];
 
-    PetscCall(DMStagGetCorners(cart->dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
-    PetscCall(DMStagGetIsLastRank(cart->dm, &isLastRank[0], &isLastRank[1], &isLastRank[2]));
+    PetscCall(DMStagGetCorners(mesh->dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+    PetscCall(DMStagGetIsLastRank(mesh->dm, &isLastRank[0], &isLastRank[1], &isLastRank[2]));
     PetscCall(FlucaGetCGNSDataType_Internal(PETSC_SCALAR, &datatype));
 
     for (d = 0; d < mesh->dim; ++d) {
@@ -96,16 +94,14 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
 
   /* Cell info */
   {
-    DM          dm;
     PetscInt    x[3], m[3], d, i;
     int         solution, field;
     PetscMPIInt rank;
     cgsize_t    rmin[3], rmax[3], rsize;
     int        *e;
 
-    PetscCall(MeshGetDM(mesh, &dm));
-    PetscCall(DMStagGetCorners(dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
-    PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)dm), &rank));
+    PetscCall(DMStagGetCorners(mesh->dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+    PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)mesh->dm), &rank));
 
     rsize = 1;
     for (d = 0; d < mesh->dim; ++d) {
@@ -162,7 +158,7 @@ PetscErrorCode MeshCartCreateCGNS(MPI_Comm comm, PetscInt file_num, Mesh *mesh)
   }
 
   /* Build mesh. */
-  PetscCall(MeshSetDim(*mesh, cell_dim));
+  PetscCall(MeshSetDimension(*mesh, cell_dim));
   PetscCall(MeshCartSetBoundaryTypes(*mesh, MESH_BOUNDARY_NONE, MESH_BOUNDARY_NONE, MESH_BOUNDARY_NONE));
   PetscCall(MeshCartSetGlobalSizes(*mesh, sizes[cell_dim], sizes[cell_dim + 1], cell_dim == 3 ? sizes[cell_dim + 2] : 1));
   PetscCall(MeshCartSetNumRanks(*mesh, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE));

@@ -9,7 +9,6 @@ PetscErrorCode NSSetMesh(NS ns, Mesh mesh)
   if (ns->mesh == mesh) PetscFunctionReturn(PETSC_SUCCESS);
 
   PetscCall(MeshDestroy(&ns->mesh));
-  PetscCall(SolDestroy(&ns->sol));
 
   ns->mesh = mesh;
   PetscCall(PetscObjectReference((PetscObject)mesh));
@@ -101,5 +100,37 @@ PetscErrorCode NSGetTime(NS ns, PetscReal *t)
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   if (t) *t = ns->t;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSSetFromOptions(NS ns)
+{
+  char      type[256];
+  PetscBool flg, opt;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscCall(NSRegisterAll());
+
+  PetscObjectOptionsBegin((PetscObject)ns);
+
+  PetscCall(PetscOptionsFList("-ns_type", "NS type", "NSSetType", NSList, (char *)(((PetscObject)ns)->type_name ? ((PetscObject)ns)->type_name : NSFSM), type, sizeof(type), &flg));
+  if (flg) PetscCall(NSSetType(ns, type));
+  else if (!((PetscObject)ns)->type_name) PetscCall(NSSetType(ns, NSFSM));
+
+  PetscCall(PetscOptionsReal("-ns_density", "Fluid density", "NSSetDensity", ns->rho, &ns->rho, NULL));
+  PetscCall(PetscOptionsReal("-ns_viscosity", "Fluid viscosity", "NSSetViscosity", ns->mu, &ns->mu, NULL));
+  PetscCall(PetscOptionsReal("-ns_time_step_size", "Time step size", "NSSetTimeStepSize", ns->dt, &ns->dt, NULL));
+
+  PetscCall(PetscOptionsInt("-ns_monitor_frequency", "Monitor frequency", "NSMonitorSetFrequency", ns->mon_freq, &ns->mon_freq, NULL));
+  PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor", "Monitor current step and time", "NSMonitorDefault", NSMonitorDefault, NULL));
+  PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor_solution", "Monitor solution", "NSMonitorSolution", NSMonitorSolution, NULL));
+  flg = PETSC_FALSE;
+  PetscCall(PetscOptionsBool("-ns_monitor_cancel", "Remove all monitors", "NSMonitorCancel", flg, &flg, &opt));
+  if (opt && flg) PetscCall(NSMonitorCancel(ns));
+
+  PetscTryTypeMethod(ns, setfromoptions, PetscOptionsObject);
+
+  PetscOptionsEnd();
   PetscFunctionReturn(PETSC_SUCCESS);
 }
