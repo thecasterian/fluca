@@ -62,7 +62,7 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   DMBoundaryType  dmBndTypes[3];
   const PetscInt *l[3];
   PetscInt        d;
-  const PetscInt  dofElem = 1, dofFace = 1, stencilWidth = 1;
+  const PetscInt  dofElem = 1, dofFace = 1, stencilWidth = 2;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);

@@ -1,5 +1,6 @@
 #include <fluca/private/flucaviewercgnsimpl.h>
 #include <fluca/private/nsfsmimpl.h>
+#include <flucameshcart.h>
 #include <petscdmstag.h>
 
 static PetscErrorCode ComputeRHSUStar2d_Private(KSP, Vec, void *);
@@ -100,8 +101,13 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   const PetscScalar ***arru, ***arrv, ***arrUV;
   const PetscScalar  **arrcx, **arrcy;
   PetscInt             ileft, iright, idown, iup, ielem, iprevc, inextc, ielemc;
-  PetscScalar          wx_left, wx_right, wy_down, wy_up, wx, wy;
+  PetscScalar          h1, h2, hx, hy;
   PetscInt             i, j;
+
+  PetscInt            ileftb, irightb, idownb, iupb;
+  NSBoundaryCondition bcleft, bcright, bcdown, bcup;
+  PetscReal           xb[2];
+  PetscScalar         vb[2];
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
@@ -131,40 +137,83 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
+  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
+  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
+  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
+  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m + nExtrax; ++i) {
-      // TODO: below is temporary for cavity flow
       if (i == 0) {
-        /* Left wall. */
-        arru_interp[j][i][ileft] = 0.0;
-        arrv_interp[j][i][ileft] = 0.0;
+        /* Left boundary */
+        switch (bcleft.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][iprevc];
+          xb[1] = arrcy[j][ielemc];
+          PetscCall(bcleft.velocity(2, ns->t, xb, vb, bcleft.ctx_velocity));
+          arru_interp[j][i][ileft] = vb[0];
+          arrv_interp[j][i][ileft] = vb[1];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
+        }
       } else if (i == M) {
-        /* Right wall. */
-        arru_interp[j][i][ileft] = 0.0;
-        arrv_interp[j][i][ileft] = 0.0;
+        /* Right boundary */
+        switch (bcright.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][iprevc];
+          xb[1] = arrcy[j][ielemc];
+          PetscCall(bcright.velocity(2, ns->t, xb, vb, bcright.ctx_velocity));
+          arru_interp[j][i][ileft] = vb[0];
+          arrv_interp[j][i][ileft] = vb[1];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
+        }
       } else {
-        wx_left                  = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
-        wx_right                 = arrcx[i][inextc] - arrcx[i][iprevc];
-        arru_interp[j][i][ileft] = (wx_right * arru[j][i - 1][ielem] + wx_left * arru[j][i][ielem]) / (wx_left + wx_right);
-        arrv_interp[j][i][ileft] = (wx_right * arrv[j][i - 1][ielem] + wx_left * arrv[j][i][ielem]) / (wx_left + wx_right);
+        h1                       = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
+        h2                       = arrcx[i][inextc] - arrcx[i][iprevc];
+        arru_interp[j][i][ileft] = (h2 * arru[j][i - 1][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
+        arrv_interp[j][i][ileft] = (h2 * arrv[j][i - 1][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
       }
     }
   for (j = y; j < y + n + nExtray; ++j)
     for (i = x; i < x + m; ++i) {
-      // TODO: below is temporary for cavity flow
       if (j == 0) {
-        /* Bottom wall. */
-        arru_interp[j][i][idown] = 0.0;
-        arrv_interp[j][i][idown] = 0.0;
+        /* Down boundary */
+        switch (bcdown.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][ielemc];
+          xb[1] = arrcy[j][iprevc];
+          PetscCall(bcdown.velocity(2, ns->t, xb, vb, bcdown.ctx_velocity));
+          arru_interp[j][i][idown] = vb[0];
+          arrv_interp[j][i][idown] = vb[1];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
+        }
       } else if (j == N) {
-        /* Top wall. */
-        arru_interp[j][i][idown] = 1.0;
-        arrv_interp[j][i][idown] = 0.0;
+        /* Up boundary */
+        switch (bcup.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][ielemc];
+          xb[1] = arrcy[j][iprevc];
+          PetscCall(bcup.velocity(2, ns->t, xb, vb, bcup.ctx_velocity));
+          arru_interp[j][i][idown] = vb[0];
+          arrv_interp[j][i][idown] = vb[1];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
+        }
       } else {
-        wy_down                  = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
-        wy_up                    = arrcy[j][inextc] - arrcy[j][iprevc];
-        arru_interp[j][i][idown] = (wy_up * arru[j - 1][i][ielem] + wy_down * arru[j][i][ielem]) / (wy_down + wy_up);
-        arrv_interp[j][i][idown] = (wy_up * arrv[j - 1][i][ielem] + wy_down * arrv[j][i][ielem]) / (wy_down + wy_up);
+        h1                       = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
+        h2                       = arrcy[j][inextc] - arrcy[j][iprevc];
+        arru_interp[j][i][idown] = (h2 * arru[j - 1][i][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
+        arrv_interp[j][i][idown] = (h2 * arrv[j - 1][i][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
       }
     }
 
@@ -175,10 +224,12 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
-      wx                 = arrcx[i][inextc] - arrcx[i][iprevc];
-      wy                 = arrcy[j][inextc] - arrcy[j][iprevc];
-      arrNu[j][i][ielem] = (arrUV[j][i][iright] * arru_interp[j][i][iright] - arrUV[j][i][ileft] * arru_interp[j][i][ileft]) / wx + (arrUV[j][i][iup] * arru_interp[j][i][iup] - arrUV[j][i][idown] * arru_interp[j][i][idown]) / wy;
-      arrNv[j][i][ielem] = (arrUV[j][i][iright] * arrv_interp[j][i][iright] - arrUV[j][i][ileft] * arrv_interp[j][i][ileft]) / wx + (arrUV[j][i][iup] * arrv_interp[j][i][iup] - arrUV[j][i][idown] * arrv_interp[j][i][idown]) / wy;
+      hx                 = arrcx[i][inextc] - arrcx[i][iprevc];
+      hy                 = arrcy[j][inextc] - arrcy[j][iprevc];
+      arrNu[j][i][ielem] = (arrUV[j][i][iright] * arru_interp[j][i][iright] - arrUV[j][i][ileft] * arru_interp[j][i][ileft]) / hx //
+                         + (arrUV[j][i][iup] * arru_interp[j][i][iup] - arrUV[j][i][idown] * arru_interp[j][i][idown]) / hy;
+      arrNv[j][i][ielem] = (arrUV[j][i][iright] * arrv_interp[j][i][iright] - arrUV[j][i][ileft] * arrv_interp[j][i][ileft]) / hx //
+                         + (arrUV[j][i][iup] * arrv_interp[j][i][iup] - arrUV[j][i][idown] * arrv_interp[j][i][idown]) / hy;
     }
 
   PetscCall(DMStagVecRestoreArray(dm, Nu, &arrNu));
@@ -214,9 +265,14 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
   const PetscScalar ***arru_star, ***arrv_star, ***arrp;
   const PetscScalar  **arrcx, **arrcy;
   PetscInt             ileft, idown, ielem, iprevc, inextc, ielemc;
-  PetscScalar          pw, pe, ps, pn, U_tilde, V_tilde, dpdx, dpdy;
-  PetscScalar          wx_left, wx_right, wy_down, wy_up;
+  PetscScalar          U_tilde, V_tilde, dpdx, dpdy;
+  PetscScalar          h1, h2, A, B, C;
   PetscInt             d, i, j;
+
+  PetscInt            ileftb, irightb, idownb, iupb;
+  NSBoundaryCondition bcleft, bcright, bcdown, bcup;
+  PetscReal           xb[2];
+  PetscScalar         vb[2];
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
@@ -255,36 +311,83 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
+  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
+  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
+  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
+  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
-      // TODO: below is temporary for cavity flow
-      /* Left wall. */
       if (i == 0) {
-        pw = arrp[j][i][ielem];
+        /* Left boundary */
+        switch (bcleft.type) {
+        case NS_BC_VELOCITY:
+          h1   = arrcx[i + 1][ielemc] - arrcx[i][ielemc];
+          h2   = arrcx[i + 2][ielemc] - arrcx[i][ielemc];
+          A    = -(h1 + h2) / (h1 * h2);
+          B    = -h2 / (h1 * (h1 - h2));
+          C    = h1 / (h2 * (h1 - h2));
+          dpdx = A * arrp[j][i][ielem] + B * arrp[j][i + 1][ielem] + C * arrp[j][i + 2][ielem];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
+        }
+      } else if (i == M - 1) {
+        /* Right boundary */
+        switch (bcright.type) {
+        case NS_BC_VELOCITY:
+          h1   = arrcx[i][ielemc] - arrcx[i - 1][ielemc];
+          h2   = arrcx[i][ielemc] - arrcx[i - 2][ielemc];
+          A    = -h1 / (h2 * (h1 - h2));
+          B    = h2 / (h1 * (h1 - h2));
+          C    = (h1 + h2) / (h1 * h2);
+          dpdx = A * arrp[j][i - 2][ielem] + B * arrp[j][i - 1][ielem] + C * arrp[j][i][ielem];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
+        }
       } else {
-        pw = arrp[j][i - 1][ielem];
-      }
-      /* Right wall. */
-      if (i == M - 1) {
-        pe = arrp[j][i][ielem];
-      } else {
-        pe = arrp[j][i + 1][ielem];
-      }
-      /* Bottom wall. */
-      if (j == 0) {
-        ps = arrp[j][i][ielem];
-      } else {
-        ps = arrp[j - 1][i][ielem];
-      }
-      /* Top wall. */
-      if (j == N - 1) {
-        pn = arrp[j][i][ielem];
-      } else {
-        pn = arrp[j + 1][i][ielem];
+        dpdx = (arrp[j][i + 1][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
       }
 
-      arru_tilde[j][i][ielem] = arru_star[j][i][ielem] + dt / rho * (pe - pw) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
-      arrv_tilde[j][i][ielem] = arrv_star[j][i][ielem] + dt / rho * (pn - ps) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
+      if (j == 0) {
+        /* Down boundary */
+        switch (bcdown.type) {
+        case NS_BC_VELOCITY:
+          h1   = arrcy[j + 1][ielemc] - arrcy[j][ielemc];
+          h2   = arrcy[j + 2][ielemc] - arrcy[j][ielemc];
+          A    = -(h1 + h2) / (h1 * h2);
+          B    = -h2 / (h1 * (h1 - h2));
+          C    = h1 / (h2 * (h1 - h2));
+          dpdy = A * arrp[j][i][ielem] + B * arrp[j + 1][i][ielem] + C * arrp[j + 2][i][ielem];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
+        }
+      } else if (j == N - 1) {
+        /* Up boundary */
+        switch (bcup.type) {
+        case NS_BC_VELOCITY:
+          h1   = arrcy[j][ielemc] - arrcy[j - 1][ielemc];
+          h2   = arrcy[j][ielemc] - arrcy[j - 2][ielemc];
+          A    = -h1 / (h2 * (h1 - h2));
+          B    = h2 / (h1 * (h1 - h2));
+          C    = (h1 + h2) / (h1 * h2);
+          dpdy = A * arrp[j - 2][i][ielem] + B * arrp[j - 1][i][ielem] + C * arrp[j][i][ielem];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
+        }
+      } else {
+        dpdy = (arrp[j + 1][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
+      }
+
+      arru_tilde[j][i][ielem] = arru_star[j][i][ielem] + dt / rho * dpdx;
+      arrv_tilde[j][i][ielem] = arrv_star[j][i][ielem] + dt / rho * dpdy;
     }
 
   PetscCall(DMLocalToLocalBegin(dm, u_tilde, INSERT_VALUES, u_tilde));
@@ -294,36 +397,68 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m + nExtrax; ++i) {
-      // TODO: below is temporary for cavity flow
-      /* Left wall. */
       if (i == 0) {
-        arrUV_star[j][i][ileft] = 0.0;
-      }
-      /* Right wall. */
-      else if (i == M) {
-        arrUV_star[j][i][ileft] = 0.0;
+        /* Left boundary */
+        switch (bcleft.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][iprevc];
+          xb[1] = arrcy[j][ielemc];
+          PetscCall(bcleft.velocity(2, ns->t, xb, vb, bcleft.ctx_velocity));
+          arrUV_star[j][i][ileft] = vb[0];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
+        }
+      } else if (i == M) {
+        /* Right boundary */
+        switch (bcright.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][iprevc];
+          xb[1] = arrcy[j][ielemc];
+          PetscCall(bcright.velocity(2, ns->t, xb, vb, bcright.ctx_velocity));
+          arrUV_star[j][i][ileft] = vb[0];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
+        }
       } else {
-        wx_left                 = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
-        wx_right                = arrcx[i][inextc] - arrcx[i][iprevc];
-        U_tilde                 = (wx_right * arru_tilde[j][i - 1][ielem] + wx_left * arru_tilde[j][i][ielem]) / (wx_left + wx_right);
+        h1                      = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
+        h2                      = arrcx[i][inextc] - arrcx[i][iprevc];
+        U_tilde                 = (h2 * arru_tilde[j][i - 1][ielem] + h1 * arru_tilde[j][i][ielem]) / (h1 + h2);
         dpdx                    = (arrp[j][i][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
         arrUV_star[j][i][ileft] = U_tilde - dt / rho * dpdx;
       }
     }
   for (j = y; j < y + n + nExtray; ++j)
     for (i = x; i < x + m; ++i) {
-      // TODO: below is temporary for cavity flow
-      /* Bottom wall. */
       if (j == 0) {
-        arrUV_star[j][i][idown] = 0.0;
-      }
-      /* Top wall. */
-      else if (j == N) {
-        arrUV_star[j][i][idown] = 0.0;
+        /* Down boundary */
+        switch (bcdown.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][ielemc];
+          xb[1] = arrcy[j][iprevc];
+          PetscCall(bcdown.velocity(2, ns->t, xb, vb, bcdown.ctx_velocity));
+          arrUV_star[j][i][idown] = vb[1];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
+        }
+      } else if (j == N) {
+        /* Up boundary */
+        switch (bcup.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][ielemc];
+          xb[1] = arrcy[j][iprevc];
+          PetscCall(bcup.velocity(2, ns->t, xb, vb, bcup.ctx_velocity));
+          arrUV_star[j][i][idown] = vb[1];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
+        }
       } else {
-        wy_down                 = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
-        wy_up                   = arrcy[j][inextc] - arrcy[j][iprevc];
-        V_tilde                 = (wy_up * arrv_tilde[j - 1][i][ielem] + wy_down * arrv_tilde[j][i][ielem]) / (wy_down + wy_up);
+        h1                      = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
+        h2                      = arrcy[j][inextc] - arrcy[j][iprevc];
+        V_tilde                 = (h2 * arrv_tilde[j - 1][i][ielem] + h1 * arrv_tilde[j][i][ielem]) / (h1 + h2);
         dpdy                    = (arrp[j][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
         arrUV_star[j][i][idown] = V_tilde - dt / rho * dpdy;
       }
@@ -382,9 +517,12 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   const PetscScalar ***arru_star, ***arrv_star, ***arrp_prime, ***arrUV_star;
   const PetscScalar  **arrcx, **arrcy;
   PetscInt             ileft, idown, ielem, iprevc, inextc, ielemc;
-  PetscScalar          ppp, ppw, ppe, pps, ppn, pplap;
-  PetscScalar          wx, wy, aw, ae, as, an;
+  PetscScalar          dppdxl, dppdxr, dppdyd, dppdyu, dppdx, dppdy, d2ppdx2, d2ppdy2;
+  PetscScalar          h1, h2, A;
   PetscInt             i, j;
+
+  PetscInt            ileftb, irightb, idownb, iupb;
+  NSBoundaryCondition bcleft, bcright, bcdown, bcup;
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
@@ -414,54 +552,146 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
+  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
+  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
+  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
+  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
-      wx = arrcx[i][inextc] - arrcx[i][iprevc];
-      wy = arrcy[j][inextc] - arrcy[j][iprevc];
-      aw = 1.0 / (wx * (arrcx[i][ielemc] - arrcx[i - 1][ielemc]));
-      ae = 1.0 / (wx * (arrcx[i + 1][ielemc] - arrcx[i][ielemc]));
-      as = 1.0 / (wy * (arrcy[j][ielemc] - arrcy[j - 1][ielemc]));
-      an = 1.0 / (wy * (arrcy[j + 1][ielemc] - arrcy[j][ielemc]));
+      if (i == 0) {
+        /* Left boundary */
+        switch (bcleft.type) {
+        case NS_BC_VELOCITY:
+          h1      = arrcx[i][ielemc] - arrcx[i][iprevc];
+          h2      = arrcx[i + 1][ielemc] - arrcx[i][ielemc];
+          A       = 2. * h1 / (h2 * (2. * h1 + h2));
+          dppdx   = -A * arrp_prime[j][i][ielem] + A * arrp_prime[j][i + 1][ielem];
+          dppdxl  = 0.;
+          dppdxr  = (arrp_prime[j][i + 1][ielem] - arrp_prime[j][i][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i][ielemc]);
+          d2ppdx2 = (dppdxr - dppdxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
+        }
+      } else if (i == M - 1) {
+        /* Right boundary */
+        switch (bcright.type) {
+        case NS_BC_VELOCITY:
+          h1      = arrcx[i][inextc] - arrcx[i][ielemc];
+          h2      = arrcx[i][ielemc] - arrcx[i - 1][ielemc];
+          A       = 2. * h1 / (h2 * (2. * h1 + h2));
+          dppdx   = -A * arrp_prime[j][i - 1][ielem] + A * arrp_prime[j][i][ielem];
+          dppdxl  = (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          dppdxr  = 0.;
+          d2ppdx2 = (dppdxr - dppdxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
+        }
+      } else {
+        dppdx   = (arrp_prime[j][i + 1][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
+        dppdxl  = (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+        dppdxr  = (arrp_prime[j][i + 1][ielem] - arrp_prime[j][i][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i][ielemc]);
+        d2ppdx2 = (dppdxr - dppdxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
+      }
 
-      ppp = arrp_prime[j][i][ielem];
+      if (j == 0) {
+        /* Down boundary */
+        switch (bcdown.type) {
+        case NS_BC_VELOCITY:
+          h1      = arrcy[j][ielemc] - arrcy[j][iprevc];
+          h2      = arrcy[j + 1][ielemc] - arrcy[j][ielemc];
+          A       = 2. * h1 / (h2 * (2. * h1 + h2));
+          dppdy   = -A * arrp_prime[j][i][ielem] + A * arrp_prime[j + 1][i][ielem];
+          dppdyd  = 0.;
+          dppdyu  = (arrp_prime[j + 1][i][ielem] - arrp_prime[j][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j][ielemc]);
+          d2ppdy2 = (dppdyu - dppdyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
+        }
+      } else if (j == N - 1) {
+        /* Up boundary */
+        switch (bcup.type) {
+        case NS_BC_VELOCITY:
+          h1      = arrcy[j][inextc] - arrcy[j][ielemc];
+          h2      = arrcy[j][ielemc] - arrcy[j - 1][ielemc];
+          A       = 2. * h1 / (h2 * (2. * h1 + h2));
+          dppdy   = A * arrp_prime[j - 1][i][ielem] - A * arrp_prime[j][i][ielem];
+          dppdyd  = (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          dppdyu  = 0.;
+          d2ppdy2 = (dppdyu - dppdyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
+        }
+      } else {
+        dppdy   = (arrp_prime[j + 1][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
+        dppdyd  = (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+        dppdyu  = (arrp_prime[j + 1][i][ielem] - arrp_prime[j][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j][ielemc]);
+        d2ppdy2 = (dppdyu - dppdyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
+      }
 
-      // TODO: below is temporary for cavity flow
-      /* Left wall. */
-      if (i == 0) ppw = arrp_prime[j][i][ielem];
-      else ppw = arrp_prime[j][i - 1][ielem];
-      /* Right wall. */
-      if (i == M - 1) ppe = arrp_prime[j][i][ielem];
-      else ppe = arrp_prime[j][i + 1][ielem];
-      /* Bottom wall. */
-      if (j == 0) pps = arrp_prime[j][i][ielem];
-      else pps = arrp_prime[j - 1][i][ielem];
-      /* Top wall. */
-      if (j == N - 1) ppn = arrp_prime[j][i][ielem];
-      else ppn = arrp_prime[j + 1][i][ielem];
-
-      pplap = aw * ppw + ae * ppe + as * pps + an * ppn - (aw + ae + as + an) * ppp;
-
-      arru[j][i][ielem] = arru_star[j][i][ielem] - dt / rho * (ppe - ppw) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
-      arrv[j][i][ielem] = arrv_star[j][i][ielem] - dt / rho * (ppn - pps) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
-      arrp[j][i][ielem] += ppp - 0.5 * mu * dt / rho * pplap;
+      arru[j][i][ielem] = arru_star[j][i][ielem] - dt / rho * dppdx;
+      arrv[j][i][ielem] = arrv_star[j][i][ielem] - dt / rho * dppdy;
+      arrp[j][i][ielem] += arrp_prime[j][i][ielem] - 0.5 * mu * dt / rho * (d2ppdx2 + d2ppdy2);
     }
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m + 1; ++i) {
-      /* Left wall. */
-      if (i == 0) arrUV[j][i][ileft] = 0.0;
-      /* Right wall. */
-      else if (i == M) arrUV[j][i][ileft] = 0.0;
-      else arrUV[j][i][ileft] = arrUV_star[j][i][ileft] - dt / rho * (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+      if (i == 0) {
+        /* Left boundary */
+        switch (bcleft.type) {
+        case NS_BC_VELOCITY:
+          dppdx = 0.;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
+        }
+      } else if (i == M) {
+        /* Right boundary */
+        switch (bcright.type) {
+        case NS_BC_VELOCITY:
+          dppdx = 0.;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
+        }
+      } else {
+        dppdx = (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+      }
+      arrUV[j][i][ileft] = arrUV_star[j][i][ileft] - dt / rho * dppdx;
     }
 
   for (j = y; j < y + n + 1; ++j)
     for (i = x; i < x + m; ++i) {
-      /* Bottom wall. */
-      if (j == 0) arrUV[j][i][idown] = 0.0;
-      /* Top wall. */
-      else if (j == N) arrUV[j][i][idown] = 0.0;
-      else arrUV[j][i][idown] = arrUV_star[j][i][idown] - dt / rho * (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+      if (j == 0) {
+        /* Down boundary */
+        switch (bcdown.type) {
+        case NS_BC_VELOCITY:
+          dppdy = 0.;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
+        }
+      } else if (j == N) {
+        /* Up boundary */
+        switch (bcup.type) {
+        case NS_BC_VELOCITY:
+          dppdy = 0.;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
+        }
+      } else {
+        dppdy = (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+      }
+      arrUV[j][i][idown] = arrUV_star[j][i][idown] - dt / rho * dppdy;
     }
 
   PetscCall(DMStagVecRestoreArray(dm, u, &arru));
@@ -497,20 +727,25 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
   const PetscReal mu  = ns->mu;
   const PetscReal dt  = ns->dt;
 
-  Vec u = fsm->v[0], v = fsm->v[1];
+  Vec u       = fsm->v[0];
   Vec Nu      = fsm->N[0];
   Vec Nu_prev = fsm->N_prev[0];
   Vec p       = fsm->p_half;
 
   PetscInt             M, N, x, y, m, n;
   DMStagStencil        row;
-  PetscScalar          valb;
-  const PetscScalar ***arrNu, ***arrNu_prev, ***arru, ***arrv, ***arrp;
+  PetscScalar          valb, valbc;
+  const PetscScalar ***arrNu, ***arrNu_prev, ***arru, ***arrp;
   const PetscScalar  **arrcx, **arrcy;
-  PetscScalar          up, uw, ue, us, un, pw, pe, dpdx, ulap;
-  PetscScalar          wx, wy, aw, ae, as, an;
+  PetscScalar          dudxl, dudxr, dudyd, dudyu, d2udx2, d2udy2, dpdx;
+  PetscScalar          h1, h2, h3, A, B, C, D;
   PetscInt             ielem, iprevc, inextc, ielemc;
   PetscInt             i, j;
+
+  PetscInt            ileftb, irightb, idownb, iupb;
+  NSBoundaryCondition bcleft, bcright, bcdown, bcup;
+  PetscReal           xb[2];
+  PetscScalar         vb[2];
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
@@ -522,7 +757,6 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(DMStagVecGetArrayRead(dm, Nu, &arrNu));
   PetscCall(DMStagVecGetArrayRead(dm, Nu_prev, &arrNu_prev));
   PetscCall(DMStagVecGetArrayRead(dm, u, &arru));
-  PetscCall(DMStagVecGetArrayRead(dm, v, &arrv));
   PetscCall(DMStagVecGetArrayRead(dm, p, &arrp));
   PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
 
@@ -531,54 +765,136 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
+  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
+  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
+  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
+  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
-      wx = arrcx[i][inextc] - arrcx[i][iprevc];
-      wy = arrcy[j][inextc] - arrcy[j][iprevc];
-      aw = 1.0 / (wx * (arrcx[i][ielemc] - arrcx[i - 1][ielemc]));
-      ae = 1.0 / (wx * (arrcx[i + 1][ielemc] - arrcx[i][ielemc]));
-      as = 1.0 / (wy * (arrcy[j][ielemc] - arrcy[j - 1][ielemc]));
-      an = 1.0 / (wy * (arrcy[j + 1][ielemc] - arrcy[j][ielemc]));
-
       row.i = i;
       row.j = j;
+      valbc = 0.;
 
-      up = arru[j][i][ielem];
-      // TODO: below is temporary for cavity flow
-      /* Left wall. */
       if (i == 0) {
-        uw = -arru[j][i][ielem];
-        pw = arrp[j][i][ielem];
-      } else {
-        uw = arru[j][i - 1][ielem];
-        pw = arrp[j][i - 1][ielem];
-      }
-      /* Right wall. */
-      if (i == M - 1) {
-        ue = -arru[j][i][ielem];
-        pe = arrp[j][i][ielem];
-      } else {
-        ue = arru[j][i + 1][ielem];
-        pe = arrp[j][i + 1][ielem];
-      }
-      /* Bottom wall. */
-      if (j == 0) us = -arru[j][i][ielem];
-      else us = arru[j - 1][i][ielem];
-      /* Top wall. */
-      if (j == N - 1) un = 2.0 - arru[j][i][ielem];
-      else un = arru[j + 1][i][ielem];
+        /* Left boundary */
+        switch (bcleft.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][iprevc];
+          xb[1] = arrcy[j][ielemc];
+          PetscCall(bcleft.velocity(2, ns->t, xb, vb, bcleft.ctx_velocity));
 
-      /* Pressure gradient. */
-      dpdx = (pe - pw) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
-      /* Laplacian of u. */
-      ulap = aw * uw + ae * ue + as * us + an * un - (aw + ae + as + an) * up;
+          h1 = arrcx[i][ielemc] - arrcx[i][iprevc];
+          h2 = arrcx[i + 1][ielemc] - arrcx[i][ielemc];
+          h3 = arrcx[i + 2][ielemc] - arrcx[i][ielemc];
 
-      valb = up - 1.5 * dt * arrNu[j][i][ielem] + 0.5 * dt * arrNu_prev[j][i][ielem] - dt / rho * dpdx + 0.5 * mu * dt / rho * ulap;
-      // TODO: below is temporary for cavity flow
-      if (j == N - 1) valb += mu * dt / rho * an;
+          A      = 2. * (h2 + h3) / (h1 * (h1 + h2) * (h1 + h3));
+          B      = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+          C      = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          D      = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+          d2udx2 = A * vb[0] + B * arru[j][i][ielem] + C * arru[j][i + 1][ielem] + D * arru[j][i + 2][ielem];
+          valbc += 0.5 * mu * dt / rho * A * vb[0];
+
+          A    = -(h2 + h3) / (h2 * h3);
+          B    = -h3 / (h2 * (h2 - h3));
+          C    = h2 / (h3 * (h2 - h3));
+          dpdx = A * arrp[j][i][ielem] + B * arrp[j][i + 1][ielem] + C * arrp[j][i + 2][ielem];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
+        }
+      } else if (i == M - 1) {
+        /* Right boundary */
+        switch (bcright.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][inextc];
+          xb[1] = arrcy[j][ielemc];
+          PetscCall(bcright.velocity(2, ns->t, xb, vb, bcright.ctx_velocity));
+
+          h1 = arrcx[i][inextc] - arrcx[i][ielemc];
+          h2 = arrcx[i][ielemc] - arrcx[i - 1][ielemc];
+          h3 = arrcx[i][ielemc] - arrcx[i - 2][ielemc];
+
+          A      = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+          B      = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          C      = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+          D      = 2. * (h2 + h3) / (h1 * (h1 + h2) * (h1 + h3));
+          d2udx2 = A * arru[j][i - 2][ielem] + B * arru[j][i - 1][ielem] + C * arru[j][i][ielem] + D * vb[0];
+          valbc += 0.5 * mu * dt / rho * D * vb[0];
+
+          A    = -h2 / (h3 * (h2 - h3));
+          B    = h3 / (h2 * (h2 - h3));
+          C    = (h2 + h3) / (h2 * h3);
+          dpdx = A * arrp[j][i - 2][ielem] + B * arrp[j][i - 1][ielem] + C * arrp[j][i][ielem];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
+        }
+      } else {
+        dudxl  = (arru[j][i][ielem] - arru[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+        dudxr  = (arru[j][i + 1][ielem] - arru[j][i][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i][ielemc]);
+        d2udx2 = (dudxr - dudxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
+        dpdx   = (arrp[j][i + 1][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
+      }
+
+      if (j == 0) {
+        /* Down boundary */
+        switch (bcdown.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][ielemc];
+          xb[1] = arrcy[j][iprevc];
+          PetscCall(bcdown.velocity(2, ns->t, xb, vb, bcdown.ctx_velocity));
+
+          h1 = arrcy[j][ielemc] - arrcy[j][iprevc];
+          h2 = arrcy[j + 1][ielemc] - arrcy[j][ielemc];
+          h3 = arrcy[j + 2][ielemc] - arrcy[j][ielemc];
+
+          A      = 2. * (h2 + h3) / (h1 * (h1 + h2) * (h1 + h3));
+          B      = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+          C      = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          D      = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+          d2udy2 = A * vb[0] + B * arru[j][i][ielem] + C * arru[j + 1][i][ielem] + D * arru[j + 2][i][ielem];
+          valbc += 0.5 * mu * dt / rho * A * vb[0];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
+        }
+      } else if (j == N - 1) {
+        /* Up boundary */
+        switch (bcup.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][ielemc];
+          xb[1] = arrcy[j][inextc];
+          PetscCall(bcup.velocity(2, ns->t, xb, vb, bcup.ctx_velocity));
+
+          h1 = arrcy[j][inextc] - arrcy[j][ielemc];
+          h2 = arrcy[j][ielemc] - arrcy[j - 1][ielemc];
+          h3 = arrcy[j][ielemc] - arrcy[j - 2][ielemc];
+
+          A      = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+          B      = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          C      = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+          D      = 2. * (h2 + h3) / (h1 * (h1 + h2) * (h1 + h3));
+          d2udy2 = A * arru[j - 2][i][ielem] + B * arru[j - 1][i][ielem] + C * arru[j][i][ielem] + D * vb[0];
+          valbc += 0.5 * mu * dt / rho * D * vb[0];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
+        }
+      } else {
+        dudyd  = (arru[j][i][ielem] - arru[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+        dudyu  = (arru[j + 1][i][ielem] - arru[j][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j][ielemc]);
+        d2udy2 = (dudyu - dudyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
+      }
+
+      valb = arru[j][i][ielem] - dt * (1.5 * arrNu[j][i][ielem] - 0.5 * arrNu_prev[j][i][ielem]) - dt / rho * dpdx + 0.5 * mu * dt / rho * (d2udx2 + d2udy2) + valbc;
 
       PetscCall(DMStagVecSetValuesStencil(dm, b, 1, &row, &valb, INSERT_VALUES));
     }
@@ -586,7 +902,6 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(DMStagVecRestoreArrayRead(dm, Nu, &arrNu));
   PetscCall(DMStagVecRestoreArrayRead(dm, Nu_prev, &arrNu_prev));
   PetscCall(DMStagVecRestoreArrayRead(dm, u, &arru));
-  PetscCall(DMStagVecRestoreArrayRead(dm, v, &arrv));
   PetscCall(DMStagVecRestoreArrayRead(dm, p, &arrp));
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
 
@@ -607,20 +922,25 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
   const PetscReal mu  = ns->mu;
   const PetscReal dt  = ns->dt;
 
-  Vec u = fsm->v[0], v = fsm->v[1];
+  Vec v       = fsm->v[1];
   Vec Nv      = fsm->N[1];
   Vec Nv_prev = fsm->N_prev[1];
   Vec p       = fsm->p_half;
 
   PetscInt             M, N, x, y, m, n;
   DMStagStencil        row;
-  PetscScalar          valb;
-  const PetscScalar ***arrNv, ***arrNv_prev, ***arru, ***arrv, ***arrp;
+  PetscScalar          valb, valbc;
+  const PetscScalar ***arrNv, ***arrNv_prev, ***arrv, ***arrp;
   const PetscScalar  **arrcx, **arrcy;
-  PetscScalar          vp, vw, ve, vs, vn, ps, pn, dpdy, vlap;
-  PetscScalar          wx, wy, aw, ae, as, an;
+  PetscScalar          dvdxl, dvdxr, dvdyd, dvdyu, d2vdx2, d2vdy2, dpdy;
+  PetscScalar          h1, h2, h3, A, B, C, D;
   PetscInt             ielem, iprevc, inextc, ielemc;
   PetscInt             i, j;
+
+  PetscInt            ileftb, irightb, idownb, iupb;
+  NSBoundaryCondition bcleft, bcright, bcdown, bcup;
+  PetscReal           xb[2];
+  PetscScalar         vb[2];
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
@@ -631,7 +951,6 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
 
   PetscCall(DMStagVecGetArrayRead(dm, Nv, &arrNv));
   PetscCall(DMStagVecGetArrayRead(dm, Nv_prev, &arrNv_prev));
-  PetscCall(DMStagVecGetArrayRead(dm, u, &arru));
   PetscCall(DMStagVecGetArrayRead(dm, v, &arrv));
   PetscCall(DMStagVecGetArrayRead(dm, p, &arrp));
   PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
@@ -641,59 +960,142 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
+  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
+  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
+  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
+  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
-      wx = arrcx[i][inextc] - arrcx[i][iprevc];
-      wy = arrcy[j][inextc] - arrcy[j][iprevc];
-      aw = 1.0 / (wx * (arrcx[i][ielemc] - arrcx[i - 1][ielemc]));
-      ae = 1.0 / (wx * (arrcx[i + 1][ielemc] - arrcx[i][ielemc]));
-      as = 1.0 / (wy * (arrcy[j][ielemc] - arrcy[j - 1][ielemc]));
-      an = 1.0 / (wy * (arrcy[j + 1][ielemc] - arrcy[j][ielemc]));
-
       row.i = i;
       row.j = j;
+      valbc = 0.;
 
-      vp = arrv[j][i][ielem];
-      // TODO: below is temporary for cavity flow
-      /* Left wall. */
-      if (i == 0) vw = -arrv[j][i][ielem];
-      else vw = arrv[j][i - 1][ielem];
-      /* Right wall. */
-      if (i == M - 1) ve = -arrv[j][i][ielem];
-      else ve = arrv[j][i + 1][ielem];
-      /* Bottom wall. */
+      if (i == 0) {
+        /* Left boundary */
+        switch (bcleft.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][iprevc];
+          xb[1] = arrcy[j][ielemc];
+          PetscCall(bcleft.velocity(2, ns->t, xb, vb, bcleft.ctx_velocity));
+
+          h1 = arrcx[i][ielemc] - arrcx[i][iprevc];
+          h2 = arrcx[i + 1][ielemc] - arrcx[i][ielemc];
+          h3 = arrcx[i + 2][ielemc] - arrcx[i][ielemc];
+
+          A      = 2. * (h2 + h3) / (h1 * (h1 + h2) * (h1 + h3));
+          B      = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+          C      = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          D      = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+          d2vdx2 = A * vb[1] + B * arrv[j][i][ielem] + C * arrv[j + 1][i][ielem] + D * arrv[j + 2][i][ielem];
+          valbc += 0.5 * mu * dt / rho * A * vb[1];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
+        }
+      } else if (i == M - 1) {
+        /* Right boundary */
+        switch (bcright.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][inextc];
+          xb[1] = arrcy[j][ielemc];
+          PetscCall(bcright.velocity(2, ns->t, xb, vb, bcright.ctx_velocity));
+
+          h1 = arrcx[i][inextc] - arrcx[i][ielemc];
+          h2 = arrcx[i][ielemc] - arrcx[i - 1][ielemc];
+          h3 = arrcx[i][ielemc] - arrcx[i - 2][ielemc];
+
+          A      = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+          B      = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          C      = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+          D      = 2. * (h2 + h3) / (h1 * (h1 + h2) * (h1 + h3));
+          d2vdx2 = A * arrv[j][i - 2][ielem] + B * arrv[j][i - 1][ielem] + C * arrv[j][i][ielem] + D * vb[1];
+          valbc += 0.5 * mu * dt / rho * D * vb[1];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
+        }
+      } else {
+        dvdxl  = (arrv[j][i][ielem] - arrv[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+        dvdxr  = (arrv[j][i + 1][ielem] - arrv[j][i][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i][ielemc]);
+        d2vdx2 = (dvdxr - dvdxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
+      }
+
       if (j == 0) {
-        vs = -arrv[j][i][ielem];
-        ps = arrp[j][i][ielem];
+        /* Down boundary */
+        switch (bcdown.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][ielemc];
+          xb[1] = arrcy[j][iprevc];
+          PetscCall(bcdown.velocity(2, ns->t, xb, vb, bcdown.ctx_velocity));
+
+          h1 = arrcy[j][ielemc] - arrcy[j][iprevc];
+          h2 = arrcy[j + 1][ielemc] - arrcy[j][ielemc];
+          h3 = arrcy[j + 2][ielemc] - arrcy[j][ielemc];
+
+          A      = 2. * (h2 + h3) / (h1 * (h1 + h2) * (h1 + h3));
+          B      = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+          C      = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          D      = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+          d2vdy2 = A * vb[1] + B * arrv[j][i][ielem] + C * arrv[j + 1][i][ielem] + D * arrv[j + 2][i][ielem];
+          valbc += 0.5 * mu * dt / rho * A * vb[1];
+
+          A    = -(h2 + h3) / (h2 * h3);
+          B    = -h3 / (h2 * (h2 - h3));
+          C    = h2 / (h3 * (h2 - h3));
+          dpdy = A * arrp[j][i][ielem] + B * arrp[j][i + 1][ielem] + C * arrp[j][i + 2][ielem];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
+        }
+      } else if (j == N - 1) {
+        /* Up boundary */
+        switch (bcup.type) {
+        case NS_BC_VELOCITY:
+          xb[0] = arrcx[i][ielemc];
+          xb[1] = arrcy[j][inextc];
+          PetscCall(bcup.velocity(2, ns->t, xb, vb, bcup.ctx_velocity));
+
+          h1 = arrcy[j][inextc] - arrcy[j][ielemc];
+          h2 = arrcy[j][ielemc] - arrcy[j - 1][ielemc];
+          h3 = arrcy[j][ielemc] - arrcy[j - 2][ielemc];
+
+          A      = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+          B      = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          C      = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+          D      = 2. * (h2 + h3) / (h1 * (h1 + h2) * (h1 + h3));
+          d2vdy2 = A * arrv[j - 2][i][ielem] + B * arrv[j - 1][i][ielem] + C * arrv[j][i][ielem] + D * vb[1];
+          valbc += 0.5 * mu * dt / rho * D * vb[1];
+
+          A    = -h2 / (h3 * (h2 - h3));
+          B    = h3 / (h2 * (h2 - h3));
+          C    = (h2 + h3) / (h2 * h3);
+          dpdy = A * arrp[j - 2][i][ielem] + B * arrp[j - 1][i][ielem] + C * arrp[j][i][ielem];
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
+        }
       } else {
-        vs = arrv[j - 1][i][ielem];
-        ps = arrp[j - 1][i][ielem];
-      }
-      /* Top wall. */
-      if (j == N - 1) {
-        vn = -arrv[j][i][ielem];
-        pn = arrp[j][i][ielem];
-      } else {
-        vn = arrv[j + 1][i][ielem];
-        pn = arrp[j + 1][i][ielem];
+        dvdyd  = (arrv[j][i][ielem] - arrv[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+        dvdyu  = (arrv[j + 1][i][ielem] - arrv[j][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j][ielemc]);
+        d2vdy2 = (dvdyu - dvdyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
+        dpdy   = (arrp[j + 1][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
       }
 
-      /* Pressure gradient. */
-      dpdy = (pn - ps) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
-      /* Laplacian of v. */
-      vlap = aw * vw + ae * ve + as * vs + an * vn - (aw + ae + as + an) * vp;
-
-      valb = vp - 1.5 * dt * arrNv[j][i][ielem] + 0.5 * dt * arrNv_prev[j][i][ielem] - dt / rho * dpdy + 0.5 * mu * dt / rho * vlap;
+      valb = arrv[j][i][ielem] - dt * (1.5 * arrNv[j][i][ielem] - 0.5 * arrNv_prev[j][i][ielem]) - dt / rho * dpdy + 0.5 * mu * dt / rho * (d2vdx2 + d2vdy2) + valbc;
 
       PetscCall(DMStagVecSetValuesStencil(dm, b, 1, &row, &valb, INSERT_VALUES));
     }
 
   PetscCall(DMStagVecRestoreArrayRead(dm, Nv, &arrNv));
   PetscCall(DMStagVecRestoreArrayRead(dm, Nv_prev, &arrNv_prev));
-  PetscCall(DMStagVecRestoreArrayRead(dm, u, &arru));
   PetscCall(DMStagVecRestoreArrayRead(dm, v, &arrv));
   PetscCall(DMStagVecRestoreArrayRead(dm, p, &arrp));
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
@@ -722,11 +1124,15 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
   PetscScalar          valb;
   const PetscScalar ***arrUV_star;
   const PetscScalar  **arrcx, **arrcy;
-  PetscScalar          wx, wy, aw, ae, as, an;
+  PetscScalar          ap;
+  PetscScalar          A, B;
   PetscInt             ileft, idown, ielem, iprevc, inextc, ielemc;
   PetscScalar          divUV_star;
   MatNullSpace         nullspace;
   PetscInt             i, j;
+
+  PetscInt            ileftb, irightb, idownb, iupb;
+  NSBoundaryCondition bcleft, bcright, bcdown, bcup;
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
@@ -746,30 +1152,86 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
+  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
+  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
+  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
+  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
-      wx = arrcx[i][inextc] - arrcx[i][iprevc];
-      wy = arrcy[j][inextc] - arrcy[j][iprevc];
-      aw = 1.0 / (wx * (arrcx[i][ielemc] - arrcx[i - 1][ielemc]));
-      ae = 1.0 / (wx * (arrcx[i + 1][ielemc] - arrcx[i][ielemc]));
-      as = 1.0 / (wy * (arrcy[j][ielemc] - arrcy[j - 1][ielemc]));
-      an = 1.0 / (wy * (arrcy[j + 1][ielemc] - arrcy[j][ielemc]));
-
       row.i = i;
       row.j = j;
+      ap    = 0.;
 
-      divUV_star = (arrUV_star[j][i + 1][ileft] - arrUV_star[j][i][ileft]) / wx + (arrUV_star[j + 1][i][idown] - arrUV_star[j][i][idown]) / wy;
-      valb       = -rho / dt * divUV_star / (aw + ae + as + an);
+      if (i == 0) {
+        /* Left boundary */
+        switch (bcleft.type) {
+        case NS_BC_VELOCITY:
+          B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          ap += B;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
+        }
+      } else if (i == M - 1) {
+        /* Right boundary */
+        switch (bcright.type) {
+        case NS_BC_VELOCITY:
+          A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          ap += A;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
+        }
+      } else {
+        A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+        B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+        ap += A + B;
+      }
+
+      if (j == 0) {
+        /* Down boundary */
+        switch (bcdown.type) {
+        case NS_BC_VELOCITY:
+          B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          ap += B;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
+        }
+      } else if (j == N - 1) {
+        /* Up boundary */
+        switch (bcup.type) {
+        case NS_BC_VELOCITY:
+          A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          ap += A;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
+        }
+      } else {
+        A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+        B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+        ap += A + B;
+      }
+
+      divUV_star = (arrUV_star[j][i + 1][ileft] - arrUV_star[j][i][ileft]) / (arrcx[i][inextc] - arrcx[i][iprevc]) //
+                 + (arrUV_star[j + 1][i][idown] - arrUV_star[j][i][idown]) / (arrcy[j][inextc] - arrcy[j][iprevc]);
+      valb = -rho / dt * divUV_star / ap;
 
       PetscCall(DMStagVecSetValuesStencil(dm, b, 1, &row, &valb, INSERT_VALUES));
     }
 
   PetscCall(DMStagVecRestoreArrayRead(fdm, fv_star, &arrUV_star));
 
-  // TODO: below is temporary for cavity flow
+  // TODO: below is only for velocity boundary conditions
   /* Remove null space. */
   PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &nullspace));
   PetscCall(MatNullSpaceRemove(nullspace, b));
@@ -796,9 +1258,12 @@ PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *
   PetscScalar         v[5];
   PetscInt            ncols;
   const PetscScalar **arrcx, **arrcy;
-  PetscScalar         wx, wy, aw, ae, as, an;
+  PetscScalar         h1, h2, h3, A, B, C, D;
   PetscInt            iprevc, inextc, ielemc;
   PetscInt            i, j;
+
+  PetscInt            ileftb, irightb, idownb, iupb;
+  NSBoundaryCondition bcleft, bcright, bcdown, bcup;
 
   PetscFunctionBegin;
   PetscCall(KSPGetDM(ksp, &dm));
@@ -810,63 +1275,174 @@ PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
+  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
+  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
+  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
+  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
-  for (ncols = 0; ncols < 5; ++ncols) {
-    col[ncols].loc = DMSTAG_ELEMENT;
-    col[ncols].c   = 0;
+  for (i = 0; i < 5; ++i) {
+    col[i].loc = DMSTAG_ELEMENT;
+    col[i].c   = 0;
   }
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
-      wx = arrcx[i][inextc] - arrcx[i][iprevc];
-      wy = arrcy[j][inextc] - arrcy[j][iprevc];
-      aw = 1.0 / (wx * (arrcx[i][ielemc] - arrcx[i - 1][ielemc]));
-      ae = 1.0 / (wx * (arrcx[i + 1][ielemc] - arrcx[i][ielemc]));
-      as = 1.0 / (wy * (arrcy[j][ielemc] - arrcy[j - 1][ielemc]));
-      an = 1.0 / (wy * (arrcy[j + 1][ielemc] - arrcy[j][ielemc]));
+      row.i    = i;
+      row.j    = j;
+      col[0].i = i;
+      col[0].j = j;
+      v[0]     = 1.;
+      v[1]     = 0.;
+      v[2]     = 0.;
+      v[3]     = 0.;
+      v[4]     = 0.;
+      ncols    = 1;
 
-      row.i = col[0].i = i;
-      row.j = col[0].j = j;
-      v[0]             = 1.0 + 0.5 * mu * dt / rho * (aw + ae + as + an);
-      v[1] = v[2] = v[3] = v[4] = 0;
-      ncols                     = 1;
-
-      // TODO: below is temporary for cavity flow
-      /* Left wall. */
       if (i == 0) {
-        v[0] += 0.5 * mu * dt / rho * aw;
+        /* Left boundary */
+        switch (bcleft.type) {
+        case NS_BC_VELOCITY:
+          h1 = arrcx[i][ielemc] - arrcx[i][iprevc];
+          h2 = arrcx[i + 1][ielemc] - arrcx[i][ielemc];
+          h3 = arrcx[i + 2][ielemc] - arrcx[i][ielemc];
+
+          B = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+          C = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          D = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+
+          v[0] -= 0.5 * mu * dt / rho * B;
+
+          col[ncols].i = i + 1;
+          col[ncols].j = j;
+          v[ncols]     = -0.5 * mu * dt / rho * C;
+          ++ncols;
+
+          col[ncols].i = i + 2;
+          col[ncols].j = j;
+          v[ncols]     = -0.5 * mu * dt / rho * D;
+          ++ncols;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
+        }
+      } else if (i == M - 1) {
+        /* Right boundary */
+        switch (bcright.type) {
+        case NS_BC_VELOCITY:
+          h1 = arrcx[i][inextc] - arrcx[i][ielemc];
+          h2 = arrcx[i][ielemc] - arrcx[i - 1][ielemc];
+          h3 = arrcx[i][inextc] - arrcx[i - 2][ielemc];
+
+          A = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+          B = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          C = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+
+          col[ncols].i = i - 2;
+          col[ncols].j = j;
+          v[ncols]     = -0.5 * mu * dt / rho * A;
+          ++ncols;
+
+          col[ncols].i = i - 1;
+          col[ncols].j = j;
+          v[ncols]     = -0.5 * mu * dt / rho * B;
+          ++ncols;
+
+          v[0] -= 0.5 * mu * dt / rho * C;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
+        }
       } else {
+        A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+        B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+
         col[ncols].i = i - 1;
         col[ncols].j = j;
-        v[ncols]     = -0.5 * mu * dt / rho * aw;
+        v[ncols]     = -0.5 * mu * dt / rho * A;
         ++ncols;
-      }
-      /* Right wall. */
-      if (i == M - 1) {
-        v[0] += 0.5 * mu * dt / rho * ae;
-      } else {
+
+        v[0] += 0.5 * mu * dt / rho * (A + B);
+
         col[ncols].i = i + 1;
         col[ncols].j = j;
-        v[ncols]     = -0.5 * mu * dt / rho * ae;
+        v[ncols]     = -0.5 * mu * dt / rho * B;
         ++ncols;
       }
-      /* Bottom wall. */
+
       if (j == 0) {
-        v[0] += 0.5 * mu * dt / rho * as;
+        /* Down boundary */
+        switch (bcdown.type) {
+        case NS_BC_VELOCITY:
+          h1 = arrcy[j][ielemc] - arrcy[j][iprevc];
+          h2 = arrcy[j + 1][ielemc] - arrcy[j][ielemc];
+          h3 = arrcy[j + 2][ielemc] - arrcy[j][ielemc];
+
+          B = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+          C = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          D = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+
+          v[0] -= 0.5 * mu * dt / rho * B;
+
+          col[ncols].i = i;
+          col[ncols].j = j + 1;
+          v[ncols]     = -0.5 * mu * dt / rho * C;
+          ++ncols;
+
+          col[ncols].i = i;
+          col[ncols].j = j + 2;
+          v[ncols]     = -0.5 * mu * dt / rho * D;
+          ++ncols;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
+        }
+      } else if (j == N - 1) {
+        /* Up boundary */
+        switch (bcup.type) {
+        case NS_BC_VELOCITY:
+          h1 = arrcy[j][inextc] - arrcy[j][ielemc];
+          h2 = arrcy[j][ielemc] - arrcy[j - 1][ielemc];
+          h3 = arrcy[j][inextc] - arrcy[j - 2][ielemc];
+
+          A = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+          B = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
+          C = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
+
+          col[ncols].i = i;
+          col[ncols].j = j - 2;
+          v[ncols]     = -0.5 * mu * dt / rho * A;
+          ++ncols;
+
+          col[ncols].i = i;
+          col[ncols].j = j - 1;
+          v[ncols]     = -0.5 * mu * dt / rho * B;
+          ++ncols;
+
+          v[0] -= 0.5 * mu * dt / rho * C;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
+        }
       } else {
+        A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+        B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+
         col[ncols].i = i;
         col[ncols].j = j - 1;
-        v[ncols]     = -0.5 * mu * dt / rho * as;
+        v[ncols]     = -0.5 * mu * dt / rho * A;
         ++ncols;
-      }
-      /* Top wall. */
-      if (j == N - 1) {
-        v[0] += 0.5 * mu * dt / rho * an;
-      } else {
+
+        v[0] += 0.5 * mu * dt / rho * (A + B);
+
         col[ncols].i = i;
         col[ncols].j = j + 1;
-        v[ncols]     = -0.5 * mu * dt / rho * an;
+        v[ncols]     = -0.5 * mu * dt / rho * B;
         ++ncols;
       }
 
@@ -893,9 +1469,12 @@ PetscErrorCode ComputeOperatorPprime2d_Private(KSP ksp, Mat J, Mat Jpre, void *c
   PetscInt            ncols;
   MatNullSpace        nullspace;
   const PetscScalar **arrcx, **arrcy;
-  PetscScalar         wx, wy, aw, ae, as, an, asum;
+  PetscScalar         A, B;
   PetscInt            iprevc, inextc, ielemc;
   PetscInt            i, j;
+
+  PetscInt            ileftb, irightb, idownb, iupb;
+  NSBoundaryCondition bcleft, bcright, bcdown, bcup;
 
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)ksp, &comm));
@@ -909,66 +1488,124 @@ PetscErrorCode ComputeOperatorPprime2d_Private(KSP ksp, Mat J, Mat Jpre, void *c
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
+  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
+  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
+  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
+  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
-  for (ncols = 0; ncols < 5; ++ncols) {
-    col[ncols].loc = DMSTAG_ELEMENT;
-    col[ncols].c   = 0;
+  for (i = 0; i < 5; ++i) {
+    col[i].loc = DMSTAG_ELEMENT;
+    col[i].c   = 0;
   }
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
-      wx   = arrcx[i][inextc] - arrcx[i][iprevc];
-      wy   = arrcy[j][inextc] - arrcy[j][iprevc];
-      aw   = 1.0 / (wx * (arrcx[i][ielemc] - arrcx[i - 1][ielemc]));
-      ae   = 1.0 / (wx * (arrcx[i + 1][ielemc] - arrcx[i][ielemc]));
-      as   = 1.0 / (wy * (arrcy[j][ielemc] - arrcy[j - 1][ielemc]));
-      an   = 1.0 / (wy * (arrcy[j + 1][ielemc] - arrcy[j][ielemc]));
-      asum = aw + ae + as + an;
+      row.i    = i;
+      row.j    = j;
+      col[0].i = i;
+      col[0].j = j;
+      v[0]     = 0.;
+      v[1]     = 0.;
+      v[2]     = 0.;
+      v[3]     = 0.;
+      v[4]     = 0.;
+      ncols    = 1;
 
-      row.i = col[0].i = i;
-      row.j = col[0].j = j;
-      v[0]             = 1.0;
-      v[1] = v[2] = v[3] = v[4] = 0;
-      ncols                     = 1;
-
-      // TODO: below is temporary for cavity flow
-      /* Left wall. */
       if (i == 0) {
-        v[0] -= aw / asum;
+        /* Left boundary */
+        switch (bcleft.type) {
+        case NS_BC_VELOCITY:
+          B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          v[0] += B;
+          col[ncols].i = i + 1;
+          col[ncols].j = j;
+          v[ncols]     = -B;
+          ++ncols;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
+        }
+      } else if (i == M - 1) {
+        /* Right boundary */
+        switch (bcright.type) {
+        case NS_BC_VELOCITY:
+          A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          v[0] += A;
+          col[ncols].i = i - 1;
+          col[ncols].j = j;
+          v[ncols]     = -A;
+          ++ncols;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
+        }
       } else {
+        A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+        B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+        v[0] += A + B;
         col[ncols].i = i - 1;
         col[ncols].j = j;
-        v[ncols]     = -aw / asum;
+        v[ncols]     = -A;
         ++ncols;
-      }
-      /* Right wall. */
-      if (i == M - 1) {
-        v[0] -= ae / asum;
-      } else {
         col[ncols].i = i + 1;
         col[ncols].j = j;
-        v[ncols]     = -ae / asum;
+        v[ncols]     = -B;
         ++ncols;
       }
-      /* Bottom wall. */
+
       if (j == 0) {
-        v[0] -= as / asum;
+        /* Down boundary */
+        switch (bcdown.type) {
+        case NS_BC_VELOCITY:
+          B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          v[0] += B;
+          col[ncols].i = i;
+          col[ncols].j = j + 1;
+          v[ncols]     = -B;
+          ++ncols;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
+        }
+      } else if (j == N - 1) {
+        /* Up boundary */
+        switch (bcup.type) {
+        case NS_BC_VELOCITY:
+          A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          v[0] += A;
+          col[ncols].i = i;
+          col[ncols].j = j - 1;
+          v[ncols]     = -A;
+          ++ncols;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
+        }
       } else {
+        A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+        B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+        v[0] += A + B;
         col[ncols].i = i;
         col[ncols].j = j - 1;
-        v[ncols]     = -as / asum;
+        v[ncols]     = -A;
         ++ncols;
-      }
-      /* Top wall. */
-      if (j == N - 1) {
-        v[0] -= an / asum;
-      } else {
         col[ncols].i = i;
         col[ncols].j = j + 1;
-        v[ncols]     = -an / asum;
+        v[ncols]     = -B;
         ++ncols;
       }
+
+      v[1] /= v[0];
+      v[2] /= v[0];
+      v[3] /= v[0];
+      v[4] /= v[0];
+      v[0] = 1.;
 
       PetscCall(DMStagMatSetValuesStencil(dm, Jpre, 1, &row, ncols, col, v, INSERT_VALUES));
     }
@@ -976,7 +1613,7 @@ PetscErrorCode ComputeOperatorPprime2d_Private(KSP ksp, Mat J, Mat Jpre, void *c
   PetscCall(MatAssemblyBegin(Jpre, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(Jpre, MAT_FINAL_ASSEMBLY));
 
-  // TODO: below is temporary for cavity flow
+  // TODO: below is temporary for velocity boundary conditions
   /* Remove null space. */
   PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &nullspace));
   PetscCall(MatSetNullSpace(J, nullspace));
