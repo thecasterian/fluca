@@ -5,6 +5,7 @@ add_library(fluca_ns SHARED
     impl/fsm/fsmcart.c
     impl/fsm/fsmcartcgns.c
     interface/nsbasic.c
+    interface/nsbc.c
     interface/nsmon.c
     interface/nsopts.c
     interface/nspkg.c

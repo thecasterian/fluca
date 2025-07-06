@@ -18,6 +18,7 @@ struct _MeshOps {
   PetscErrorCode (*setup)(Mesh);
   PetscErrorCode (*destroy)(Mesh);
   PetscErrorCode (*view)(Mesh, PetscViewer);
+  PetscErrorCode (*getnumberboundaries)(Mesh, PetscInt *);
 };
 
 struct _p_Mesh {

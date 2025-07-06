@@ -159,7 +159,7 @@ PetscErrorCode MeshCartCreateCGNS(MPI_Comm comm, PetscInt file_num, Mesh *mesh)
 
   /* Build mesh. */
   PetscCall(MeshSetDimension(*mesh, cell_dim));
-  PetscCall(MeshCartSetBoundaryTypes(*mesh, MESH_BOUNDARY_NONE, MESH_BOUNDARY_NONE, MESH_BOUNDARY_NONE));
+  PetscCall(MeshCartSetBoundaryTypes(*mesh, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE));
   PetscCall(MeshCartSetGlobalSizes(*mesh, sizes[cell_dim], sizes[cell_dim + 1], cell_dim == 3 ? sizes[cell_dim + 2] : 1));
   PetscCall(MeshCartSetNumRanks(*mesh, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE));
   PetscCall(MeshCartSetOwnershipRanges(*mesh, NULL, NULL, NULL));

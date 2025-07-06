@@ -1,8 +1,6 @@
 #include <fluca/private/meshimpl.h>
 #include <flucaviewer.h>
 
-const char *MeshBoundaryTypes[] = {"NONE", "PERIODIC", "MeshBoundaryType", "", NULL};
-
 PetscClassId  MESH_CLASSID = 0;
 PetscLogEvent MESH_SetUp   = 0;
 
@@ -142,5 +140,15 @@ PetscErrorCode MeshGetFaceDM(Mesh mesh, DM *dm)
   PetscAssertPointer(dm, 2);
   PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
   *dm = mesh->fdm;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshGetNumberBoundaries(Mesh mesh, PetscInt *nb)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+  PetscAssertPointer(nb, 2);
+  PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
+  PetscTryTypeMethod(mesh, getnumberboundaries, nb);
   PetscFunctionReturn(PETSC_SUCCESS);
 }

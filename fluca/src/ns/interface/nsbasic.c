@@ -24,6 +24,7 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns)
   n->step        = 0;
   n->t           = 0.0;
   n->mesh        = NULL;
+  n->bcs         = NULL;
   n->data        = NULL;
   n->setupcalled = PETSC_FALSE;
   n->num_mons    = 0;
@@ -162,6 +163,7 @@ PetscErrorCode NSDestroy(NS *ns)
   }
 
   PetscCall(MeshDestroy(&(*ns)->mesh));
+  PetscCall(PetscFree((*ns)->bcs));
   PetscCall(NSMonitorCancel(*ns));
 
   PetscTryTypeMethod((*ns), destroy);
