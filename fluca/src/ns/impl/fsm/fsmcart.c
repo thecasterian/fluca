@@ -9,6 +9,22 @@ static PetscErrorCode ComputeRHSPprime2d_Private(KSP, Vec, void *);
 static PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP, Mat, Mat, void *);
 static PetscErrorCode ComputeOperatorPprime2d_Private(KSP, Mat, Mat, void *);
 
+static PetscErrorCode GetBoundaryConditions2d_Private(NS ns, NSBoundaryCondition *bcleft, NSBoundaryCondition *bcright, NSBoundaryCondition *bcdown, NSBoundaryCondition *bcup)
+{
+  PetscInt ileftb, irightb, idownb, iupb;
+
+  PetscFunctionBegin;
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
+  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
+  PetscCall(NSGetBoundaryCondition(ns, ileftb, bcleft));
+  PetscCall(NSGetBoundaryCondition(ns, irightb, bcright));
+  PetscCall(NSGetBoundaryCondition(ns, idownb, bcdown));
+  PetscCall(NSGetBoundaryCondition(ns, iupb, bcup));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSFSMInterpolateVelocity2d_Cart_Internal(NS ns)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
@@ -104,7 +120,6 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   PetscScalar          h1, h2, hx, hy;
   PetscInt             i, j;
 
-  PetscInt            ileftb, irightb, idownb, iupb;
   NSBoundaryCondition bcleft, bcright, bcdown, bcup;
   PetscReal           xb[2];
   PetscScalar         vb[2];
@@ -137,14 +152,7 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
-  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
-  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
-  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
-  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+  PetscCall(GetBoundaryConditions2d_Private(ns, &bcleft, &bcright, &bcdown, &bcup));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m + nExtrax; ++i) {
@@ -269,7 +277,6 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
   PetscScalar          h1, h2, A, B, C;
   PetscInt             d, i, j;
 
-  PetscInt            ileftb, irightb, idownb, iupb;
   NSBoundaryCondition bcleft, bcright, bcdown, bcup;
   PetscReal           xb[2];
   PetscScalar         vb[2];
@@ -311,14 +318,7 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
-  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
-  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
-  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
-  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+  PetscCall(GetBoundaryConditions2d_Private(ns, &bcleft, &bcright, &bcdown, &bcup));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
@@ -521,7 +521,6 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   PetscScalar          h1, h2, A;
   PetscInt             i, j;
 
-  PetscInt            ileftb, irightb, idownb, iupb;
   NSBoundaryCondition bcleft, bcright, bcdown, bcup;
 
   PetscFunctionBegin;
@@ -552,14 +551,7 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
-  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
-  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
-  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
-  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+  PetscCall(GetBoundaryConditions2d_Private(ns, &bcleft, &bcright, &bcdown, &bcup));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
@@ -742,7 +734,6 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
   PetscInt             ielem, iprevc, inextc, ielemc;
   PetscInt             i, j;
 
-  PetscInt            ileftb, irightb, idownb, iupb;
   NSBoundaryCondition bcleft, bcright, bcdown, bcup;
   PetscReal           xb[2];
   PetscScalar         vb[2];
@@ -765,14 +756,7 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
-  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
-  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
-  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
-  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+  PetscCall(GetBoundaryConditions2d_Private(ns, &bcleft, &bcright, &bcdown, &bcup));
 
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
@@ -937,7 +921,6 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
   PetscInt             ielem, iprevc, inextc, ielemc;
   PetscInt             i, j;
 
-  PetscInt            ileftb, irightb, idownb, iupb;
   NSBoundaryCondition bcleft, bcright, bcdown, bcup;
   PetscReal           xb[2];
   PetscScalar         vb[2];
@@ -960,14 +943,7 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
-  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
-  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
-  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
-  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+  PetscCall(GetBoundaryConditions2d_Private(ns, &bcleft, &bcright, &bcdown, &bcup));
 
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
@@ -1131,7 +1107,6 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
   MatNullSpace         nullspace;
   PetscInt             i, j;
 
-  PetscInt            ileftb, irightb, idownb, iupb;
   NSBoundaryCondition bcleft, bcright, bcdown, bcup;
 
   PetscFunctionBegin;
@@ -1152,14 +1127,7 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
-  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
-  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
-  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
-  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+  PetscCall(GetBoundaryConditions2d_Private(ns, &bcleft, &bcright, &bcdown, &bcup));
 
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
@@ -1262,7 +1230,6 @@ PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *
   PetscInt            iprevc, inextc, ielemc;
   PetscInt            i, j;
 
-  PetscInt            ileftb, irightb, idownb, iupb;
   NSBoundaryCondition bcleft, bcright, bcdown, bcup;
 
   PetscFunctionBegin;
@@ -1275,14 +1242,7 @@ PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
-  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
-  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
-  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
-  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+  PetscCall(GetBoundaryConditions2d_Private(ns, &bcleft, &bcright, &bcdown, &bcup));
 
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
@@ -1473,7 +1433,6 @@ PetscErrorCode ComputeOperatorPprime2d_Private(KSP ksp, Mat J, Mat Jpre, void *c
   PetscInt            iprevc, inextc, ielemc;
   PetscInt            i, j;
 
-  PetscInt            ileftb, irightb, idownb, iupb;
   NSBoundaryCondition bcleft, bcright, bcdown, bcup;
 
   PetscFunctionBegin;
@@ -1488,14 +1447,7 @@ PetscErrorCode ComputeOperatorPprime2d_Private(KSP ksp, Mat J, Mat Jpre, void *c
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
-  PetscCall(NSGetBoundaryCondition(ns, ileftb, &bcleft));
-  PetscCall(NSGetBoundaryCondition(ns, irightb, &bcright));
-  PetscCall(NSGetBoundaryCondition(ns, idownb, &bcdown));
-  PetscCall(NSGetBoundaryCondition(ns, iupb, &bcup));
+  PetscCall(GetBoundaryConditions2d_Private(ns, &bcleft, &bcright, &bcdown, &bcup));
 
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
