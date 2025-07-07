@@ -510,10 +510,12 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   Vec fv      = fsm->fv;
   Vec fv_star = fsm->fv_star;
   Vec p       = fsm->p_half;
+  Vec p_prev  = fsm->p_half_prev;
+  Vec p_full  = fsm->p;
   Vec p_prime = fsm->p_prime;
 
   PetscInt             M, N, x, y, m, n;
-  PetscScalar       ***arru, ***arrv, ***arrp, ***arrUV;
+  PetscScalar       ***arru, ***arrv, ***arrp, ***arrp_prev, ***arrp_full, ***arrUV;
   const PetscScalar ***arru_star, ***arrv_star, ***arrp_prime, ***arrUV_star;
   const PetscScalar  **arrcx, **arrcy;
   PetscInt             ileft, idown, ielem, iprevc, inextc, ielemc;
@@ -537,6 +539,8 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   PetscCall(DMStagVecGetArray(dm, u, &arru));
   PetscCall(DMStagVecGetArray(dm, v, &arrv));
   PetscCall(DMStagVecGetArray(dm, p, &arrp));
+  PetscCall(DMStagVecGetArray(dm, p_prev, &arrp_prev));
+  PetscCall(DMStagVecGetArray(dm, p_full, &arrp_full));
   PetscCall(DMStagVecGetArray(fdm, fv, &arrUV));
   PetscCall(DMStagVecGetArrayRead(dm, u_star, &arru_star));
   PetscCall(DMStagVecGetArrayRead(dm, v_star, &arrv_star));
@@ -629,9 +633,10 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
         d2ppdy2 = (dppdyu - dppdyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
       }
 
-      arru[j][i][ielem] = arru_star[j][i][ielem] - dt / rho * dppdx;
-      arrv[j][i][ielem] = arrv_star[j][i][ielem] - dt / rho * dppdy;
-      arrp[j][i][ielem] += arrp_prime[j][i][ielem] - 0.5 * mu * dt / rho * (d2ppdx2 + d2ppdy2);
+      arru[j][i][ielem]      = arru_star[j][i][ielem] - dt / rho * dppdx;
+      arrv[j][i][ielem]      = arrv_star[j][i][ielem] - dt / rho * dppdy;
+      arrp[j][i][ielem]      = arrp_prev[j][i][ielem] + arrp_prime[j][i][ielem] - 0.5 * mu * dt / rho * (d2ppdx2 + d2ppdy2);
+      arrp_full[j][i][ielem] = 1.5 * arrp[j][i][ielem] - 0.5 * arrp_prev[j][i][ielem];
     }
 
   for (j = y; j < y + n; ++j)
@@ -689,6 +694,8 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   PetscCall(DMStagVecRestoreArray(dm, u, &arru));
   PetscCall(DMStagVecRestoreArray(dm, v, &arrv));
   PetscCall(DMStagVecRestoreArray(dm, p, &arrp));
+  PetscCall(DMStagVecRestoreArray(dm, p_prev, &arrp_prev));
+  PetscCall(DMStagVecRestoreArray(dm, p_full, &arrp_full));
   PetscCall(DMStagVecRestoreArray(fdm, fv, &arrUV));
   PetscCall(DMStagVecRestoreArrayRead(dm, u_star, &arru_star));
   PetscCall(DMStagVecRestoreArrayRead(dm, v_star, &arrv_star));
