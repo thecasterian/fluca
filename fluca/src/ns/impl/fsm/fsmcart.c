@@ -106,6 +106,8 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm, fdm;
 
+  const PetscReal t_next = ns->t + ns->dt;
+
   Vec u = fsm->v[0], v = fsm->v[1];
   Vec fv = fsm->fv;
   Vec Nu = fsm->N[0], Nv = fsm->N[1];
@@ -162,7 +164,7 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][iprevc];
           xb[1] = arrcy[j][ielemc];
-          PetscCall(bcleft.velocity(2, ns->t, xb, vb, bcleft.ctx_velocity));
+          PetscCall(bcleft.velocity(2, t_next, xb, vb, bcleft.ctx_velocity));
           arru_interp[j][i][ileft] = vb[0];
           arrv_interp[j][i][ileft] = vb[1];
           break;
@@ -175,7 +177,7 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][iprevc];
           xb[1] = arrcy[j][ielemc];
-          PetscCall(bcright.velocity(2, ns->t, xb, vb, bcright.ctx_velocity));
+          PetscCall(bcright.velocity(2, t_next, xb, vb, bcright.ctx_velocity));
           arru_interp[j][i][ileft] = vb[0];
           arrv_interp[j][i][ileft] = vb[1];
           break;
@@ -197,7 +199,7 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][ielemc];
           xb[1] = arrcy[j][iprevc];
-          PetscCall(bcdown.velocity(2, ns->t, xb, vb, bcdown.ctx_velocity));
+          PetscCall(bcdown.velocity(2, t_next, xb, vb, bcdown.ctx_velocity));
           arru_interp[j][i][idown] = vb[0];
           arrv_interp[j][i][idown] = vb[1];
           break;
@@ -210,7 +212,7 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][ielemc];
           xb[1] = arrcy[j][iprevc];
-          PetscCall(bcup.velocity(2, ns->t, xb, vb, bcup.ctx_velocity));
+          PetscCall(bcup.velocity(2, t_next, xb, vb, bcup.ctx_velocity));
           arru_interp[j][i][idown] = vb[0];
           arrv_interp[j][i][idown] = vb[1];
           break;
@@ -259,8 +261,9 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm, fdm;
 
-  const PetscReal rho = ns->rho;
-  const PetscReal dt  = ns->dt;
+  const PetscReal rho    = ns->rho;
+  const PetscReal dt     = ns->dt;
+  const PetscReal t_next = ns->t + ns->dt;
 
   Vec u_star = fsm->v_star[0], v_star = fsm->v_star[1];
   Vec fv_star = fsm->fv_star;
@@ -403,7 +406,7 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][iprevc];
           xb[1] = arrcy[j][ielemc];
-          PetscCall(bcleft.velocity(2, ns->t, xb, vb, bcleft.ctx_velocity));
+          PetscCall(bcleft.velocity(2, t_next, xb, vb, bcleft.ctx_velocity));
           arrUV_star[j][i][ileft] = vb[0];
           break;
         default:
@@ -415,7 +418,7 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][iprevc];
           xb[1] = arrcy[j][ielemc];
-          PetscCall(bcright.velocity(2, ns->t, xb, vb, bcright.ctx_velocity));
+          PetscCall(bcright.velocity(2, t_next, xb, vb, bcright.ctx_velocity));
           arrUV_star[j][i][ileft] = vb[0];
           break;
         default:
@@ -437,7 +440,7 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][ielemc];
           xb[1] = arrcy[j][iprevc];
-          PetscCall(bcdown.velocity(2, ns->t, xb, vb, bcdown.ctx_velocity));
+          PetscCall(bcdown.velocity(2, t_next, xb, vb, bcdown.ctx_velocity));
           arrUV_star[j][i][idown] = vb[1];
           break;
         default:
@@ -449,7 +452,7 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][ielemc];
           xb[1] = arrcy[j][iprevc];
-          PetscCall(bcup.velocity(2, ns->t, xb, vb, bcup.ctx_velocity));
+          PetscCall(bcup.velocity(2, t_next, xb, vb, bcup.ctx_velocity));
           arrUV_star[j][i][idown] = vb[1];
           break;
         default:
@@ -722,9 +725,10 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm, fdm;
 
-  const PetscReal rho = ns->rho;
-  const PetscReal mu  = ns->mu;
-  const PetscReal dt  = ns->dt;
+  const PetscReal rho    = ns->rho;
+  const PetscReal mu     = ns->mu;
+  const PetscReal dt     = ns->dt;
+  const PetscReal t_next = ns->t + ns->dt;
 
   Vec u       = fsm->v[0];
   Vec Nu      = fsm->N[0];
@@ -780,7 +784,7 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][iprevc];
           xb[1] = arrcy[j][ielemc];
-          PetscCall(bcleft.velocity(2, ns->t, xb, vb, bcleft.ctx_velocity));
+          PetscCall(bcleft.velocity(2, t_next, xb, vb, bcleft.ctx_velocity));
 
           h1 = arrcx[i][ielemc] - arrcx[i][iprevc];
           h2 = arrcx[i + 1][ielemc] - arrcx[i][ielemc];
@@ -807,7 +811,7 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][inextc];
           xb[1] = arrcy[j][ielemc];
-          PetscCall(bcright.velocity(2, ns->t, xb, vb, bcright.ctx_velocity));
+          PetscCall(bcright.velocity(2, t_next, xb, vb, bcright.ctx_velocity));
 
           h1 = arrcx[i][inextc] - arrcx[i][ielemc];
           h2 = arrcx[i][ielemc] - arrcx[i - 1][ielemc];
@@ -841,7 +845,7 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][ielemc];
           xb[1] = arrcy[j][iprevc];
-          PetscCall(bcdown.velocity(2, ns->t, xb, vb, bcdown.ctx_velocity));
+          PetscCall(bcdown.velocity(2, t_next, xb, vb, bcdown.ctx_velocity));
 
           h1 = arrcy[j][ielemc] - arrcy[j][iprevc];
           h2 = arrcy[j + 1][ielemc] - arrcy[j][ielemc];
@@ -863,7 +867,7 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][ielemc];
           xb[1] = arrcy[j][inextc];
-          PetscCall(bcup.velocity(2, ns->t, xb, vb, bcup.ctx_velocity));
+          PetscCall(bcup.velocity(2, t_next, xb, vb, bcup.ctx_velocity));
 
           h1 = arrcy[j][inextc] - arrcy[j][ielemc];
           h2 = arrcy[j][ielemc] - arrcy[j - 1][ielemc];
@@ -909,9 +913,10 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm, fdm;
 
-  const PetscReal rho = ns->rho;
-  const PetscReal mu  = ns->mu;
-  const PetscReal dt  = ns->dt;
+  const PetscReal rho    = ns->rho;
+  const PetscReal mu     = ns->mu;
+  const PetscReal dt     = ns->dt;
+  const PetscReal t_next = ns->t + ns->dt;
 
   Vec v       = fsm->v[1];
   Vec Nv      = fsm->N[1];
@@ -967,7 +972,7 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][iprevc];
           xb[1] = arrcy[j][ielemc];
-          PetscCall(bcleft.velocity(2, ns->t, xb, vb, bcleft.ctx_velocity));
+          PetscCall(bcleft.velocity(2, t_next, xb, vb, bcleft.ctx_velocity));
 
           h1 = arrcx[i][ielemc] - arrcx[i][iprevc];
           h2 = arrcx[i + 1][ielemc] - arrcx[i][ielemc];
@@ -977,7 +982,7 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
           B      = 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
           C      = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
           D      = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
-          d2vdx2 = A * vb[1] + B * arrv[j][i][ielem] + C * arrv[j + 1][i][ielem] + D * arrv[j + 2][i][ielem];
+          d2vdx2 = A * vb[1] + B * arrv[j][i][ielem] + C * arrv[j][i + 1][ielem] + D * arrv[j][i + 2][ielem];
           valbc += 0.5 * mu * dt / rho * A * vb[1];
           break;
         default:
@@ -989,7 +994,7 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][inextc];
           xb[1] = arrcy[j][ielemc];
-          PetscCall(bcright.velocity(2, ns->t, xb, vb, bcright.ctx_velocity));
+          PetscCall(bcright.velocity(2, t_next, xb, vb, bcright.ctx_velocity));
 
           h1 = arrcx[i][inextc] - arrcx[i][ielemc];
           h2 = arrcx[i][ielemc] - arrcx[i - 1][ielemc];
@@ -1017,7 +1022,7 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][ielemc];
           xb[1] = arrcy[j][iprevc];
-          PetscCall(bcdown.velocity(2, ns->t, xb, vb, bcdown.ctx_velocity));
+          PetscCall(bcdown.velocity(2, t_next, xb, vb, bcdown.ctx_velocity));
 
           h1 = arrcy[j][ielemc] - arrcy[j][iprevc];
           h2 = arrcy[j + 1][ielemc] - arrcy[j][ielemc];
@@ -1033,7 +1038,7 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
           A    = -(h2 + h3) / (h2 * h3);
           B    = -h3 / (h2 * (h2 - h3));
           C    = h2 / (h3 * (h2 - h3));
-          dpdy = A * arrp[j][i][ielem] + B * arrp[j][i + 1][ielem] + C * arrp[j][i + 2][ielem];
+          dpdy = A * arrp[j][i][ielem] + B * arrp[j + 1][i][ielem] + C * arrp[j + 2][i][ielem];
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
@@ -1044,7 +1049,7 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
         case NS_BC_VELOCITY:
           xb[0] = arrcx[i][ielemc];
           xb[1] = arrcy[j][inextc];
-          PetscCall(bcup.velocity(2, ns->t, xb, vb, bcup.ctx_velocity));
+          PetscCall(bcup.velocity(2, t_next, xb, vb, bcup.ctx_velocity));
 
           h1 = arrcy[j][inextc] - arrcy[j][ielemc];
           h2 = arrcy[j][ielemc] - arrcy[j - 1][ielemc];
@@ -1304,7 +1309,7 @@ PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *
         case NS_BC_VELOCITY:
           h1 = arrcx[i][inextc] - arrcx[i][ielemc];
           h2 = arrcx[i][ielemc] - arrcx[i - 1][ielemc];
-          h3 = arrcx[i][inextc] - arrcx[i - 2][ielemc];
+          h3 = arrcx[i][ielemc] - arrcx[i - 2][ielemc];
 
           A = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
           B = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
@@ -1375,7 +1380,7 @@ PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *
         case NS_BC_VELOCITY:
           h1 = arrcy[j][inextc] - arrcy[j][ielemc];
           h2 = arrcy[j][ielemc] - arrcy[j - 1][ielemc];
-          h3 = arrcy[j][inextc] - arrcy[j - 2][ielemc];
+          h3 = arrcy[j][ielemc] - arrcy[j - 2][ielemc];
 
           A = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
           B = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
