@@ -168,6 +168,12 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
           arru_interp[j][i][ileft] = vb[0];
           arrv_interp[j][i][ileft] = vb[1];
           break;
+        case NS_BC_PERIODIC:
+          h1                       = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
+          h2                       = arrcx[i][inextc] - arrcx[i][iprevc];
+          arru_interp[j][i][ileft] = (h2 * arru[j][i - 1][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
+          arrv_interp[j][i][ileft] = (h2 * arrv[j][i - 1][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
         }
@@ -180,6 +186,12 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
           PetscCall(bcright.velocity(2, t_next, xb, vb, bcright.ctx_velocity));
           arru_interp[j][i][ileft] = vb[0];
           arrv_interp[j][i][ileft] = vb[1];
+          break;
+        case NS_BC_PERIODIC:
+          h1                       = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
+          h2                       = arrcx[i][inextc] - arrcx[i][iprevc];
+          arru_interp[j][i][ileft] = (h2 * arru[j][i - 1][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
+          arrv_interp[j][i][ileft] = (h2 * arrv[j][i - 1][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
@@ -203,6 +215,12 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
           arru_interp[j][i][idown] = vb[0];
           arrv_interp[j][i][idown] = vb[1];
           break;
+        case NS_BC_PERIODIC:
+          h1                       = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
+          h2                       = arrcy[j][inextc] - arrcy[j][iprevc];
+          arru_interp[j][i][idown] = (h2 * arru[j - 1][i][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
+          arrv_interp[j][i][idown] = (h2 * arrv[j - 1][i][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
         }
@@ -215,6 +233,12 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
           PetscCall(bcup.velocity(2, t_next, xb, vb, bcup.ctx_velocity));
           arru_interp[j][i][idown] = vb[0];
           arrv_interp[j][i][idown] = vb[1];
+          break;
+        case NS_BC_PERIODIC:
+          h1                       = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
+          h2                       = arrcy[j][inextc] - arrcy[j][iprevc];
+          arru_interp[j][i][idown] = (h2 * arru[j - 1][i][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
+          arrv_interp[j][i][idown] = (h2 * arrv[j - 1][i][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
@@ -336,6 +360,9 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           C    = h1 / (h2 * (h1 - h2));
           dpdx = A * arrp[j][i][ielem] + B * arrp[j][i + 1][ielem] + C * arrp[j][i + 2][ielem];
           break;
+        case NS_BC_PERIODIC:
+          dpdx = (arrp[j][i + 1][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
         }
@@ -349,6 +376,9 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           B    = h2 / (h1 * (h1 - h2));
           C    = (h1 + h2) / (h1 * h2);
           dpdx = A * arrp[j][i - 2][ielem] + B * arrp[j][i - 1][ielem] + C * arrp[j][i][ielem];
+          break;
+        case NS_BC_PERIODIC:
+          dpdx = (arrp[j][i + 1][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
@@ -368,6 +398,9 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           C    = h1 / (h2 * (h1 - h2));
           dpdy = A * arrp[j][i][ielem] + B * arrp[j + 1][i][ielem] + C * arrp[j + 2][i][ielem];
           break;
+        case NS_BC_PERIODIC:
+          dpdy = (arrp[j + 1][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
         }
@@ -381,6 +414,9 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           B    = h2 / (h1 * (h1 - h2));
           C    = (h1 + h2) / (h1 * h2);
           dpdy = A * arrp[j - 2][i][ielem] + B * arrp[j - 1][i][ielem] + C * arrp[j][i][ielem];
+          break;
+        case NS_BC_PERIODIC:
+          dpdy = (arrp[j + 1][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
@@ -409,6 +445,13 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           PetscCall(bcleft.velocity(2, t_next, xb, vb, bcleft.ctx_velocity));
           arrUV_star[j][i][ileft] = vb[0];
           break;
+        case NS_BC_PERIODIC:
+          h1                      = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
+          h2                      = arrcx[i][inextc] - arrcx[i][iprevc];
+          U_tilde                 = (h2 * arru_tilde[j][i - 1][ielem] + h1 * arru_tilde[j][i][ielem]) / (h1 + h2);
+          dpdx                    = (arrp[j][i][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          arrUV_star[j][i][ileft] = U_tilde - dt / rho * dpdx;
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
         }
@@ -420,6 +463,13 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           xb[1] = arrcy[j][ielemc];
           PetscCall(bcright.velocity(2, t_next, xb, vb, bcright.ctx_velocity));
           arrUV_star[j][i][ileft] = vb[0];
+          break;
+        case NS_BC_PERIODIC:
+          h1                      = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
+          h2                      = arrcx[i][inextc] - arrcx[i][iprevc];
+          U_tilde                 = (h2 * arru_tilde[j][i - 1][ielem] + h1 * arru_tilde[j][i][ielem]) / (h1 + h2);
+          dpdx                    = (arrp[j][i][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          arrUV_star[j][i][ileft] = U_tilde - dt / rho * dpdx;
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
@@ -443,6 +493,13 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           PetscCall(bcdown.velocity(2, t_next, xb, vb, bcdown.ctx_velocity));
           arrUV_star[j][i][idown] = vb[1];
           break;
+        case NS_BC_PERIODIC:
+          h1                      = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
+          h2                      = arrcy[j][inextc] - arrcy[j][iprevc];
+          V_tilde                 = (h2 * arrv_tilde[j - 1][i][ielem] + h1 * arrv_tilde[j][i][ielem]) / (h1 + h2);
+          dpdy                    = (arrp[j][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          arrUV_star[j][i][idown] = V_tilde - dt / rho * dpdy;
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
         }
@@ -454,6 +511,13 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           xb[1] = arrcy[j][iprevc];
           PetscCall(bcup.velocity(2, t_next, xb, vb, bcup.ctx_velocity));
           arrUV_star[j][i][idown] = vb[1];
+          break;
+        case NS_BC_PERIODIC:
+          h1                      = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
+          h2                      = arrcy[j][inextc] - arrcy[j][iprevc];
+          V_tilde                 = (h2 * arrv_tilde[j - 1][i][ielem] + h1 * arrv_tilde[j][i][ielem]) / (h1 + h2);
+          dpdy                    = (arrp[j][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          arrUV_star[j][i][idown] = V_tilde - dt / rho * dpdy;
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
@@ -574,6 +638,12 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
           dppdxr  = (arrp_prime[j][i + 1][ielem] - arrp_prime[j][i][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i][ielemc]);
           d2ppdx2 = (dppdxr - dppdxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
           break;
+        case NS_BC_PERIODIC:
+          dppdx   = (arrp_prime[j][i + 1][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
+          dppdxl  = (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          dppdxr  = (arrp_prime[j][i + 1][ielem] - arrp_prime[j][i][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i][ielemc]);
+          d2ppdx2 = (dppdxr - dppdxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
         }
@@ -587,6 +657,12 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
           dppdx   = -A * arrp_prime[j][i - 1][ielem] + A * arrp_prime[j][i][ielem];
           dppdxl  = (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
           dppdxr  = 0.;
+          d2ppdx2 = (dppdxr - dppdxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
+          break;
+        case NS_BC_PERIODIC:
+          dppdx   = (arrp_prime[j][i + 1][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
+          dppdxl  = (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          dppdxr  = (arrp_prime[j][i + 1][ielem] - arrp_prime[j][i][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i][ielemc]);
           d2ppdx2 = (dppdxr - dppdxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
           break;
         default:
@@ -611,6 +687,12 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
           dppdyu  = (arrp_prime[j + 1][i][ielem] - arrp_prime[j][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j][ielemc]);
           d2ppdy2 = (dppdyu - dppdyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
           break;
+        case NS_BC_PERIODIC:
+          dppdy   = (arrp_prime[j + 1][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
+          dppdyd  = (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          dppdyu  = (arrp_prime[j + 1][i][ielem] - arrp_prime[j][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j][ielemc]);
+          d2ppdy2 = (dppdyu - dppdyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
         }
@@ -624,6 +706,12 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
           dppdy   = A * arrp_prime[j - 1][i][ielem] - A * arrp_prime[j][i][ielem];
           dppdyd  = (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
           dppdyu  = 0.;
+          d2ppdy2 = (dppdyu - dppdyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
+          break;
+        case NS_BC_PERIODIC:
+          dppdy   = (arrp_prime[j + 1][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
+          dppdyd  = (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          dppdyu  = (arrp_prime[j + 1][i][ielem] - arrp_prime[j][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j][ielemc]);
           d2ppdy2 = (dppdyu - dppdyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
           break;
         default:
@@ -650,6 +738,9 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
         case NS_BC_VELOCITY:
           dppdx = 0.;
           break;
+        case NS_BC_PERIODIC:
+          dppdx = (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
         }
@@ -658,6 +749,9 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
         switch (bcright.type) {
         case NS_BC_VELOCITY:
           dppdx = 0.;
+          break;
+        case NS_BC_PERIODIC:
+          dppdx = (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
@@ -676,6 +770,9 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
         case NS_BC_VELOCITY:
           dppdy = 0.;
           break;
+        case NS_BC_PERIODIC:
+          dppdy = (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
         }
@@ -684,6 +781,9 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
         switch (bcup.type) {
         case NS_BC_VELOCITY:
           dppdy = 0.;
+          break;
+        case NS_BC_PERIODIC:
+          dppdy = (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
@@ -802,6 +902,12 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
           C    = h2 / (h3 * (h2 - h3));
           dpdx = A * arrp[j][i][ielem] + B * arrp[j][i + 1][ielem] + C * arrp[j][i + 2][ielem];
           break;
+        case NS_BC_PERIODIC:
+          dudxl  = (arru[j][i][ielem] - arru[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          dudxr  = (arru[j][i + 1][ielem] - arru[j][i][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i][ielemc]);
+          d2udx2 = (dudxr - dudxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
+          dpdx   = (arrp[j][i + 1][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
         }
@@ -828,6 +934,12 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
           B    = h3 / (h2 * (h2 - h3));
           C    = (h2 + h3) / (h2 * h3);
           dpdx = A * arrp[j][i - 2][ielem] + B * arrp[j][i - 1][ielem] + C * arrp[j][i][ielem];
+          break;
+        case NS_BC_PERIODIC:
+          dudxl  = (arru[j][i][ielem] - arru[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          dudxr  = (arru[j][i + 1][ielem] - arru[j][i][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i][ielemc]);
+          d2udx2 = (dudxr - dudxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
+          dpdx   = (arrp[j][i + 1][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
@@ -858,6 +970,11 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
           d2udy2 = A * vb[0] + B * arru[j][i][ielem] + C * arru[j + 1][i][ielem] + D * arru[j + 2][i][ielem];
           valbc += 0.5 * mu * dt / rho * A * vb[0];
           break;
+        case NS_BC_PERIODIC:
+          dudyd  = (arru[j][i][ielem] - arru[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          dudyu  = (arru[j + 1][i][ielem] - arru[j][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j][ielemc]);
+          d2udy2 = (dudyu - dudyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
         }
@@ -879,6 +996,11 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
           D      = 2. * (h2 + h3) / (h1 * (h1 + h2) * (h1 + h3));
           d2udy2 = A * arru[j - 2][i][ielem] + B * arru[j - 1][i][ielem] + C * arru[j][i][ielem] + D * vb[0];
           valbc += 0.5 * mu * dt / rho * D * vb[0];
+          break;
+        case NS_BC_PERIODIC:
+          dudyd  = (arru[j][i][ielem] - arru[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          dudyu  = (arru[j + 1][i][ielem] - arru[j][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j][ielemc]);
+          d2udy2 = (dudyu - dudyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
@@ -985,6 +1107,11 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
           d2vdx2 = A * vb[1] + B * arrv[j][i][ielem] + C * arrv[j][i + 1][ielem] + D * arrv[j][i + 2][ielem];
           valbc += 0.5 * mu * dt / rho * A * vb[1];
           break;
+        case NS_BC_PERIODIC:
+          dvdxl  = (arrv[j][i][ielem] - arrv[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          dvdxr  = (arrv[j][i + 1][ielem] - arrv[j][i][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i][ielemc]);
+          d2vdx2 = (dvdxr - dvdxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
         }
@@ -1006,6 +1133,11 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
           D      = 2. * (h2 + h3) / (h1 * (h1 + h2) * (h1 + h3));
           d2vdx2 = A * arrv[j][i - 2][ielem] + B * arrv[j][i - 1][ielem] + C * arrv[j][i][ielem] + D * vb[1];
           valbc += 0.5 * mu * dt / rho * D * vb[1];
+          break;
+        case NS_BC_PERIODIC:
+          dvdxl  = (arrv[j][i][ielem] - arrv[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          dvdxr  = (arrv[j][i + 1][ielem] - arrv[j][i][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i][ielemc]);
+          d2vdx2 = (dvdxr - dvdxl) / (arrcx[i][inextc] - arrcx[i][iprevc]);
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
@@ -1040,6 +1172,12 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
           C    = h2 / (h3 * (h2 - h3));
           dpdy = A * arrp[j][i][ielem] + B * arrp[j + 1][i][ielem] + C * arrp[j + 2][i][ielem];
           break;
+        case NS_BC_PERIODIC:
+          dvdyd  = (arrv[j][i][ielem] - arrv[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          dvdyu  = (arrv[j + 1][i][ielem] - arrv[j][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j][ielemc]);
+          d2vdy2 = (dvdyu - dvdyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
+          dpdy   = (arrp[j + 1][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
         }
@@ -1066,6 +1204,12 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
           B    = h3 / (h2 * (h2 - h3));
           C    = (h2 + h3) / (h2 * h3);
           dpdy = A * arrp[j - 2][i][ielem] + B * arrp[j - 1][i][ielem] + C * arrp[j][i][ielem];
+          break;
+        case NS_BC_PERIODIC:
+          dvdyd  = (arrv[j][i][ielem] - arrv[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          dvdyu  = (arrv[j + 1][i][ielem] - arrv[j][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j][ielemc]);
+          d2vdy2 = (dvdyu - dvdyd) / (arrcy[j][inextc] - arrcy[j][iprevc]);
+          dpdy   = (arrp[j + 1][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
@@ -1157,6 +1301,11 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
           B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
           ap += B;
           break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          ap += A + B;
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
         }
@@ -1166,6 +1315,11 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
         case NS_BC_VELOCITY:
           A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
           ap += A;
+          break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          ap += A + B;
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
@@ -1183,6 +1337,11 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
           B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
           ap += B;
           break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          ap += A + B;
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
         }
@@ -1192,6 +1351,11 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
         case NS_BC_VELOCITY:
           A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
           ap += A;
+          break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          ap += A + B;
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
@@ -1300,6 +1464,22 @@ PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *
           v[ncols]     = -0.5 * mu * dt / rho * D;
           ++ncols;
           break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+
+          col[ncols].i = i - 1;
+          col[ncols].j = j;
+          v[ncols]     = -0.5 * mu * dt / rho * A;
+          ++ncols;
+
+          v[0] += 0.5 * mu * dt / rho * (A + B);
+
+          col[ncols].i = i + 1;
+          col[ncols].j = j;
+          v[ncols]     = -0.5 * mu * dt / rho * B;
+          ++ncols;
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
         }
@@ -1326,6 +1506,22 @@ PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *
           ++ncols;
 
           v[0] -= 0.5 * mu * dt / rho * C;
+          break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+
+          col[ncols].i = i - 1;
+          col[ncols].j = j;
+          v[ncols]     = -0.5 * mu * dt / rho * A;
+          ++ncols;
+
+          v[0] += 0.5 * mu * dt / rho * (A + B);
+
+          col[ncols].i = i + 1;
+          col[ncols].j = j;
+          v[ncols]     = -0.5 * mu * dt / rho * B;
+          ++ncols;
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
@@ -1371,6 +1567,22 @@ PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *
           v[ncols]     = -0.5 * mu * dt / rho * D;
           ++ncols;
           break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+
+          col[ncols].i = i;
+          col[ncols].j = j - 1;
+          v[ncols]     = -0.5 * mu * dt / rho * A;
+          ++ncols;
+
+          v[0] += 0.5 * mu * dt / rho * (A + B);
+
+          col[ncols].i = i;
+          col[ncols].j = j + 1;
+          v[ncols]     = -0.5 * mu * dt / rho * B;
+          ++ncols;
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
         }
@@ -1397,6 +1609,22 @@ PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *
           ++ncols;
 
           v[0] -= 0.5 * mu * dt / rho * C;
+          break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+
+          col[ncols].i = i;
+          col[ncols].j = j - 1;
+          v[ncols]     = -0.5 * mu * dt / rho * A;
+          ++ncols;
+
+          v[0] += 0.5 * mu * dt / rho * (A + B);
+
+          col[ncols].i = i;
+          col[ncols].j = j + 1;
+          v[ncols]     = -0.5 * mu * dt / rho * B;
+          ++ncols;
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
@@ -1492,6 +1720,19 @@ PetscErrorCode ComputeOperatorPprime2d_Private(KSP ksp, Mat J, Mat Jpre, void *c
           v[ncols]     = -B;
           ++ncols;
           break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          v[0] += A + B;
+          col[ncols].i = i - 1;
+          col[ncols].j = j;
+          v[ncols]     = -A;
+          ++ncols;
+          col[ncols].i = i + 1;
+          col[ncols].j = j;
+          v[ncols]     = -B;
+          ++ncols;
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
         }
@@ -1504,6 +1745,19 @@ PetscErrorCode ComputeOperatorPprime2d_Private(KSP ksp, Mat J, Mat Jpre, void *c
           col[ncols].i = i - 1;
           col[ncols].j = j;
           v[ncols]     = -A;
+          ++ncols;
+          break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcx[i][ielemc] - arrcx[i - 1][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          B = 1. / ((arrcx[i + 1][ielemc] - arrcx[i][ielemc]) * (arrcx[i][inextc] - arrcx[i][iprevc]));
+          v[0] += A + B;
+          col[ncols].i = i - 1;
+          col[ncols].j = j;
+          v[ncols]     = -A;
+          ++ncols;
+          col[ncols].i = i + 1;
+          col[ncols].j = j;
+          v[ncols]     = -B;
           ++ncols;
           break;
         default:
@@ -1534,6 +1788,19 @@ PetscErrorCode ComputeOperatorPprime2d_Private(KSP ksp, Mat J, Mat Jpre, void *c
           v[ncols]     = -B;
           ++ncols;
           break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          v[0] += A + B;
+          col[ncols].i = i;
+          col[ncols].j = j - 1;
+          v[ncols]     = -A;
+          ++ncols;
+          col[ncols].i = i;
+          col[ncols].j = j + 1;
+          v[ncols]     = -B;
+          ++ncols;
+          break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
         }
@@ -1546,6 +1813,19 @@ PetscErrorCode ComputeOperatorPprime2d_Private(KSP ksp, Mat J, Mat Jpre, void *c
           col[ncols].i = i;
           col[ncols].j = j - 1;
           v[ncols]     = -A;
+          ++ncols;
+          break;
+        case NS_BC_PERIODIC:
+          A = 1. / ((arrcy[j][ielemc] - arrcy[j - 1][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          B = 1. / ((arrcy[j + 1][ielemc] - arrcy[j][ielemc]) * (arrcy[j][inextc] - arrcy[j][iprevc]));
+          v[0] += A + B;
+          col[ncols].i = i;
+          col[ncols].j = j - 1;
+          v[ncols]     = -A;
+          ++ncols;
+          col[ncols].i = i;
+          col[ncols].j = j + 1;
+          v[ncols]     = -B;
           ++ncols;
           break;
         default:

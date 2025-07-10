@@ -71,7 +71,7 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   for (d = 0; d < mesh->dim; ++d) {
     switch (cart->bndTypes[d]) {
     case MESHCART_BOUNDARY_NONE:
-      dmBndTypes[d] = DM_BOUNDARY_GHOSTED;
+      dmBndTypes[d] = DM_BOUNDARY_NONE;
       break;
     case MESHCART_BOUNDARY_PERIODIC:
       dmBndTypes[d] = DM_BOUNDARY_PERIODIC;
