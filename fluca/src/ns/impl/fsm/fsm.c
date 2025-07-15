@@ -43,6 +43,12 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(DMCreateLocalVector(dm, &fsm->p_prime));
   PetscCall(DMCreateLocalVector(dm, &fsm->p_half_prev));
 
+  /* Create operators */
+  for (d = 0; d < dim; ++d) PetscCall(DMCreateMatrix(dm, &fsm->grad_p[d]));
+  PetscCall(DMCreateMatrix(dm, &fsm->lap_v));
+
+  PetscCall(NSFSMComputePressureGradientOperator2d_Cart_Internal(dm, ns->bcs, fsm->grad_p));
+
   /* Create KSP */
   for (d = 0; d < dim; ++d) {
     PetscCall(KSPCreate(comm, &fsm->kspv[d]));
