@@ -45,9 +45,10 @@ PetscErrorCode NSSetup_FSM(NS ns)
 
   /* Create operators */
   for (d = 0; d < dim; ++d) PetscCall(DMCreateMatrix(dm, &fsm->grad_p[d]));
-  PetscCall(DMCreateMatrix(dm, &fsm->lap_v));
+  PetscCall(DMCreateMatrix(dm, &fsm->helm_v));
 
   PetscCall(NSFSMComputePressureGradientOperator2d_Cart_Internal(dm, ns->bcs, fsm->grad_p));
+  PetscCall(NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(dm, ns->bcs, 1., 0.5 * ns->mu * ns->dt / ns->rho, fsm->helm_v));
 
   /* Create KSP */
   for (d = 0; d < dim; ++d) {

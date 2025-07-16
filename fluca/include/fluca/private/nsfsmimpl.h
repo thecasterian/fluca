@@ -16,13 +16,15 @@ typedef struct {
   Vec p_half_prev; /* pressure at previous half time step n-3/2 */
 
   Mat grad_p[3]; /* gradient operator in each direction for pressure */
-  Mat lap_v;     /* laplacian operator for velocity */
+  Mat helm_v;    /* helmholtz operator for velocity */
 
   KSP kspv[3]; /* for solving intermediate velocities */
   KSP kspp;    /* for solving pressure correction */
 } NS_FSM;
 
 FLUCA_INTERN PetscErrorCode NSFSMComputePressureGradientOperator2d_Cart_Internal(DM, const NSBoundaryCondition *, Mat[]);
+FLUCA_INTERN PetscErrorCode NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(DM, const NSBoundaryCondition *, PetscScalar, PetscScalar, Mat);
+FLUCA_INTERN PetscErrorCode NSFSMAddVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(DM, PetscInt, const NSBoundaryCondition *, PetscReal, PetscReal, Vec);
 
 FLUCA_INTERN PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSFSMCalculatePressureCorrection2d_Cart_Internal(NS);
