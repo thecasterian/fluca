@@ -164,7 +164,7 @@ PetscErrorCode NSFSMComputePressureGradientOperator2d_Cart_Internal(DM dm, const
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeSecondDerivForwardDiff(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_bnd, PetscReal coord_center, PetscReal coord_next, PetscReal coord_next2, PetscScalar scale, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeSecondDerivForwardDiffDirichletCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_bnd, PetscReal coord_center, PetscReal coord_next, PetscReal coord_next2, PetscScalar scale, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2, h3;
 
@@ -182,6 +182,23 @@ static PetscErrorCode ComputeSecondDerivForwardDiff(DerivDirection dir, PetscInt
   col[*ncols + 1].i = i + (dir == DERIV_X ? 2 : 0);
   col[*ncols + 1].j = j + (dir == DERIV_Y ? 2 : 0);
   *ncols += 2;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ComputeSecondDerivForwardDiffNeumannCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_bnd, PetscReal coord_center, PetscReal coord_next_b, PetscReal coord_next, PetscScalar scale, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  PetscReal h1, h2;
+
+  PetscFunctionBegin;
+  h1 = coord_next - coord_center;
+  h2 = coord_next_b - coord_bnd;
+
+  v[0] -= 1. / (h1 * h2) * scale;
+  v[*ncols] = 1. / (h1 * h2) * scale;
+
+  col[*ncols].i = i + (dir == DERIV_X ? 1 : 0);
+  col[*ncols].j = j + (dir == DERIV_Y ? 1 : 0);
+  *ncols += 1;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -206,7 +223,7 @@ static PetscErrorCode ComputeSecondDerivCentralDiff(DerivDirection dir, PetscInt
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeSecondDerivBackwardDiff(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev2, PetscReal coord_prev, PetscReal coord_center, PetscReal coord_bnd, PetscScalar scale, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeSecondDerivBackwardDiffDirichletCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev2, PetscReal coord_prev, PetscReal coord_center, PetscReal coord_bnd, PetscScalar scale, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2, h3;
 
@@ -224,6 +241,23 @@ static PetscErrorCode ComputeSecondDerivBackwardDiff(DerivDirection dir, PetscIn
   col[*ncols + 1].i = i - (dir == DERIV_X ? 2 : 0);
   col[*ncols + 1].j = j - (dir == DERIV_Y ? 2 : 0);
   *ncols += 2;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ComputeSecondDerivBackwardDiffNeumannCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_prev_b, PetscReal coord_center, PetscReal coord_bnd, PetscScalar scale, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  PetscReal h1, h2;
+
+  PetscFunctionBegin;
+  h1 = coord_center - coord_prev;
+  h2 = coord_bnd - coord_prev_b;
+
+  v[0] -= 1. / (h1 * h2) * scale;
+  v[*ncols] = 1. / (h1 * h2) * scale;
+
+  col[*ncols].i = i - (dir == DERIV_X ? 1 : 0);
+  col[*ncols].j = j - (dir == DERIV_Y ? 1 : 0);
+  *ncols += 1;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -269,7 +303,7 @@ PetscErrorCode NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(DM dm, cons
         /* Left boundary */
         switch (bcs[0].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeSecondDerivForwardDiff(DERIV_X, i, j, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], scale, &ncols, col, v));
+          PetscCall(ComputeSecondDerivForwardDiffDirichletCond(DERIV_X, i, j, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], scale, &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
           PetscCall(ComputeSecondDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], scale, &ncols, col, v));
@@ -281,7 +315,7 @@ PetscErrorCode NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(DM dm, cons
         /* Right boundary */
         switch (bcs[1].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeSecondDerivBackwardDiff(DERIV_X, i, j, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], scale, &ncols, col, v));
+          PetscCall(ComputeSecondDerivBackwardDiffDirichletCond(DERIV_X, i, j, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], scale, &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
           PetscCall(ComputeSecondDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], scale, &ncols, col, v));
@@ -297,7 +331,7 @@ PetscErrorCode NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(DM dm, cons
         /* Down boundary */
         switch (bcs[2].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeSecondDerivForwardDiff(DERIV_Y, i, j, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], scale, &ncols, col, v));
+          PetscCall(ComputeSecondDerivForwardDiffDirichletCond(DERIV_Y, i, j, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], scale, &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
           PetscCall(ComputeSecondDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], scale, &ncols, col, v));
@@ -309,7 +343,7 @@ PetscErrorCode NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(DM dm, cons
         /* Up boundary */
         switch (bcs[3].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeSecondDerivBackwardDiff(DERIV_Y, i, j, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], scale, &ncols, col, v));
+          PetscCall(ComputeSecondDerivBackwardDiffDirichletCond(DERIV_Y, i, j, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], scale, &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
           PetscCall(ComputeSecondDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], scale, &ncols, col, v));
@@ -464,5 +498,104 @@ PetscErrorCode NSFSMAddVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_I
 
   PetscCall(VecAssemblyBegin(vbc));
   PetscCall(VecAssemblyEnd(vbc));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFSMComputePressureCorrectionLaplacianOperator2d_Cart_Internal(DM dm, const NSBoundaryCondition *bcs, Mat L)
+{
+  PetscInt            M, N, x, y, m, n;
+  DMStagStencil       row, col[5];
+  PetscInt            ncols;
+  PetscScalar         v[5];
+  const PetscScalar **arrcx, **arrcy;
+  PetscInt            iprevc, inextc, ielemc;
+  PetscInt            i, j;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetGlobalSizes(dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
+
+  row.loc = DMSTAG_ELEMENT;
+  row.c   = 0;
+  for (i = 0; i < 5; ++i) {
+    col[i].loc = DMSTAG_ELEMENT;
+    col[i].c   = 0;
+  }
+
+  for (j = y; j < y + n; ++j)
+    for (i = x; i < x + m; ++i) {
+      row.i    = i;
+      row.j    = j;
+      col[0].i = i;
+      col[0].j = j;
+      v[0]     = 0.;
+      ncols    = 1;
+
+      if (i == 0) {
+        /* Left boundary */
+        switch (bcs[0].type) {
+        case NS_BC_VELOCITY:
+          PetscCall(ComputeSecondDerivForwardDiffNeumannCond(DERIV_X, i, j, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], 1., &ncols, col, v));
+          break;
+        case NS_BC_PERIODIC:
+          PetscCall(ComputeSecondDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], 1., &ncols, col, v));
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary");
+        }
+      } else if (i == M - 1) {
+        /* Right boundary */
+        switch (bcs[1].type) {
+        case NS_BC_VELOCITY:
+          PetscCall(ComputeSecondDerivBackwardDiffNeumannCond(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], 1., &ncols, col, v));
+          break;
+        case NS_BC_PERIODIC:
+          PetscCall(ComputeSecondDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], 1., &ncols, col, v));
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary");
+        }
+      } else {
+        PetscCall(ComputeSecondDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], 1., &ncols, col, v));
+      }
+
+      if (j == 0) {
+        /* Down boundary */
+        switch (bcs[2].type) {
+        case NS_BC_VELOCITY:
+          PetscCall(ComputeSecondDerivForwardDiffNeumannCond(DERIV_Y, i, j, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], 1., &ncols, col, v));
+          break;
+        case NS_BC_PERIODIC:
+          PetscCall(ComputeSecondDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], 1., &ncols, col, v));
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary");
+        }
+      } else if (j == N - 1) {
+        /* Up boundary */
+        switch (bcs[3].type) {
+        case NS_BC_VELOCITY:
+          PetscCall(ComputeSecondDerivBackwardDiffNeumannCond(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], 1., &ncols, col, v));
+          break;
+        case NS_BC_PERIODIC:
+          PetscCall(ComputeSecondDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], 1., &ncols, col, v));
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary");
+        }
+      } else {
+        PetscCall(ComputeSecondDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], 1., &ncols, col, v));
+      }
+
+      PetscCall(DMStagMatSetValuesStencil(dm, L, 1, &row, ncols, col, v, INSERT_VALUES));
+    }
+
+  /* Assemble the matrix */
+  PetscCall(MatAssemblyBegin(L, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(L, MAT_FINAL_ASSEMBLY));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
