@@ -71,10 +71,14 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   PetscCall(DMLocalToGlobal(dm, fsm->v[0], INSERT_VALUES, u_global));
   PetscCall(DMLocalToGlobal(dm, fsm->v[1], INSERT_VALUES, v_global));
 
-  PetscCall(MatMult(fsm->interp_v, u_global, u_interp_global));
-  PetscCall(NSFSMAddVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 0, ns->bcs, ns->t, u_interp_global));
-  PetscCall(MatMult(fsm->interp_v, v_global, v_interp_global));
-  PetscCall(NSFSMAddVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 1, ns->bcs, ns->t, v_interp_global));
+  PetscCall(MatMult(fsm->interp_v[0], u_global, u_interp_global));
+  PetscCall(MatMultAdd(fsm->interp_v[1], u_global, u_interp_global, u_interp_global));
+  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 0, 0, ns->bcs, ns->t, ADD_VALUES, u_interp_global));
+  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 1, 0, ns->bcs, ns->t, ADD_VALUES, v_interp_global));
+  PetscCall(MatMult(fsm->interp_v[0], v_global, v_interp_global));
+  PetscCall(MatMultAdd(fsm->interp_v[1], v_global, v_interp_global, v_interp_global));
+  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 0, 1, ns->bcs, ns->t, ADD_VALUES, v_interp_global));
+  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 1, 1, ns->bcs, ns->t, ADD_VALUES, v_interp_global));
 
   PetscCall(DMGlobalToLocal(fdm, u_interp_global, INSERT_VALUES, u_interp_local));
   PetscCall(DMGlobalToLocal(fdm, v_interp_global, INSERT_VALUES, v_interp_local));
@@ -441,12 +445,12 @@ PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(DMLocalToGlobal(dm, fsm->N_prev[0], INSERT_VALUES, Nu_prev_global));
 
   PetscCall(MatMult(fsm->helm_v, u_global, helm_u));
-  PetscCall(NSFSMAddVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 0, ns->bcs, ns->t, 0.5 * ns->mu * ns->dt / ns->rho, helm_u));
+  PetscCall(NSFSMComputeVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 0, ns->bcs, ns->t, 0.5 * ns->mu * ns->dt / ns->rho, ADD_VALUES, helm_u));
 
   PetscCall(MatMult(fsm->grad_p[0], p_global, dpdx));
 
   PetscCall(VecSet(valbc, 0.));
-  PetscCall(NSFSMAddVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 0, ns->bcs, ns->t + ns->dt, 0.5 * ns->mu * ns->dt / ns->rho, valbc));
+  PetscCall(NSFSMComputeVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 0, ns->bcs, ns->t + ns->dt, 0.5 * ns->mu * ns->dt / ns->rho, ADD_VALUES, valbc));
 
   PetscCall(VecCopy(helm_u, b));
   PetscCall(VecAXPY(b, -1.5 * ns->dt, Nu_global));
@@ -491,12 +495,12 @@ PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(DMLocalToGlobal(dm, fsm->N_prev[1], INSERT_VALUES, Nv_prev_global));
 
   PetscCall(MatMult(fsm->helm_v, v_global, helm_v));
-  PetscCall(NSFSMAddVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 1, ns->bcs, ns->t, 0.5 * ns->mu * ns->dt / ns->rho, helm_v));
+  PetscCall(NSFSMComputeVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 1, ns->bcs, ns->t, 0.5 * ns->mu * ns->dt / ns->rho, ADD_VALUES, helm_v));
 
   PetscCall(MatMult(fsm->grad_p[1], p_global, dpdy));
 
   PetscCall(VecSet(valbc, 0.));
-  PetscCall(NSFSMAddVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 1, ns->bcs, ns->t + ns->dt, 0.5 * ns->mu * ns->dt / ns->rho, valbc));
+  PetscCall(NSFSMComputeVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 1, ns->bcs, ns->t + ns->dt, 0.5 * ns->mu * ns->dt / ns->rho, ADD_VALUES, valbc));
 
   PetscCall(VecCopy(helm_v, b));
   PetscCall(VecAXPY(b, -1.5 * ns->dt, Nv_global));
