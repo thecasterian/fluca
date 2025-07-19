@@ -124,12 +124,11 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
   const PetscScalar ***arrp;
   const PetscScalar  **arrcx, **arrcy;
   PetscInt             ileft, idown, ielem, iprevc, inextc, ielemc;
-  PetscScalar          U_tilde, V_tilde, dpdx, dpdy;
-  PetscScalar          h1, h2;
+  PetscScalar          dpdx, dpdy;
   PetscInt             d, i, j;
 
-  Vec            p_global, grad_p[2], u_star_global, v_star_global, u_tilde_global, u_tilde_local, v_tilde_global, v_tilde_local;
-  PetscScalar ***arru_tilde, ***arrv_tilde;
+  Vec            p_global, grad_p[2], u_star_global, v_star_global, u_tilde, v_tilde, UV_tilde_global, UV_tilde_local;
+  PetscScalar ***arrUV_tilde;
 
   NSBoundaryCondition bcleft, bcright, bcdown, bcup;
   PetscReal           xb[2];
@@ -159,10 +158,10 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
   PetscCall(DMGetGlobalVector(dm, &grad_p[1]));
   PetscCall(DMGetGlobalVector(dm, &u_star_global));
   PetscCall(DMGetGlobalVector(dm, &v_star_global));
-  PetscCall(DMGetGlobalVector(dm, &u_tilde_global));
-  PetscCall(DMGetLocalVector(dm, &u_tilde_local));
-  PetscCall(DMGetGlobalVector(dm, &v_tilde_global));
-  PetscCall(DMGetLocalVector(dm, &v_tilde_local));
+  PetscCall(DMGetGlobalVector(dm, &u_tilde));
+  PetscCall(DMGetGlobalVector(dm, &v_tilde));
+  PetscCall(DMGetGlobalVector(fdm, &UV_tilde_global));
+  PetscCall(DMGetLocalVector(fdm, &UV_tilde_local));
 
   PetscCall(DMStagVecGetArray(fdm, fsm->fv_star, &arrUV_star));
   PetscCall(DMStagVecGetArrayRead(dm, fsm->p_half, &arrp));
@@ -184,13 +183,14 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
   PetscCall(MatMult(fsm->grad_p[0], p_global, grad_p[0]));
   PetscCall(MatMult(fsm->grad_p[1], p_global, grad_p[1]));
 
-  PetscCall(VecWAXPY(u_tilde_global, ns->dt / ns->rho, grad_p[0], u_star_global));
-  PetscCall(VecWAXPY(v_tilde_global, ns->dt / ns->rho, grad_p[1], v_star_global));
+  PetscCall(VecWAXPY(u_tilde, ns->dt / ns->rho, grad_p[0], u_star_global));
+  PetscCall(VecWAXPY(v_tilde, ns->dt / ns->rho, grad_p[1], v_star_global));
 
-  PetscCall(DMGlobalToLocal(dm, u_tilde_global, INSERT_VALUES, u_tilde_local));
-  PetscCall(DMGlobalToLocal(dm, v_tilde_global, INSERT_VALUES, v_tilde_local));
-  PetscCall(DMStagVecGetArray(dm, u_tilde_local, &arru_tilde));
-  PetscCall(DMStagVecGetArray(dm, v_tilde_local, &arrv_tilde));
+  PetscCall(MatMult(fsm->interp_v[0], u_tilde, UV_tilde_global));
+  PetscCall(MatMultAdd(fsm->interp_v[1], v_tilde, UV_tilde_global, UV_tilde_global));
+
+  PetscCall(DMGlobalToLocal(fdm, UV_tilde_global, INSERT_VALUES, UV_tilde_local));
+  PetscCall(DMStagVecGetArray(fdm, UV_tilde_local, &arrUV_tilde));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m + nExtrax; ++i) {
@@ -204,11 +204,8 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           arrUV_star[j][i][ileft] = vb[0];
           break;
         case NS_BC_PERIODIC:
-          h1                      = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
-          h2                      = arrcx[i][inextc] - arrcx[i][iprevc];
-          U_tilde                 = (h2 * arru_tilde[j][i - 1][ielem] + h1 * arru_tilde[j][i][ielem]) / (h1 + h2);
           dpdx                    = (arrp[j][i][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
-          arrUV_star[j][i][ileft] = U_tilde - ns->dt / ns->rho * dpdx;
+          arrUV_star[j][i][ileft] = arrUV_tilde[j][i][ileft] - ns->dt / ns->rho * dpdx;
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
@@ -223,21 +220,15 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           arrUV_star[j][i][ileft] = vb[0];
           break;
         case NS_BC_PERIODIC:
-          h1                      = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
-          h2                      = arrcx[i][inextc] - arrcx[i][iprevc];
-          U_tilde                 = (h2 * arru_tilde[j][i - 1][ielem] + h1 * arru_tilde[j][i][ielem]) / (h1 + h2);
           dpdx                    = (arrp[j][i][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
-          arrUV_star[j][i][ileft] = U_tilde - ns->dt / ns->rho * dpdx;
+          arrUV_star[j][i][ileft] = arrUV_tilde[j][i][ileft] - ns->dt / ns->rho * dpdx;
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
         }
       } else {
-        h1                      = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
-        h2                      = arrcx[i][inextc] - arrcx[i][iprevc];
-        U_tilde                 = (h2 * arru_tilde[j][i - 1][ielem] + h1 * arru_tilde[j][i][ielem]) / (h1 + h2);
         dpdx                    = (arrp[j][i][ielem] - arrp[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
-        arrUV_star[j][i][ileft] = U_tilde - ns->dt / ns->rho * dpdx;
+        arrUV_star[j][i][ileft] = arrUV_tilde[j][i][ileft] - ns->dt / ns->rho * dpdx;
       }
     }
   for (j = y; j < y + n + nExtray; ++j)
@@ -252,11 +243,8 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           arrUV_star[j][i][idown] = vb[1];
           break;
         case NS_BC_PERIODIC:
-          h1                      = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
-          h2                      = arrcy[j][inextc] - arrcy[j][iprevc];
-          V_tilde                 = (h2 * arrv_tilde[j - 1][i][ielem] + h1 * arrv_tilde[j][i][ielem]) / (h1 + h2);
           dpdy                    = (arrp[j][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
-          arrUV_star[j][i][idown] = V_tilde - ns->dt / ns->rho * dpdy;
+          arrUV_star[j][i][idown] = arrUV_tilde[j][i][idown] - ns->dt / ns->rho * dpdy;
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
@@ -271,26 +259,19 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
           arrUV_star[j][i][idown] = vb[1];
           break;
         case NS_BC_PERIODIC:
-          h1                      = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
-          h2                      = arrcy[j][inextc] - arrcy[j][iprevc];
-          V_tilde                 = (h2 * arrv_tilde[j - 1][i][ielem] + h1 * arrv_tilde[j][i][ielem]) / (h1 + h2);
           dpdy                    = (arrp[j][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
-          arrUV_star[j][i][idown] = V_tilde - ns->dt / ns->rho * dpdy;
+          arrUV_star[j][i][idown] = arrUV_tilde[j][i][idown] - ns->dt / ns->rho * dpdy;
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
         }
       } else {
-        h1                      = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
-        h2                      = arrcy[j][inextc] - arrcy[j][iprevc];
-        V_tilde                 = (h2 * arrv_tilde[j - 1][i][ielem] + h1 * arrv_tilde[j][i][ielem]) / (h1 + h2);
         dpdy                    = (arrp[j][i][ielem] - arrp[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
-        arrUV_star[j][i][idown] = V_tilde - ns->dt / ns->rho * dpdy;
+        arrUV_star[j][i][idown] = arrUV_tilde[j][i][idown] - ns->dt / ns->rho * dpdy;
       }
     }
 
-  PetscCall(DMStagVecRestoreArray(dm, u_tilde_local, &arru_tilde));
-  PetscCall(DMStagVecRestoreArray(dm, v_tilde_local, &arrv_tilde));
+  PetscCall(DMStagVecRestoreArray(fdm, UV_tilde_local, &arrUV_tilde));
   PetscCall(DMStagVecRestoreArray(fdm, fsm->fv_star, &arrUV_star));
   PetscCall(DMStagVecRestoreArrayRead(dm, fsm->p_half, &arrp));
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
@@ -303,10 +284,10 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
   PetscCall(DMRestoreGlobalVector(dm, &grad_p[1]));
   PetscCall(DMRestoreGlobalVector(dm, &u_star_global));
   PetscCall(DMRestoreGlobalVector(dm, &v_star_global));
-  PetscCall(DMRestoreGlobalVector(dm, &u_tilde_global));
-  PetscCall(DMRestoreLocalVector(dm, &u_tilde_local));
-  PetscCall(DMRestoreGlobalVector(dm, &v_tilde_global));
-  PetscCall(DMRestoreLocalVector(dm, &v_tilde_local));
+  PetscCall(DMRestoreGlobalVector(dm, &u_tilde));
+  PetscCall(DMRestoreGlobalVector(dm, &v_tilde));
+  PetscCall(DMRestoreGlobalVector(fdm, &UV_tilde_global));
+  PetscCall(DMRestoreLocalVector(fdm, &UV_tilde_local));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
