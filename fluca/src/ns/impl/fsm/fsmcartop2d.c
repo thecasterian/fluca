@@ -6,7 +6,7 @@ typedef enum {
   DERIV_Y,
 } DerivDirection;
 
-static PetscErrorCode ComputeFirstDerivForwardDiff(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_center, PetscReal coord_next, PetscReal coord_next2, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeFirstDerivForwardDiffNoCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_center, PetscReal coord_next, PetscReal coord_next2, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2;
 
@@ -26,6 +26,23 @@ static PetscErrorCode ComputeFirstDerivForwardDiff(DerivDirection dir, PetscInt 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode ComputeFirstDerivForwardDiffNeumannCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_bnd, PetscReal coord_center, PetscReal coord_next, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  PetscReal h1, h2;
+
+  PetscFunctionBegin;
+  h1       = coord_center - coord_bnd;
+  h2       = coord_next - coord_center;
+  v[0]     = -2. * h1 / (h2 * (2. * h1 + h2));
+  v[1]     = 2. * h1 / (h2 * (2. * h1 + h2));
+  col[0].i = i;
+  col[0].j = j;
+  col[1].i = i + (dir == DERIV_X ? 1 : 0);
+  col[1].j = j + (dir == DERIV_Y ? 1 : 0);
+  *ncols   = 2;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode ComputeFirstDerivCentralDiff(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_next, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscFunctionBegin;
@@ -39,7 +56,7 @@ static PetscErrorCode ComputeFirstDerivCentralDiff(DerivDirection dir, PetscInt 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFirstDerivBackwardDiff(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev2, PetscReal coord_prev, PetscReal coord_center, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeFirstDerivBackwardDiffNoCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev2, PetscReal coord_prev, PetscReal coord_center, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2;
 
@@ -56,6 +73,23 @@ static PetscErrorCode ComputeFirstDerivBackwardDiff(DerivDirection dir, PetscInt
   col[2].i = i;
   col[2].j = j;
   *ncols   = 3;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ComputeFirstDerivBackwardDiffNeumannCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_center, PetscReal coord_bnd, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  PetscReal h1, h2;
+
+  PetscFunctionBegin;
+  h1       = coord_bnd - coord_center;
+  h2       = coord_center - coord_prev;
+  v[0]     = -2. * h1 / (h2 * (2. * h1 + h2));
+  v[1]     = 2. * h1 / (h2 * (2. * h1 + h2));
+  col[0].i = i - (dir == DERIV_X ? 1 : 0);
+  col[0].j = j - (dir == DERIV_Y ? 1 : 0);
+  col[1].i = i;
+  col[1].j = j;
+  *ncols   = 2;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -92,7 +126,7 @@ PetscErrorCode NSFSMComputePressureGradientOperator2d_Cart_Internal(DM dm, const
         /* Left boundary */
         switch (bcs[0].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivForwardDiff(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivForwardDiffNoCond(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
           PetscCall(ComputeFirstDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
@@ -104,7 +138,7 @@ PetscErrorCode NSFSMComputePressureGradientOperator2d_Cart_Internal(DM dm, const
         /* Right boundary */
         switch (bcs[1].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivBackwardDiff(DERIV_X, i, j, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivBackwardDiffNoCond(DERIV_X, i, j, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
           PetscCall(ComputeFirstDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
@@ -129,7 +163,7 @@ PetscErrorCode NSFSMComputePressureGradientOperator2d_Cart_Internal(DM dm, const
         /* Down boundary */
         switch (bcs[2].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivForwardDiff(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivForwardDiffNoCond(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
           PetscCall(ComputeFirstDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
@@ -141,7 +175,7 @@ PetscErrorCode NSFSMComputePressureGradientOperator2d_Cart_Internal(DM dm, const
         /* Up boundary */
         switch (bcs[3].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivBackwardDiff(DERIV_Y, i, j, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivBackwardDiffNoCond(DERIV_Y, i, j, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
           PetscCall(ComputeFirstDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
@@ -161,6 +195,238 @@ PetscErrorCode NSFSMComputePressureGradientOperator2d_Cart_Internal(DM dm, const
   PetscCall(MatAssemblyEnd(G[0], MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyBegin(G[1], MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(G[1], MAT_FINAL_ASSEMBLY));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+FLUCA_INTERN PetscErrorCode NSFSMComputePressureCorrectionGradientOperator2d_Cart_Internal(DM dm, const NSBoundaryCondition *bcs, Mat G[])
+{
+  PetscInt            M, N, x, y, m, n;
+  DMStagStencil       row, col[5];
+  PetscInt            ncols;
+  PetscScalar         v[3];
+  const PetscScalar **arrcx, **arrcy;
+  PetscInt            iprevc, inextc, ielemc;
+  PetscInt            i, j;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetGlobalSizes(dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
+
+  row.loc = DMSTAG_ELEMENT;
+  row.c   = 0;
+  for (i = 0; i < 5; ++i) {
+    col[i].loc = DMSTAG_ELEMENT;
+    col[i].c   = 0;
+  }
+
+  /* Compute x-gradient operator */
+  for (j = y; j < y + n; ++j)
+    for (i = x; i < x + m; ++i) {
+      row.i = i;
+      row.j = j;
+
+      if (i == 0) {
+        /* Left boundary */
+        switch (bcs[0].type) {
+        case NS_BC_VELOCITY:
+          PetscCall(ComputeFirstDerivForwardDiffNeumannCond(DERIV_X, i, j, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_PERIODIC:
+          PetscCall(ComputeFirstDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
+        }
+      } else if (i == M - 1) {
+        /* Right boundary */
+        switch (bcs[1].type) {
+        case NS_BC_VELOCITY:
+          PetscCall(ComputeFirstDerivBackwardDiffNeumannCond(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
+          break;
+        case NS_BC_PERIODIC:
+          PetscCall(ComputeFirstDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
+        }
+      } else {
+        PetscCall(ComputeFirstDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+      }
+
+      PetscCall(DMStagMatSetValuesStencil(dm, G[0], 1, &row, ncols, col, v, INSERT_VALUES));
+    }
+
+  // Compute y-gradient operator
+  for (j = y; j < y + n; ++j)
+    for (i = x; i < x + m; ++i) {
+      row.i = i;
+      row.j = j;
+
+      if (j == 0) {
+        /* Down boundary */
+        switch (bcs[2].type) {
+        case NS_BC_VELOCITY:
+          PetscCall(ComputeFirstDerivForwardDiffNeumannCond(DERIV_Y, i, j, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_PERIODIC:
+          PetscCall(ComputeFirstDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
+        }
+      } else if (j == N - 1) {
+        /* Up boundary */
+        switch (bcs[3].type) {
+        case NS_BC_VELOCITY:
+          PetscCall(ComputeFirstDerivBackwardDiffNeumannCond(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
+          break;
+        case NS_BC_PERIODIC:
+          PetscCall(ComputeFirstDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
+        }
+      } else {
+        PetscCall(ComputeFirstDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+      }
+
+      PetscCall(DMStagMatSetValuesStencil(dm, G[1], 1, &row, ncols, col, v, INSERT_VALUES));
+    }
+
+  /* Assemble the matrix */
+  PetscCall(MatAssemblyBegin(G[0], MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(G[0], MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyBegin(G[1], MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(G[1], MAT_FINAL_ASSEMBLY));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+FLUCA_INTERN PetscErrorCode NSFSMComputePressureCorrectionFaceGradientOperator2d_Cart_Internal(DM dm, DM fdm, const NSBoundaryCondition *bcs, Mat G)
+{
+  PetscInt            M, N, x, y, m, n, nExtrax, nExtray;
+  DMStagStencil       row, col[2];
+  PetscInt            ncols;
+  PetscScalar         v[2];
+  PetscInt            ir, ic[2];
+  const PetscScalar **arrcx, **arrcy;
+  PetscInt            ielemc;
+  PetscInt            i, j;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetGlobalSizes(fdm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(fdm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
+
+  row.c = 0;
+  for (i = 0; i < 2; ++i) {
+    col[i].loc = DMSTAG_ELEMENT;
+    col[i].c   = 0;
+  }
+
+  for (j = y; j < y + n + nExtray; ++j)
+    for (i = x; i < x + m + nExtrax; ++i) {
+      row.i = i;
+      row.j = j;
+
+      /* x-gradient */
+      row.loc = DMSTAG_LEFT;
+      if (i == 0) {
+        switch (bcs[0].type) {
+        case NS_BC_VELOCITY:
+          ncols = 0;
+          break;
+        case NS_BC_PERIODIC:
+          v[0]     = -1. / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          v[1]     = 1. / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+          col[0].i = i - 1;
+          col[0].j = j;
+          col[1].i = i;
+          col[1].j = j;
+          ncols    = 2;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
+        }
+      } else if (i == M) {
+        switch (bcs[1].type) {
+        case NS_BC_VELOCITY:
+          ncols = 0;
+          break;
+        case NS_BC_PERIODIC:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Periodic boundary condition on right boundary but mesh is not periodic in x-direction");
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
+        }
+      } else {
+        v[0]     = -1. / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+        v[1]     = 1. / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
+        col[0].i = i - 1;
+        col[0].j = j;
+        col[1].i = i;
+        col[1].j = j;
+        ncols    = 2;
+      }
+
+      if (ncols > 0) {
+        PetscCall(DMStagStencilToIndexLocal(fdm, 2, 1, &row, &ir));
+        PetscCall(DMStagStencilToIndexLocal(dm, 2, 2, col, ic));
+        PetscCall(MatSetValuesLocal(G, 1, &ir, ncols, ic, v, INSERT_VALUES));
+      }
+
+      /* y-gradient */
+      row.loc = DMSTAG_DOWN;
+      if (j == 0) {
+        switch (bcs[2].type) {
+        case NS_BC_VELOCITY:
+          ncols = 0;
+          break;
+        case NS_BC_PERIODIC:
+          v[0]     = -1. / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          v[1]     = 1. / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+          col[0].i = i;
+          col[0].j = j - 1;
+          col[1].i = i;
+          col[1].j = j;
+          ncols    = 2;
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
+        }
+      } else if (j == N) {
+        switch (bcs[3].type) {
+        case NS_BC_VELOCITY:
+          ncols = 0;
+          break;
+        case NS_BC_PERIODIC:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Periodic boundary condition on up boundary but mesh is not periodic in y-direction");
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
+        }
+      } else {
+        v[0]     = -1. / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+        v[1]     = 1. / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
+        col[0].i = i;
+        col[0].j = j - 1;
+        col[1].i = i;
+        col[1].j = j;
+        ncols    = 2;
+      }
+
+      if (ncols > 0) {
+        PetscCall(DMStagStencilToIndexLocal(fdm, 2, 1, &row, &ir));
+        PetscCall(DMStagStencilToIndexLocal(dm, 2, 2, col, ic));
+        PetscCall(MatSetValuesLocal(G, 1, &ir, ncols, ic, v, INSERT_VALUES));
+      }
+    }
+
+  /* Assemble the matrix */
+  PetscCall(MatAssemblyBegin(G, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(G, MAT_FINAL_ASSEMBLY));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

@@ -537,14 +537,12 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   const PetscScalar ***arru_star, ***arrv_star, ***arrp_prime, ***arrUV_star;
   const PetscScalar  **arrcx, **arrcy;
   PetscInt             ileft, idown, ielem, iprevc, inextc, ielemc;
-  PetscScalar          dppdx, dppdy;
-  PetscScalar          h1, h2, A;
   PetscInt             i, j;
 
   NSBoundaryCondition bcleft, bcright, bcdown, bcup;
 
-  Vec            p_prime_global, lap_p_prime_global, lap_p_prime_local;
-  PetscScalar ***arrlap_p_prime;
+  Vec            p_prime_global, dppdx_global, dppdx_local, dppdy_global, dppdy_local, f_grad_p_prime_global, f_grad_p_prime_local, lap_p_prime_global, lap_p_prime_local;
+  PetscScalar ***arrdppdx, ***arrdppdy, ***arrf_grad_p_prime, ***arrlap_p_prime;
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
@@ -554,6 +552,12 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
 
   PetscCall(DMGetGlobalVector(dm, &p_prime_global));
+  PetscCall(DMGetGlobalVector(dm, &dppdx_global));
+  PetscCall(DMGetLocalVector(dm, &dppdx_local));
+  PetscCall(DMGetGlobalVector(dm, &dppdy_global));
+  PetscCall(DMGetLocalVector(dm, &dppdy_local));
+  PetscCall(DMGetGlobalVector(fdm, &f_grad_p_prime_global));
+  PetscCall(DMGetLocalVector(fdm, &f_grad_p_prime_local));
   PetscCall(DMGetGlobalVector(dm, &lap_p_prime_global));
   PetscCall(DMGetLocalVector(dm, &lap_p_prime_local));
 
@@ -583,149 +587,32 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   PetscCall(GetBoundaryConditions2d_Private(ns, &bcleft, &bcright, &bcdown, &bcup));
 
   PetscCall(DMLocalToGlobal(dm, p_prime, INSERT_VALUES, p_prime_global));
+  PetscCall(MatMult(fsm->grad_p[0], p_prime_global, dppdx_global));
+  PetscCall(MatMult(fsm->grad_p[1], p_prime_global, dppdy_global));
+  PetscCall(DMGlobalToLocal(dm, dppdx_global, INSERT_VALUES, dppdx_local));
+  PetscCall(DMGlobalToLocal(dm, dppdy_global, INSERT_VALUES, dppdy_local));
+  PetscCall(DMStagVecGetArray(dm, dppdx_local, &arrdppdx));
+  PetscCall(DMStagVecGetArray(dm, dppdy_local, &arrdppdy));
+  PetscCall(MatMult(fsm->grad_f_p_prime, p_prime_global, f_grad_p_prime_global));
+  PetscCall(DMGlobalToLocal(fdm, f_grad_p_prime_global, INSERT_VALUES, f_grad_p_prime_local));
+  PetscCall(DMStagVecGetArray(fdm, f_grad_p_prime_local, &arrf_grad_p_prime));
   PetscCall(MatMult(fsm->lap_p_prime, p_prime_global, lap_p_prime_global));
   PetscCall(DMGlobalToLocal(dm, lap_p_prime_global, INSERT_VALUES, lap_p_prime_local));
   PetscCall(DMStagVecGetArray(dm, lap_p_prime_local, &arrlap_p_prime));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
-      if (i == 0) {
-        /* Left boundary */
-        switch (bcleft.type) {
-        case NS_BC_VELOCITY:
-          h1    = arrcx[i][ielemc] - arrcx[i][iprevc];
-          h2    = arrcx[i + 1][ielemc] - arrcx[i][ielemc];
-          A     = 2. * h1 / (h2 * (2. * h1 + h2));
-          dppdx = -A * arrp_prime[j][i][ielem] + A * arrp_prime[j][i + 1][ielem];
-          break;
-        case NS_BC_PERIODIC:
-          dppdx = (arrp_prime[j][i + 1][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
-        }
-      } else if (i == M - 1) {
-        /* Right boundary */
-        switch (bcright.type) {
-        case NS_BC_VELOCITY:
-          h1    = arrcx[i][inextc] - arrcx[i][ielemc];
-          h2    = arrcx[i][ielemc] - arrcx[i - 1][ielemc];
-          A     = 2. * h1 / (h2 * (2. * h1 + h2));
-          dppdx = -A * arrp_prime[j][i - 1][ielem] + A * arrp_prime[j][i][ielem];
-          break;
-        case NS_BC_PERIODIC:
-          dppdx = (arrp_prime[j][i + 1][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
-        }
-      } else {
-        dppdx = (arrp_prime[j][i + 1][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i + 1][ielemc] - arrcx[i - 1][ielemc]);
-      }
-
-      if (j == 0) {
-        /* Down boundary */
-        switch (bcdown.type) {
-        case NS_BC_VELOCITY:
-          h1    = arrcy[j][ielemc] - arrcy[j][iprevc];
-          h2    = arrcy[j + 1][ielemc] - arrcy[j][ielemc];
-          A     = 2. * h1 / (h2 * (2. * h1 + h2));
-          dppdy = -A * arrp_prime[j][i][ielem] + A * arrp_prime[j + 1][i][ielem];
-          break;
-        case NS_BC_PERIODIC:
-          dppdy = (arrp_prime[j + 1][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
-        }
-      } else if (j == N - 1) {
-        /* Up boundary */
-        switch (bcup.type) {
-        case NS_BC_VELOCITY:
-          h1    = arrcy[j][inextc] - arrcy[j][ielemc];
-          h2    = arrcy[j][ielemc] - arrcy[j - 1][ielemc];
-          A     = 2. * h1 / (h2 * (2. * h1 + h2));
-          dppdy = A * arrp_prime[j - 1][i][ielem] - A * arrp_prime[j][i][ielem];
-          break;
-        case NS_BC_PERIODIC:
-          dppdy = (arrp_prime[j + 1][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
-        }
-      } else {
-        dppdy = (arrp_prime[j + 1][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j + 1][ielemc] - arrcy[j - 1][ielemc]);
-      }
-
-      arru[j][i][ielem]      = arru_star[j][i][ielem] - dt / rho * dppdx;
-      arrv[j][i][ielem]      = arrv_star[j][i][ielem] - dt / rho * dppdy;
+      arru[j][i][ielem]      = arru_star[j][i][ielem] - dt / rho * arrdppdx[j][i][ielem];
+      arrv[j][i][ielem]      = arrv_star[j][i][ielem] - dt / rho * arrdppdy[j][i][ielem];
       arrp[j][i][ielem]      = arrp_prev[j][i][ielem] + arrp_prime[j][i][ielem] - 0.5 * mu * dt / rho * arrlap_p_prime[j][i][ielem];
       arrp_full[j][i][ielem] = 1.5 * arrp[j][i][ielem] - 0.5 * arrp_prev[j][i][ielem];
     }
 
   for (j = y; j < y + n; ++j)
-    for (i = x; i < x + m + 1; ++i) {
-      if (i == 0) {
-        /* Left boundary */
-        switch (bcleft.type) {
-        case NS_BC_VELOCITY:
-          dppdx = 0.;
-          break;
-        case NS_BC_PERIODIC:
-          dppdx = (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
-        }
-      } else if (i == M) {
-        /* Right boundary */
-        switch (bcright.type) {
-        case NS_BC_VELOCITY:
-          dppdx = 0.;
-          break;
-        case NS_BC_PERIODIC:
-          dppdx = (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
-        }
-      } else {
-        dppdx = (arrp_prime[j][i][ielem] - arrp_prime[j][i - 1][ielem]) / (arrcx[i][ielemc] - arrcx[i - 1][ielemc]);
-      }
-      arrUV[j][i][ileft] = arrUV_star[j][i][ileft] - dt / rho * dppdx;
-    }
+    for (i = x; i < x + m + 1; ++i) arrUV[j][i][ileft] = arrUV_star[j][i][ileft] - dt / rho * arrf_grad_p_prime[j][i][ileft];
 
   for (j = y; j < y + n + 1; ++j)
-    for (i = x; i < x + m; ++i) {
-      if (j == 0) {
-        /* Down boundary */
-        switch (bcdown.type) {
-        case NS_BC_VELOCITY:
-          dppdy = 0.;
-          break;
-        case NS_BC_PERIODIC:
-          dppdy = (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
-        }
-      } else if (j == N) {
-        /* Up boundary */
-        switch (bcup.type) {
-        case NS_BC_VELOCITY:
-          dppdy = 0.;
-          break;
-        case NS_BC_PERIODIC:
-          dppdy = (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
-        }
-      } else {
-        dppdy = (arrp_prime[j][i][ielem] - arrp_prime[j - 1][i][ielem]) / (arrcy[j][ielemc] - arrcy[j - 1][ielemc]);
-      }
-      arrUV[j][i][idown] = arrUV_star[j][i][idown] - dt / rho * dppdy;
-    }
+    for (i = x; i < x + m; ++i) arrUV[j][i][idown] = arrUV_star[j][i][idown] - dt / rho * arrf_grad_p_prime[j][i][idown];
 
   PetscCall(DMStagVecRestoreArray(dm, u, &arru));
   PetscCall(DMStagVecRestoreArray(dm, v, &arrv));
@@ -739,8 +626,17 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   PetscCall(DMStagVecRestoreArrayRead(fdm, fv_star, &arrUV_star));
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
 
+  PetscCall(DMStagVecRestoreArray(dm, dppdx_local, &arrdppdx));
+  PetscCall(DMStagVecRestoreArray(dm, dppdy_local, &arrdppdy));
+  PetscCall(DMStagVecRestoreArray(fdm, f_grad_p_prime_local, &arrf_grad_p_prime));
   PetscCall(DMStagVecRestoreArray(dm, lap_p_prime_local, &arrlap_p_prime));
   PetscCall(DMRestoreGlobalVector(dm, &p_prime_global));
+  PetscCall(DMRestoreGlobalVector(dm, &dppdx_global));
+  PetscCall(DMRestoreLocalVector(dm, &dppdx_local));
+  PetscCall(DMRestoreGlobalVector(dm, &dppdy_global));
+  PetscCall(DMRestoreLocalVector(dm, &dppdy_local));
+  PetscCall(DMRestoreGlobalVector(fdm, &f_grad_p_prime_global));
+  PetscCall(DMRestoreLocalVector(fdm, &f_grad_p_prime_local));
   PetscCall(DMRestoreGlobalVector(dm, &lap_p_prime_global));
   PetscCall(DMRestoreLocalVector(dm, &lap_p_prime_local));
 

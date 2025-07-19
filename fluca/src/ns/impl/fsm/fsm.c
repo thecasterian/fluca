@@ -1,5 +1,6 @@
 #include <fluca/private/nsfsmimpl.h>
 #include <flucaviewer.h>
+#include <petscdmstag.h>
 
 PetscErrorCode NSSetFromOptions_FSM(NS ns, PetscOptionItems PetscOptionsObject)
 {
@@ -10,6 +11,25 @@ PetscErrorCode NSSetFromOptions_FSM(NS ns, PetscOptionItems PetscOptionsObject)
   // TODO: Add options
   (void)fsm;
   PetscOptionsHeadEnd();
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode CreateDMToDMOperator_Private(DM dmfrom, DM dmto, Mat *A)
+{
+  PetscInt               entriesfrom, entriesto;
+  ISLocalToGlobalMapping ltogfrom, ltogto;
+  MatType                mattype;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetEntries(dmfrom, &entriesfrom));
+  PetscCall(DMStagGetEntries(dmto, &entriesto));
+  PetscCall(DMGetLocalToGlobalMapping(dmfrom, &ltogfrom));
+  PetscCall(DMGetLocalToGlobalMapping(dmto, &ltogto));
+  PetscCall(MatCreate(PetscObjectComm((PetscObject)dmfrom), A));
+  PetscCall(MatSetSizes(*A, entriesto, entriesfrom, PETSC_DECIDE, PETSC_DECIDE));
+  PetscCall(DMGetMatType(dmfrom, &mattype));
+  PetscCall(MatSetType(*A, mattype));
+  PetscCall(MatSetLocalToGlobalMapping(*A, ltogto, ltogfrom));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -44,11 +64,17 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(DMCreateLocalVector(dm, &fsm->p_half_prev));
 
   /* Create operators */
-  for (d = 0; d < dim; ++d) PetscCall(DMCreateMatrix(dm, &fsm->grad_p[d]));
+  for (d = 0; d < dim; ++d) {
+    PetscCall(DMCreateMatrix(dm, &fsm->grad_p[d]));
+    PetscCall(DMCreateMatrix(dm, &fsm->grad_p_prime[d]));
+  }
+  PetscCall(CreateDMToDMOperator_Private(dm, fdm, &fsm->grad_f_p_prime));
   PetscCall(DMCreateMatrix(dm, &fsm->helm_v));
   PetscCall(DMCreateMatrix(dm, &fsm->lap_p_prime));
 
   PetscCall(NSFSMComputePressureGradientOperator2d_Cart_Internal(dm, ns->bcs, fsm->grad_p));
+  PetscCall(NSFSMComputePressureCorrectionGradientOperator2d_Cart_Internal(dm, ns->bcs, fsm->grad_p_prime));
+  PetscCall(NSFSMComputePressureCorrectionFaceGradientOperator2d_Cart_Internal(dm, fdm, ns->bcs, fsm->grad_f_p_prime));
   PetscCall(NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(dm, ns->bcs, 1., 0.5 * ns->mu * ns->dt / ns->rho, fsm->helm_v));
   PetscCall(NSFSMComputePressureCorrectionLaplacianOperator2d_Cart_Internal(dm, ns->bcs, fsm->lap_p_prime));
 
@@ -109,7 +135,10 @@ PetscErrorCode NSDestroy_FSM(NS ns)
   PetscCall(VecDestroy(&fsm->p_prime));
   PetscCall(VecDestroy(&fsm->p_half_prev));
 
-  for (d = 0; d < 3; ++d) PetscCall(MatDestroy(&fsm->grad_p[d]));
+  for (d = 0; d < 3; ++d) {
+    PetscCall(MatDestroy(&fsm->grad_p[d]));
+    PetscCall(MatDestroy(&fsm->grad_p_prime[d]));
+  }
   PetscCall(MatDestroy(&fsm->helm_v));
   PetscCall(MatDestroy(&fsm->lap_p_prime));
 
