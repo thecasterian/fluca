@@ -71,12 +71,15 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(CreateDMToDMOperator_Private(dm, fdm, &fsm->grad_p_prime_f));
   PetscCall(DMCreateMatrix(dm, &fsm->helm_v));
   PetscCall(DMCreateMatrix(dm, &fsm->lap_p_prime));
+  PetscCall(CreateDMToDMOperator_Private(dm, fdm, &fsm->interp_v));
+  PetscCall(CreateDMToDMOperator_Private(fdm, dm, &fsm->div_fv));
 
   PetscCall(NSFSMComputePressureGradientOperator2d_Cart_Internal(dm, ns->bcs, fsm->grad_p));
   PetscCall(NSFSMComputePressureCorrectionGradientOperator2d_Cart_Internal(dm, ns->bcs, fsm->grad_p_prime));
   PetscCall(NSFSMComputePressureCorrectionFaceGradientOperator2d_Cart_Internal(dm, fdm, ns->bcs, fsm->grad_p_prime_f));
   PetscCall(NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(dm, ns->bcs, 1., 0.5 * ns->mu * ns->dt / ns->rho, fsm->helm_v));
   PetscCall(NSFSMComputePressureCorrectionLaplacianOperator2d_Cart_Internal(dm, ns->bcs, fsm->lap_p_prime));
+  PetscCall(NSFSMComputeVelocityInterpolationOperator2d_Cart_Internal(dm, fdm, ns->bcs, fsm->interp_v));
 
   /* Create KSP */
   for (d = 0; d < dim; ++d) {
@@ -139,8 +142,11 @@ PetscErrorCode NSDestroy_FSM(NS ns)
     PetscCall(MatDestroy(&fsm->grad_p[d]));
     PetscCall(MatDestroy(&fsm->grad_p_prime[d]));
   }
+  PetscCall(MatDestroy(&fsm->grad_p_prime_f));
   PetscCall(MatDestroy(&fsm->helm_v));
   PetscCall(MatDestroy(&fsm->lap_p_prime));
+  PetscCall(MatDestroy(&fsm->interp_v));
+  PetscCall(MatDestroy(&fsm->div_fv));
 
   for (d = 0; d < 3; ++d) PetscCall(KSPDestroy(&fsm->kspv[d]));
   PetscCall(KSPDestroy(&fsm->kspp));

@@ -30,25 +30,16 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm, fdm;
 
-  const PetscReal t_next = ns->t + ns->dt;
-
-  Vec u = fsm->v[0], v = fsm->v[1];
-  Vec fv = fsm->fv;
-  Vec Nu = fsm->N[0], Nv = fsm->N[1];
-  Vec u_interp, v_interp;
-
   PetscInt             M, N, x, y, m, n, nExtrax, nExtray;
   PetscScalar       ***arrNu, ***arrNv;
-  PetscScalar       ***arru_interp, ***arrv_interp;
-  const PetscScalar ***arru, ***arrv, ***arrUV;
+  const PetscScalar ***arrUV;
   const PetscScalar  **arrcx, **arrcy;
   PetscInt             ileft, iright, idown, iup, ielem, iprevc, inextc, ielemc;
-  PetscScalar          h1, h2, hx, hy;
+  PetscScalar          hx, hy;
   PetscInt             i, j;
 
-  NSBoundaryCondition bcleft, bcright, bcdown, bcup;
-  PetscReal           xb[2];
-  PetscScalar         vb[2];
+  Vec            u_global, v_global, u_interp_global, u_interp_local, v_interp_global, v_interp_local;
+  PetscScalar ***arru_interp, ***arrv_interp;
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
@@ -57,16 +48,15 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   PetscCall(DMStagGetGlobalSizes(dm, &M, &N, NULL));
   PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
 
-  PetscCall(DMGetLocalVector(fdm, &u_interp));
-  PetscCall(DMGetLocalVector(fdm, &v_interp));
+  PetscCall(DMGetGlobalVector(dm, &u_global));
+  PetscCall(DMGetGlobalVector(dm, &v_global));
+  PetscCall(DMGetGlobalVector(fdm, &u_interp_global));
+  PetscCall(DMGetLocalVector(fdm, &u_interp_local));
+  PetscCall(DMGetGlobalVector(fdm, &v_interp_global));
+  PetscCall(DMGetLocalVector(fdm, &v_interp_local));
 
-  PetscCall(DMStagVecGetArray(dm, Nu, &arrNu));
-  PetscCall(DMStagVecGetArray(dm, Nv, &arrNv));
-  PetscCall(DMStagVecGetArray(fdm, u_interp, &arru_interp));
-  PetscCall(DMStagVecGetArray(fdm, v_interp, &arrv_interp));
-  PetscCall(DMStagVecGetArrayRead(dm, u, &arru));
-  PetscCall(DMStagVecGetArrayRead(dm, v, &arrv));
-  PetscCall(DMStagVecGetArrayRead(fdm, fv, &arrUV));
+  PetscCall(DMStagVecGetArray(dm, fsm->N[0], &arrNu));
+  PetscCall(DMStagVecGetArray(dm, fsm->N[1], &arrNv));
   PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
 
   PetscCall(DMStagGetLocationSlot(fdm, DMSTAG_LEFT, 0, &ileft));
@@ -78,107 +68,20 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
-  PetscCall(GetBoundaryConditions2d_Private(ns, &bcleft, &bcright, &bcdown, &bcup));
+  PetscCall(DMLocalToGlobal(dm, fsm->v[0], INSERT_VALUES, u_global));
+  PetscCall(DMLocalToGlobal(dm, fsm->v[1], INSERT_VALUES, v_global));
 
-  for (j = y; j < y + n; ++j)
-    for (i = x; i < x + m + nExtrax; ++i) {
-      if (i == 0) {
-        /* Left boundary */
-        switch (bcleft.type) {
-        case NS_BC_VELOCITY:
-          xb[0] = arrcx[i][iprevc];
-          xb[1] = arrcy[j][ielemc];
-          PetscCall(bcleft.velocity(2, t_next, xb, vb, bcleft.ctx_velocity));
-          arru_interp[j][i][ileft] = vb[0];
-          arrv_interp[j][i][ileft] = vb[1];
-          break;
-        case NS_BC_PERIODIC:
-          h1                       = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
-          h2                       = arrcx[i][inextc] - arrcx[i][iprevc];
-          arru_interp[j][i][ileft] = (h2 * arru[j][i - 1][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
-          arrv_interp[j][i][ileft] = (h2 * arrv[j][i - 1][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary: %s", NSBoundaryConditionTypes[bcleft.type]);
-        }
-      } else if (i == M) {
-        /* Right boundary */
-        switch (bcright.type) {
-        case NS_BC_VELOCITY:
-          xb[0] = arrcx[i][iprevc];
-          xb[1] = arrcy[j][ielemc];
-          PetscCall(bcright.velocity(2, t_next, xb, vb, bcright.ctx_velocity));
-          arru_interp[j][i][ileft] = vb[0];
-          arrv_interp[j][i][ileft] = vb[1];
-          break;
-        case NS_BC_PERIODIC:
-          h1                       = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
-          h2                       = arrcx[i][inextc] - arrcx[i][iprevc];
-          arru_interp[j][i][ileft] = (h2 * arru[j][i - 1][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
-          arrv_interp[j][i][ileft] = (h2 * arrv[j][i - 1][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary: %s", NSBoundaryConditionTypes[bcright.type]);
-        }
-      } else {
-        h1                       = arrcx[i - 1][inextc] - arrcx[i - 1][iprevc];
-        h2                       = arrcx[i][inextc] - arrcx[i][iprevc];
-        arru_interp[j][i][ileft] = (h2 * arru[j][i - 1][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
-        arrv_interp[j][i][ileft] = (h2 * arrv[j][i - 1][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
-      }
-    }
-  for (j = y; j < y + n + nExtray; ++j)
-    for (i = x; i < x + m; ++i) {
-      if (j == 0) {
-        /* Down boundary */
-        switch (bcdown.type) {
-        case NS_BC_VELOCITY:
-          xb[0] = arrcx[i][ielemc];
-          xb[1] = arrcy[j][iprevc];
-          PetscCall(bcdown.velocity(2, t_next, xb, vb, bcdown.ctx_velocity));
-          arru_interp[j][i][idown] = vb[0];
-          arrv_interp[j][i][idown] = vb[1];
-          break;
-        case NS_BC_PERIODIC:
-          h1                       = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
-          h2                       = arrcy[j][inextc] - arrcy[j][iprevc];
-          arru_interp[j][i][idown] = (h2 * arru[j - 1][i][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
-          arrv_interp[j][i][idown] = (h2 * arrv[j - 1][i][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary: %s", NSBoundaryConditionTypes[bcdown.type]);
-        }
-      } else if (j == N) {
-        /* Up boundary */
-        switch (bcup.type) {
-        case NS_BC_VELOCITY:
-          xb[0] = arrcx[i][ielemc];
-          xb[1] = arrcy[j][iprevc];
-          PetscCall(bcup.velocity(2, t_next, xb, vb, bcup.ctx_velocity));
-          arru_interp[j][i][idown] = vb[0];
-          arrv_interp[j][i][idown] = vb[1];
-          break;
-        case NS_BC_PERIODIC:
-          h1                       = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
-          h2                       = arrcy[j][inextc] - arrcy[j][iprevc];
-          arru_interp[j][i][idown] = (h2 * arru[j - 1][i][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
-          arrv_interp[j][i][idown] = (h2 * arrv[j - 1][i][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary: %s", NSBoundaryConditionTypes[bcup.type]);
-        }
-      } else {
-        h1                       = arrcy[j - 1][inextc] - arrcy[j - 1][iprevc];
-        h2                       = arrcy[j][inextc] - arrcy[j][iprevc];
-        arru_interp[j][i][idown] = (h2 * arru[j - 1][i][ielem] + h1 * arru[j][i][ielem]) / (h1 + h2);
-        arrv_interp[j][i][idown] = (h2 * arrv[j - 1][i][ielem] + h1 * arrv[j][i][ielem]) / (h1 + h2);
-      }
-    }
+  PetscCall(MatMult(fsm->interp_v, u_global, u_interp_global));
+  PetscCall(NSFSMAddVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 0, ns->bcs, ns->t, u_interp_global));
+  PetscCall(MatMult(fsm->interp_v, v_global, v_interp_global));
+  PetscCall(NSFSMAddVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 1, ns->bcs, ns->t, v_interp_global));
 
-  PetscCall(DMLocalToLocalBegin(fdm, u_interp, INSERT_VALUES, u_interp));
-  PetscCall(DMLocalToLocalEnd(fdm, u_interp, INSERT_VALUES, u_interp));
-  PetscCall(DMLocalToLocalBegin(fdm, v_interp, INSERT_VALUES, v_interp));
-  PetscCall(DMLocalToLocalEnd(fdm, v_interp, INSERT_VALUES, v_interp));
+  PetscCall(DMGlobalToLocal(fdm, u_interp_global, INSERT_VALUES, u_interp_local));
+  PetscCall(DMGlobalToLocal(fdm, v_interp_global, INSERT_VALUES, v_interp_local));
+
+  PetscCall(DMStagVecGetArray(fdm, u_interp_local, &arru_interp));
+  PetscCall(DMStagVecGetArray(fdm, v_interp_local, &arrv_interp));
+  PetscCall(DMStagVecGetArrayRead(fdm, fsm->fv, &arrUV));
 
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
@@ -190,17 +93,19 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
                          + (arrUV[j][i][iup] * arrv_interp[j][i][iup] - arrUV[j][i][idown] * arrv_interp[j][i][idown]) / hy;
     }
 
-  PetscCall(DMStagVecRestoreArray(dm, Nu, &arrNu));
-  PetscCall(DMStagVecRestoreArray(dm, Nv, &arrNv));
-  PetscCall(DMStagVecRestoreArray(fdm, u_interp, &arru_interp));
-  PetscCall(DMStagVecRestoreArray(fdm, v_interp, &arrv_interp));
-  PetscCall(DMStagVecRestoreArrayRead(dm, u, &arru));
-  PetscCall(DMStagVecRestoreArrayRead(dm, v, &arrv));
-  PetscCall(DMStagVecRestoreArrayRead(fdm, fv, &arrUV));
+  PetscCall(DMStagVecRestoreArray(dm, fsm->N[0], &arrNu));
+  PetscCall(DMStagVecRestoreArray(dm, fsm->N[1], &arrNv));
+  PetscCall(DMStagVecRestoreArray(fdm, u_interp_local, &arru_interp));
+  PetscCall(DMStagVecRestoreArray(fdm, v_interp_local, &arrv_interp));
+  PetscCall(DMStagVecRestoreArrayRead(fdm, fsm->fv, &arrUV));
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
 
-  PetscCall(DMRestoreLocalVector(fdm, &u_interp));
-  PetscCall(DMRestoreLocalVector(fdm, &v_interp));
+  PetscCall(DMRestoreGlobalVector(dm, &u_global));
+  PetscCall(DMRestoreGlobalVector(dm, &v_global));
+  PetscCall(DMRestoreGlobalVector(fdm, &u_interp_global));
+  PetscCall(DMRestoreLocalVector(fdm, &u_interp_local));
+  PetscCall(DMRestoreGlobalVector(fdm, &v_interp_global));
+  PetscCall(DMRestoreLocalVector(fdm, &v_interp_local));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -671,6 +576,7 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
     }
 
   PetscCall(DMStagVecRestoreArrayRead(fdm, fv_star, &arrUV_star));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
 
   // TODO: below is only for velocity boundary conditions
   /* Remove null space. */
