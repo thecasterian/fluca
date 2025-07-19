@@ -68,13 +68,13 @@ PetscErrorCode NSSetup_FSM(NS ns)
     PetscCall(DMCreateMatrix(dm, &fsm->grad_p[d]));
     PetscCall(DMCreateMatrix(dm, &fsm->grad_p_prime[d]));
   }
-  PetscCall(CreateDMToDMOperator_Private(dm, fdm, &fsm->grad_f_p_prime));
+  PetscCall(CreateDMToDMOperator_Private(dm, fdm, &fsm->grad_p_prime_f));
   PetscCall(DMCreateMatrix(dm, &fsm->helm_v));
   PetscCall(DMCreateMatrix(dm, &fsm->lap_p_prime));
 
   PetscCall(NSFSMComputePressureGradientOperator2d_Cart_Internal(dm, ns->bcs, fsm->grad_p));
   PetscCall(NSFSMComputePressureCorrectionGradientOperator2d_Cart_Internal(dm, ns->bcs, fsm->grad_p_prime));
-  PetscCall(NSFSMComputePressureCorrectionFaceGradientOperator2d_Cart_Internal(dm, fdm, ns->bcs, fsm->grad_f_p_prime));
+  PetscCall(NSFSMComputePressureCorrectionFaceGradientOperator2d_Cart_Internal(dm, fdm, ns->bcs, fsm->grad_p_prime_f));
   PetscCall(NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(dm, ns->bcs, 1., 0.5 * ns->mu * ns->dt / ns->rho, fsm->helm_v));
   PetscCall(NSFSMComputePressureCorrectionLaplacianOperator2d_Cart_Internal(dm, ns->bcs, fsm->lap_p_prime));
 

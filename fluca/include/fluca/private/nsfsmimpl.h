@@ -17,7 +17,7 @@ typedef struct {
 
   Mat grad_p[3];       /* gradient operators for pressure */
   Mat grad_p_prime[3]; /* gradient operators for pressure correction */
-  Mat grad_f_p_prime;  /* gradient operators at face for pressure correction */
+  Mat grad_p_prime_f;  /* gradient operators at face for pressure correction */
   Mat helm_v;          /* helmholtz operator for velocity */
   Mat lap_p_prime;     /* laplacian operator for pressure correction */
 
