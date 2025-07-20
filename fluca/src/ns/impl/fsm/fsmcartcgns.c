@@ -21,6 +21,7 @@ static PetscErrorCode DMStagGetLocalEntries2d_Private(DM dm, Vec v, DMStagStenci
 {
   PetscInt       x, y, m, n, nExtrax, nExtray;
   PetscBool      isLastRankx, isLastRanky;
+  Vec            vlocal;
   PetscScalar ***arr;
   PetscInt       iloc, i, j, cnt = 0;
 
@@ -29,11 +30,14 @@ static PetscErrorCode DMStagGetLocalEntries2d_Private(DM dm, Vec v, DMStagStenci
   PetscCall(DMStagGetIsLastRank(dm, &isLastRankx, &isLastRanky, NULL));
   nExtrax = (loc == DMSTAG_LEFT && isLastRankx) ? 1 : 0;
   nExtray = (loc == DMSTAG_DOWN && isLastRanky) ? 1 : 0;
-  PetscCall(DMStagVecGetArrayRead(dm, v, &arr));
+  PetscCall(DMGetLocalVector(dm, &vlocal));
+  PetscCall(DMGlobalToLocal(dm, v, INSERT_VALUES, vlocal));
+  PetscCall(DMStagVecGetArrayRead(dm, vlocal, &arr));
   PetscCall(DMStagGetLocationSlot(dm, loc, d, &iloc));
   for (j = y; j < y + n + nExtray; ++j)
     for (i = x; i < x + m + nExtrax; ++i) e[cnt++] = arr[j][i][iloc];
-  PetscCall(DMStagVecRestoreArrayRead(dm, v, &arr));
+  PetscCall(DMStagVecRestoreArrayRead(dm, vlocal, &arr));
+  PetscCall(DMRestoreLocalVector(dm, &vlocal));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -41,6 +45,7 @@ static PetscErrorCode DMStagGetLocalEntries3d_Private(DM dm, Vec v, DMStagStenci
 {
   PetscInt        x, y, z, m, n, p, nExtrax, nExtray, nExtraz;
   PetscBool       isLastRankx, isLastRanky, isLastRankz;
+  Vec             vlocal;
   PetscScalar ****arr;
   PetscInt        iloc, i, j, k, cnt = 0;
 
@@ -50,12 +55,15 @@ static PetscErrorCode DMStagGetLocalEntries3d_Private(DM dm, Vec v, DMStagStenci
   nExtrax = (loc == DMSTAG_LEFT && isLastRankx) ? 1 : 0;
   nExtray = (loc == DMSTAG_DOWN && isLastRanky) ? 1 : 0;
   nExtraz = (loc == DMSTAG_BACK && isLastRankz) ? 1 : 0;
-  PetscCall(DMStagVecGetArrayRead(dm, v, &arr));
+  PetscCall(DMGetLocalVector(dm, &vlocal));
+  PetscCall(DMGlobalToLocal(dm, v, INSERT_VALUES, vlocal));
+  PetscCall(DMStagVecGetArrayRead(dm, vlocal, &arr));
   PetscCall(DMStagGetLocationSlot(dm, loc, d, &iloc));
   for (k = z; k < z + p + nExtraz; ++k)
     for (j = y; j < y + n + nExtray; ++j)
       for (i = x; i < x + m + nExtrax; ++i) e[cnt++] = arr[k][j][i][iloc];
-  PetscCall(DMStagVecRestoreArrayRead(dm, v, &arr));
+  PetscCall(DMStagVecRestoreArrayRead(dm, vlocal, &arr));
+  PetscCall(DMRestoreLocalVector(dm, &vlocal));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -225,6 +233,7 @@ static PetscErrorCode DMStagSetLocalEntries2d_Private(DM dm, Vec v, DMStagStenci
 {
   PetscInt       x, y, m, n, nExtrax, nExtray;
   PetscBool      isLastRankx, isLastRanky;
+  Vec            vlocal;
   PetscScalar ***arr;
   PetscInt       iloc, i, j, cnt = 0;
 
@@ -233,11 +242,14 @@ static PetscErrorCode DMStagSetLocalEntries2d_Private(DM dm, Vec v, DMStagStenci
   PetscCall(DMStagGetIsLastRank(dm, &isLastRankx, &isLastRanky, NULL));
   nExtrax = (loc == DMSTAG_LEFT && isLastRankx) ? 1 : 0;
   nExtray = (loc == DMSTAG_DOWN && isLastRanky) ? 1 : 0;
-  PetscCall(DMStagVecGetArray(dm, v, &arr));
+  PetscCall(DMGetLocalVector(dm, &vlocal));
+  PetscCall(DMStagVecGetArray(dm, vlocal, &arr));
   PetscCall(DMStagGetLocationSlot(dm, loc, d, &iloc));
   for (j = y; j < y + n + nExtray; ++j)
     for (i = x; i < x + m + nExtrax; ++i) arr[j][i][iloc] = e[cnt++];
-  PetscCall(DMStagVecRestoreArray(dm, v, &arr));
+  PetscCall(DMStagVecRestoreArray(dm, vlocal, &arr));
+  PetscCall(DMLocalToGlobal(dm, vlocal, INSERT_VALUES, v));
+  PetscCall(DMRestoreLocalVector(dm, &vlocal));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -245,6 +257,7 @@ static PetscErrorCode DMStagSetLocalEntries3d_Private(DM dm, Vec v, DMStagStenci
 {
   PetscInt        x, y, z, m, n, p, nExtrax, nExtray, nExtraz;
   PetscBool       isLastRankx, isLastRanky, isLastRankz;
+  Vec             vlocal;
   PetscScalar ****arr;
   PetscInt        iloc, i, j, k, cnt = 0;
 
@@ -254,12 +267,15 @@ static PetscErrorCode DMStagSetLocalEntries3d_Private(DM dm, Vec v, DMStagStenci
   nExtrax = (loc == DMSTAG_LEFT && isLastRankx) ? 1 : 0;
   nExtray = (loc == DMSTAG_DOWN && isLastRanky) ? 1 : 0;
   nExtraz = (loc == DMSTAG_BACK && isLastRankz) ? 1 : 0;
-  PetscCall(DMStagVecGetArray(dm, v, &arr));
+  PetscCall(DMGetLocalVector(dm, &vlocal));
+  PetscCall(DMStagVecGetArray(dm, vlocal, &arr));
   PetscCall(DMStagGetLocationSlot(dm, loc, d, &iloc));
   for (k = z; k < z + p + nExtraz; ++k)
     for (j = y; j < y + n + nExtray; ++j)
       for (i = x; i < x + m + nExtrax; ++i) arr[k][j][i][iloc] = e[cnt++];
-  PetscCall(DMStagVecRestoreArray(dm, v, &arr));
+  PetscCall(DMStagVecRestoreArray(dm, vlocal, &arr));
+  PetscCall(DMLocalToGlobal(dm, vlocal, INSERT_VALUES, v));
+  PetscCall(DMRestoreLocalVector(dm, &vlocal));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

@@ -51,17 +51,17 @@ PetscErrorCode NSSetup_FSM(NS ns)
 
   /* Create solution */
   for (d = 0; d < dim; ++d) {
-    PetscCall(DMCreateLocalVector(dm, &fsm->v[d]));
-    PetscCall(DMCreateLocalVector(dm, &fsm->v_star[d]));
-    PetscCall(DMCreateLocalVector(dm, &fsm->N[d]));
-    PetscCall(DMCreateLocalVector(dm, &fsm->N_prev[d]));
+    PetscCall(DMCreateGlobalVector(dm, &fsm->v[d]));
+    PetscCall(DMCreateGlobalVector(dm, &fsm->v_star[d]));
+    PetscCall(DMCreateGlobalVector(dm, &fsm->N[d]));
+    PetscCall(DMCreateGlobalVector(dm, &fsm->N_prev[d]));
   }
-  PetscCall(DMCreateLocalVector(fdm, &fsm->fv));
-  PetscCall(DMCreateLocalVector(fdm, &fsm->fv_star));
-  PetscCall(DMCreateLocalVector(dm, &fsm->p));
-  PetscCall(DMCreateLocalVector(dm, &fsm->p_half));
-  PetscCall(DMCreateLocalVector(dm, &fsm->p_prime));
-  PetscCall(DMCreateLocalVector(dm, &fsm->p_half_prev));
+  PetscCall(DMCreateGlobalVector(fdm, &fsm->fv));
+  PetscCall(DMCreateGlobalVector(fdm, &fsm->fv_star));
+  PetscCall(DMCreateGlobalVector(dm, &fsm->p));
+  PetscCall(DMCreateGlobalVector(dm, &fsm->p_half));
+  PetscCall(DMCreateGlobalVector(dm, &fsm->p_prime));
+  PetscCall(DMCreateGlobalVector(dm, &fsm->p_half_prev));
 
   /* Create operators */
   for (d = 0; d < dim; ++d) {
