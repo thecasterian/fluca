@@ -38,6 +38,7 @@ FLUCA_INTERN PetscErrorCode NSFSMComputeVelocityInterpolationOperatorBoundaryCon
 FLUCA_INTERN PetscErrorCode NSFSMComputeFaceGradientOperator2d_Cart_Internal(DM, DM, const NSBoundaryCondition *, Mat);
 FLUCA_INTERN PetscErrorCode NSFSMComputeFaceDivergenceOperator2d_Cart_Internal(DM, DM, Mat);
 
+FLUCA_INTERN PetscErrorCode NSFSMSetKSPComputeFunctions2d_Cart_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSFSMCalculatePressureCorrection2d_Cart_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS);

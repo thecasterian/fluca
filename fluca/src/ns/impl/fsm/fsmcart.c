@@ -9,7 +9,7 @@ static PetscErrorCode ComputeRHSPprime2d_Private(KSP, Vec, void *);
 static PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP, Mat, Mat, void *);
 static PetscErrorCode ComputeOperatorPprime2d_Private(KSP, Mat, Mat, void *);
 
-PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
+static PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm, fdm;
@@ -45,12 +45,28 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode NSFSMSetKSPComputeFunctions2d_Cart_Internal(NS ns)
+{
+  NS_FSM  *fsm = (NS_FSM *)ns->data;
+  PetscInt d;
+
+  PetscErrorCode (*rhs[2])(KSP, Vec, void *) = {ComputeRHSUStar2d_Private, ComputeRHSVStar2d_Private};
+
+  PetscFunctionBegin;
+  for (d = 0; d < 2; ++d) {
+    PetscCall(KSPSetComputeOperators(fsm->kspv[d], ComputeOperatorsUVstar2d_Private, ns));
+    PetscCall(KSPSetComputeRHS(fsm->kspv[d], rhs[d], ns));
+  }
+  PetscCall(KSPSetComputeOperators(fsm->kspp, ComputeOperatorPprime2d_Private, ns));
+  PetscCall(KSPSetComputeRHS(fsm->kspp, ComputeRHSPprime2d_Private, ns));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
 {
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-  DM      dm, fdm;
-  PetscErrorCode (*rhs[2])(KSP, Vec, void *) = {ComputeRHSUStar2d_Private, ComputeRHSVStar2d_Private};
-  Vec      grad_p[2], grad_p_f, u_tilde, v_tilde, UV_tilde;
+  NS_FSM  *fsm = (NS_FSM *)ns->data;
+  DM       dm, fdm;
+  Vec      grad_p[2], grad_p_f, u_tilde, v_tilde, UV_tilde, s;
   PetscInt d;
 
   PetscFunctionBegin;
@@ -59,10 +75,6 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
 
   /* Solve for cell-centered intermediate velocity. */
   for (d = 0; d < 2; ++d) {
-    Vec s;
-
-    PetscCall(KSPSetComputeRHS(fsm->kspv[d], rhs[d], ns));
-    PetscCall(KSPSetComputeOperators(fsm->kspv[d], ComputeOperatorsUVstar2d_Private, ns));
     PetscCall(KSPSolve(fsm->kspv[d], NULL, NULL));
     PetscCall(KSPGetSolution(fsm->kspv[d], &s));
     PetscCall(VecCopy(s, fsm->v_star[d]));
@@ -107,8 +119,6 @@ PetscErrorCode NSFSMCalculatePressureCorrection2d_Cart_Internal(NS ns)
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
-  PetscCall(KSPSetComputeRHS(fsm->kspp, ComputeRHSPprime2d_Private, ns));
-  PetscCall(KSPSetComputeOperators(fsm->kspp, ComputeOperatorPprime2d_Private, ns));
   PetscCall(KSPSolve(fsm->kspp, NULL, NULL));
   PetscCall(KSPGetSolution(fsm->kspp, &s));
   PetscCall(VecCopy(s, fsm->p_prime));

@@ -33,11 +33,22 @@ static PetscErrorCode CreateDMToDMOperator_Private(DM dmfrom, DM dmto, Mat *A)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode CreateDMClone_Private(DM dm, DM *dmclone)
+{
+  DM cdm;
+
+  PetscFunctionBegin;
+  PetscCall(DMClone(dm, dmclone));
+  PetscCall(DMGetCoordinateDM(dm, &cdm));
+  PetscCall(DMSetCoordinateDM(*dmclone, cdm));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetup_FSM(NS ns)
 {
   NS_FSM  *fsm = (NS_FSM *)ns->data;
   MPI_Comm comm;
-  DM       dm, fdm;
+  DM       dm, fdm, dmclone;
   PC       pc;
   PetscInt dim, d;
 
@@ -85,16 +96,27 @@ PetscErrorCode NSSetup_FSM(NS ns)
   /* Create KSP */
   for (d = 0; d < dim; ++d) {
     PetscCall(KSPCreate(comm, &fsm->kspv[d]));
-    PetscCall(KSPSetDM(fsm->kspv[d], dm));
+    PetscCall(CreateDMClone_Private(dm, &dmclone));
+    PetscCall(KSPSetDM(fsm->kspv[d], dmclone));
+    PetscCall(DMDestroy(&dmclone));
     PetscCall(KSPGetPC(fsm->kspv[d], &pc));
     PetscCall(PCSetType(pc, PCMG));
     PetscCall(KSPSetFromOptions(fsm->kspv[d]));
   }
   PetscCall(KSPCreate(comm, &fsm->kspp));
-  PetscCall(KSPSetDM(fsm->kspp, dm));
+  PetscCall(CreateDMClone_Private(dm, &dmclone));
+  PetscCall(KSPSetDM(fsm->kspp, dmclone));
+  PetscCall(DMDestroy(&dmclone));
   PetscCall(KSPGetPC(fsm->kspp, &pc));
   PetscCall(PCSetType(pc, PCMG));
   PetscCall(KSPSetFromOptions(fsm->kspp));
+  switch (dim) {
+  case 2:
+    PetscCall(NSFSMSetKSPComputeFunctions2d_Cart_Internal(ns));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
