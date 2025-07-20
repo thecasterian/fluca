@@ -16,6 +16,7 @@ typedef struct {
   Vec p_half_prev; /* pressure at previous half time step n-3/2 */
 
   Mat grad_p[3];       /* gradient operators for pressure */
+  Mat grad_p_f;        /* gradient operators at face for pressure */
   Mat grad_p_prime[3]; /* gradient operators for pressure correction */
   Mat grad_p_prime_f;  /* gradient operators at face for pressure correction */
   Mat helm_v;          /* helmholtz operator for velocity */
@@ -28,6 +29,7 @@ typedef struct {
 } NS_FSM;
 
 FLUCA_INTERN PetscErrorCode NSFSMComputePressureGradientOperators2d_Cart_Internal(DM, const NSBoundaryCondition *, Mat[]);
+FLUCA_INTERN PetscErrorCode NSFSMComputePressureFaceGradientOperator2d_Cart_Internal(DM, DM, const NSBoundaryCondition *, Mat);
 FLUCA_INTERN PetscErrorCode NSFSMComputePressureCorrectionGradientOperators2d_Cart_Internal(DM, const NSBoundaryCondition *, Mat[]);
 FLUCA_INTERN PetscErrorCode NSFSMComputePressureCorrectionFaceGradientOperator2d_Cart_Internal(DM, DM, const NSBoundaryCondition *, Mat);
 FLUCA_INTERN PetscErrorCode NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(DM, const NSBoundaryCondition *, PetscScalar, PetscScalar, Mat);
