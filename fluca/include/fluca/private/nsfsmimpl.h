@@ -37,7 +37,7 @@ FLUCA_INTERN PetscErrorCode NSFSMComputeVelocityHelmholtzOperatorBoundaryConditi
 FLUCA_INTERN PetscErrorCode NSFSMComputePressureCorrectionLaplacianOperator2d_Cart_Internal(DM, const NSBoundaryCondition *, Mat);
 FLUCA_INTERN PetscErrorCode NSFSMComputeVelocityInterpolationOperators2d_Cart_Internal(DM, DM, const NSBoundaryCondition *, Mat[]);
 FLUCA_INTERN PetscErrorCode NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(DM, DM, PetscInt, PetscInt, const NSBoundaryCondition *, PetscReal, InsertMode, Vec);
-FLUCA_INTERN PetscErrorCode NSFSMComputeFaceVelocityDivergenceOperator2d_Cart_Internal(DM, const NSBoundaryCondition *, Mat);
+FLUCA_INTERN PetscErrorCode NSFSMComputeFaceVelocityDivergenceOperator2d_Cart_Internal(DM, DM, Mat);
 
 FLUCA_INTERN PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSFSMCalculatePressureCorrection2d_Cart_Internal(NS);

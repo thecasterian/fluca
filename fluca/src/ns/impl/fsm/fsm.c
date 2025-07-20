@@ -82,6 +82,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(dm, ns->bcs, 1., 0.5 * ns->mu * ns->dt / ns->rho, fsm->helm_v));
   PetscCall(NSFSMComputePressureCorrectionLaplacianOperator2d_Cart_Internal(dm, ns->bcs, fsm->lap_p_prime));
   PetscCall(NSFSMComputeVelocityInterpolationOperators2d_Cart_Internal(dm, fdm, ns->bcs, fsm->interp_v));
+  PetscCall(NSFSMComputeFaceVelocityDivergenceOperator2d_Cart_Internal(dm, fdm, fsm->div_fv));
 
   /* Create KSP */
   for (d = 0; d < dim; ++d) {

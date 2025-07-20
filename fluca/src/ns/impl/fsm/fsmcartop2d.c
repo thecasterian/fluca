@@ -270,7 +270,7 @@ PetscErrorCode NSFSMComputePressureFaceGradientOperator2d_Cart_Internal(DM dm, D
 
       if (ncols > 0) {
         PetscCall(DMStagStencilToIndexLocal(fdm, 2, 1, &row, &ir));
-        PetscCall(DMStagStencilToIndexLocal(dm, 2, 2, col, ic));
+        PetscCall(DMStagStencilToIndexLocal(dm, 2, ncols, col, ic));
         PetscCall(MatSetValuesLocal(grad, 1, &ir, ncols, ic, v, INSERT_VALUES));
       }
 
@@ -303,7 +303,7 @@ PetscErrorCode NSFSMComputePressureFaceGradientOperator2d_Cart_Internal(DM dm, D
 
       if (ncols > 0) {
         PetscCall(DMStagStencilToIndexLocal(fdm, 2, 1, &row, &ir));
-        PetscCall(DMStagStencilToIndexLocal(dm, 2, 2, col, ic));
+        PetscCall(DMStagStencilToIndexLocal(dm, 2, ncols, col, ic));
         PetscCall(MatSetValuesLocal(grad, 1, &ir, ncols, ic, v, INSERT_VALUES));
       }
     }
@@ -482,7 +482,7 @@ PetscErrorCode NSFSMComputePressureCorrectionFaceGradientOperator2d_Cart_Interna
 
       if (ncols > 0) {
         PetscCall(DMStagStencilToIndexLocal(fdm, 2, 1, &row, &ir));
-        PetscCall(DMStagStencilToIndexLocal(dm, 2, 2, col, ic));
+        PetscCall(DMStagStencilToIndexLocal(dm, 2, ncols, col, ic));
         PetscCall(MatSetValuesLocal(grad, 1, &ir, ncols, ic, v, INSERT_VALUES));
       }
 
@@ -515,7 +515,7 @@ PetscErrorCode NSFSMComputePressureCorrectionFaceGradientOperator2d_Cart_Interna
 
       if (ncols > 0) {
         PetscCall(DMStagStencilToIndexLocal(fdm, 2, 1, &row, &ir));
-        PetscCall(DMStagStencilToIndexLocal(dm, 2, 2, col, ic));
+        PetscCall(DMStagStencilToIndexLocal(dm, 2, ncols, col, ic));
         PetscCall(MatSetValuesLocal(grad, 1, &ir, ncols, ic, v, INSERT_VALUES));
       }
     }
@@ -1030,7 +1030,7 @@ PetscErrorCode NSFSMComputeVelocityInterpolationOperators2d_Cart_Internal(DM dm,
 
       if (ncols > 0) {
         PetscCall(DMStagStencilToIndexLocal(fdm, 2, 1, &row, &ir));
-        PetscCall(DMStagStencilToIndexLocal(dm, 2, 2, col, ic));
+        PetscCall(DMStagStencilToIndexLocal(dm, 2, ncols, col, ic));
         PetscCall(MatSetValuesLocal(interp[0], 1, &ir, ncols, ic, v, INSERT_VALUES));
       }
 
@@ -1075,7 +1075,7 @@ PetscErrorCode NSFSMComputeVelocityInterpolationOperators2d_Cart_Internal(DM dm,
 
       if (ncols > 0) {
         PetscCall(DMStagStencilToIndexLocal(fdm, 2, 1, &row, &ir));
-        PetscCall(DMStagStencilToIndexLocal(dm, 2, 2, col, ic));
+        PetscCall(DMStagStencilToIndexLocal(dm, 2, ncols, col, ic));
         PetscCall(MatSetValuesLocal(interp[1], 1, &ir, ncols, ic, v, INSERT_VALUES));
       }
     }
@@ -1198,6 +1198,64 @@ PetscErrorCode NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2
 
   PetscCall(VecAssemblyBegin(vbc));
   PetscCall(VecAssemblyEnd(vbc));
+
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFSMComputeFaceVelocityDivergenceOperator2d_Cart_Internal(DM dm, DM fdm, Mat D)
+{
+  PetscInt            M, N, x, y, m, n;
+  DMStagStencil       row, col[4];
+  PetscInt            ncols;
+  PetscScalar         v[4];
+  PetscInt            ir, ic[4];
+  const PetscScalar **arrcx, **arrcy;
+  PetscInt            iprevc, inextc;
+  PetscInt            i, j;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetGlobalSizes(dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
+
+  row.loc = DMSTAG_ELEMENT;
+  row.c   = 0;
+  for (i = 0; i < 4; ++i) col[i].c = 0;
+
+  for (j = y; j < y + n; ++j)
+    for (i = x; i < x + m; ++i) {
+      row.i = i;
+      row.j = j;
+
+      v[0]       = -1. / (arrcx[i][inextc] - arrcx[i][iprevc]);
+      col[0].loc = DMSTAG_LEFT;
+      col[0].i   = i;
+      col[0].j   = j;
+      v[1]       = 1. / (arrcx[i][inextc] - arrcx[i][iprevc]);
+      col[1].loc = DMSTAG_RIGHT;
+      col[1].i   = i;
+      col[1].j   = j;
+      v[2]       = -1. / (arrcy[j][inextc] - arrcy[j][iprevc]);
+      col[2].loc = DMSTAG_DOWN;
+      col[2].i   = i;
+      col[2].j   = j;
+      v[3]       = 1. / (arrcy[j][inextc] - arrcy[j][iprevc]);
+      col[3].loc = DMSTAG_UP;
+      col[3].i   = i;
+      col[3].j   = j;
+      ncols      = 4;
+
+      PetscCall(DMStagStencilToIndexLocal(dm, 2, 1, &row, &ir));
+      PetscCall(DMStagStencilToIndexLocal(fdm, 2, ncols, col, ic));
+      PetscCall(MatSetValuesLocal(D, 1, &ir, ncols, ic, v, INSERT_VALUES));
+    }
+
+  /* Assemble the matrix */
+  PetscCall(MatAssemblyBegin(D, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(D, MAT_FINAL_ASSEMBLY));
 
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);

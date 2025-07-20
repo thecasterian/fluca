@@ -9,107 +9,57 @@ static PetscErrorCode ComputeRHSPprime2d_Private(KSP, Vec, void *);
 static PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP, Mat, Mat, void *);
 static PetscErrorCode ComputeOperatorPprime2d_Private(KSP, Mat, Mat, void *);
 
-static PetscErrorCode GetBoundaryConditions2d_Private(NS ns, NSBoundaryCondition *bcleft, NSBoundaryCondition *bcright, NSBoundaryCondition *bcdown, NSBoundaryCondition *bcup)
-{
-  PetscInt ileftb, irightb, idownb, iupb;
-
-  PetscFunctionBegin;
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_LEFT, &ileftb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_RIGHT, &irightb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_DOWN, &idownb));
-  PetscCall(MeshCartGetBoundaryIndex(ns->mesh, MESHCART_UP, &iupb));
-  PetscCall(NSGetBoundaryCondition(ns, ileftb, bcleft));
-  PetscCall(NSGetBoundaryCondition(ns, irightb, bcright));
-  PetscCall(NSGetBoundaryCondition(ns, idownb, bcdown));
-  PetscCall(NSGetBoundaryCondition(ns, iupb, bcup));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm, fdm;
 
-  PetscInt             M, N, x, y, m, n, nExtrax, nExtray;
-  PetscScalar       ***arrNu, ***arrNv;
-  const PetscScalar ***arrUV;
-  const PetscScalar  **arrcx, **arrcy;
-  PetscInt             ileft, iright, idown, iup, ielem, iprevc, inextc, ielemc;
-  PetscScalar          hx, hy;
-  PetscInt             i, j;
-
-  Vec            u_global, v_global, u_interp_global, u_interp_local, v_interp_global, v_interp_local;
-  PetscScalar ***arru_interp, ***arrv_interp;
+  Vec u_global, v_global, UV_global, u_interp, v_interp, UV_u_interp, UV_v_interp, Nu_global, Nv_global;
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
   PetscCall(MeshGetFaceDM(ns->mesh, &fdm));
 
-  PetscCall(DMStagGetGlobalSizes(dm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
-
   PetscCall(DMGetGlobalVector(dm, &u_global));
   PetscCall(DMGetGlobalVector(dm, &v_global));
-  PetscCall(DMGetGlobalVector(fdm, &u_interp_global));
-  PetscCall(DMGetLocalVector(fdm, &u_interp_local));
-  PetscCall(DMGetGlobalVector(fdm, &v_interp_global));
-  PetscCall(DMGetLocalVector(fdm, &v_interp_local));
-
-  PetscCall(DMStagVecGetArray(dm, fsm->N[0], &arrNu));
-  PetscCall(DMStagVecGetArray(dm, fsm->N[1], &arrNv));
-  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
-
-  PetscCall(DMStagGetLocationSlot(fdm, DMSTAG_LEFT, 0, &ileft));
-  PetscCall(DMStagGetLocationSlot(fdm, DMSTAG_RIGHT, 0, &iright));
-  PetscCall(DMStagGetLocationSlot(fdm, DMSTAG_DOWN, 0, &idown));
-  PetscCall(DMStagGetLocationSlot(fdm, DMSTAG_UP, 0, &iup));
-  PetscCall(DMStagGetLocationSlot(dm, DMSTAG_ELEMENT, 0, &ielem));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
+  PetscCall(DMGetGlobalVector(fdm, &UV_global));
+  PetscCall(DMGetGlobalVector(fdm, &u_interp));
+  PetscCall(DMGetGlobalVector(fdm, &v_interp));
+  PetscCall(DMGetGlobalVector(fdm, &UV_u_interp));
+  PetscCall(DMGetGlobalVector(fdm, &UV_v_interp));
+  PetscCall(DMGetGlobalVector(dm, &Nu_global));
+  PetscCall(DMGetGlobalVector(dm, &Nv_global));
 
   PetscCall(DMLocalToGlobal(dm, fsm->v[0], INSERT_VALUES, u_global));
   PetscCall(DMLocalToGlobal(dm, fsm->v[1], INSERT_VALUES, v_global));
+  PetscCall(DMLocalToGlobal(fdm, fsm->fv, INSERT_VALUES, UV_global));
 
-  PetscCall(MatMult(fsm->interp_v[0], u_global, u_interp_global));
-  PetscCall(MatMultAdd(fsm->interp_v[1], u_global, u_interp_global, u_interp_global));
-  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 0, 0, ns->bcs, ns->t + ns->dt, ADD_VALUES, u_interp_global));
-  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 1, 0, ns->bcs, ns->t + ns->dt, ADD_VALUES, v_interp_global));
-  PetscCall(MatMult(fsm->interp_v[0], v_global, v_interp_global));
-  PetscCall(MatMultAdd(fsm->interp_v[1], v_global, v_interp_global, v_interp_global));
-  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 0, 1, ns->bcs, ns->t + ns->dt, ADD_VALUES, v_interp_global));
-  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 1, 1, ns->bcs, ns->t + ns->dt, ADD_VALUES, v_interp_global));
+  PetscCall(MatMult(fsm->interp_v[0], u_global, u_interp));
+  PetscCall(MatMultAdd(fsm->interp_v[1], u_global, u_interp, u_interp));
+  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 0, 0, ns->bcs, ns->t + ns->dt, ADD_VALUES, u_interp));
+  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 1, 0, ns->bcs, ns->t + ns->dt, ADD_VALUES, u_interp));
+  PetscCall(MatMult(fsm->interp_v[0], v_global, v_interp));
+  PetscCall(MatMultAdd(fsm->interp_v[1], v_global, v_interp, v_interp));
+  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 0, 1, ns->bcs, ns->t + ns->dt, ADD_VALUES, v_interp));
+  PetscCall(NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2d_Cart_Internal(dm, fdm, 1, 1, ns->bcs, ns->t + ns->dt, ADD_VALUES, v_interp));
 
-  PetscCall(DMGlobalToLocal(fdm, u_interp_global, INSERT_VALUES, u_interp_local));
-  PetscCall(DMGlobalToLocal(fdm, v_interp_global, INSERT_VALUES, v_interp_local));
+  PetscCall(VecPointwiseMult(UV_u_interp, UV_global, u_interp));
+  PetscCall(VecPointwiseMult(UV_v_interp, UV_global, v_interp));
+  PetscCall(MatMult(fsm->div_fv, UV_u_interp, Nu_global));
+  PetscCall(MatMult(fsm->div_fv, UV_v_interp, Nv_global));
 
-  PetscCall(DMStagVecGetArray(fdm, u_interp_local, &arru_interp));
-  PetscCall(DMStagVecGetArray(fdm, v_interp_local, &arrv_interp));
-  PetscCall(DMStagVecGetArrayRead(fdm, fsm->fv, &arrUV));
-
-  for (j = y; j < y + n; ++j)
-    for (i = x; i < x + m; ++i) {
-      hx                 = arrcx[i][inextc] - arrcx[i][iprevc];
-      hy                 = arrcy[j][inextc] - arrcy[j][iprevc];
-      arrNu[j][i][ielem] = (arrUV[j][i][iright] * arru_interp[j][i][iright] - arrUV[j][i][ileft] * arru_interp[j][i][ileft]) / hx //
-                         + (arrUV[j][i][iup] * arru_interp[j][i][iup] - arrUV[j][i][idown] * arru_interp[j][i][idown]) / hy;
-      arrNv[j][i][ielem] = (arrUV[j][i][iright] * arrv_interp[j][i][iright] - arrUV[j][i][ileft] * arrv_interp[j][i][ileft]) / hx //
-                         + (arrUV[j][i][iup] * arrv_interp[j][i][iup] - arrUV[j][i][idown] * arrv_interp[j][i][idown]) / hy;
-    }
-
-  PetscCall(DMStagVecRestoreArray(dm, fsm->N[0], &arrNu));
-  PetscCall(DMStagVecRestoreArray(dm, fsm->N[1], &arrNv));
-  PetscCall(DMStagVecRestoreArray(fdm, u_interp_local, &arru_interp));
-  PetscCall(DMStagVecRestoreArray(fdm, v_interp_local, &arrv_interp));
-  PetscCall(DMStagVecRestoreArrayRead(fdm, fsm->fv, &arrUV));
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMGlobalToLocal(dm, Nu_global, INSERT_VALUES, fsm->N[0]));
+  PetscCall(DMGlobalToLocal(dm, Nv_global, INSERT_VALUES, fsm->N[1]));
 
   PetscCall(DMRestoreGlobalVector(dm, &u_global));
   PetscCall(DMRestoreGlobalVector(dm, &v_global));
-  PetscCall(DMRestoreGlobalVector(fdm, &u_interp_global));
-  PetscCall(DMRestoreLocalVector(fdm, &u_interp_local));
-  PetscCall(DMRestoreGlobalVector(fdm, &v_interp_global));
-  PetscCall(DMRestoreLocalVector(fdm, &v_interp_local));
+  PetscCall(DMRestoreGlobalVector(fdm, &UV_global));
+  PetscCall(DMRestoreGlobalVector(fdm, &u_interp));
+  PetscCall(DMRestoreGlobalVector(fdm, &v_interp));
+  PetscCall(DMRestoreGlobalVector(fdm, &UV_u_interp));
+  PetscCall(DMRestoreGlobalVector(fdm, &UV_v_interp));
+  PetscCall(DMRestoreGlobalVector(dm, &Nu_global));
+  PetscCall(DMRestoreGlobalVector(dm, &Nv_global));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -377,61 +327,21 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm, fdm;
 
-  const PetscReal rho = ns->rho;
-  const PetscReal dt  = ns->dt;
+  MPI_Comm     comm;
+  MatNullSpace nullspace;
 
-  Vec fv_star = fsm->fv_star;
-
-  MPI_Comm             comm;
-  PetscInt             M, N, x, y, m, n;
-  DMStagStencil        row;
-  PetscScalar          valb;
-  const PetscScalar ***arrUV_star;
-  const PetscScalar  **arrcx, **arrcy;
-  PetscInt             ileft, idown, ielem, iprevc, inextc, ielemc;
-  PetscScalar          divUV_star;
-  MatNullSpace         nullspace;
-  PetscInt             i, j;
-
-  NSBoundaryCondition bcleft, bcright, bcdown, bcup;
+  Vec UV_star_global;
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
   PetscCall(MeshGetFaceDM(ns->mesh, &fdm));
   PetscCall(PetscObjectGetComm((PetscObject)ksp, &comm));
 
-  PetscCall(DMStagGetGlobalSizes(dm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMGetGlobalVector(fdm, &UV_star_global));
+  PetscCall(DMLocalToGlobal(fdm, fsm->fv_star, INSERT_VALUES, UV_star_global));
 
-  PetscCall(DMStagVecGetArrayRead(fdm, fv_star, &arrUV_star));
-  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
-
-  PetscCall(DMStagGetLocationSlot(fdm, DMSTAG_LEFT, 0, &ileft));
-  PetscCall(DMStagGetLocationSlot(fdm, DMSTAG_DOWN, 0, &idown));
-  PetscCall(DMStagGetLocationSlot(dm, DMSTAG_ELEMENT, 0, &ielem));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
-
-  PetscCall(GetBoundaryConditions2d_Private(ns, &bcleft, &bcright, &bcdown, &bcup));
-
-  row.loc = DMSTAG_ELEMENT;
-  row.c   = 0;
-
-  for (j = y; j < y + n; ++j)
-    for (i = x; i < x + m; ++i) {
-      row.i = i;
-      row.j = j;
-
-      divUV_star = (arrUV_star[j][i + 1][ileft] - arrUV_star[j][i][ileft]) / (arrcx[i][inextc] - arrcx[i][iprevc]) //
-                 + (arrUV_star[j + 1][i][idown] - arrUV_star[j][i][idown]) / (arrcy[j][inextc] - arrcy[j][iprevc]);
-      valb = rho / dt * divUV_star;
-
-      PetscCall(DMStagVecSetValuesStencil(dm, b, 1, &row, &valb, INSERT_VALUES));
-    }
-
-  PetscCall(DMStagVecRestoreArrayRead(fdm, fv_star, &arrUV_star));
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscCall(MatMult(fsm->div_fv, UV_star_global, b));
+  PetscCall(VecScale(b, ns->rho / ns->dt));
 
   // TODO: below is only for velocity boundary conditions
   /* Remove null space. */
@@ -439,8 +349,7 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(MatNullSpaceRemove(nullspace, b));
   PetscCall(MatNullSpaceDestroy(&nullspace));
 
-  PetscCall(VecAssemblyBegin(b));
-  PetscCall(VecAssemblyEnd(b));
+  PetscCall(DMRestoreGlobalVector(fdm, &UV_star_global));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
