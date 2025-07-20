@@ -213,109 +213,6 @@ PetscErrorCode NSFSMComputePressureGradientOperators2d_Cart_Internal(DM dm, cons
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMComputePressureFaceGradientOperator2d_Cart_Internal(DM dm, DM fdm, const NSBoundaryCondition *bcs, Mat grad)
-{
-  PetscInt            M, N, x, y, m, n, nExtrax, nExtray;
-  DMStagStencil       row, col[2];
-  PetscInt            ncols;
-  PetscScalar         v[2];
-  PetscInt            ir, ic[2];
-  const PetscScalar **arrcx, **arrcy;
-  PetscInt            ielemc;
-  PetscInt            i, j;
-
-  PetscFunctionBegin;
-  PetscCall(DMStagGetGlobalSizes(fdm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(fdm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
-  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
-
-  row.c = 0;
-  for (i = 0; i < 2; ++i) {
-    col[i].loc = DMSTAG_ELEMENT;
-    col[i].c   = 0;
-  }
-
-  for (j = y; j < y + n + nExtray; ++j)
-    for (i = x; i < x + m + nExtrax; ++i) {
-      row.i = i;
-      row.j = j;
-
-      /* x-gradient */
-      row.loc = DMSTAG_LEFT;
-      if (i == 0) {
-        switch (bcs[0].type) {
-        case NS_BC_VELOCITY:
-          ncols = 0;
-          break;
-        case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivFace(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
-        }
-      } else if (i == M) {
-        switch (bcs[1].type) {
-        case NS_BC_VELOCITY:
-          ncols = 0;
-          break;
-        case NS_BC_PERIODIC:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Periodic boundary condition on right boundary but mesh is not periodic in x-direction");
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
-        }
-      } else {
-        PetscCall(ComputeFirstDerivFace(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
-      }
-
-      if (ncols > 0) {
-        PetscCall(DMStagStencilToIndexLocal(fdm, 2, 1, &row, &ir));
-        PetscCall(DMStagStencilToIndexLocal(dm, 2, ncols, col, ic));
-        PetscCall(MatSetValuesLocal(grad, 1, &ir, ncols, ic, v, INSERT_VALUES));
-      }
-
-      /* y-gradient */
-      row.loc = DMSTAG_DOWN;
-      if (j == 0) {
-        switch (bcs[2].type) {
-        case NS_BC_VELOCITY:
-          ncols = 0;
-          break;
-        case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivFace(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
-        }
-      } else if (j == N) {
-        switch (bcs[3].type) {
-        case NS_BC_VELOCITY:
-          ncols = 0;
-          break;
-        case NS_BC_PERIODIC:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Periodic boundary condition on up boundary but mesh is not periodic in y-direction");
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
-        }
-      } else {
-        PetscCall(ComputeFirstDerivFace(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
-      }
-
-      if (ncols > 0) {
-        PetscCall(DMStagStencilToIndexLocal(fdm, 2, 1, &row, &ir));
-        PetscCall(DMStagStencilToIndexLocal(dm, 2, ncols, col, ic));
-        PetscCall(MatSetValuesLocal(grad, 1, &ir, ncols, ic, v, INSERT_VALUES));
-      }
-    }
-
-  /* Assemble the matrix */
-  PetscCall(MatAssemblyBegin(grad, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(grad, MAT_FINAL_ASSEMBLY));
-
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 PetscErrorCode NSFSMComputePressureCorrectionGradientOperators2d_Cart_Internal(DM dm, const NSBoundaryCondition *bcs, Mat grad[])
 {
   PetscInt            M, N, x, y, m, n;
@@ -425,7 +322,7 @@ PetscErrorCode NSFSMComputePressureCorrectionGradientOperators2d_Cart_Internal(D
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMComputePressureCorrectionFaceGradientOperator2d_Cart_Internal(DM dm, DM fdm, const NSBoundaryCondition *bcs, Mat grad)
+PetscErrorCode NSFSMComputeFaceGradientOperator2d_Cart_Internal(DM dm, DM fdm, const NSBoundaryCondition *bcs, Mat grad)
 {
   PetscInt            M, N, x, y, m, n, nExtrax, nExtray;
   DMStagStencil       row, col[2];
@@ -1203,7 +1100,7 @@ PetscErrorCode NSFSMComputeVelocityInterpolationOperatorBoundaryConditionVector2
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMComputeFaceVelocityDivergenceOperator2d_Cart_Internal(DM dm, DM fdm, Mat D)
+PetscErrorCode NSFSMComputeFaceDivergenceOperator2d_Cart_Internal(DM dm, DM fdm, Mat D)
 {
   PetscInt            M, N, x, y, m, n;
   DMStagStencil       row, col[4];

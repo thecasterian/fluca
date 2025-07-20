@@ -45,8 +45,8 @@ PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
 
   PetscCall(VecPointwiseMult(UV_u_interp, UV_global, u_interp));
   PetscCall(VecPointwiseMult(UV_v_interp, UV_global, v_interp));
-  PetscCall(MatMult(fsm->div_fv, UV_u_interp, Nu_global));
-  PetscCall(MatMult(fsm->div_fv, UV_v_interp, Nv_global));
+  PetscCall(MatMult(fsm->div_f, UV_u_interp, Nu_global));
+  PetscCall(MatMult(fsm->div_f, UV_v_interp, Nv_global));
 
   PetscCall(DMGlobalToLocal(dm, Nu_global, INSERT_VALUES, fsm->N[0]));
   PetscCall(DMGlobalToLocal(dm, Nv_global, INSERT_VALUES, fsm->N[1]));
@@ -106,7 +106,7 @@ PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
 
   PetscCall(MatMult(fsm->grad_p[0], p_global, grad_p[0]));
   PetscCall(MatMult(fsm->grad_p[1], p_global, grad_p[1]));
-  PetscCall(MatMult(fsm->grad_p_f, p_global, grad_p_f));
+  PetscCall(MatMult(fsm->grad_f, p_global, grad_p_f));
 
   PetscCall(VecWAXPY(u_tilde, ns->dt / ns->rho, grad_p[0], u_star_global));
   PetscCall(VecWAXPY(v_tilde, ns->dt / ns->rho, grad_p[1], v_star_global));
@@ -185,7 +185,7 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
 
   PetscCall(MatMult(fsm->grad_p_prime[0], p_prime_global, grad_p_prime[0]));
   PetscCall(MatMult(fsm->grad_p_prime[1], p_prime_global, grad_p_prime[1]));
-  PetscCall(MatMult(fsm->grad_p_prime_f, p_prime_global, grad_p_prime_f));
+  PetscCall(MatMult(fsm->grad_f, p_prime_global, grad_p_prime_f));
   PetscCall(MatMult(fsm->lap_p_prime, p_prime_global, lap_p_prime));
 
   PetscCall(VecWAXPY(u_global, -ns->dt / ns->rho, grad_p_prime[0], u_star_global));
@@ -340,7 +340,7 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
   PetscCall(DMGetGlobalVector(fdm, &UV_star_global));
   PetscCall(DMLocalToGlobal(fdm, fsm->fv_star, INSERT_VALUES, UV_star_global));
 
-  PetscCall(MatMult(fsm->div_fv, UV_star_global, b));
+  PetscCall(MatMult(fsm->div_f, UV_star_global, b));
   PetscCall(VecScale(b, ns->rho / ns->dt));
 
   // TODO: below is only for velocity boundary conditions
