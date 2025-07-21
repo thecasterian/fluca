@@ -1,5 +1,6 @@
 #include <fluca/private/nsfsmimpl.h>
 #include <flucaviewer.h>
+#include <petscdmstag.h>
 
 PetscErrorCode NSSetFromOptions_FSM(NS ns, PetscOptionItems PetscOptionsObject)
 {
@@ -13,13 +14,55 @@ PetscErrorCode NSSetFromOptions_FSM(NS ns, PetscOptionItems PetscOptionsObject)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode CreateDMToDMOperator_Private(DM dmfrom, DM dmto, Mat *A)
+{
+  PetscInt               entriesfrom, entriesto;
+  ISLocalToGlobalMapping ltogfrom, ltogto;
+  MatType                mattype;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetEntries(dmfrom, &entriesfrom));
+  PetscCall(DMStagGetEntries(dmto, &entriesto));
+  PetscCall(DMGetLocalToGlobalMapping(dmfrom, &ltogfrom));
+  PetscCall(DMGetLocalToGlobalMapping(dmto, &ltogto));
+  PetscCall(MatCreate(PetscObjectComm((PetscObject)dmfrom), A));
+  PetscCall(MatSetSizes(*A, entriesto, entriesfrom, PETSC_DECIDE, PETSC_DECIDE));
+  PetscCall(DMGetMatType(dmfrom, &mattype));
+  PetscCall(MatSetType(*A, mattype));
+  PetscCall(MatSetLocalToGlobalMapping(*A, ltogto, ltogfrom));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode CreateKSPWithDMClone_Private(DM dm, KSP *ksp)
+{
+  MPI_Comm comm;
+  DM       dmclone, cdm;
+  PC       pc;
+
+  PetscFunctionBegin;
+  PetscCall(PetscObjectGetComm((PetscObject)dm, &comm));
+  PetscCall(KSPCreate(comm, ksp));
+
+  PetscCall(DMClone(dm, &dmclone));
+  PetscCall(DMGetCoordinateDM(dm, &cdm));
+  PetscCall(DMSetCoordinateDM(dmclone, cdm));
+  PetscCall(KSPSetDM(*ksp, dmclone));
+  PetscCall(DMDestroy(&dmclone));
+
+  PetscCall(KSPGetPC(*ksp, &pc));
+  PetscCall(PCSetType(pc, PCMG));
+
+  PetscCall(KSPSetFromOptions(*ksp));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetup_FSM(NS ns)
 {
-  NS_FSM  *fsm = (NS_FSM *)ns->data;
-  MPI_Comm comm;
-  DM       dm, fdm;
-  PC       pc;
-  PetscInt dim, d;
+  NS_FSM   *fsm = (NS_FSM *)ns->data;
+  MPI_Comm  comm;
+  DM        dm, fdm;
+  PetscInt  dim, d;
+  PetscBool iscart;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
@@ -28,34 +71,52 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(MeshGetDM(ns->mesh, &dm));
   PetscCall(MeshGetFaceDM(ns->mesh, &fdm));
   PetscCall(MeshGetDimension(ns->mesh, &dim));
+  PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
 
   /* Create solution */
   for (d = 0; d < dim; ++d) {
-    PetscCall(DMCreateLocalVector(dm, &fsm->v[d]));
-    PetscCall(DMCreateLocalVector(dm, &fsm->v_star[d]));
-    PetscCall(DMCreateLocalVector(dm, &fsm->N[d]));
-    PetscCall(DMCreateLocalVector(dm, &fsm->N_prev[d]));
+    PetscCall(DMCreateGlobalVector(dm, &fsm->v[d]));
+    PetscCall(DMCreateGlobalVector(dm, &fsm->v_star[d]));
+    PetscCall(DMCreateGlobalVector(dm, &fsm->N[d]));
+    PetscCall(DMCreateGlobalVector(dm, &fsm->N_prev[d]));
   }
-  PetscCall(DMCreateLocalVector(fdm, &fsm->fv));
-  PetscCall(DMCreateLocalVector(fdm, &fsm->fv_star));
-  PetscCall(DMCreateLocalVector(dm, &fsm->p));
-  PetscCall(DMCreateLocalVector(dm, &fsm->p_half));
-  PetscCall(DMCreateLocalVector(dm, &fsm->p_prime));
-  PetscCall(DMCreateLocalVector(dm, &fsm->p_half_prev));
+  PetscCall(DMCreateGlobalVector(fdm, &fsm->fv));
+  PetscCall(DMCreateGlobalVector(fdm, &fsm->fv_star));
+  PetscCall(DMCreateGlobalVector(dm, &fsm->p));
+  PetscCall(DMCreateGlobalVector(dm, &fsm->p_half));
+  PetscCall(DMCreateGlobalVector(dm, &fsm->p_prime));
+  PetscCall(DMCreateGlobalVector(dm, &fsm->p_half_prev));
+
+  /* Create operators */
+  for (d = 0; d < dim; ++d) {
+    PetscCall(DMCreateMatrix(dm, &fsm->grad_p[d]));
+    PetscCall(DMCreateMatrix(dm, &fsm->grad_p_prime[d]));
+    PetscCall(CreateDMToDMOperator_Private(dm, fdm, &fsm->interp_v[d]));
+  }
+  PetscCall(DMCreateMatrix(dm, &fsm->helm_v));
+  PetscCall(DMCreateMatrix(dm, &fsm->lap_p_prime));
+  PetscCall(CreateDMToDMOperator_Private(dm, fdm, &fsm->grad_f));
+  PetscCall(CreateDMToDMOperator_Private(fdm, dm, &fsm->div_f));
+
+  switch (dim) {
+  case 2:
+    if (iscart) PetscCall(NSFSMComputeSpatialOperators2d_Cart_Internal(ns));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
+  }
 
   /* Create KSP */
-  for (d = 0; d < dim; ++d) {
-    PetscCall(KSPCreate(comm, &fsm->kspv[d]));
-    PetscCall(KSPSetDM(fsm->kspv[d], dm));
-    PetscCall(KSPGetPC(fsm->kspv[d], &pc));
-    PetscCall(PCSetType(pc, PCMG));
-    PetscCall(KSPSetFromOptions(fsm->kspv[d]));
+  for (d = 0; d < dim; ++d) PetscCall(CreateKSPWithDMClone_Private(dm, &fsm->kspv[d]));
+  PetscCall(CreateKSPWithDMClone_Private(dm, &fsm->kspp));
+
+  switch (dim) {
+  case 2:
+    if (iscart) PetscCall(NSFSMSetKSPComputeFunctions2d_Cart_Internal(ns));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
   }
-  PetscCall(KSPCreate(comm, &fsm->kspp));
-  PetscCall(KSPSetDM(fsm->kspp, dm));
-  PetscCall(KSPGetPC(fsm->kspp, &pc));
-  PetscCall(PCSetType(pc, PCMG));
-  PetscCall(KSPSetFromOptions(fsm->kspp));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -69,11 +130,7 @@ PetscErrorCode NSIterate_FSM(NS ns)
   PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
   switch (dim) {
   case 2:
-    if (iscart) {
-      PetscCall(NSFSMCalculateIntermediateVelocity2d_Cart_Internal(ns));
-      PetscCall(NSFSMCalculatePressureCorrection2d_Cart_Internal(ns));
-      PetscCall(NSFSMUpdate2d_Cart_Internal(ns));
-    }
+    if (iscart) PetscCall(NSFSMIterate2d_Cart_Internal(ns));
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
@@ -99,6 +156,16 @@ PetscErrorCode NSDestroy_FSM(NS ns)
   PetscCall(VecDestroy(&fsm->p_half));
   PetscCall(VecDestroy(&fsm->p_prime));
   PetscCall(VecDestroy(&fsm->p_half_prev));
+
+  for (d = 0; d < 3; ++d) {
+    PetscCall(MatDestroy(&fsm->grad_p[d]));
+    PetscCall(MatDestroy(&fsm->grad_p_prime[d]));
+    PetscCall(MatDestroy(&fsm->interp_v[d]));
+  }
+  PetscCall(MatDestroy(&fsm->helm_v));
+  PetscCall(MatDestroy(&fsm->lap_p_prime));
+  PetscCall(MatDestroy(&fsm->grad_f));
+  PetscCall(MatDestroy(&fsm->div_f));
 
   for (d = 0; d < 3; ++d) PetscCall(KSPDestroy(&fsm->kspv[d]));
   PetscCall(KSPDestroy(&fsm->kspp));
@@ -158,7 +225,21 @@ PetscErrorCode NSCreate_FSM(NS ns)
   fsm->p_prime     = NULL;
   fsm->p_half_prev = NULL;
 
-  for (d = 0; d < 3; ++d) fsm->kspv[d] = NULL;
+  for (d = 0; d < 3; ++d) {
+    fsm->grad_p[d]       = NULL;
+    fsm->grad_p_prime[d] = NULL;
+    fsm->interp_v[d]     = NULL;
+  }
+  fsm->helm_v      = NULL;
+  fsm->lap_p_prime = NULL;
+  fsm->grad_f      = NULL;
+  fsm->div_f       = NULL;
+
+  for (d = 0; d < 3; ++d) {
+    fsm->kspv[d]        = NULL;
+    fsm->kspvctx[d].ns  = ns;
+    fsm->kspvctx[d].dim = d;
+  }
   fsm->kspp = NULL;
 
   ns->ops->setfromoptions   = NSSetFromOptions_FSM;
