@@ -166,7 +166,7 @@ static PetscErrorCode NSFSMComputePressureGradientOperators2d_Cart_Internal(DM d
       PetscCall(DMStagMatSetValuesStencil(dm, grad[0], 1, &row, ncols, col, v, INSERT_VALUES));
     }
 
-  // Compute y-gradient operator
+  /* Compute y-gradient operator */
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
       row.i = i;
@@ -275,7 +275,7 @@ static PetscErrorCode NSFSMComputePressureCorrectionGradientOperators2d_Cart_Int
       PetscCall(DMStagMatSetValuesStencil(dm, grad[0], 1, &row, ncols, col, v, INSERT_VALUES));
     }
 
-  // Compute y-gradient operator
+  /* Compute y-gradient operator */
   for (j = y; j < y + n; ++j)
     for (i = x; i < x + m; ++i) {
       row.i = i;
