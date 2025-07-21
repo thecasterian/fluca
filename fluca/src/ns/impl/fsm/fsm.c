@@ -100,15 +100,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
 
   switch (dim) {
   case 2:
-    if (iscart) {
-      PetscCall(NSFSMComputePressureGradientOperators2d_Cart_Internal(dm, ns->bcs, fsm->grad_p));
-      PetscCall(NSFSMComputePressureCorrectionGradientOperators2d_Cart_Internal(dm, ns->bcs, fsm->grad_p_prime));
-      PetscCall(NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(dm, ns->bcs, 1., 0.5 * ns->mu * ns->dt / ns->rho, fsm->helm_v));
-      PetscCall(NSFSMComputePressureCorrectionLaplacianOperator2d_Cart_Internal(dm, ns->bcs, fsm->lap_p_prime));
-      PetscCall(NSFSMComputeVelocityInterpolationOperators2d_Cart_Internal(dm, fdm, ns->bcs, fsm->interp_v));
-      PetscCall(NSFSMComputeFaceGradientOperator2d_Cart_Internal(dm, fdm, ns->bcs, fsm->grad_f));
-      PetscCall(NSFSMComputeFaceDivergenceOperator2d_Cart_Internal(dm, fdm, fsm->div_f));
-    }
+    if (iscart) PetscCall(NSFSMComputeSpatialOperators2d_Cart_Internal(ns));
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
@@ -138,11 +130,7 @@ PetscErrorCode NSIterate_FSM(NS ns)
   PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
   switch (dim) {
   case 2:
-    if (iscart) {
-      PetscCall(NSFSMCalculateIntermediateVelocity2d_Cart_Internal(ns));
-      PetscCall(NSFSMCalculatePressureCorrection2d_Cart_Internal(ns));
-      PetscCall(NSFSMUpdate2d_Cart_Internal(ns));
-    }
+    if (iscart) PetscCall(NSFSMIterate2d_Cart_Internal(ns));
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
