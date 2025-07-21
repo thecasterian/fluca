@@ -4,6 +4,11 @@
 #include <petscksp.h>
 
 typedef struct {
+  NS       ns;
+  PetscInt dim;
+} KSPVCtx;
+
+typedef struct {
   Vec v[3];        /* velocity at n */
   Vec v_star[3];   /* intermediate velocity between n and n+1 */
   Vec N[3];        /* convection at n */
@@ -24,8 +29,9 @@ typedef struct {
   Mat grad_f; /* face gradient operator; computes gradient at face from cell-centered values (except for boundaries) */
   Mat div_f;  /* face divergence operator; computes divergence at cell center from face values */
 
-  KSP kspv[3]; /* for solving intermediate velocities */
-  KSP kspp;    /* for solving pressure correction */
+  KSP     kspv[3];    /* KSP to solve intermediate velocities */
+  KSPVCtx kspvctx[3]; /* context for intermediate velocity KSP */
+  KSP     kspp;       /* KSP to solve pressure correction */
 } NS_FSM;
 
 FLUCA_INTERN PetscErrorCode NSFSMComputePressureGradientOperators2d_Cart_Internal(DM, const NSBoundaryCondition *, Mat[]);
@@ -39,6 +45,7 @@ FLUCA_INTERN PetscErrorCode NSFSMComputeFaceGradientOperator2d_Cart_Internal(DM,
 FLUCA_INTERN PetscErrorCode NSFSMComputeFaceDivergenceOperator2d_Cart_Internal(DM, DM, Mat);
 
 FLUCA_INTERN PetscErrorCode NSFSMSetKSPComputeFunctions2d_Cart_Internal(NS);
+
 FLUCA_INTERN PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSFSMCalculatePressureCorrection2d_Cart_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS);

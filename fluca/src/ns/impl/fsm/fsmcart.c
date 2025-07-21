@@ -3,11 +3,10 @@
 #include <flucameshcart.h>
 #include <petscdmstag.h>
 
-static PetscErrorCode ComputeRHSUStar2d_Private(KSP, Vec, void *);
-static PetscErrorCode ComputeRHSVStar2d_Private(KSP, Vec, void *);
-static PetscErrorCode ComputeRHSPprime2d_Private(KSP, Vec, void *);
-static PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP, Mat, Mat, void *);
-static PetscErrorCode ComputeOperatorPprime2d_Private(KSP, Mat, Mat, void *);
+static PetscErrorCode ComputeRHSIntermediateVelocity2d_Private(KSP, Vec, void *);
+static PetscErrorCode ComputeRHSPressureCorrection2d_Private(KSP, Vec, void *);
+static PetscErrorCode ComputeOperatorsIntermediateVelocity2d_Private(KSP, Mat, Mat, void *);
+static PetscErrorCode ComputeOperatorPressureCorrection2d_Private(KSP, Mat, Mat, void *);
 
 static PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
 {
@@ -50,15 +49,13 @@ PetscErrorCode NSFSMSetKSPComputeFunctions2d_Cart_Internal(NS ns)
   NS_FSM  *fsm = (NS_FSM *)ns->data;
   PetscInt d;
 
-  PetscErrorCode (*rhs[2])(KSP, Vec, void *) = {ComputeRHSUStar2d_Private, ComputeRHSVStar2d_Private};
-
   PetscFunctionBegin;
   for (d = 0; d < 2; ++d) {
-    PetscCall(KSPSetComputeOperators(fsm->kspv[d], ComputeOperatorsUVstar2d_Private, ns));
-    PetscCall(KSPSetComputeRHS(fsm->kspv[d], rhs[d], ns));
+    PetscCall(KSPSetComputeOperators(fsm->kspv[d], ComputeOperatorsIntermediateVelocity2d_Private, &fsm->kspvctx[d]));
+    PetscCall(KSPSetComputeRHS(fsm->kspv[d], ComputeRHSIntermediateVelocity2d_Private, &fsm->kspvctx[d]));
   }
-  PetscCall(KSPSetComputeOperators(fsm->kspp, ComputeOperatorPprime2d_Private, ns));
-  PetscCall(KSPSetComputeRHS(fsm->kspp, ComputeRHSPprime2d_Private, ns));
+  PetscCall(KSPSetComputeOperators(fsm->kspp, ComputeOperatorPressureCorrection2d_Private, ns));
+  PetscCall(KSPSetComputeRHS(fsm->kspp, ComputeRHSPressureCorrection2d_Private, ns));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -165,64 +162,36 @@ PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode ComputeRHSUStar2d_Private(KSP ksp, Vec b, void *ctx)
+PetscErrorCode ComputeRHSIntermediateVelocity2d_Private(KSP ksp, Vec b, void *ctx)
 {
   (void)ksp;
 
-  NS      ns  = (NS)ctx;
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-  DM      dm;
-  Vec     grad_p_x;
+  KSPVCtx *kspvctx = (KSPVCtx *)ctx;
+  NS       ns      = kspvctx->ns;
+  NS_FSM  *fsm     = (NS_FSM *)ns->data;
+  DM       dm;
+  Vec      grad_p;
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
 
-  PetscCall(DMGetGlobalVector(dm, &grad_p_x));
+  PetscCall(DMGetGlobalVector(dm, &grad_p));
 
-  PetscCall(MatMult(fsm->grad_p[0], fsm->p_half, grad_p_x));
+  PetscCall(MatMult(fsm->grad_p[kspvctx->dim], fsm->p_half, grad_p));
 
-  PetscCall(MatMult(fsm->helm_v, fsm->v[0], b));
-  PetscCall(NSFSMComputeVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 0, ns->bcs, ns->t, 0.5 * ns->mu * ns->dt / ns->rho, ADD_VALUES, b));
+  PetscCall(MatMult(fsm->helm_v, fsm->v[kspvctx->dim], b));
+  PetscCall(NSFSMComputeVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, kspvctx->dim, ns->bcs, ns->t, 0.5 * ns->mu * ns->dt / ns->rho, ADD_VALUES, b));
 
-  PetscCall(VecAXPBYPCZ(b, -1.5 * ns->dt, 0.5 * ns->dt, 1., fsm->N[0], fsm->N_prev[0]));
-  PetscCall(VecAXPY(b, -ns->dt / ns->rho, grad_p_x));
+  PetscCall(VecAXPBYPCZ(b, -1.5 * ns->dt, 0.5 * ns->dt, 1., fsm->N[kspvctx->dim], fsm->N_prev[kspvctx->dim]));
+  PetscCall(VecAXPY(b, -ns->dt / ns->rho, grad_p));
 
-  PetscCall(NSFSMComputeVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 0, ns->bcs, ns->t + ns->dt, 0.5 * ns->mu * ns->dt / ns->rho, ADD_VALUES, b));
+  PetscCall(NSFSMComputeVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, kspvctx->dim, ns->bcs, ns->t + ns->dt, 0.5 * ns->mu * ns->dt / ns->rho, ADD_VALUES, b));
 
-  PetscCall(DMRestoreGlobalVector(dm, &grad_p_x));
+  PetscCall(DMRestoreGlobalVector(dm, &grad_p));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode ComputeRHSVStar2d_Private(KSP ksp, Vec b, void *ctx)
-{
-  (void)ksp;
-
-  NS      ns  = (NS)ctx;
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-  DM      dm;
-
-  Vec grad_p_y;
-
-  PetscFunctionBegin;
-  PetscCall(MeshGetDM(ns->mesh, &dm));
-
-  PetscCall(DMGetGlobalVector(dm, &grad_p_y));
-
-  PetscCall(MatMult(fsm->grad_p[1], fsm->p_half, grad_p_y));
-
-  PetscCall(MatMult(fsm->helm_v, fsm->v[1], b));
-  PetscCall(NSFSMComputeVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 1, ns->bcs, ns->t, 0.5 * ns->mu * ns->dt / ns->rho, ADD_VALUES, b));
-
-  PetscCall(VecAXPBYPCZ(b, -1.5 * ns->dt, 0.5 * ns->dt, 1., fsm->N[1], fsm->N_prev[1]));
-  PetscCall(VecAXPY(b, -ns->dt / ns->rho, grad_p_y));
-
-  PetscCall(NSFSMComputeVelocityHelmholtzOperatorBoundaryConditionVector2d_Cart_Internal(dm, 1, ns->bcs, ns->t + ns->dt, 0.5 * ns->mu * ns->dt / ns->rho, ADD_VALUES, b));
-
-  PetscCall(DMRestoreGlobalVector(dm, &grad_p_y));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
+PetscErrorCode ComputeRHSPressureCorrection2d_Private(KSP ksp, Vec b, void *ctx)
 {
   (void)ksp;
 
@@ -249,12 +218,13 @@ PetscErrorCode ComputeRHSPprime2d_Private(KSP ksp, Vec b, void *ctx)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *ctx)
+PetscErrorCode ComputeOperatorsIntermediateVelocity2d_Private(KSP ksp, Mat J, Mat Jpre, void *ctx)
 {
   (void)J;
 
-  NS ns = (NS)ctx;
-  DM dm;
+  KSPVCtx *kspvctx = (KSPVCtx *)ctx;
+  NS       ns      = kspvctx->ns;
+  DM       dm;
 
   PetscFunctionBegin;
   PetscCall(KSPGetDM(ksp, &dm));
@@ -262,7 +232,7 @@ PetscErrorCode ComputeOperatorsUVstar2d_Private(KSP ksp, Mat J, Mat Jpre, void *
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode ComputeOperatorPprime2d_Private(KSP ksp, Mat J, Mat Jpre, void *ctx)
+PetscErrorCode ComputeOperatorPressureCorrection2d_Private(KSP ksp, Mat J, Mat Jpre, void *ctx)
 {
   NS           ns = (NS)ctx;
   MPI_Comm     comm;
