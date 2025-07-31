@@ -622,7 +622,6 @@ static PetscErrorCode NSFSMComputeVelocityHelmholtzOperator2d_Cart_Internal(DM d
   /* Assemble the matrix */
   PetscCall(MatAssemblyBegin(helm, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(helm, MAT_FINAL_ASSEMBLY));
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
 
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
