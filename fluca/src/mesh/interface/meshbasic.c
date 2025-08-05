@@ -18,7 +18,6 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh)
   PetscCall(FlucaHeaderCreate(m, MESH_CLASSID, "Mesh", "Mesh", "Mesh", comm, MeshDestroy, MeshView));
   m->dim         = PETSC_DETERMINE;
   m->dm          = NULL;
-  m->fdm         = NULL;
   m->data        = NULL;
   m->setupcalled = PETSC_FALSE;
 
@@ -130,16 +129,6 @@ PetscErrorCode MeshGetDM(Mesh mesh, DM *dm)
   PetscAssertPointer(dm, 2);
   PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
   *dm = mesh->dm;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode MeshGetFaceDM(Mesh mesh, DM *dm)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscAssertPointer(dm, 2);
-  PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
-  *dm = mesh->fdm;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
