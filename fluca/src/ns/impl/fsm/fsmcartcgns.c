@@ -12,6 +12,70 @@ static const char *const intervelnames[3]   = {"IntermediateVelocityX", "Interme
 static const char *const convecnames[3]     = {"ConvectionX", "ConvectionY", "ConvectionZ"};
 static const char *const prevconvecnames[3] = {"PrevConvectionX", "PrevConvectionY", "PrevConvectionZ"};
 
+static PetscErrorCode DMStagWriteCoordinatesInSolution_Private(DM dm, int file_num, int base, int zone, int solution)
+{
+  PetscInt               dim, x[3], m[3], ielemc, d;
+  cgsize_t               rmin[3], rmax[3], rsize;
+  const PetscScalar    **arrc[3];
+  int                    field;
+  PetscScalar           *e[3];
+  CGNS_ENUMT(DataType_t) datatype;
+  const char            *coordnames[3] = {"CoordinateX", "CoordinateY", "CoordinateZ"};
+
+  PetscFunctionBegin;
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(DMStagGetCorners(dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+  PetscCall(FlucaGetCGNSDataType_Internal(PETSC_SCALAR, &datatype));
+
+  rsize = 1;
+  for (d = 0; d < dim; ++d) {
+    rmin[d] = x[d] + 1;
+    rmax[d] = x[d] + m[d];
+    rsize *= rmax[d] - rmin[d] + 1;
+  }
+
+  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrc[0], &arrc[1], &arrc[2]));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
+
+  for (d = 0; d < dim; ++d) {
+    cgsize_t i[3];
+    PetscInt cnt;
+
+    PetscCall(PetscMalloc1(rsize, &e[d]));
+    switch (dim) {
+    case 2:
+      cnt = 0;
+      for (i[1] = rmin[1] - 1; i[1] < rmax[1]; ++i[1])
+        for (i[0] = rmin[0] - 1; i[0] < rmax[0]; ++i[0]) {
+          e[d][cnt] = arrc[d][i[d]][ielemc];
+          ++cnt;
+        }
+      break;
+    case 3:
+      cnt = 0;
+      for (i[2] = rmin[2] - 1; i[2] < rmax[2]; ++i[2])
+        for (i[1] = rmin[1] - 1; i[1] < rmax[1]; ++i[1])
+          for (i[0] = rmin[0] - 1; i[0] < rmax[0]; ++i[0]) {
+            e[d][cnt] = arrc[d][i[d]][ielemc];
+            ++cnt;
+          }
+      break;
+    default:
+      SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
+    }
+  }
+
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrc[0], &arrc[1], &arrc[2]));
+
+  for (d = 0; d < dim; ++d) {
+    CGNSCall(cgp_field_write(file_num, base, zone, solution, datatype, coordnames[d], &field));
+    CGNSCall(cgp_field_write_data(file_num, base, zone, solution, field, rmin, rmax, e[d]));
+    PetscCall(PetscFree(e[d]));
+  }
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode DMStagGetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
 {
   PetscInt       x, y, m, n, nExtrax, nExtray;
@@ -133,6 +197,7 @@ PetscErrorCode NSViewSolution_FSM_Cart_CGNS_Internal(NS ns, PetscViewer viewer)
   CGNSCall(cg_sol_write(cgv->file_num, cgv->base, cgv->zone, solution_name, CGNS_ENUMV(CellCenter), &solution));
 
   /* Write solutions */
+  PetscCall(DMStagWriteCoordinatesInSolution_Private(dm, cgv->file_num, cgv->base, cgv->zone, solution));
   for (d = 0; d < dim; ++d) {
     PetscCall(DMStagWriteSolution_Private(dm, fsm->v[d], cgv->file_num, cgv->base, cgv->zone, solution, velnames[d]));
     PetscCall(DMStagWriteSolution_Private(dm, fsm->v_star[d], cgv->file_num, cgv->base, cgv->zone, solution, intervelnames[d]));

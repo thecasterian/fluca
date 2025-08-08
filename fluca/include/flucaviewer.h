@@ -11,5 +11,7 @@ PETSC_EXTERN PetscErrorCode FlucaObjectViewFromOptions(PetscObject, PetscObject,
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSOpen(MPI_Comm, const char[], PetscFileMode, PetscViewer *);
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSSetBatchSize(PetscViewer, PetscInt);
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSGetBatchSize(PetscViewer, PetscInt *);
+FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSSetIncludeCoord(PetscViewer, PetscBool);
+FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSGetIncludeCoord(PetscViewer, PetscBool *);
 
 FLUCA_EXTERN PetscViewer PETSC_VIEWER_FLUCACGNS_(MPI_Comm);

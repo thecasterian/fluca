@@ -143,6 +143,7 @@ static PetscErrorCode PetscViewerSetFromOptions_FlucaCGNS(PetscViewer viewer, Pe
   PetscFunctionBegin;
   PetscOptionsHeadBegin(PetscOptionsObject, "CGNS Viewer Options");
   PetscCall(PetscOptionsBoundedInt("-viewer_cgns_batch_size", "Max number of output sequence times to write per batch", "PetscViewerFlucaCGNSSetBatchSize", cgv->batch_size, &cgv->batch_size, NULL, 1));
+  PetscCall(PetscOptionsBool("-viewer_cgns_include_coord", "Write solution including coordinates", "PetscViewerFlucaCGNSSetIncludeCoord", cgv->include_coord, &cgv->include_coord, NULL));
   PetscOptionsHeadEnd();
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -206,14 +207,15 @@ PetscErrorCode PetscViewerCreate_FlucaCGNS(PetscViewer viewer)
   viewer->ops->setfromoptions = PetscViewerSetFromOptions_FlucaCGNS;
   viewer->ops->setup          = NULL;
 
-  cgv->file_num     = 0;
-  cgv->base         = 0;
-  cgv->zone         = 0;
-  cgv->sol          = 0;
-  cgv->output_steps = NULL;
-  cgv->output_times = NULL;
-  cgv->last_step    = -1;
-  cgv->batch_size   = 1;
+  cgv->file_num      = 0;
+  cgv->base          = 0;
+  cgv->zone          = 0;
+  cgv->sol           = 0;
+  cgv->output_steps  = NULL;
+  cgv->output_times  = NULL;
+  cgv->last_step     = -1;
+  cgv->batch_size    = 1;
+  cgv->include_coord = PETSC_FALSE;
 
   PetscCall(PetscObjectComposeFunction((PetscObject)viewer, "PetscViewerFileSetName_C", PetscViewerFileSetName_FlucaCGNS));
   PetscCall(PetscObjectComposeFunction((PetscObject)viewer, "PetscViewerFileGetName_C", PetscViewerFileGetName_FlucaCGNS));
@@ -253,6 +255,27 @@ PetscErrorCode PetscViewerFlucaCGNSGetBatchSize(PetscViewer viewer, PetscInt *ba
   PetscValidHeaderSpecificType(viewer, PETSC_VIEWER_CLASSID, 1, PETSCVIEWERFLUCACGNS);
   PetscAssertPointer(batch_size, 2);
   *batch_size = cgv->batch_size;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PetscViewerFlucaCGNSSetIncludeCoord(PetscViewer viewer, PetscBool include_coord)
+{
+  PetscViewer_FlucaCGNS *cgv = (PetscViewer_FlucaCGNS *)viewer->data;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(viewer, PETSC_VIEWER_CLASSID, 1, PETSCVIEWERFLUCACGNS);
+  cgv->include_coord = include_coord;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PetscViewerFlucaCGNSGetIncludeCoord(PetscViewer viewer, PetscBool *include_coord)
+{
+  PetscViewer_FlucaCGNS *cgv = (PetscViewer_FlucaCGNS *)viewer->data;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(viewer, PETSC_VIEWER_CLASSID, 1, PETSCVIEWERFLUCACGNS);
+  PetscAssertPointer(include_coord, 2);
+  *include_coord = cgv->include_coord;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

@@ -18,6 +18,7 @@ typedef struct {
   PetscSegBuffer output_times;
   PetscInt       last_step;
   PetscInt       batch_size;
+  PetscBool      include_coord;
 } PetscViewer_FlucaCGNS;
 
 FLUCA_EXTERN PetscErrorCode FlucaGetCGNSDataType_Internal(PetscDataType, CGNS_ENUMT(DataType_t) *);
