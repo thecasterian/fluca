@@ -28,9 +28,7 @@ struct _p_Mesh {
   PetscInt dim; /* dimension */
 
   /* Data ----------------------------------------------------------------- */
-  DM dm;  /* DM for cell-centered variables */
-  DM fdm; /* DM for face-centered variables */
-
+  DM    dm;   /* DM */
   void *data; /* implementation-specific data */
 
   /* Status --------------------------------------------------------------- */
