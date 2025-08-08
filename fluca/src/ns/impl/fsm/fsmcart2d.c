@@ -6,7 +6,7 @@ typedef enum {
   DERIV_Y,
 } DerivDirection;
 
-static PetscErrorCode NSFSMComputeIdentityOperator2d_Cart_Private(DM dm, Mat Id)
+static PetscErrorCode ComputeIdentityOperator_Private(DM dm, Mat Id)
 {
   PetscInt      x, y, m, n;
   DMStagStencil row, col;
@@ -37,7 +37,7 @@ static PetscErrorCode NSFSMComputeIdentityOperator2d_Cart_Private(DM dm, Mat Id)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFirstDerivForwardDiffNoCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_center, PetscReal coord_next, PetscReal coord_next2, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeFirstDerivForwardDiffNoCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_center, PetscReal coord_next, PetscReal coord_next2, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2;
 
@@ -57,7 +57,7 @@ static PetscErrorCode ComputeFirstDerivForwardDiffNoCond(DerivDirection dir, Pet
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFirstDerivForwardDiffDirichletCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_bnd, PetscReal coord_center, PetscReal coord_next, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeFirstDerivForwardDiffDirichletCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_bnd, PetscReal coord_center, PetscReal coord_next, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2;
 
@@ -74,7 +74,7 @@ static PetscErrorCode ComputeFirstDerivForwardDiffDirichletCond(DerivDirection d
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFirstDerivCentralDiff(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_next, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeFirstDerivCentralDiff_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_next, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscFunctionBegin;
   v[0]     = -1. / (coord_next - coord_prev);
@@ -87,7 +87,7 @@ static PetscErrorCode ComputeFirstDerivCentralDiff(DerivDirection dir, PetscInt 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFirstDerivBackwardDiffNoCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev2, PetscReal coord_prev, PetscReal coord_center, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeFirstDerivBackwardDiffNoCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev2, PetscReal coord_prev, PetscReal coord_center, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2;
 
@@ -107,7 +107,7 @@ static PetscErrorCode ComputeFirstDerivBackwardDiffNoCond(DerivDirection dir, Pe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFirstDerivBackwardDiffDirichletCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_center, PetscReal coord_bnd, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeFirstDerivBackwardDiffDirichletCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_center, PetscReal coord_bnd, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2;
 
@@ -124,7 +124,7 @@ static PetscErrorCode ComputeFirstDerivBackwardDiffDirichletCond(DerivDirection 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMComputeVelocityGradientOperators2d_Cart_Private(DM dm, const NSBoundaryCondition *bcs, Mat G[])
+static PetscErrorCode ComputeVelocityGradientOperators_Private(DM dm, const NSBoundaryCondition *bcs, Mat G[])
 {
   PetscInt            M, N, x, y, m, n;
   DMStagStencil       row, col[5];
@@ -162,10 +162,10 @@ static PetscErrorCode NSFSMComputeVelocityGradientOperators2d_Cart_Private(DM dm
         /* Left boundary */
         switch (bcs[0].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivForwardDiffDirichletCond(DERIV_X, i, j, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivForwardDiffDirichletCond_Private(DERIV_X, i, j, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
@@ -174,16 +174,16 @@ static PetscErrorCode NSFSMComputeVelocityGradientOperators2d_Cart_Private(DM dm
         /* Right boundary */
         switch (bcs[1].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivBackwardDiffDirichletCond(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivBackwardDiffDirichletCond_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
         }
       } else {
-        PetscCall(ComputeFirstDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+        PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
       }
 
       PetscCall(DMStagMatSetValuesStencil(dm, G[0], 1, &row, ncols, col, v, INSERT_VALUES));
@@ -199,10 +199,10 @@ static PetscErrorCode NSFSMComputeVelocityGradientOperators2d_Cart_Private(DM dm
         /* Down boundary */
         switch (bcs[2].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivForwardDiffDirichletCond(DERIV_Y, i, j, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivForwardDiffDirichletCond_Private(DERIV_Y, i, j, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
@@ -211,16 +211,16 @@ static PetscErrorCode NSFSMComputeVelocityGradientOperators2d_Cart_Private(DM dm
         /* Up boundary */
         switch (bcs[3].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivBackwardDiffDirichletCond(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivBackwardDiffDirichletCond_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
         }
       } else {
-        PetscCall(ComputeFirstDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+        PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
       }
 
       PetscCall(DMStagMatSetValuesStencil(dm, G[1], 1, &row, ncols, col, v, INSERT_VALUES));
@@ -236,7 +236,7 @@ static PetscErrorCode NSFSMComputeVelocityGradientOperators2d_Cart_Private(DM dm
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMComputePressureGradientOperators2d_Cart_Private(DM dm, const NSBoundaryCondition *bcs, Mat G[])
+static PetscErrorCode ComputePressureGradientOperators_Private(DM dm, const NSBoundaryCondition *bcs, Mat G[])
 {
   PetscInt            M, N, x, y, m, n;
   DMStagStencil       row, col[5];
@@ -274,10 +274,10 @@ static PetscErrorCode NSFSMComputePressureGradientOperators2d_Cart_Private(DM dm
         /* Left boundary */
         switch (bcs[0].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivForwardDiffNoCond(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivForwardDiffNoCond_Private(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
@@ -286,16 +286,16 @@ static PetscErrorCode NSFSMComputePressureGradientOperators2d_Cart_Private(DM dm
         /* Right boundary */
         switch (bcs[1].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivBackwardDiffNoCond(DERIV_X, i, j, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivBackwardDiffNoCond_Private(DERIV_X, i, j, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
         }
       } else {
-        PetscCall(ComputeFirstDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+        PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
       }
 
       PetscCall(DMStagMatSetValuesStencil(dm, G[0], 1, &row, ncols, col, v, INSERT_VALUES));
@@ -311,10 +311,10 @@ static PetscErrorCode NSFSMComputePressureGradientOperators2d_Cart_Private(DM dm
         /* Down boundary */
         switch (bcs[2].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivForwardDiffNoCond(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivForwardDiffNoCond_Private(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
@@ -323,16 +323,16 @@ static PetscErrorCode NSFSMComputePressureGradientOperators2d_Cart_Private(DM dm
         /* Up boundary */
         switch (bcs[3].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivBackwardDiffNoCond(DERIV_Y, i, j, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivBackwardDiffNoCond_Private(DERIV_Y, i, j, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
         }
       } else {
-        PetscCall(ComputeFirstDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+        PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
       }
 
       PetscCall(DMStagMatSetValuesStencil(dm, G[1], 1, &row, ncols, col, v, INSERT_VALUES));
@@ -348,7 +348,7 @@ static PetscErrorCode NSFSMComputePressureGradientOperators2d_Cart_Private(DM dm
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeSecondDerivForwardDiffDirichletCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_bnd, PetscReal coord_center, PetscReal coord_next, PetscReal coord_next2, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeSecondDerivForwardDiffDirichletCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_bnd, PetscReal coord_center, PetscReal coord_next, PetscReal coord_next2, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2, h3;
 
@@ -369,7 +369,7 @@ static PetscErrorCode ComputeSecondDerivForwardDiffDirichletCond(DerivDirection 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeSecondDerivCentralDiff(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_prev_b, PetscReal coord_center, PetscReal coord_next_b, PetscReal coord_next, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeSecondDerivCentralDiff_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_prev_b, PetscReal coord_center, PetscReal coord_next_b, PetscReal coord_next, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2, h3;
 
@@ -390,7 +390,7 @@ static PetscErrorCode ComputeSecondDerivCentralDiff(DerivDirection dir, PetscInt
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeSecondDerivBackwardDiffDirichletCond(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev2, PetscReal coord_prev, PetscReal coord_center, PetscReal coord_bnd, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputeSecondDerivBackwardDiffDirichletCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev2, PetscReal coord_prev, PetscReal coord_center, PetscReal coord_bnd, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2, h3;
 
@@ -411,7 +411,7 @@ static PetscErrorCode ComputeSecondDerivBackwardDiffDirichletCond(DerivDirection
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMComputeVelocityLaplacianOperator2d_Cart_Private(DM dm, const NSBoundaryCondition *bcs, Mat L)
+static PetscErrorCode ComputeVelocityLaplacianOperator_Private(DM dm, const NSBoundaryCondition *bcs, Mat L)
 {
   PetscInt            M, N, x, y, m, n;
   DMStagStencil       row, col[5];
@@ -451,10 +451,10 @@ static PetscErrorCode NSFSMComputeVelocityLaplacianOperator2d_Cart_Private(DM dm
         /* Left boundary */
         switch (bcs[0].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeSecondDerivForwardDiffDirichletCond(DERIV_X, i, j, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], &ncols, col, v));
+          PetscCall(ComputeSecondDerivForwardDiffDirichletCond_Private(DERIV_X, i, j, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeSecondDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary");
@@ -463,26 +463,26 @@ static PetscErrorCode NSFSMComputeVelocityLaplacianOperator2d_Cart_Private(DM dm
         /* Right boundary */
         switch (bcs[1].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeSecondDerivBackwardDiffDirichletCond(DERIV_X, i, j, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
+          PetscCall(ComputeSecondDerivBackwardDiffDirichletCond_Private(DERIV_X, i, j, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeSecondDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary");
         }
       } else {
-        PetscCall(ComputeSecondDerivCentralDiff(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
+        PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
       }
 
       if (j == 0) {
         /* Down boundary */
         switch (bcs[2].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeSecondDerivForwardDiffDirichletCond(DERIV_Y, i, j, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], &ncols, col, v));
+          PetscCall(ComputeSecondDerivForwardDiffDirichletCond_Private(DERIV_Y, i, j, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeSecondDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary");
@@ -491,16 +491,16 @@ static PetscErrorCode NSFSMComputeVelocityLaplacianOperator2d_Cart_Private(DM dm
         /* Up boundary */
         switch (bcs[3].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeSecondDerivBackwardDiffDirichletCond(DERIV_Y, i, j, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
+          PetscCall(ComputeSecondDerivBackwardDiffDirichletCond_Private(DERIV_Y, i, j, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeSecondDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
+          PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary");
         }
       } else {
-        PetscCall(ComputeSecondDerivCentralDiff(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
+        PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
       }
 
       PetscCall(DMStagMatSetValuesStencil(dm, L, 1, &row, ncols, col, v, INSERT_VALUES));
@@ -514,7 +514,7 @@ static PetscErrorCode NSFSMComputeVelocityLaplacianOperator2d_Cart_Private(DM dm
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMComputeVelocityLaplacianBoundaryConditionVector2d_Cart_Private(DM dm, PetscInt axis, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
+static PetscErrorCode ComputeVelocityLaplacianBoundaryConditionVector_Private(DM dm, PetscInt axis, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
 {
   PetscInt            M, N, x, y, m, n;
   DMStagStencil       row;
@@ -642,7 +642,7 @@ static PetscErrorCode NSFSMComputeVelocityLaplacianBoundaryConditionVector2d_Car
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMComputeVelocityDivergenceBoundaryConditionVector2d_Cart_Private(DM dm, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
+static PetscErrorCode ComputeVelocityDivergenceBoundaryConditionVector_Private(DM dm, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
 {
   PetscInt            M, N, x, y, m, n;
   DMStagStencil       row;
@@ -766,7 +766,7 @@ static PetscErrorCode NSFSMComputeVelocityDivergenceBoundaryConditionVector2d_Ca
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMComputeConvectionBoundaryConditionVector2d_Cart_Private(DM dm, PetscInt axis, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
+static PetscErrorCode ComputeConvectionBoundaryConditionVector_Private(DM dm, PetscInt axis, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
 {
   PetscInt            M, N, x, y, m, n;
   DMStagStencil       row;
@@ -898,13 +898,13 @@ PetscErrorCode NSFSMComputeSpatialOperators2d_Cart_Internal(NS ns)
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
 
-  PetscCall(NSFSMComputeVelocityGradientOperators2d_Cart_Private(dm, ns->bcs, fsm->Gv));
-  PetscCall(NSFSMComputePressureGradientOperators2d_Cart_Private(dm, ns->bcs, fsm->Gp));
-  PetscCall(NSFSMComputeVelocityLaplacianOperator2d_Cart_Private(dm, ns->bcs, fsm->Lv));
+  PetscCall(ComputeVelocityGradientOperators_Private(dm, ns->bcs, fsm->Gv));
+  PetscCall(ComputePressureGradientOperators_Private(dm, ns->bcs, fsm->Gp));
+  PetscCall(ComputeVelocityLaplacianOperator_Private(dm, ns->bcs, fsm->Lv));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeOperatorsIntermediateVelocity2d_Private(KSP ksp, Mat J, Mat Jpre, void *ctx)
+static PetscErrorCode ComputeOperatorsIntermediateVelocity_Private(KSP ksp, Mat J, Mat Jpre, void *ctx)
 {
   (void)J;
 
@@ -918,16 +918,16 @@ static PetscErrorCode ComputeOperatorsIntermediateVelocity2d_Private(KSP ksp, Ma
   PetscCall(DMSetMatrixPreallocateOnly(dm, PETSC_TRUE));
 
   PetscCall(DMCreateMatrix(dm, &L));
-  PetscCall(NSFSMComputeVelocityLaplacianOperator2d_Cart_Private(dm, ns->bcs, L));
+  PetscCall(ComputeVelocityLaplacianOperator_Private(dm, ns->bcs, L));
 
-  PetscCall(NSFSMComputeIdentityOperator2d_Cart_Private(dm, Jpre));
+  PetscCall(ComputeIdentityOperator_Private(dm, Jpre));
   PetscCall(MatAXPY(Jpre, -0.5 * ns->mu * ns->dt / ns->rho, L, DIFFERENT_NONZERO_PATTERN));
 
   PetscCall(MatDestroy(&L));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeRHSIntermediateVelocity2d_Private(KSP ksp, Vec b, void *ctx)
+static PetscErrorCode ComputeRHSIntermediateVelocity_Private(KSP ksp, Vec b, void *ctx)
 {
   (void)ksp;
 
@@ -946,7 +946,7 @@ static PetscErrorCode ComputeRHSIntermediateVelocity2d_Private(KSP ksp, Vec b, v
 
   PetscCall(MatMult(fsm->Gp[kspvctx->axis], fsm->p_half, Gp));
   PetscCall(MatMult(fsm->Lv, fsm->v[kspvctx->axis], Lv));
-  PetscCall(NSFSMComputeVelocityLaplacianBoundaryConditionVector2d_Cart_Private(dm, kspvctx->axis, ns->bcs, ns->t, vbc));
+  PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(dm, kspvctx->axis, ns->bcs, ns->t, vbc));
   PetscCall(VecAXPY(Lv, 1., vbc));
 
   /* RHS of momentum equation */
@@ -955,7 +955,7 @@ static PetscErrorCode ComputeRHSIntermediateVelocity2d_Private(KSP ksp, Vec b, v
   PetscCall(VecAXPY(b, -ns->dt / ns->rho, Gp));
 
   /* Add boundary condition */
-  PetscCall(NSFSMComputeVelocityLaplacianBoundaryConditionVector2d_Cart_Private(dm, kspvctx->axis, ns->bcs, ns->t + ns->dt, vbc));
+  PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(dm, kspvctx->axis, ns->bcs, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(b, 0.5 * ns->mu * ns->dt / ns->rho, vbc));
 
   PetscCall(DMRestoreGlobalVector(dm, &Gp));
@@ -964,7 +964,7 @@ static PetscErrorCode ComputeRHSIntermediateVelocity2d_Private(KSP ksp, Vec b, v
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeOperatorPressureCorrection2d_Private(KSP ksp, Mat J, Mat Jpre, void *ctx)
+static PetscErrorCode ComputeOperatorPressureCorrection_Private(KSP ksp, Mat J, Mat Jpre, void *ctx)
 {
   NS           ns = (NS)ctx;
   MPI_Comm     comm;
@@ -982,8 +982,8 @@ static PetscErrorCode ComputeOperatorPressureCorrection2d_Private(KSP ksp, Mat J
   PetscCall(DMCreateMatrix(dm, &Gv[1]));
   PetscCall(DMCreateMatrix(dm, &Gp[0]));
   PetscCall(DMCreateMatrix(dm, &Gp[1]));
-  PetscCall(NSFSMComputeVelocityGradientOperators2d_Cart_Private(dm, ns->bcs, Gv));
-  PetscCall(NSFSMComputePressureGradientOperators2d_Cart_Private(dm, ns->bcs, Gp));
+  PetscCall(ComputeVelocityGradientOperators_Private(dm, ns->bcs, Gv));
+  PetscCall(ComputePressureGradientOperators_Private(dm, ns->bcs, Gp));
 
   /* G_x^(v) * G_x^(p) + G_y^(v) * G_y^(p) */
   PetscCall(MatZeroEntries(Jpre));
@@ -1008,7 +1008,7 @@ static PetscErrorCode ComputeOperatorPressureCorrection2d_Private(KSP ksp, Mat J
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeRHSPressureCorrection2d_Private(KSP ksp, Vec b, void *ctx)
+static PetscErrorCode ComputeRHSPressureCorrection_Private(KSP ksp, Vec b, void *ctx)
 {
   (void)ksp;
 
@@ -1029,7 +1029,7 @@ static PetscErrorCode ComputeRHSPressureCorrection2d_Private(KSP ksp, Vec b, voi
   PetscCall(MatMult(fsm->Gv[0], fsm->v_star[0], b));
   PetscCall(MatMultAdd(fsm->Gv[1], fsm->v_star[1], b, b));
 
-  PetscCall(NSFSMComputeVelocityDivergenceBoundaryConditionVector2d_Cart_Private(dm, ns->bcs, ns->t + ns->dt, vbc));
+  PetscCall(ComputeVelocityDivergenceBoundaryConditionVector_Private(dm, ns->bcs, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(b, 1., vbc));
 
   // TODO: below is only for velocity boundary conditions
@@ -1047,15 +1047,15 @@ PetscErrorCode NSFSMSetKSPComputeFunctions2d_Cart_Internal(NS ns)
 
   PetscFunctionBegin;
   for (d = 0; d < 2; ++d) {
-    PetscCall(KSPSetComputeOperators(fsm->kspv[d], ComputeOperatorsIntermediateVelocity2d_Private, &fsm->kspvctx[d]));
-    PetscCall(KSPSetComputeRHS(fsm->kspv[d], ComputeRHSIntermediateVelocity2d_Private, &fsm->kspvctx[d]));
+    PetscCall(KSPSetComputeOperators(fsm->kspv[d], ComputeOperatorsIntermediateVelocity_Private, &fsm->kspvctx[d]));
+    PetscCall(KSPSetComputeRHS(fsm->kspv[d], ComputeRHSIntermediateVelocity_Private, &fsm->kspvctx[d]));
   }
-  PetscCall(KSPSetComputeOperators(fsm->kspp, ComputeOperatorPressureCorrection2d_Private, ns));
-  PetscCall(KSPSetComputeRHS(fsm->kspp, ComputeRHSPressureCorrection2d_Private, ns));
+  PetscCall(KSPSetComputeOperators(fsm->kspp, ComputeOperatorPressureCorrection_Private, ns));
+  PetscCall(KSPSetComputeRHS(fsm->kspp, ComputeRHSPressureCorrection_Private, ns));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
+static PetscErrorCode ComputeConvection_Private(NS ns)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm;
@@ -1076,13 +1076,13 @@ static PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   /* Nx = d(uu)/dx + d(uv)/dy */
   PetscCall(MatMult(fsm->Gv[0], uu, fsm->N[0]));
   PetscCall(MatMultAdd(fsm->Gv[1], uv, fsm->N[0], fsm->N[0]));
-  PetscCall(NSFSMComputeConvectionBoundaryConditionVector2d_Cart_Private(dm, 0, ns->bcs, ns->t + ns->dt, vbc));
+  PetscCall(ComputeConvectionBoundaryConditionVector_Private(dm, 0, ns->bcs, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(fsm->N[0], 1., vbc));
 
   /* Ny = d(uv)/dx + d(vv)/dy */
   PetscCall(MatMult(fsm->Gv[0], uv, fsm->N[1]));
   PetscCall(MatMultAdd(fsm->Gv[1], vv, fsm->N[1], fsm->N[1]));
-  PetscCall(NSFSMComputeConvectionBoundaryConditionVector2d_Cart_Private(dm, 1, ns->bcs, ns->t + ns->dt, vbc));
+  PetscCall(ComputeConvectionBoundaryConditionVector_Private(dm, 1, ns->bcs, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(fsm->N[1], 1., vbc));
 
   PetscCall(DMRestoreGlobalVector(dm, &uu));
@@ -1092,7 +1092,7 @@ static PetscErrorCode NSFSMCalculateConvection2d_Cart_Internal(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
+static PetscErrorCode ComputeIntermediateVelocity_Private(NS ns)
 {
   NS_FSM  *fsm = (NS_FSM *)ns->data;
   DM       dm;
@@ -1111,7 +1111,7 @@ static PetscErrorCode NSFSMCalculateIntermediateVelocity2d_Cart_Internal(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMCalculatePressureCorrection2d_Cart_Internal(NS ns)
+static PetscErrorCode ComputePressureCorrection_Private(NS ns)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm;
@@ -1125,7 +1125,7 @@ static PetscErrorCode NSFSMCalculatePressureCorrection2d_Cart_Internal(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
+static PetscErrorCode UpdateToNextTimeStep_Private(NS ns)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm;
@@ -1155,15 +1155,15 @@ static PetscErrorCode NSFSMUpdate2d_Cart_Internal(NS ns)
   PetscCall(DMRestoreGlobalVector(dm, &Gpp[0]));
   PetscCall(DMRestoreGlobalVector(dm, &Gpp[1]));
 
-  PetscCall(NSFSMCalculateConvection2d_Cart_Internal(ns));
+  PetscCall(ComputeConvection_Private(ns));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
 {
   PetscFunctionBegin;
-  PetscCall(NSFSMCalculateIntermediateVelocity2d_Cart_Internal(ns));
-  PetscCall(NSFSMCalculatePressureCorrection2d_Cart_Internal(ns));
-  PetscCall(NSFSMUpdate2d_Cart_Internal(ns));
+  PetscCall(ComputeIntermediateVelocity_Private(ns));
+  PetscCall(ComputePressureCorrection_Private(ns));
+  PetscCall(UpdateToNextTimeStep_Private(ns));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
