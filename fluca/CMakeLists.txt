@@ -26,3 +26,4 @@ message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
 
 add_subdirectory(app)
 add_subdirectory(src)
+add_subdirectory(tests)
