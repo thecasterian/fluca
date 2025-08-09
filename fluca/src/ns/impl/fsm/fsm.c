@@ -4,12 +4,9 @@
 
 PetscErrorCode NSSetFromOptions_FSM(NS ns, PetscOptionItems PetscOptionsObject)
 {
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-
   PetscFunctionBegin;
   PetscOptionsHeadBegin(PetscOptionsObject, "NSFSM Options");
   // TODO: Add options
-  (void)fsm;
   PetscOptionsHeadEnd();
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -146,8 +143,6 @@ PetscErrorCode NSView_FSM(NS ns, PetscViewer v)
 {
   PetscFunctionBegin;
   // TODO: add view
-  (void)ns;
-  (void)v;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

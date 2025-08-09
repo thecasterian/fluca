@@ -18,7 +18,7 @@ option(FLUCA_USE_PETSC_CC "Use C compiler used to build PETSc" ON)
 if (FLUCA_USE_PETSC_CC)
     set(CMAKE_C_COMPILER ${PETSC_CC})
 endif()
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wno-cast-function-type")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wno-unused-parameter -Wno-cast-function-type")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g3 -O0")
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -DNDEBUG")
 
