@@ -197,7 +197,7 @@ PetscErrorCode NSViewSolution_FSM_Cart_CGNS_Internal(NS ns, PetscViewer viewer)
   CGNSCall(cg_sol_write(cgv->file_num, cgv->base, cgv->zone, solution_name, CGNS_ENUMV(CellCenter), &solution));
 
   /* Write solutions */
-  PetscCall(DMStagWriteCoordinatesInSolution_Private(dm, cgv->file_num, cgv->base, cgv->zone, solution));
+  if (cgv->include_coord) PetscCall(DMStagWriteCoordinatesInSolution_Private(dm, cgv->file_num, cgv->base, cgv->zone, solution));
   for (d = 0; d < dim; ++d) {
     PetscCall(DMStagWriteSolution_Private(dm, fsm->v[d], cgv->file_num, cgv->base, cgv->zone, solution, velnames[d]));
     PetscCall(DMStagWriteSolution_Private(dm, fsm->v_star[d], cgv->file_num, cgv->base, cgv->zone, solution, intervelnames[d]));
