@@ -23,10 +23,14 @@ static PetscErrorCode velocity(PetscInt dim, PetscReal t, const PetscReal x[], P
 
 static PetscErrorCode GetErrorNorm(Vec actual, Vec exact, PetscReal *norm_2)
 {
+  Vec diff;
+
   PetscFunctionBeginUser;
-  /* exact = exact - actual */
-  PetscCall(VecAXPY(exact, -1.0, actual));
-  PetscCall(VecNorm(exact, NORM_2, norm_2));
+  PetscCall(VecDuplicate(exact, &diff));
+  /* diff = exact - actual */
+  PetscCall(VecWAXPY(diff, -1.0, actual, exact));
+  PetscCall(VecNorm(diff, NORM_2, norm_2));
+  PetscCall(VecDestroy(&diff));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -44,8 +48,6 @@ int main(int argc, char **argv)
 
   AppCtx ctx;
 
-  const PetscReal pi = 3.14159265358979323846;
-
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-rho", &rho, NULL));
@@ -61,7 +63,7 @@ int main(int argc, char **argv)
   else PetscCall(MeshCartCreate2d(PETSC_COMM_WORLD, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE, 8, 8, PETSC_DECIDE, PETSC_DECIDE, NULL, NULL, &mesh));
   PetscCall(MeshSetFromOptions(mesh));
   PetscCall(MeshSetUp(mesh));
-  PetscCall(MeshCartSetUniformCoordinates(mesh, 0., 2. * pi, 0., 2. * pi, 0., 0.));
+  PetscCall(MeshCartSetUniformCoordinates(mesh, 0., 2. * PETSC_PI, 0., 2. * PETSC_PI, 0., 0.));
 
   PetscCall(NSCreate(PETSC_COMM_WORLD, &ns));
   PetscCall(NSSetType(ns, NSFSM));
@@ -114,6 +116,12 @@ int main(int argc, char **argv)
     PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_LEFT, &iprevc));
     PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
+    /**
+     * Set the exact solution of Taylor-Green vortex:
+     *   u(x, y, t) = sin(x) * cos(y) * exp(-2 * nu * t)
+     *   v(x, y, t) = -cos(x) * sin(y) * exp(-2 * nu * t)
+     *   p(x, y, t) = (rho / 4) * [cos(2x) + cos(2y)] * exp(-4 * nu * t)
+     */
     row.loc = DMSTAG_ELEMENT;
     row.c   = 0;
     for (j = y; j < y + n; ++j) {
