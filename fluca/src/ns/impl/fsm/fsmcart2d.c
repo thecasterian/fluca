@@ -906,8 +906,6 @@ PetscErrorCode NSFSMComputeSpatialOperators2d_Cart_Internal(NS ns)
 
 static PetscErrorCode ComputeOperatorsIntermediateVelocity_Private(KSP ksp, Mat J, Mat Jpre, void *ctx)
 {
-  (void)J;
-
   KSPVCtx *kspvctx = (KSPVCtx *)ctx;
   NS       ns      = kspvctx->ns;
   DM       dm;
@@ -929,8 +927,6 @@ static PetscErrorCode ComputeOperatorsIntermediateVelocity_Private(KSP ksp, Mat 
 
 static PetscErrorCode ComputeRHSIntermediateVelocity_Private(KSP ksp, Vec b, void *ctx)
 {
-  (void)ksp;
-
   KSPVCtx *kspvctx = (KSPVCtx *)ctx;
   NS       ns      = kspvctx->ns;
   NS_FSM  *fsm     = (NS_FSM *)ns->data;
@@ -1010,8 +1006,6 @@ static PetscErrorCode ComputeOperatorPressureCorrection_Private(KSP ksp, Mat J, 
 
 static PetscErrorCode ComputeRHSPressureCorrection_Private(KSP ksp, Vec b, void *ctx)
 {
-  (void)ksp;
-
   NS      ns  = (NS)ctx;
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      dm;

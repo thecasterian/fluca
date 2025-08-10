@@ -56,9 +56,6 @@ PetscErrorCode NSMonitorSetFrequency(NS ns, PetscInt freq)
 
 PetscErrorCode NSMonitorSetFromOptions(NS ns, const char name[], const char help[], const char manual[], PetscErrorCode (*mon)(NS, PetscViewerAndFormat *), PetscErrorCode (*mon_setup)(NS, PetscViewerAndFormat *))
 {
-  (void)help;
-  (void)manual;
-
   PetscViewer       viewer;
   PetscViewerFormat format;
   PetscBool         flg;
@@ -78,8 +75,6 @@ PetscErrorCode NSMonitorSetFromOptions(NS ns, const char name[], const char help
 
 PetscErrorCode NSMonitorDefault(NS ns, PetscViewerAndFormat *vf)
 {
-  (void)ns;
-
   PetscViewer       viewer = vf->viewer;
   PetscViewerFormat format = vf->format;
   PetscBool         isascii;
