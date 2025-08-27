@@ -62,7 +62,7 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   DMBoundaryType  dmBndTypes[3];
   const PetscInt *l[3];
   PetscInt        d;
-  const PetscInt  dofElem = 1, stencilWidth = 1;
+  const PetscInt  dofElem = 1, dofFace = 1, stencilWidth = 1;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
@@ -102,7 +102,19 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   PetscCall(DMStagGetOwnershipRanges(mesh->dm, &l[0], &l[1], &l[2]));
   for (d = 0; d < mesh->dim; ++d) PetscCall(PetscArraycpy(cart->l[d], l[d], cart->nRanks[d]));
 
+  switch (mesh->dim) {
+  case 2:
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->dm, 0, dofFace, 0, 0, &mesh->fdm));
+    break;
+  case 3:
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->dm, 0, 0, dofFace, 0, &mesh->fdm));
+    break;
+  default:
+    SETERRQ(comm, PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, mesh->dim);
+  }
+
   PetscCall(DMSetMatrixPreallocateOnly(mesh->dm, PETSC_TRUE));
+  PetscCall(DMSetMatrixPreallocateOnly(mesh->fdm, PETSC_TRUE));
   PetscCall(DMStagSetUniformCoordinatesProduct(mesh->dm, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -115,6 +127,7 @@ PetscErrorCode MeshDestroy_Cart(Mesh mesh)
   PetscFunctionBegin;
   for (d = 0; d < mesh->dim; ++d) PetscCall(PetscFree(cart->l[d]));
   PetscCall(DMDestroy(&mesh->dm));
+  PetscCall(DMDestroy(&mesh->fdm));
   PetscCall(PetscFree(mesh->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

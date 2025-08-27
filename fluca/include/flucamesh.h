@@ -25,6 +25,7 @@ FLUCA_EXTERN PetscErrorCode MeshViewFromOptions(Mesh, PetscObject, const char[])
 FLUCA_EXTERN PetscErrorCode MeshDestroy(Mesh *);
 
 FLUCA_EXTERN PetscErrorCode MeshGetDM(Mesh, DM *);
+FLUCA_EXTERN PetscErrorCode MeshGetFaceDM(Mesh, DM *);
 FLUCA_EXTERN PetscErrorCode MeshGetNumberBoundaries(Mesh, PetscInt *);
 
 FLUCA_EXTERN PetscFunctionList MeshList;
