@@ -21,6 +21,7 @@ typedef struct {
   Mat Gp[3]; /* gradient operators for pressure */
   Mat Gv[3]; /* gradient operators for velocity */
   Mat Lv;    /* laplacian operator for velocity */
+  Mat Tv[3]; /* interpolation operators for velocity */
 
   KSP     kspv[3];    /* KSP to solve intermediate velocities */
   KSPVCtx kspvctx[3]; /* context for intermediate velocity KSP */

@@ -890,17 +890,252 @@ static PetscErrorCode ComputeConvectionBoundaryConditionVector_Private(DM dm, Pe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode ComputeLinearInterpolation_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_prev_f, PetscReal coord_center, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  PetscFunctionBegin;
+  v[0]     = (coord_center - coord_prev_f) / (coord_center - coord_prev);
+  v[1]     = (coord_prev_f - coord_prev) / (coord_center - coord_prev);
+  col[0].i = i - (dir == DERIV_X ? 1 : 0);
+  col[0].j = j - (dir == DERIV_Y ? 1 : 0);
+  col[1].i = i;
+  col[1].j = j;
+  *ncols   = 2;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ComputeVelocityInterpolationOperators_Private(DM dm, DM fdm, const NSBoundaryCondition *bcs, Mat Tv[])
+{
+  PetscInt            M, N, x, y, m, n, nExtrax, nExtray;
+  DMStagStencil       row, col[2];
+  PetscInt            ncols, ir, ic[2];
+  PetscScalar         v[2];
+  const PetscScalar **arrcx, **arrcy;
+  PetscInt            iprevc, ielemc;
+  PetscInt            i, j;
+  const PetscInt      dim = 2;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetGlobalSizes(dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
+
+  PetscCall(MatSetOption(Tv[0], MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscCall(MatSetOption(Tv[1], MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+
+  row.c = 0;
+  for (i = 0; i < 2; ++i) {
+    col[i].loc = DMSTAG_ELEMENT;
+    col[i].c   = 0;
+  }
+
+  /* Compute x-interpolation operator */
+  row.loc = DMSTAG_LEFT;
+  for (j = y; j < y + n; ++j)
+    for (i = x; i < x + m + nExtrax; ++i) {
+      row.i = i;
+      row.j = j;
+      ncols = 0;
+
+      if (i == 0) {
+        /* Left boundary */
+        switch (bcs[0].type) {
+        case NS_BC_VELOCITY:
+          break;
+        case NS_BC_PERIODIC:
+          PetscCall(ComputeLinearInterpolation_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], &ncols, col, v));
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
+        }
+      } else if (i == M) {
+        /* Right boundary */
+        switch (bcs[1].type) {
+        case NS_BC_VELOCITY:
+          break;
+        case NS_BC_PERIODIC: /* Cannot happen */
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
+        }
+      } else {
+        PetscCall(ComputeLinearInterpolation_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], &ncols, col, v));
+      }
+
+      if (ncols > 0) {
+        PetscCall(DMStagStencilToIndexLocal(fdm, dim, 1, &row, &ir));
+        PetscCall(DMStagStencilToIndexLocal(dm, dim, ncols, col, ic));
+        PetscCall(MatSetValuesLocal(Tv[0], 1, &ir, ncols, ic, v, INSERT_VALUES));
+      }
+    }
+
+  /* Compute y-interpolation operator */
+  row.loc = DMSTAG_DOWN;
+  for (j = y; j < y + n + nExtray; ++j)
+    for (i = x; i < x + m; ++i) {
+      row.i = i;
+      row.j = j;
+      ncols = 0;
+
+      if (j == 0) {
+        /* Down boundary */
+        switch (bcs[2].type) {
+        case NS_BC_VELOCITY:
+          break;
+        case NS_BC_PERIODIC:
+          PetscCall(ComputeLinearInterpolation_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], &ncols, col, v));
+          break;
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
+        }
+      } else if (j == N) {
+        /* Up boundary */
+        switch (bcs[3].type) {
+        case NS_BC_VELOCITY:
+          break;
+        case NS_BC_PERIODIC: /* Cannot happen */
+        default:
+          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
+        }
+      } else {
+        PetscCall(ComputeLinearInterpolation_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], &ncols, col, v));
+      }
+
+      if (ncols > 0) {
+        PetscCall(DMStagStencilToIndexLocal(fdm, dim, 1, &row, &ir));
+        PetscCall(DMStagStencilToIndexLocal(dm, dim, ncols, col, ic));
+        PetscCall(MatSetValuesLocal(Tv[1], 1, &ir, ncols, ic, v, INSERT_VALUES));
+      }
+    }
+
+  /* Assemble the matrix */
+  PetscCall(MatAssemblyBegin(Tv[0], MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(Tv[0], MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyBegin(Tv[1], MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(Tv[1], MAT_FINAL_ASSEMBLY));
+
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ComputeVelocityInterpolationBoundaryConditionVector_Private(DM dm, DM fdm, DerivDirection dir, PetscInt axis, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
+{
+  PetscInt            M, N, x, y, m, n;
+  DMStagStencil       row;
+  PetscReal           xb[2];
+  PetscScalar         vb[2];
+  const PetscScalar **arrcx, **arrcy;
+  PetscInt            iprevc, ielemc;
+  PetscInt            i, j;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetGlobalSizes(dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
+
+  PetscCall(VecSet(vbc, 0.));
+
+  switch (dir) {
+  case DERIV_X:
+    /* Boundary condition for x-interpolation */
+    row.loc = DMSTAG_LEFT;
+    row.c   = 0;
+
+    switch (bcs[0].type) {
+    case NS_BC_VELOCITY:
+      for (j = y; j < y + n; ++j) {
+        row.i = 0;
+        row.j = j;
+        xb[0] = arrcx[0][iprevc];
+        xb[1] = arrcy[j][ielemc];
+        PetscCall(bcs[0].velocity(2, t, xb, vb, bcs[0].ctx_velocity));
+        PetscCall(DMStagVecSetValuesStencil(fdm, vbc, 1, &row, &vb[axis], INSERT_VALUES));
+      }
+      break;
+    case NS_BC_PERIODIC:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
+    }
+
+    switch (bcs[1].type) {
+    case NS_BC_VELOCITY:
+      for (j = y; j < y + n; ++j) {
+        row.i = M;
+        row.j = j;
+        xb[0] = arrcx[M][iprevc];
+        xb[1] = arrcy[j][ielemc];
+        PetscCall(bcs[1].velocity(2, t, xb, vb, bcs[1].ctx_velocity));
+        PetscCall(DMStagVecSetValuesStencil(fdm, vbc, 1, &row, &vb[axis], INSERT_VALUES));
+      }
+      break;
+    case NS_BC_PERIODIC:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
+    }
+    break;
+
+  case DERIV_Y:
+    /* Boundary condition for y-interpolation */
+    row.loc = DMSTAG_DOWN;
+    row.c   = 0;
+
+    switch (bcs[2].type) {
+    case NS_BC_VELOCITY:
+      for (i = x; i < x + m; ++i) {
+        row.i = i;
+        row.j = 0;
+        xb[0] = arrcx[i][ielemc];
+        xb[1] = arrcy[0][iprevc];
+        PetscCall(bcs[2].velocity(2, t, xb, vb, bcs[2].ctx_velocity));
+        PetscCall(DMStagVecSetValuesStencil(fdm, vbc, 1, &row, &vb[axis], INSERT_VALUES));
+      }
+    case NS_BC_PERIODIC:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
+    }
+
+    switch (bcs[3].type) {
+    case NS_BC_VELOCITY:
+      for (i = x; i < x + m; ++i) {
+        row.i = i;
+        row.j = N;
+        xb[0] = arrcx[i][ielemc];
+        xb[1] = arrcy[N][iprevc];
+        PetscCall(bcs[3].velocity(2, t, xb, vb, bcs[3].ctx_velocity));
+        PetscCall(DMStagVecSetValuesStencil(fdm, vbc, 1, &row, &vb[axis], INSERT_VALUES));
+      }
+    case NS_BC_PERIODIC:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
+    }
+    break;
+
+  default:
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported direction");
+  }
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSFSMComputeSpatialOperators2d_Cart_Internal(NS ns)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
-  DM      dm;
+  DM      dm, fdm;
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, &dm));
+  PetscCall(MeshGetFaceDM(ns->mesh, &fdm));
 
   PetscCall(ComputeVelocityGradientOperators_Private(dm, ns->bcs, fsm->Gv));
   PetscCall(ComputePressureGradientOperators_Private(dm, ns->bcs, fsm->Gp));
   PetscCall(ComputeVelocityLaplacianOperator_Private(dm, ns->bcs, fsm->Lv));
+  PetscCall(ComputeVelocityInterpolationOperators_Private(dm, fdm, ns->bcs, fsm->Tv));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
