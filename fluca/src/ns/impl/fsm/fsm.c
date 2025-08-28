@@ -78,6 +78,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
     PetscCall(DMCreateGlobalVector(dm, &fsm->N[d]));
     PetscCall(DMCreateGlobalVector(dm, &fsm->N_prev[d]));
   }
+  PetscCall(DMCreateGlobalVector(fdm, &fsm->V_star));
   PetscCall(DMCreateGlobalVector(dm, &fsm->p));
   PetscCall(DMCreateGlobalVector(dm, &fsm->p_half));
   PetscCall(DMCreateGlobalVector(dm, &fsm->p_prime));
@@ -88,6 +89,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
     PetscCall(DMCreateMatrix(dm, &fsm->Gp[d]));
     PetscCall(DMCreateMatrix(dm, &fsm->Gv[d]));
     PetscCall(CreateOperatorFromDMToDM_Private(dm, fdm, &fsm->Tv[d]));
+    PetscCall(CreateOperatorFromDMToDM_Private(fdm, dm, &fsm->Gstv[d]));
   }
   PetscCall(DMCreateMatrix(dm, &fsm->Lv));
 
@@ -143,6 +145,7 @@ PetscErrorCode NSDestroy_FSM(NS ns)
     PetscCall(VecDestroy(&fsm->N[d]));
     PetscCall(VecDestroy(&fsm->N_prev[d]));
   }
+  PetscCall(VecDestroy(&fsm->V_star));
   PetscCall(VecDestroy(&fsm->p));
   PetscCall(VecDestroy(&fsm->p_half));
   PetscCall(VecDestroy(&fsm->p_prime));
@@ -152,8 +155,10 @@ PetscErrorCode NSDestroy_FSM(NS ns)
     PetscCall(MatDestroy(&fsm->Gp[d]));
     PetscCall(MatDestroy(&fsm->Gv[d]));
     PetscCall(MatDestroy(&fsm->Tv[d]));
+    PetscCall(MatDestroy(&fsm->Gstv[d]));
   }
   PetscCall(MatDestroy(&fsm->Lv));
+  PetscCall(MatDestroy(&fsm->Dstv));
 
   for (d = 0; d < 3; ++d) PetscCall(KSPDestroy(&fsm->kspv[d]));
   PetscCall(KSPDestroy(&fsm->kspp));
@@ -204,17 +209,20 @@ PetscErrorCode NSCreate_FSM(NS ns)
     fsm->N[d]      = NULL;
     fsm->N_prev[d] = NULL;
   }
+  fsm->V_star      = NULL;
   fsm->p           = NULL;
   fsm->p_half      = NULL;
   fsm->p_prime     = NULL;
   fsm->p_half_prev = NULL;
 
   for (d = 0; d < 3; ++d) {
-    fsm->Gp[d] = NULL;
-    fsm->Gv[d] = NULL;
-    fsm->Tv[d] = NULL;
+    fsm->Gp[d]   = NULL;
+    fsm->Gv[d]   = NULL;
+    fsm->Tv[d]   = NULL;
+    fsm->Gstv[d] = NULL;
   }
-  fsm->Lv = NULL;
+  fsm->Lv   = NULL;
+  fsm->Dstv = NULL;
 
   for (d = 0; d < 3; ++d) {
     fsm->kspv[d]         = NULL;
