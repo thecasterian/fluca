@@ -19,11 +19,12 @@ typedef struct {
   Vec p_prime;     /* pressure correction between n-1/2 and n+1/2 */
   Vec p_half_prev; /* pressure at previous half time step n-3/2 */
 
-  Mat Gp[3];   /* gradient operators for pressure */
   Mat Gv[3];   /* gradient operators for velocity */
+  Mat Gp[3];   /* gradient operators for pressure */
   Mat Lv;      /* laplacian operator for velocity */
   Mat Tv[3];   /* interpolation operators for velocity */
   Mat Gstv[3]; /* staggered gradient operators for velocity */
+  Mat Gstp[3]; /* staggered pressure gradient operators from DM to face DM */
   Mat Dstv;    /* staggered divergence operator for velocity */
 
   KSP     kspv[3];    /* KSP to solve intermediate velocities */
