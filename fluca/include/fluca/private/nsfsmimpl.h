@@ -10,7 +10,9 @@ typedef struct {
 
 typedef struct {
   Vec v[3];        /* velocity at n */
+  Vec V;           /* face velocity at n */
   Vec v_star[3];   /* intermediate velocity between n and n+1 */
+  Vec V_star;      /* intermediate face velocity between n and n+1 */
   Vec N[3];        /* convection at n */
   Vec N_prev[3];   /* convection at n-1 */
   Vec p;           /* pressure at n */
@@ -18,9 +20,12 @@ typedef struct {
   Vec p_prime;     /* pressure correction between n-1/2 and n+1/2 */
   Vec p_half_prev; /* pressure at previous half time step n-3/2 */
 
-  Mat Gp[3]; /* gradient operators for pressure */
-  Mat Gv[3]; /* gradient operators for velocity */
-  Mat Lv;    /* laplacian operator for velocity */
+  Mat Gp[3];   /* gradient operators for pressure */
+  Mat Lv;      /* laplacian operator for velocity */
+  Mat Tv[3];   /* interpolation operators for velocity */
+  Mat Gstv[3]; /* staggered gradient operators for velocity */
+  Mat Gstp[3]; /* staggered pressure gradient operators from DM to face DM */
+  Mat Dstv;    /* staggered divergence operator for velocity */
 
   KSP     kspv[3];    /* KSP to solve intermediate velocities */
   KSPVCtx kspvctx[3]; /* context for intermediate velocity KSP */
