@@ -87,7 +87,6 @@ PetscErrorCode NSSetup_FSM(NS ns)
 
   /* Create operators */
   for (d = 0; d < dim; ++d) {
-    PetscCall(DMCreateMatrix(dm, &fsm->Gv[d]));
     PetscCall(DMCreateMatrix(dm, &fsm->Gp[d]));
     PetscCall(CreateOperatorFromDMToDM_Private(dm, fdm, &fsm->Tv[d]));
     PetscCall(CreateOperatorFromDMToDM_Private(fdm, dm, &fsm->Gstv[d]));
@@ -155,7 +154,6 @@ PetscErrorCode NSDestroy_FSM(NS ns)
   PetscCall(VecDestroy(&fsm->p_half_prev));
 
   for (d = 0; d < 3; ++d) {
-    PetscCall(MatDestroy(&fsm->Gv[d]));
     PetscCall(MatDestroy(&fsm->Gp[d]));
     PetscCall(MatDestroy(&fsm->Tv[d]));
     PetscCall(MatDestroy(&fsm->Gstv[d]));
@@ -221,7 +219,6 @@ PetscErrorCode NSCreate_FSM(NS ns)
   fsm->p_half_prev = NULL;
 
   for (d = 0; d < 3; ++d) {
-    fsm->Gv[d]   = NULL;
     fsm->Gp[d]   = NULL;
     fsm->Tv[d]   = NULL;
     fsm->Gstv[d] = NULL;

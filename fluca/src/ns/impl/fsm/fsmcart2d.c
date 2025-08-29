@@ -57,23 +57,6 @@ static PetscErrorCode ComputeFirstDerivForwardDiffNoCond_Private(DerivDirection 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFirstDerivForwardDiffDirichletCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_bnd, PetscReal coord_center, PetscReal coord_next, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  PetscReal h1, h2;
-
-  PetscFunctionBegin;
-  h1       = coord_center - coord_bnd;
-  h2       = coord_next - coord_center;
-  v[0]     = (h2 - h1) / (h1 * h2);
-  v[1]     = h1 / (h2 * (h1 + h2));
-  col[0].i = i;
-  col[0].j = j;
-  col[1].i = i + (dir == DERIV_X ? 1 : 0);
-  col[1].j = j + (dir == DERIV_Y ? 1 : 0);
-  *ncols   = 2;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode ComputeFirstDerivCentralDiff_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_next, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscFunctionBegin;
@@ -104,135 +87,6 @@ static PetscErrorCode ComputeFirstDerivBackwardDiffNoCond_Private(DerivDirection
   col[2].i = i;
   col[2].j = j;
   *ncols   = 3;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode ComputeFirstDerivBackwardDiffDirichletCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_center, PetscReal coord_bnd, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  PetscReal h1, h2;
-
-  PetscFunctionBegin;
-  h1       = coord_bnd - coord_center;
-  h2       = coord_center - coord_prev;
-  v[0]     = -h1 / (h2 * (h1 + h2));
-  v[1]     = (h1 - h2) / (h1 * h2);
-  col[0].i = i - (dir == DERIV_X ? 1 : 0);
-  col[0].j = j - (dir == DERIV_Y ? 1 : 0);
-  col[1].i = i;
-  col[1].j = j;
-  *ncols   = 2;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode ComputeVelocityGradientOperators_Private(DM dm, const NSBoundaryCondition *bcs, Mat G[])
-{
-  PetscInt            M, N, x, y, m, n;
-  DMStagStencil       row, col[5];
-  PetscInt            ncols;
-  PetscScalar         v[3];
-  const PetscScalar **arrcx, **arrcy;
-  PetscInt            iprevc, inextc, ielemc;
-  PetscInt            i, j;
-
-  PetscFunctionBegin;
-  PetscCall(DMStagGetGlobalSizes(dm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
-  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
-
-  PetscCall(MatSetOption(G[0], MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
-  PetscCall(MatSetOption(G[1], MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
-
-  row.loc = DMSTAG_ELEMENT;
-  row.c   = 0;
-  for (i = 0; i < 5; ++i) {
-    col[i].loc = DMSTAG_ELEMENT;
-    col[i].c   = 0;
-  }
-
-  /* Compute x-gradient operator */
-  for (j = y; j < y + n; ++j)
-    for (i = x; i < x + m; ++i) {
-      row.i = i;
-      row.j = j;
-
-      if (i == 0) {
-        /* Left boundary */
-        switch (bcs[0].type) {
-        case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivForwardDiffDirichletCond_Private(DERIV_X, i, j, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
-          break;
-        case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
-        }
-      } else if (i == M - 1) {
-        /* Right boundary */
-        switch (bcs[1].type) {
-        case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivBackwardDiffDirichletCond_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
-          break;
-        case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
-        }
-      } else {
-        PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
-      }
-
-      PetscCall(DMStagMatSetValuesStencil(dm, G[0], 1, &row, ncols, col, v, INSERT_VALUES));
-    }
-
-  /* Compute y-gradient operator */
-  for (j = y; j < y + n; ++j)
-    for (i = x; i < x + m; ++i) {
-      row.i = i;
-      row.j = j;
-
-      if (j == 0) {
-        /* Down boundary */
-        switch (bcs[2].type) {
-        case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivForwardDiffDirichletCond_Private(DERIV_Y, i, j, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
-          break;
-        case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
-        }
-      } else if (j == N - 1) {
-        /* Up boundary */
-        switch (bcs[3].type) {
-        case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivBackwardDiffDirichletCond_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
-          break;
-        case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
-          break;
-        default:
-          SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
-        }
-      } else {
-        PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
-      }
-
-      PetscCall(DMStagMatSetValuesStencil(dm, G[1], 1, &row, ncols, col, v, INSERT_VALUES));
-    }
-
-  /* Assemble the matrix */
-  PetscCall(MatAssemblyBegin(G[0], MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(G[0], MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyBegin(G[1], MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(G[1], MAT_FINAL_ASSEMBLY));
-
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -1123,7 +977,6 @@ PetscErrorCode NSFSMComputeSpatialOperators2d_Cart_Internal(NS ns)
   PetscCall(MeshGetDM(ns->mesh, &dm));
   PetscCall(MeshGetFaceDM(ns->mesh, &fdm));
 
-  PetscCall(ComputeVelocityGradientOperators_Private(dm, ns->bcs, fsm->Gv));
   PetscCall(ComputePressureGradientOperators_Private(dm, ns->bcs, fsm->Gp));
   PetscCall(ComputeVelocityLaplacianOperator_Private(dm, ns->bcs, fsm->Lv));
   PetscCall(ComputeVelocityInterpolationOperators_Private(dm, fdm, ns->bcs, fsm->Tv));

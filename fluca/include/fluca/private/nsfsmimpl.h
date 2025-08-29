@@ -20,7 +20,6 @@ typedef struct {
   Vec p_prime;     /* pressure correction between n-1/2 and n+1/2 */
   Vec p_half_prev; /* pressure at previous half time step n-3/2 */
 
-  Mat Gv[3];   /* gradient operators for velocity */
   Mat Gp[3];   /* gradient operators for pressure */
   Mat Lv;      /* laplacian operator for velocity */
   Mat Tv[3];   /* interpolation operators for velocity */
