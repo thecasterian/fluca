@@ -10,6 +10,7 @@ typedef struct {
 
 typedef struct {
   Vec v[3];        /* velocity at n */
+  Vec V;           /* face velocity at n */
   Vec v_star[3];   /* intermediate velocity between n and n+1 */
   Vec V_star;      /* intermediate face velocity between n and n+1 */
   Vec N[3];        /* convection at n */

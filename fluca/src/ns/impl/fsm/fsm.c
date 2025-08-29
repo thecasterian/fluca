@@ -78,6 +78,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
     PetscCall(DMCreateGlobalVector(dm, &fsm->N[d]));
     PetscCall(DMCreateGlobalVector(dm, &fsm->N_prev[d]));
   }
+  PetscCall(DMCreateGlobalVector(fdm, &fsm->V));
   PetscCall(DMCreateGlobalVector(fdm, &fsm->V_star));
   PetscCall(DMCreateGlobalVector(dm, &fsm->p));
   PetscCall(DMCreateGlobalVector(dm, &fsm->p_half));
@@ -146,6 +147,7 @@ PetscErrorCode NSDestroy_FSM(NS ns)
     PetscCall(VecDestroy(&fsm->N[d]));
     PetscCall(VecDestroy(&fsm->N_prev[d]));
   }
+  PetscCall(VecDestroy(&fsm->V));
   PetscCall(VecDestroy(&fsm->V_star));
   PetscCall(VecDestroy(&fsm->p));
   PetscCall(VecDestroy(&fsm->p_half));
@@ -211,6 +213,7 @@ PetscErrorCode NSCreate_FSM(NS ns)
     fsm->N[d]      = NULL;
     fsm->N_prev[d] = NULL;
   }
+  fsm->V           = NULL;
   fsm->V_star      = NULL;
   fsm->p           = NULL;
   fsm->p_half      = NULL;
