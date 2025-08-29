@@ -90,7 +90,7 @@ static PetscErrorCode ComputeFirstDerivBackwardDiffNoCond_Private(DerivDirection
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputePressureGradientOperators_Private(DM dm, const NSBoundaryCondition *bcs, Mat G[])
+static PetscErrorCode ComputePressureGradientOperators_Private(DM dm, const NSBoundaryCondition *bcs, Mat Gp[])
 {
   PetscInt            M, N, x, y, m, n;
   DMStagStencil       row, col[5];
@@ -108,8 +108,8 @@ static PetscErrorCode ComputePressureGradientOperators_Private(DM dm, const NSBo
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
-  PetscCall(MatSetOption(G[0], MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
-  PetscCall(MatSetOption(G[1], MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscCall(MatSetOption(Gp[0], MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscCall(MatSetOption(Gp[1], MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
 
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
@@ -152,7 +152,7 @@ static PetscErrorCode ComputePressureGradientOperators_Private(DM dm, const NSBo
         PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
       }
 
-      PetscCall(DMStagMatSetValuesStencil(dm, G[0], 1, &row, ncols, col, v, INSERT_VALUES));
+      PetscCall(DMStagMatSetValuesStencil(dm, Gp[0], 1, &row, ncols, col, v, INSERT_VALUES));
     }
 
   /* Compute y-gradient operator */
@@ -189,14 +189,14 @@ static PetscErrorCode ComputePressureGradientOperators_Private(DM dm, const NSBo
         PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
       }
 
-      PetscCall(DMStagMatSetValuesStencil(dm, G[1], 1, &row, ncols, col, v, INSERT_VALUES));
+      PetscCall(DMStagMatSetValuesStencil(dm, Gp[1], 1, &row, ncols, col, v, INSERT_VALUES));
     }
 
   /* Assemble the matrix */
-  PetscCall(MatAssemblyBegin(G[0], MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(G[0], MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyBegin(G[1], MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(G[1], MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyBegin(Gp[0], MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(Gp[0], MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyBegin(Gp[1], MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(Gp[1], MAT_FINAL_ASSEMBLY));
 
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -265,7 +265,7 @@ static PetscErrorCode ComputeSecondDerivBackwardDiffDirichletCond_Private(DerivD
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeVelocityLaplacianOperator_Private(DM dm, const NSBoundaryCondition *bcs, Mat L)
+static PetscErrorCode ComputeVelocityLaplacianOperator_Private(DM dm, const NSBoundaryCondition *bcs, Mat Lv)
 {
   PetscInt            M, N, x, y, m, n;
   DMStagStencil       row, col[5];
@@ -283,7 +283,7 @@ static PetscErrorCode ComputeVelocityLaplacianOperator_Private(DM dm, const NSBo
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
 
-  PetscCall(MatSetOption(L, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscCall(MatSetOption(Lv, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
 
   row.loc = DMSTAG_ELEMENT;
   row.c   = 0;
@@ -357,12 +357,12 @@ static PetscErrorCode ComputeVelocityLaplacianOperator_Private(DM dm, const NSBo
         PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
       }
 
-      PetscCall(DMStagMatSetValuesStencil(dm, L, 1, &row, ncols, col, v, INSERT_VALUES));
+      PetscCall(DMStagMatSetValuesStencil(dm, Lv, 1, &row, ncols, col, v, INSERT_VALUES));
     }
 
   /* Assemble the matrix */
-  PetscCall(MatAssemblyBegin(L, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(L, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyBegin(Lv, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(Lv, MAT_FINAL_ASSEMBLY));
 
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -699,6 +699,7 @@ static PetscErrorCode ComputeVelocityInterpolationBoundaryConditionVector_Privat
         PetscCall(bcs[2].velocity(2, t, xb, vb, bcs[2].ctx_velocity));
         PetscCall(DMStagVecSetValuesStencil(fdm, vbc, 1, &row, &vb[axis], INSERT_VALUES));
       }
+      break;
     case NS_BC_PERIODIC:
       break;
     default:
@@ -715,6 +716,7 @@ static PetscErrorCode ComputeVelocityInterpolationBoundaryConditionVector_Privat
         PetscCall(bcs[3].velocity(2, t, xb, vb, bcs[3].ctx_velocity));
         PetscCall(DMStagVecSetValuesStencil(fdm, vbc, 1, &row, &vb[axis], INSERT_VALUES));
       }
+      break;
     case NS_BC_PERIODIC:
       break;
     default:
@@ -903,10 +905,6 @@ static PetscErrorCode ComputeStaggeredPressureGradientOperators_Private(DM dm, D
           break;
         case NS_BC_PERIODIC:
           PetscCall(ComputeFaceDerivative_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
-
-          PetscCall(DMStagStencilToIndexLocal(fdm, dim, 1, &row, &ir));
-          PetscCall(DMStagStencilToIndexLocal(dm, dim, ncols, col, ic));
-          PetscCall(MatSetValuesLocal(Gstp[1], 1, &ir, ncols, ic, v, INSERT_VALUES));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
@@ -991,19 +989,19 @@ static PetscErrorCode ComputeOperatorsIntermediateVelocity_Private(KSP ksp, Mat 
   KSPVCtx *kspvctx = (KSPVCtx *)ctx;
   NS       ns      = kspvctx->ns;
   DM       dm;
-  Mat      L;
+  Mat      Lv;
 
   PetscFunctionBegin;
   PetscCall(KSPGetDM(ksp, &dm));
   PetscCall(DMSetMatrixPreallocateOnly(dm, PETSC_TRUE));
 
-  PetscCall(DMCreateMatrix(dm, &L));
-  PetscCall(ComputeVelocityLaplacianOperator_Private(dm, ns->bcs, L));
+  PetscCall(DMCreateMatrix(dm, &Lv));
+  PetscCall(ComputeVelocityLaplacianOperator_Private(dm, ns->bcs, Lv));
 
   PetscCall(ComputeIdentityOperator_Private(dm, Jpre));
-  PetscCall(MatAXPY(Jpre, -0.5 * ns->mu * ns->dt / ns->rho, L, DIFFERENT_NONZERO_PATTERN));
+  PetscCall(MatAXPY(Jpre, -0.5 * ns->mu * ns->dt / ns->rho, Lv, DIFFERENT_NONZERO_PATTERN));
 
-  PetscCall(MatDestroy(&L));
+  PetscCall(MatDestroy(&Lv));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
