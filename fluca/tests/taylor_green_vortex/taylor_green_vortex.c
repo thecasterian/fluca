@@ -185,7 +185,7 @@ int main(int argc, char **argv)
     PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
 
     PetscCall(NSFSMGetVelocity(ns, &u, &v, NULL));
-    PetscCall(NSFSMGetHalfStepPressure(ns, &p));
+    PetscCall(NSFSMGetPressure(ns, &p));
     PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
 
     PetscCall(DMCreateGlobalVector(dm, &u_exact));
