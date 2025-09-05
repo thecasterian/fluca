@@ -58,7 +58,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
 {
   NS_FSM   *fsm = (NS_FSM *)ns->data;
   MPI_Comm  comm;
-  DM        dm, fdm;
+  DM        sdm, Vdm;
   PetscInt  dim, d;
   PetscBool iscart;
 
@@ -66,33 +66,33 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
 
-  PetscCall(MeshGetDM(ns->mesh, &dm));
-  PetscCall(MeshGetFaceDM(ns->mesh, &fdm));
+  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
+  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
   PetscCall(MeshGetDimension(ns->mesh, &dim));
   PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
 
   /* Create solution */
   for (d = 0; d < dim; ++d) {
-    PetscCall(DMCreateGlobalVector(dm, &fsm->v[d]));
-    PetscCall(DMCreateGlobalVector(dm, &fsm->v_star[d]));
-    PetscCall(DMCreateGlobalVector(dm, &fsm->N[d]));
-    PetscCall(DMCreateGlobalVector(dm, &fsm->N_prev[d]));
+    PetscCall(DMCreateGlobalVector(sdm, &fsm->v[d]));
+    PetscCall(DMCreateGlobalVector(sdm, &fsm->v_star[d]));
+    PetscCall(DMCreateGlobalVector(sdm, &fsm->N[d]));
+    PetscCall(DMCreateGlobalVector(sdm, &fsm->N_prev[d]));
   }
-  PetscCall(DMCreateGlobalVector(fdm, &fsm->V));
-  PetscCall(DMCreateGlobalVector(fdm, &fsm->V_star));
-  PetscCall(DMCreateGlobalVector(dm, &fsm->p));
-  PetscCall(DMCreateGlobalVector(dm, &fsm->p_half));
-  PetscCall(DMCreateGlobalVector(dm, &fsm->p_prime));
-  PetscCall(DMCreateGlobalVector(dm, &fsm->p_half_prev));
+  PetscCall(DMCreateGlobalVector(Vdm, &fsm->V));
+  PetscCall(DMCreateGlobalVector(Vdm, &fsm->V_star));
+  PetscCall(DMCreateGlobalVector(sdm, &fsm->p));
+  PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half));
+  PetscCall(DMCreateGlobalVector(sdm, &fsm->p_prime));
+  PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half_prev));
 
   /* Create operators */
   for (d = 0; d < dim; ++d) {
-    PetscCall(DMCreateMatrix(dm, &fsm->Gp[d]));
-    PetscCall(CreateOperatorFromDMToDM_Private(dm, fdm, &fsm->Tv[d]));
-    PetscCall(CreateOperatorFromDMToDM_Private(fdm, dm, &fsm->Gstv[d]));
-    PetscCall(CreateOperatorFromDMToDM_Private(dm, fdm, &fsm->Gstp[d]));
+    PetscCall(DMCreateMatrix(sdm, &fsm->Gp[d]));
+    PetscCall(CreateOperatorFromDMToDM_Private(sdm, Vdm, &fsm->Tv[d]));
+    PetscCall(CreateOperatorFromDMToDM_Private(Vdm, sdm, &fsm->Gstv[d]));
+    PetscCall(CreateOperatorFromDMToDM_Private(sdm, Vdm, &fsm->Gstp[d]));
   }
-  PetscCall(DMCreateMatrix(dm, &fsm->Lv));
+  PetscCall(DMCreateMatrix(sdm, &fsm->Lv));
 
   switch (dim) {
   case 2:
@@ -103,8 +103,8 @@ PetscErrorCode NSSetup_FSM(NS ns)
   }
 
   /* Create KSP */
-  for (d = 0; d < dim; ++d) PetscCall(CreateKSPWithDMClone_Private(dm, &fsm->kspv[d]));
-  PetscCall(CreateKSPWithDMClone_Private(dm, &fsm->kspp));
+  for (d = 0; d < dim; ++d) PetscCall(CreateKSPWithDMClone_Private(sdm, &fsm->kspv[d]));
+  PetscCall(CreateKSPWithDMClone_Private(sdm, &fsm->kspp));
 
   switch (dim) {
   case 2:

@@ -94,7 +94,7 @@ int main(int argc, char **argv)
   PetscCall(NSSetUp(ns));
 
   {
-    DM                  dm;
+    DM                  sdm;
     Vec                 u, v, p, Nu, Nv, Nu_prev, Nv_prev;
     DMStagStencil       row;
     PetscScalar         val;
@@ -103,18 +103,18 @@ int main(int argc, char **argv)
     PetscInt            iprevc, ielemc;
     PetscInt            i, j;
 
-    PetscCall(MeshGetDM(mesh, &dm));
+    PetscCall(MeshGetScalarDM(mesh, &sdm));
 
-    PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
+    PetscCall(DMStagGetCorners(sdm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
 
     PetscCall(NSFSMGetVelocity(ns, &u, &v, NULL));
     PetscCall(NSFSMGetHalfStepPressure(ns, &p));
     PetscCall(NSFSMGetConvection(ns, &Nu, &Nv, NULL));
     PetscCall(NSFSMGetPreviousConvection(ns, &Nu_prev, &Nv_prev, NULL));
-    PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+    PetscCall(DMStagGetProductCoordinateArraysRead(sdm, &arrcx, &arrcy, NULL));
 
-    PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_LEFT, &iprevc));
-    PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(sdm, DMSTAG_LEFT, &iprevc));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(sdm, DMSTAG_ELEMENT, &ielemc));
 
     /**
      * Set the exact solution of Taylor-Green vortex:
@@ -130,26 +130,26 @@ int main(int argc, char **argv)
         row.j = j;
         /* Velocity at t = 0 */
         val = PetscSinReal(arrcx[i][ielemc]) * PetscCosReal(arrcy[j][ielemc]);
-        DMStagVecSetValuesStencil(dm, u, 1, &row, &val, INSERT_VALUES);
+        DMStagVecSetValuesStencil(sdm, u, 1, &row, &val, INSERT_VALUES);
         val = -PetscCosReal(arrcx[i][ielemc]) * PetscSinReal(arrcy[j][ielemc]);
-        DMStagVecSetValuesStencil(dm, v, 1, &row, &val, INSERT_VALUES);
+        DMStagVecSetValuesStencil(sdm, v, 1, &row, &val, INSERT_VALUES);
         /* Pressure at t = -dt/2 */
         val = rho / 4. * (PetscCosReal(2. * arrcx[i][ielemc]) + PetscCosReal(2. * arrcy[j][ielemc])) * PetscExpReal(2. * mu / rho * dt);
-        DMStagVecSetValuesStencil(dm, p, 1, &row, &val, INSERT_VALUES);
+        DMStagVecSetValuesStencil(sdm, p, 1, &row, &val, INSERT_VALUES);
         /* Convection at t = 0 */
         val = 0.5 * PetscSinReal(2. * arrcx[i][ielemc]);
-        DMStagVecSetValuesStencil(dm, Nu, 1, &row, &val, INSERT_VALUES);
+        DMStagVecSetValuesStencil(sdm, Nu, 1, &row, &val, INSERT_VALUES);
         val = 0.5 * PetscSinReal(2. * arrcy[j][ielemc]);
-        DMStagVecSetValuesStencil(dm, Nv, 1, &row, &val, INSERT_VALUES);
+        DMStagVecSetValuesStencil(sdm, Nv, 1, &row, &val, INSERT_VALUES);
         /* Convection at t = -dt */
         val = 0.5 * PetscSinReal(2. * arrcx[i][ielemc]) * PetscExpReal(4. * mu / rho * dt);
-        DMStagVecSetValuesStencil(dm, Nu_prev, 1, &row, &val, INSERT_VALUES);
+        DMStagVecSetValuesStencil(sdm, Nu_prev, 1, &row, &val, INSERT_VALUES);
         val = 0.5 * PetscSinReal(2. * arrcy[j][ielemc]) * PetscExpReal(4. * mu / rho * dt);
-        DMStagVecSetValuesStencil(dm, Nv_prev, 1, &row, &val, INSERT_VALUES);
+        DMStagVecSetValuesStencil(sdm, Nv_prev, 1, &row, &val, INSERT_VALUES);
       }
     }
 
-    PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+    PetscCall(DMStagRestoreProductCoordinateArraysRead(sdm, &arrcx, &arrcy, NULL));
 
     PetscCall(VecAssemblyBegin(u));
     PetscCall(VecAssemblyBegin(v));
@@ -170,7 +170,7 @@ int main(int argc, char **argv)
   PetscCall(NSSolve(ns, nsteps));
 
   {
-    DM                  dm;
+    DM                  sdm;
     Vec                 u, v, p;
     const PetscScalar **arrcx, **arrcy;
     Vec                 u_exact, v_exact, p_exact;
@@ -181,18 +181,18 @@ int main(int argc, char **argv)
     PetscInt            ielemc;
     PetscInt            i, j;
 
-    PetscCall(MeshGetDM(mesh, &dm));
-    PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+    PetscCall(MeshGetScalarDM(mesh, &sdm));
+    PetscCall(DMStagGetCorners(sdm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
 
     PetscCall(NSFSMGetVelocity(ns, &u, &v, NULL));
     PetscCall(NSFSMGetHalfStepPressure(ns, &p));
-    PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+    PetscCall(DMStagGetProductCoordinateArraysRead(sdm, &arrcx, &arrcy, NULL));
 
-    PetscCall(DMCreateGlobalVector(dm, &u_exact));
-    PetscCall(DMCreateGlobalVector(dm, &v_exact));
-    PetscCall(DMCreateGlobalVector(dm, &p_exact));
+    PetscCall(DMCreateGlobalVector(sdm, &u_exact));
+    PetscCall(DMCreateGlobalVector(sdm, &v_exact));
+    PetscCall(DMCreateGlobalVector(sdm, &p_exact));
 
-    PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
+    PetscCall(DMStagGetProductCoordinateLocationSlot(sdm, DMSTAG_ELEMENT, &ielemc));
 
     row.loc = DMSTAG_ELEMENT;
     row.c   = 0;
@@ -202,16 +202,16 @@ int main(int argc, char **argv)
         row.j = j;
         /* Velocity at t = t_final */
         val = PetscSinReal(arrcx[i][ielemc]) * PetscCosReal(arrcy[j][ielemc]) * PetscExpReal(-2. * mu / rho * t_final);
-        DMStagVecSetValuesStencil(dm, u_exact, 1, &row, &val, INSERT_VALUES);
+        DMStagVecSetValuesStencil(sdm, u_exact, 1, &row, &val, INSERT_VALUES);
         val = -PetscCosReal(arrcx[i][ielemc]) * PetscSinReal(arrcy[j][ielemc]) * PetscExpReal(-2. * mu / rho * t_final);
-        DMStagVecSetValuesStencil(dm, v_exact, 1, &row, &val, INSERT_VALUES);
+        DMStagVecSetValuesStencil(sdm, v_exact, 1, &row, &val, INSERT_VALUES);
         /* Pressure at t = t_final */
         val = rho / 4. * (PetscCosReal(2. * arrcx[i][ielemc]) + PetscCosReal(2. * arrcy[j][ielemc])) * PetscExpReal(-4. * mu / rho * t_final);
-        DMStagVecSetValuesStencil(dm, p_exact, 1, &row, &val, INSERT_VALUES);
+        DMStagVecSetValuesStencil(sdm, p_exact, 1, &row, &val, INSERT_VALUES);
       }
     }
 
-    PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+    PetscCall(DMStagRestoreProductCoordinateArraysRead(sdm, &arrcx, &arrcy, NULL));
 
     PetscCall(VecAssemblyBegin(u_exact));
     PetscCall(VecAssemblyBegin(v_exact));
@@ -224,9 +224,9 @@ int main(int argc, char **argv)
     PetscCall(GetErrorNorm(v, v_exact, &v_norm_2));
     PetscCall(GetErrorNorm(p, p_exact, &p_norm_2));
 
-    PetscCall(DMRestoreGlobalVector(dm, &u_exact));
-    PetscCall(DMRestoreGlobalVector(dm, &v_exact));
-    PetscCall(DMRestoreGlobalVector(dm, &p_exact));
+    PetscCall(DMRestoreGlobalVector(sdm, &u_exact));
+    PetscCall(DMRestoreGlobalVector(sdm, &v_exact));
+    PetscCall(DMRestoreGlobalVector(sdm, &p_exact));
 
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "L2 norm of u error: %g\n", u_norm_2));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "L2 norm of v error: %g\n", v_norm_2));
