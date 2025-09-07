@@ -1,51 +1,43 @@
 #include <flucansfsm.h>
 #include <fluca/private/nsfsmimpl.h>
 
-PetscErrorCode NSFSMGetVelocity(NS ns, Vec *u, Vec *v, Vec *w)
+PetscErrorCode NSFSMGetVelocity(NS ns, Vec *v)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(ns, NS_CLASSID, 1, NSFSM);
-  if (u) *u = fsm->v[0];
-  if (v) *v = fsm->v[1];
-  if (w) *w = fsm->v[2];
+  if (v) *v = fsm->v;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMGetIntermediateVelocity(NS ns, Vec *u_star, Vec *v_star, Vec *w_star)
+PetscErrorCode NSFSMGetIntermediateVelocity(NS ns, Vec *v_star)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(ns, NS_CLASSID, 1, NSFSM);
-  if (u_star) *u_star = fsm->v_star[0];
-  if (v_star) *v_star = fsm->v_star[1];
-  if (w_star) *w_star = fsm->v_star[2];
+  if (v_star) *v_star = fsm->v_star;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMGetConvection(NS ns, Vec *Nu, Vec *Nv, Vec *Nw)
+PetscErrorCode NSFSMGetConvection(NS ns, Vec *N)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(ns, NS_CLASSID, 1, NSFSM);
-  if (Nu) *Nu = fsm->N[0];
-  if (Nv) *Nv = fsm->N[1];
-  if (Nw) *Nw = fsm->N[2];
+  if (N) *N = fsm->N;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMGetPreviousConvection(NS ns, Vec *Nu_prev, Vec *Nv_prev, Vec *Nw_prev)
+PetscErrorCode NSFSMGetPreviousConvection(NS ns, Vec *N_prev)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(ns, NS_CLASSID, 1, NSFSM);
-  if (Nu_prev) *Nu_prev = fsm->N_prev[0];
-  if (Nv_prev) *Nv_prev = fsm->N_prev[1];
-  if (Nw_prev) *Nw_prev = fsm->N_prev[2];
+  if (N_prev) *N_prev = fsm->N_prev;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
