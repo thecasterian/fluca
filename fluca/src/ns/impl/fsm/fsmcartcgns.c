@@ -76,7 +76,7 @@ static PetscErrorCode DMStagWriteCoordinatesInSolution_Private(DM dm, int file_n
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMStagGetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
+static PetscErrorCode DMStagGetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt c, PetscScalar *e)
 {
   PetscInt       x, y, m, n, nExtrax, nExtray;
   PetscBool      isLastRankx, isLastRanky;
@@ -92,7 +92,7 @@ static PetscErrorCode DMStagGetLocalEntries2d_Private(DM dm, Vec v, DMStagStenci
   PetscCall(DMGetLocalVector(dm, &vlocal));
   PetscCall(DMGlobalToLocal(dm, v, INSERT_VALUES, vlocal));
   PetscCall(DMStagVecGetArrayRead(dm, vlocal, &arr));
-  PetscCall(DMStagGetLocationSlot(dm, loc, d, &iloc));
+  PetscCall(DMStagGetLocationSlot(dm, loc, c, &iloc));
   for (j = y; j < y + n + nExtray; ++j)
     for (i = x; i < x + m + nExtrax; ++i) e[cnt++] = arr[j][i][iloc];
   PetscCall(DMStagVecRestoreArrayRead(dm, vlocal, &arr));
@@ -100,7 +100,7 @@ static PetscErrorCode DMStagGetLocalEntries2d_Private(DM dm, Vec v, DMStagStenci
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMStagGetLocalEntries3d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
+static PetscErrorCode DMStagGetLocalEntries3d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt c, PetscScalar *e)
 {
   PetscInt        x, y, z, m, n, p, nExtrax, nExtray, nExtraz;
   PetscBool       isLastRankx, isLastRanky, isLastRankz;
@@ -117,7 +117,7 @@ static PetscErrorCode DMStagGetLocalEntries3d_Private(DM dm, Vec v, DMStagStenci
   PetscCall(DMGetLocalVector(dm, &vlocal));
   PetscCall(DMGlobalToLocal(dm, v, INSERT_VALUES, vlocal));
   PetscCall(DMStagVecGetArrayRead(dm, vlocal, &arr));
-  PetscCall(DMStagGetLocationSlot(dm, loc, d, &iloc));
+  PetscCall(DMStagGetLocationSlot(dm, loc, c, &iloc));
   for (k = z; k < z + p + nExtraz; ++k)
     for (j = y; j < y + n + nExtray; ++j)
       for (i = x; i < x + m + nExtrax; ++i) e[cnt++] = arr[k][j][i][iloc];
@@ -126,7 +126,7 @@ static PetscErrorCode DMStagGetLocalEntries3d_Private(DM dm, Vec v, DMStagStenci
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMStagWriteSolution_Private(DM dm, Vec v, int file_num, int base, int zone, int solution, const char *name)
+static PetscErrorCode DMStagWriteSolution_Private(DM dm, Vec v, PetscInt c, int file_num, int base, int zone, int solution, const char *name)
 {
   PetscInt               dim, x[3], m[3], d;
   cgsize_t               rmin[3], rmax[3], rsize;
@@ -149,10 +149,10 @@ static PetscErrorCode DMStagWriteSolution_Private(DM dm, Vec v, int file_num, in
   PetscCall(PetscMalloc1(rsize, &e));
   switch (dim) {
   case 2:
-    PetscCall(DMStagGetLocalEntries2d_Private(dm, v, DMSTAG_ELEMENT, 0, e));
+    PetscCall(DMStagGetLocalEntries2d_Private(dm, v, DMSTAG_ELEMENT, c, e));
     break;
   case 3:
-    PetscCall(DMStagGetLocalEntries3d_Private(dm, v, DMSTAG_ELEMENT, 0, e));
+    PetscCall(DMStagGetLocalEntries3d_Private(dm, v, DMSTAG_ELEMENT, c, e));
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
@@ -167,7 +167,7 @@ PetscErrorCode NSViewSolution_FSM_Cart_CGNS_Internal(NS ns, PetscViewer viewer)
 {
   NS_FSM                *fsm = (NS_FSM *)ns->data;
   PetscViewer_FlucaCGNS *cgv = (PetscViewer_FlucaCGNS *)viewer->data;
-  DM                     dm;
+  DM                     sdm, vdm;
   PetscInt               dim, d;
   PetscReal              time;
   PetscInt               step;
@@ -179,12 +179,13 @@ PetscErrorCode NSViewSolution_FSM_Cart_CGNS_Internal(NS ns, PetscViewer viewer)
   PetscFunctionBegin;
   if (!cgv->file_num || !cgv->base) PetscCall(MeshView(ns->mesh, viewer));
 
-  PetscCall(MeshGetDM(ns->mesh, &dm));
+  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
+  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
   PetscCall(MeshGetDimension(ns->mesh, &dim));
 
   if (!cgv->output_times) PetscCall(PetscSegBufferCreate(sizeof(PetscReal), 20, &cgv->output_times));
   if (!cgv->output_steps) PetscCall(PetscSegBufferCreate(sizeof(size_t), 20, &cgv->output_steps));
-  PetscCall(DMGetOutputSequenceNumber(dm, &step, &time));
+  PetscCall(DMGetOutputSequenceNumber(sdm, &step, &time));
   if (time < 0.0) {
     step = 0;
     time = 0.0;
@@ -197,23 +198,23 @@ PetscErrorCode NSViewSolution_FSM_Cart_CGNS_Internal(NS ns, PetscViewer viewer)
   CGNSCall(cg_sol_write(cgv->file_num, cgv->base, cgv->zone, solution_name, CGNS_ENUMV(CellCenter), &solution));
 
   /* Write solutions */
-  if (cgv->include_coord) PetscCall(DMStagWriteCoordinatesInSolution_Private(dm, cgv->file_num, cgv->base, cgv->zone, solution));
+  if (cgv->include_coord) PetscCall(DMStagWriteCoordinatesInSolution_Private(sdm, cgv->file_num, cgv->base, cgv->zone, solution));
   for (d = 0; d < dim; ++d) {
-    PetscCall(DMStagWriteSolution_Private(dm, fsm->v[d], cgv->file_num, cgv->base, cgv->zone, solution, velnames[d]));
-    PetscCall(DMStagWriteSolution_Private(dm, fsm->v_star[d], cgv->file_num, cgv->base, cgv->zone, solution, intervelnames[d]));
-    PetscCall(DMStagWriteSolution_Private(dm, fsm->N[d], cgv->file_num, cgv->base, cgv->zone, solution, convecnames[d]));
-    PetscCall(DMStagWriteSolution_Private(dm, fsm->N_prev[d], cgv->file_num, cgv->base, cgv->zone, solution, prevconvecnames[d]));
+    PetscCall(DMStagWriteSolution_Private(vdm, fsm->v, d, cgv->file_num, cgv->base, cgv->zone, solution, velnames[d]));
+    PetscCall(DMStagWriteSolution_Private(vdm, fsm->v_star, d, cgv->file_num, cgv->base, cgv->zone, solution, intervelnames[d]));
+    PetscCall(DMStagWriteSolution_Private(vdm, fsm->N, d, cgv->file_num, cgv->base, cgv->zone, solution, convecnames[d]));
+    PetscCall(DMStagWriteSolution_Private(vdm, fsm->N_prev, d, cgv->file_num, cgv->base, cgv->zone, solution, prevconvecnames[d]));
   }
-  PetscCall(DMStagWriteSolution_Private(dm, fsm->p, cgv->file_num, cgv->base, cgv->zone, solution, presname));
-  PetscCall(DMStagWriteSolution_Private(dm, fsm->p_half, cgv->file_num, cgv->base, cgv->zone, solution, preshalfname));
-  PetscCall(DMStagWriteSolution_Private(dm, fsm->p_half_prev, cgv->file_num, cgv->base, cgv->zone, solution, prevpreshalfname));
-  PetscCall(DMStagWriteSolution_Private(dm, fsm->p_prime, cgv->file_num, cgv->base, cgv->zone, solution, prescorrecname));
+  PetscCall(DMStagWriteSolution_Private(sdm, fsm->p, 0, cgv->file_num, cgv->base, cgv->zone, solution, presname));
+  PetscCall(DMStagWriteSolution_Private(sdm, fsm->p_half, 0, cgv->file_num, cgv->base, cgv->zone, solution, preshalfname));
+  PetscCall(DMStagWriteSolution_Private(sdm, fsm->p_half_prev, 0, cgv->file_num, cgv->base, cgv->zone, solution, prevpreshalfname));
+  PetscCall(DMStagWriteSolution_Private(sdm, fsm->p_prime, 0, cgv->file_num, cgv->base, cgv->zone, solution, prescorrecname));
 
   PetscCall(PetscViewerFlucaCGNSCheckBatch_Internal(viewer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMStagSetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
+static PetscErrorCode DMStagSetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt c, PetscScalar *e)
 {
   PetscInt       x, y, m, n, nExtrax, nExtray;
   PetscBool      isLastRankx, isLastRanky;
@@ -228,7 +229,7 @@ static PetscErrorCode DMStagSetLocalEntries2d_Private(DM dm, Vec v, DMStagStenci
   nExtray = (loc == DMSTAG_DOWN && isLastRanky) ? 1 : 0;
   PetscCall(DMGetLocalVector(dm, &vlocal));
   PetscCall(DMStagVecGetArray(dm, vlocal, &arr));
-  PetscCall(DMStagGetLocationSlot(dm, loc, d, &iloc));
+  PetscCall(DMStagGetLocationSlot(dm, loc, c, &iloc));
   for (j = y; j < y + n + nExtray; ++j)
     for (i = x; i < x + m + nExtrax; ++i) arr[j][i][iloc] = e[cnt++];
   PetscCall(DMStagVecRestoreArray(dm, vlocal, &arr));
@@ -237,7 +238,7 @@ static PetscErrorCode DMStagSetLocalEntries2d_Private(DM dm, Vec v, DMStagStenci
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMStagSetLocalEntries3d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt d, PetscScalar *e)
+static PetscErrorCode DMStagSetLocalEntries3d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt c, PetscScalar *e)
 {
   PetscInt        x, y, z, m, n, p, nExtrax, nExtray, nExtraz;
   PetscBool       isLastRankx, isLastRanky, isLastRankz;
@@ -253,7 +254,7 @@ static PetscErrorCode DMStagSetLocalEntries3d_Private(DM dm, Vec v, DMStagStenci
   nExtraz = (loc == DMSTAG_BACK && isLastRankz) ? 1 : 0;
   PetscCall(DMGetLocalVector(dm, &vlocal));
   PetscCall(DMStagVecGetArray(dm, vlocal, &arr));
-  PetscCall(DMStagGetLocationSlot(dm, loc, d, &iloc));
+  PetscCall(DMStagGetLocationSlot(dm, loc, c, &iloc));
   for (k = z; k < z + p + nExtraz; ++k)
     for (j = y; j < y + n + nExtray; ++j)
       for (i = x; i < x + m + nExtrax; ++i) arr[k][j][i][iloc] = e[cnt++];
@@ -286,7 +287,7 @@ static PetscErrorCode FindSolutionFieldInfo_Private(int file_num, int base, int 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMStagLoadSolution_Private(DM dm, Vec v, int file_num, int base, int zone, int solution, const char *name)
+static PetscErrorCode DMStagLoadSolution_Private(DM dm, Vec v, PetscInt c, int file_num, int base, int zone, int solution, const char *name)
 {
   PetscInt               dim, x[3], m[3], d, i;
   int                    field;
@@ -334,10 +335,10 @@ static PetscErrorCode DMStagLoadSolution_Private(DM dm, Vec v, int file_num, int
 
   switch (dim) {
   case 2:
-    PetscCall(DMStagSetLocalEntries2d_Private(dm, v, DMSTAG_ELEMENT, 0, e));
+    PetscCall(DMStagSetLocalEntries2d_Private(dm, v, DMSTAG_ELEMENT, c, e));
     break;
   case 3:
-    PetscCall(DMStagSetLocalEntries3d_Private(dm, v, DMSTAG_ELEMENT, 0, e));
+    PetscCall(DMStagSetLocalEntries3d_Private(dm, v, DMSTAG_ELEMENT, c, e));
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
@@ -349,7 +350,7 @@ static PetscErrorCode DMStagLoadSolution_Private(DM dm, Vec v, int file_num, int
 PetscErrorCode NSLoadSolutionCGNS_FSM_Cart_Internal(NS ns, PetscInt file_num)
 {
   NS_FSM                    *fsm = (NS_FSM *)ns->data;
-  DM                         dm;
+  DM                         sdm, vdm;
   PetscInt                   dim, M[3], d;
   cgsize_t                   sizes[9];
   const int                  base = 1, zone = 1;
@@ -362,7 +363,8 @@ PetscErrorCode NSLoadSolutionCGNS_FSM_Cart_Internal(NS ns, PetscInt file_num)
   CGNS_ENUMT(GridLocation_t) grid_loc;
 
   PetscFunctionBegin;
-  PetscCall(MeshGetDM(ns->mesh, &dm));
+  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
+  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
   PetscCall(MeshGetDimension(ns->mesh, &dim));
 
   /* Read CGNS file info */
@@ -387,14 +389,14 @@ PetscErrorCode NSLoadSolutionCGNS_FSM_Cart_Internal(NS ns, PetscInt file_num)
   PetscCheck(grid_loc == CGNS_ENUMV(CellCenter), PETSC_COMM_SELF, PETSC_ERR_LIB, "Grid location is not cell-centered in base %d zone %d solution %d", base, zone, solution);
 
   for (d = 0; d < dim; ++d) {
-    PetscCall(DMStagLoadSolution_Private(dm, fsm->v[d], file_num, base, zone, solution, velnames[d]));
-    PetscCall(DMStagLoadSolution_Private(dm, fsm->v_star[d], file_num, base, zone, solution, intervelnames[d]));
-    PetscCall(DMStagLoadSolution_Private(dm, fsm->N[d], file_num, base, zone, solution, convecnames[d]));
-    PetscCall(DMStagLoadSolution_Private(dm, fsm->N_prev[d], file_num, base, zone, solution, prevconvecnames[d]));
+    PetscCall(DMStagLoadSolution_Private(vdm, fsm->v, d, file_num, base, zone, solution, velnames[d]));
+    PetscCall(DMStagLoadSolution_Private(vdm, fsm->v_star, d, file_num, base, zone, solution, intervelnames[d]));
+    PetscCall(DMStagLoadSolution_Private(vdm, fsm->N, d, file_num, base, zone, solution, convecnames[d]));
+    PetscCall(DMStagLoadSolution_Private(vdm, fsm->N_prev, d, file_num, base, zone, solution, prevconvecnames[d]));
   }
-  PetscCall(DMStagLoadSolution_Private(dm, fsm->p, file_num, base, zone, solution, presname));
-  PetscCall(DMStagLoadSolution_Private(dm, fsm->p_half, file_num, base, zone, solution, preshalfname));
-  PetscCall(DMStagLoadSolution_Private(dm, fsm->p_half_prev, file_num, base, zone, solution, prevpreshalfname));
-  PetscCall(DMStagLoadSolution_Private(dm, fsm->p_prime, file_num, base, zone, solution, prescorrecname));
+  PetscCall(DMStagLoadSolution_Private(sdm, fsm->p, 0, file_num, base, zone, solution, presname));
+  PetscCall(DMStagLoadSolution_Private(sdm, fsm->p_half, 0, file_num, base, zone, solution, preshalfname));
+  PetscCall(DMStagLoadSolution_Private(sdm, fsm->p_half_prev, 0, file_num, base, zone, solution, prevpreshalfname));
+  PetscCall(DMStagLoadSolution_Private(sdm, fsm->p_prime, 0, file_num, base, zone, solution, prescorrecname));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

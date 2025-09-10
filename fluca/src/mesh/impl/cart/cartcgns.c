@@ -14,7 +14,7 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
   if (!cgv->file_num) {
     PetscInt timestep;
 
-    PetscCall(DMGetOutputSequenceNumber(mesh->dm, &timestep, NULL));
+    PetscCall(DMGetOutputSequenceNumber(mesh->sdm, &timestep, NULL));
     PetscCall(PetscViewerFileOpen_FlucaCGNS_Internal(viewer, timestep));
   }
   CGNSCall(cg_base_write(cgv->file_num, "Base", mesh->dim, mesh->dim, &cgv->base));
@@ -40,8 +40,8 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
     const char            *coordnames[3] = {"CoordinateX", "CoordinateY", "CoordinateZ"};
     int                    coord[3];
 
-    PetscCall(DMStagGetCorners(mesh->dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
-    PetscCall(DMStagGetIsLastRank(mesh->dm, &isLastRank[0], &isLastRank[1], &isLastRank[2]));
+    PetscCall(DMStagGetCorners(mesh->sdm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+    PetscCall(DMStagGetIsLastRank(mesh->sdm, &isLastRank[0], &isLastRank[1], &isLastRank[2]));
     PetscCall(FlucaGetCGNSDataType_Internal(PETSC_SCALAR, &datatype));
 
     for (d = 0; d < mesh->dim; ++d) {
@@ -100,8 +100,8 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
     cgsize_t    rmin[3], rmax[3], rsize;
     int        *e;
 
-    PetscCall(DMStagGetCorners(mesh->dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
-    PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)mesh->dm), &rank));
+    PetscCall(DMStagGetCorners(mesh->sdm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+    PetscCallMPI(MPI_Comm_rank(PetscObjectComm((PetscObject)mesh->sdm), &rank));
 
     rsize = 1;
     for (d = 0; d < mesh->dim; ++d) {

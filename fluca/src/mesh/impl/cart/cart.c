@@ -62,7 +62,8 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   DMBoundaryType  dmBndTypes[3];
   const PetscInt *l[3];
   PetscInt        d;
-  const PetscInt  dofElem = 1, dofFace = 1, stencilWidth = 1;
+  DM              cdm;
+  const PetscInt  dofScalar = 1, dofVector = mesh->dim, dofFace = 1, stencilWidth = 1;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
@@ -81,41 +82,62 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
     }
   }
 
-  /* Allocate DMs */
+  /* Create scalar DM */
   switch (mesh->dim) {
   case 2:
-    PetscCall(DMStagCreate2d(comm, dmBndTypes[0], dmBndTypes[1], cart->N[0], cart->N[1], cart->nRanks[0], cart->nRanks[1], 0, 0, dofElem, DMSTAG_STENCIL_STAR, stencilWidth, cart->l[0], cart->l[1], &mesh->dm));
+    PetscCall(DMStagCreate2d(comm, dmBndTypes[0], dmBndTypes[1], cart->N[0], cart->N[1], cart->nRanks[0], cart->nRanks[1], 0, 0, dofScalar, DMSTAG_STENCIL_STAR, stencilWidth, cart->l[0], cart->l[1], &mesh->sdm));
     break;
   case 3:
-    PetscCall(DMStagCreate3d(comm, dmBndTypes[0], dmBndTypes[1], dmBndTypes[2], cart->N[0], cart->N[1], cart->N[2], cart->nRanks[0], cart->nRanks[1], cart->nRanks[2], 0, 0, 0, dofElem, DMSTAG_STENCIL_STAR, stencilWidth, cart->l[0], cart->l[1], cart->l[2],
-                             &mesh->dm));
+    PetscCall(DMStagCreate3d(comm, dmBndTypes[0], dmBndTypes[1], dmBndTypes[2], cart->N[0], cart->N[1], cart->N[2], cart->nRanks[0], cart->nRanks[1], cart->nRanks[2], 0, 0, 0, dofScalar, DMSTAG_STENCIL_STAR, stencilWidth, cart->l[0], cart->l[1], cart->l[2],
+                             &mesh->sdm));
     break;
   default:
     SETERRQ(comm, PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, mesh->dim);
   }
-  PetscCall(DMStagSetRefinementFactor(mesh->dm, cart->refineFactor[0], cart->refineFactor[1], cart->refineFactor[2]));
-  PetscCall(DMSetUp(mesh->dm));
+  PetscCall(DMStagSetRefinementFactor(mesh->sdm, cart->refineFactor[0], cart->refineFactor[1], cart->refineFactor[2]));
+  PetscCall(DMSetUp(mesh->sdm));
 
-  PetscCall(DMStagGetNumRanks(mesh->dm, &cart->nRanks[0], &cart->nRanks[1], &cart->nRanks[2]));
+  PetscCall(DMStagGetNumRanks(mesh->sdm, &cart->nRanks[0], &cart->nRanks[1], &cart->nRanks[2]));
   for (d = 0; d < mesh->dim; ++d)
     if (!cart->l[d]) PetscCall(PetscMalloc1(cart->nRanks[d], &cart->l[d]));
-  PetscCall(DMStagGetOwnershipRanges(mesh->dm, &l[0], &l[1], &l[2]));
+  PetscCall(DMStagGetOwnershipRanges(mesh->sdm, &l[0], &l[1], &l[2]));
   for (d = 0; d < mesh->dim; ++d) PetscCall(PetscArraycpy(cart->l[d], l[d], cart->nRanks[d]));
 
+  /* Create vector DM */
   switch (mesh->dim) {
   case 2:
-    PetscCall(DMStagCreateCompatibleDMStag(mesh->dm, 0, dofFace, 0, 0, &mesh->fdm));
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, 0, dofVector, 0, &mesh->vdm));
     break;
   case 3:
-    PetscCall(DMStagCreateCompatibleDMStag(mesh->dm, 0, 0, dofFace, 0, &mesh->fdm));
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, 0, 0, dofVector, &mesh->vdm));
     break;
   default:
     SETERRQ(comm, PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, mesh->dim);
   }
 
-  PetscCall(DMSetMatrixPreallocateOnly(mesh->dm, PETSC_TRUE));
-  PetscCall(DMSetMatrixPreallocateOnly(mesh->fdm, PETSC_TRUE));
-  PetscCall(DMStagSetUniformCoordinatesProduct(mesh->dm, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0));
+  /* Create face DM */
+  switch (mesh->dim) {
+  case 2:
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, dofFace, 0, 0, &mesh->Vdm));
+    break;
+  case 3:
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, 0, dofFace, 0, &mesh->Vdm));
+    break;
+  default:
+    SETERRQ(comm, PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, mesh->dim);
+  }
+
+  PetscCall(DMSetMatrixPreallocateOnly(mesh->sdm, PETSC_TRUE));
+  PetscCall(DMSetMatrixPreallocateOnly(mesh->vdm, PETSC_TRUE));
+  PetscCall(DMSetMatrixPreallocateOnly(mesh->Vdm, PETSC_TRUE));
+
+  /* Set common coordinate DM */
+  PetscCall(DMStagSetUniformCoordinatesProduct(mesh->sdm, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0));
+  PetscCall(DMGetCoordinateDM(mesh->sdm, &cdm));
+  PetscCall(DMStagSetCoordinateDMType(mesh->vdm, DMPRODUCT));
+  PetscCall(DMSetCoordinateDM(mesh->vdm, cdm));
+  PetscCall(DMStagSetCoordinateDMType(mesh->Vdm, DMPRODUCT));
+  PetscCall(DMSetCoordinateDM(mesh->Vdm, cdm));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -126,8 +148,9 @@ PetscErrorCode MeshDestroy_Cart(Mesh mesh)
 
   PetscFunctionBegin;
   for (d = 0; d < mesh->dim; ++d) PetscCall(PetscFree(cart->l[d]));
-  PetscCall(DMDestroy(&mesh->dm));
-  PetscCall(DMDestroy(&mesh->fdm));
+  PetscCall(DMDestroy(&mesh->sdm));
+  PetscCall(DMDestroy(&mesh->vdm));
+  PetscCall(DMDestroy(&mesh->Vdm));
   PetscCall(PetscFree(mesh->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -146,7 +169,7 @@ PetscErrorCode MeshView_Cart(Mesh mesh, PetscViewer v)
   if (isascii) {
     PetscInt x, y, z, m, n, p;
 
-    PetscCall(DMStagGetCorners(mesh->dm, &x, &y, &z, &m, &n, &p, NULL, NULL, NULL));
+    PetscCall(DMStagGetCorners(mesh->sdm, &x, &y, &z, &m, &n, &p, NULL, NULL, NULL));
     PetscCall(PetscViewerASCIIPushSynchronized(v));
     switch (mesh->dim) {
     case 2:
@@ -371,7 +394,7 @@ PetscErrorCode MeshCartSetUniformCoordinates(Mesh mesh, PetscReal xmin, PetscRea
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "This function must be called after MeshSetUp()");
 
-  PetscCall(DMStagSetUniformCoordinatesProduct(mesh->dm, xmin, xmax, ymin, ymax, zmin, zmax));
+  PetscCall(DMStagSetUniformCoordinatesProduct(mesh->sdm, xmin, xmax, ymin, ymax, zmin, zmax));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -379,7 +402,7 @@ PetscErrorCode MeshCartGetCoordinateArrays(Mesh mesh, PetscScalar ***ax, PetscSc
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscCall(DMStagGetProductCoordinateArrays(mesh->dm, ax, ay, az));
+  PetscCall(DMStagGetProductCoordinateArrays(mesh->sdm, ax, ay, az));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -387,7 +410,7 @@ PetscErrorCode MeshCartGetCoordinateArraysRead(Mesh mesh, const PetscScalar ***a
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscCall(DMStagGetProductCoordinateArraysRead(mesh->dm, ax, ay, az));
+  PetscCall(DMStagGetProductCoordinateArraysRead(mesh->sdm, ax, ay, az));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -395,27 +418,27 @@ PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh mesh, PetscScalar ***ax, Pet
 {
   PetscScalar ***a[3] = {ax, ay, az};
   PetscInt       x[3], m[3];
-  PetscInt       i, d, iprev, inext, icenter;
+  PetscInt       i, d, iprevc, inextc, ielemc;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
 
-  PetscCall(DMStagGetCorners(mesh->dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_LEFT, &iprev));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_RIGHT, &inext));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_ELEMENT, &icenter));
+  PetscCall(DMStagGetCorners(mesh->sdm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->sdm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->sdm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->sdm, DMSTAG_ELEMENT, &ielemc));
   for (d = 0; d < mesh->dim; ++d)
-    for (i = x[d]; i < x[d] + m[d]; ++i) (*a[d])[i][icenter] = ((*a[d])[i][iprev] + (*a[d])[i][inext]) / 2.0;
+    for (i = x[d]; i < x[d] + m[d]; ++i) (*a[d])[i][ielemc] = ((*a[d])[i][iprevc] + (*a[d])[i][inextc]) / 2.0;
 
-  PetscCall(DMStagRestoreProductCoordinateArrays(mesh->dm, ax, ay, az));
+  PetscCall(DMStagRestoreProductCoordinateArrays(mesh->sdm, ax, ay, az));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartRestoreCoordinateArraysRead(Mesh mesh, const PetscScalar ***arrx, const PetscScalar ***arry, const PetscScalar ***arrz)
+PetscErrorCode MeshCartRestoreCoordinateArraysRead(Mesh mesh, const PetscScalar ***ax, const PetscScalar ***ay, const PetscScalar ***az)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(mesh->dm, arrx, arry, arrz));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(mesh->sdm, ax, ay, az));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -435,7 +458,7 @@ PetscErrorCode MeshCartGetCoordinateLocationSlot(Mesh mesh, MeshCartCoordinateSt
   default:
     SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONG, "Invalid coordinate stencil location");
   }
-  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, stagLoc, slot));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->sdm, stagLoc, slot));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -443,7 +466,7 @@ PetscErrorCode MeshCartGetLocalSizes(Mesh mesh, PetscInt *m, PetscInt *n, PetscI
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscCall(DMStagGetLocalSizes(mesh->dm, m, n, p));
+  PetscCall(DMStagGetLocalSizes(mesh->sdm, m, n, p));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -451,7 +474,7 @@ PetscErrorCode MeshCartGetCorners(Mesh mesh, PetscInt *x, PetscInt *y, PetscInt 
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscCall(DMStagGetCorners(mesh->dm, x, y, z, m, n, p, NULL, NULL, NULL));
+  PetscCall(DMStagGetCorners(mesh->sdm, x, y, z, m, n, p, NULL, NULL, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -459,7 +482,7 @@ PetscErrorCode MeshCartGetIsFirstRank(Mesh mesh, PetscBool *isFirstRankX, PetscB
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscCall(DMStagGetIsFirstRank(mesh->dm, isFirstRankX, isFirstRankY, isFirstRankZ));
+  PetscCall(DMStagGetIsFirstRank(mesh->sdm, isFirstRankX, isFirstRankY, isFirstRankZ));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -467,7 +490,7 @@ PetscErrorCode MeshCartGetIsLastRank(Mesh mesh, PetscBool *isLastRankX, PetscBoo
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscCall(DMStagGetIsLastRank(mesh->dm, isLastRankX, isLastRankY, isLastRankZ));
+  PetscCall(DMStagGetIsLastRank(mesh->sdm, isLastRankX, isLastRankY, isLastRankZ));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

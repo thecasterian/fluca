@@ -35,13 +35,13 @@ PetscErrorCode NSMonitorCancel(NS ns)
 
 PetscErrorCode NSMonitor(NS ns)
 {
-  DM       dm;
+  DM       sdm;
   PetscInt i;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  PetscCall(MeshGetDM(ns->mesh, &dm));
-  PetscCall(DMSetOutputSequenceNumber(dm, ns->step, ns->t));
+  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
+  PetscCall(DMSetOutputSequenceNumber(sdm, ns->step, ns->t));
   for (i = 0; i < ns->num_mons; ++i) PetscCall((*ns->mons[i])(ns, ns->mon_ctxs[i]));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

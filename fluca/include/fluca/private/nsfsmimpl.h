@@ -4,32 +4,26 @@
 #include <petscksp.h>
 
 typedef struct {
-  NS       ns;
-  PetscInt axis;
-} KSPVCtx;
-
-typedef struct {
-  Vec v[3];        /* velocity at n */
+  Vec v;           /* velocity at n */
   Vec V;           /* face velocity at n */
-  Vec v_star[3];   /* intermediate velocity between n and n+1 */
+  Vec v_star;      /* intermediate velocity between n and n+1 */
   Vec V_star;      /* intermediate face velocity between n and n+1 */
-  Vec N[3];        /* convection at n */
-  Vec N_prev[3];   /* convection at n-1 */
+  Vec N;           /* convection at n */
+  Vec N_prev;      /* convection at n-1 */
   Vec p;           /* pressure at n */
   Vec p_half;      /* pressure at n-1/2 */
   Vec p_prime;     /* pressure correction between n-1/2 and n+1/2 */
   Vec p_half_prev; /* pressure at previous half time step n-3/2 */
 
-  Mat Gp[3];   /* gradient operators for pressure */
-  Mat Lv;      /* laplacian operator for velocity */
-  Mat Tv[3];   /* interpolation operators for velocity */
-  Mat Gstv[3]; /* staggered gradient operators for velocity */
-  Mat Gstp[3]; /* staggered pressure gradient operators from DM to face DM */
-  Mat Dstv;    /* staggered divergence operator for velocity */
+  Mat Gp;     /* pressure gradient operator */
+  Mat Lv;     /* velocity laplacian operator */
+  Mat Tv;     /* velocity interpolation operator for divergence */
+  Mat Gstp;   /* staggered pressure gradient operator */
+  Mat Dstv;   /* staggered velocity divergence operator */
+  Mat TvN[3]; /* velocity interpolation operators for convection */
 
-  KSP     kspv[3];    /* KSP to solve intermediate velocities */
-  KSPVCtx kspvctx[3]; /* context for intermediate velocity KSP */
-  KSP     kspp;       /* KSP to solve pressure correction */
+  KSP kspv; /* KSP to solve intermediate velocities */
+  KSP kspp; /* KSP to solve pressure correction */
 } NS_FSM;
 
 FLUCA_INTERN PetscErrorCode NSFSMComputeSpatialOperators2d_Cart_Internal(NS);
