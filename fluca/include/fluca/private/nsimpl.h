@@ -4,6 +4,7 @@
 #include <flucamesh.h>
 #include <flucans.h>
 #include <flucansbc.h>
+#include <petscsnes.h>
 
 #define MAXNSMONITORS 10
 
@@ -25,6 +26,14 @@ struct _NSOps {
   PetscErrorCode (*loadsolutioncgns)(NS, PetscInt);
 };
 
+typedef struct _n_NSFieldLink *NSFieldLink;
+struct _n_NSFieldLink {
+  char       *fieldname;
+  DM          dm;
+  IS          is;           /* indices in solution vector */
+  NSFieldLink prev, next;
+};
+
 struct _p_NS {
   PETSCHEADER(struct _NSOps);
 
@@ -39,6 +48,16 @@ struct _p_NS {
   Mesh                 mesh; /* mesh */
   NSBoundaryCondition *bcs;  /* boundary conditions */
   void                *data; /* implementation-specific data */
+
+  /* Solution ------------------------------------------------------------- */
+  NSFieldLink fieldlink; /* list of fields */
+  DM          soldm;     /* DM for solution vector */
+  Vec         sol;       /* solution vector */
+
+  /* Solver --------------------------------------------------------------- */
+  SNES snes;
+  Vec  b;
+  Vec  x;
 
   /* State ---------------------------------------------------------------- */
   PetscBool setupcalled; /* whether NSSetUp() has been called */

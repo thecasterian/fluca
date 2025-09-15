@@ -26,6 +26,12 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns)
   n->mesh        = NULL;
   n->bcs         = NULL;
   n->data        = NULL;
+  n->fieldlink   = NULL;
+  n->soldm       = NULL;
+  n->sol         = NULL;
+  n->snes        = NULL;
+  n->b           = NULL;
+  n->x           = NULL;
   n->setupcalled = PETSC_FALSE;
   n->num_mons    = 0;
   n->mon_freq    = 1;
@@ -69,8 +75,36 @@ PetscErrorCode NSGetType(NS ns, NSType *type)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode AddField_Private(NS ns, const char *fieldname, DM dm)
+{
+  NSFieldLink newlink, lastlink;
+
+  PetscFunctionBegin;
+  /* Create new field */
+  PetscCall(PetscNew(&newlink));
+  PetscCall(PetscStrallocpy(fieldname, &newlink->fieldname));
+  newlink->dm   = dm;
+  newlink->is   = NULL;
+  newlink->prev = NULL;
+  newlink->next = NULL;
+
+  /* Append to end of list */
+  if (!ns->fieldlink) {
+    ns->fieldlink = newlink;
+  } else {
+    lastlink = ns->fieldlink;
+    while (lastlink->next) lastlink = lastlink->next;
+    lastlink->next = newlink;
+    newlink->prev  = lastlink;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetUp(NS ns)
 {
+  MPI_Comm    comm;
+  DM          sdm, vdm, Vdm;
+
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   if (ns->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
@@ -81,6 +115,18 @@ PetscErrorCode NSSetUp(NS ns)
 
   /* Validate */
   PetscCheck(ns->mesh, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "Mesh not set");
+
+  /* Create fields and solution vector */
+  PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
+  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
+  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
+  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+
+  PetscCall(AddField_Private(ns, "velocity", vdm));
+  PetscCall(AddField_Private(ns, "facenormalvelocity", Vdm));
+  PetscCall(AddField_Private(ns, "pressure", sdm));
+
+  // TODO: create solution DM and Vec
 
   /* Call specific type setup */
   PetscTryTypeMethod(ns, setup);
@@ -153,6 +199,8 @@ PetscErrorCode NSViewFromOptions(NS ns, PetscObject obj, const char name[])
 
 PetscErrorCode NSDestroy(NS *ns)
 {
+  NSFieldLink link, nextlink;
+
   PetscFunctionBegin;
   if (!*ns) PetscFunctionReturn(PETSC_SUCCESS);
   PetscValidHeaderSpecific((*ns), NS_CLASSID, 1);
@@ -164,6 +212,18 @@ PetscErrorCode NSDestroy(NS *ns)
 
   PetscCall(MeshDestroy(&(*ns)->mesh));
   PetscCall(PetscFree((*ns)->bcs));
+
+  link = (*ns)->fieldlink;
+  while (link) {
+    PetscCall(PetscFree(link->fieldname));
+    PetscCall(ISDestroy(&link->is));
+    nextlink = link->next;
+    PetscCall(PetscFree(link));
+    link = nextlink;
+  }
+  PetscCall(DMDestroy(&(*ns)->soldm));
+  PetscCall(VecDestroy(&(*ns)->sol));
+
   PetscCall(NSMonitorCancel(*ns));
 
   PetscTryTypeMethod((*ns), destroy);

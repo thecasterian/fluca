@@ -2,6 +2,7 @@
 
 #include <flucamesh.h>
 #include <flucansbc.h>
+#include <petscis.h>
 
 typedef struct _p_NS *NS;
 
@@ -37,6 +38,10 @@ FLUCA_EXTERN PetscErrorCode NSView(NS, PetscViewer);
 FLUCA_EXTERN PetscErrorCode NSViewFromOptions(NS, PetscObject, const char[]);
 FLUCA_EXTERN PetscErrorCode NSDestroy(NS *);
 
+FLUCA_EXTERN PetscErrorCode NSGetSolution(NS, Vec *);
+FLUCA_EXTERN PetscErrorCode NSGetNumFields(NS, PetscInt *);
+FLUCA_EXTERN PetscErrorCode NSGetField(NS, const char[], DM *, IS *);
+FLUCA_EXTERN PetscErrorCode NSGetFieldByIndex(NS, PetscInt, const char *[], DM *, IS *);
 FLUCA_EXTERN PetscErrorCode NSViewSolution(NS, PetscViewer);
 FLUCA_EXTERN PetscErrorCode NSViewSolutionFromOptions(NS, PetscObject, const char[]);
 FLUCA_EXTERN PetscErrorCode NSLoadSolutionFromFile(NS, const char[]);
