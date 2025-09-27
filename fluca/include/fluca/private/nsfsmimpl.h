@@ -4,6 +4,11 @@
 #include <petscksp.h>
 
 typedef struct {
+  KSP ksp;
+  Mat A;
+} NSFSMShellCtx;
+
+typedef struct {
   NS       ns;
   PetscInt axis;
 } KSPVCtx;
@@ -26,6 +31,10 @@ typedef struct {
   KSPVCtx kspvctx[3]; /* context for intermediate velocity KSP */
   KSP     kspp;       /* KSP to solve pressure correction */
 } NS_FSM;
+
+FLUCA_INTERN PetscErrorCode NSFSMShellCtxCreate(NSFSMShellCtx **, DM, PetscReal, PetscReal);
+FLUCA_INTERN PetscErrorCode NSFSMShellPCApply(PC, Vec, Vec);
+FLUCA_INTERN PetscErrorCode NSFSMShellPCDestroy(PC);
 
 FLUCA_INTERN PetscErrorCode NSFSMComputeSpatialOperators2d_Cart_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSFSMSetKSPComputeFunctions2d_Cart_Internal(NS);

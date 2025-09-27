@@ -6,6 +6,122 @@ typedef enum {
   DERIV_Y,
 } DerivDirection;
 
+static PetscErrorCode ComputeCompactLaplacian(DM dm, Mat A)
+{
+  PetscInt            M, N, x, y, m, n;
+  DMStagStencil       row, col[5];
+  PetscInt            ncols;
+  PetscScalar         v[3];
+  const PetscScalar **arrcx, **arrcy;
+  PetscInt            iprevc, inextc, ielemc;
+  PetscInt            i, j;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetGlobalSizes(dm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &ielemc));
+
+  PetscCall(MatSetOption(A, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+
+  row.loc = DMSTAG_ELEMENT;
+  row.c   = 0;
+  for (i = 0; i < 3; ++i) {
+    col[i].loc = DMSTAG_ELEMENT;
+    col[i].c   = 0;
+  }
+
+  for (j = y; j < y + n; ++j)
+    for (i = x; i < x + m; ++i) {
+      PetscScalar h1, h2, h3;
+
+      row.i = i;
+      row.j = j;
+
+      col[0].i = i - 1;
+      col[0].j = j;
+      col[1].i = i;
+      col[1].j = j;
+      col[2].i = i + 1;
+      col[2].j = j;
+
+      h1   = arrcx[i][ielemc] - arrcx[i - 1][ielemc];
+      h2   = arrcx[i + 1][ielemc] - arrcx[i][ielemc];
+      h3   = arrcx[i][inextc] - arrcx[i][iprevc];
+      v[0] = 1. / (h1 * h3);
+      v[1] = -(1. / (h1 * h3) + 1. / (h2 * h3));
+      v[2] = 1. / (h2 * h3);
+
+      ncols = 3;
+      PetscCall(DMStagMatSetValuesStencil(dm, A, 1, &row, ncols, col, v, ADD_VALUES));
+
+      col[0].i = i;
+      col[0].j = j - 1;
+      col[1].i = i;
+      col[1].j = j;
+      col[2].i = i;
+      col[2].j = j + 1;
+
+      h1   = arrcy[j][ielemc] - arrcy[j - 1][ielemc];
+      h2   = arrcy[j + 1][ielemc] - arrcy[j][ielemc];
+      h3   = arrcy[j][inextc] - arrcy[j][iprevc];
+      v[0] = 1. / (h1 * h3);
+      v[1] = -(1. / (h1 * h3) + 1. / (h2 * h3));
+      v[2] = 1. / (h2 * h3);
+
+      ncols = 3;
+      PetscCall(DMStagMatSetValuesStencil(dm, A, 1, &row, ncols, col, v, ADD_VALUES));
+    }
+
+  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
+
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrcx, &arrcy, NULL));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFSMShellCtxCreate(NSFSMShellCtx **shellctx, DM dm, PetscReal rho, PetscReal dt)
+{
+  NSFSMShellCtx *newctx;
+
+  PetscFunctionBegin;
+  PetscCall(PetscNew(&newctx));
+
+  PetscCall(KSPCreate(PetscObjectComm((PetscObject)dm), &newctx->ksp));
+  PetscCall(DMCreateMatrix(dm, &newctx->A));
+  PetscCall(ComputeCompactLaplacian(dm, newctx->A));
+  PetscCall(MatScale(newctx->A, dt / rho));
+  // PetscCall(MatView(newctx->A, PETSC_VIEWER_STDOUT_WORLD));
+  PetscCall(KSPSetOperators(newctx->ksp, newctx->A, newctx->A));
+  // PetscCall(KSPSetFromOptions(newctx->ksp));
+  *shellctx = newctx;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFSMShellPCApply(PC pc, Vec x, Vec y)
+{
+  NSFSMShellCtx *shellctx;
+
+  PetscFunctionBegin;
+  PetscCall(PCShellGetContext(pc, &shellctx));
+  PetscCall(KSPSolve(shellctx->ksp, x, y));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFSMShellPCDestroy(PC pc)
+{
+  NSFSMShellCtx *shellctx;
+
+  PetscFunctionBegin;
+  PetscCall(PCShellGetContext(pc, &shellctx));
+  PetscCall(KSPDestroy(&shellctx->ksp));
+  PetscCall(MatDestroy(&shellctx->A));
+  PetscCall(PetscFree(shellctx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode ComputeIdentityOperator_Private(DM dm, Mat Id)
 {
   PetscInt      x, y, m, n;

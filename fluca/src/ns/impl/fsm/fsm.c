@@ -27,20 +27,22 @@ static PetscErrorCode CreateKSPWithDMClone_Private(DM dm, KSP *ksp)
   PetscCall(KSPSetDM(*ksp, dmclone));
   PetscCall(DMDestroy(&dmclone));
 
-  PetscCall(KSPGetPC(*ksp, &pc));
-  PetscCall(PCSetType(pc, PCMG));
+  // PetscCall(KSPGetPC(*ksp, &pc));
+  // PetscCall(PCSetType(pc, PCMG));
 
-  PetscCall(KSPSetFromOptions(*ksp));
+  // PetscCall(KSPSetFromOptions(*ksp));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSSetup_FSM(NS ns)
 {
-  NS_FSM   *fsm = (NS_FSM *)ns->data;
-  MPI_Comm  comm;
-  DM        dm;
-  PetscInt  dim, d;
-  PetscBool iscart;
+  NS_FSM        *fsm = (NS_FSM *)ns->data;
+  MPI_Comm       comm;
+  DM             dm;
+  PetscInt       dim, d;
+  PetscBool      iscart;
+  PC             pc;
+  NSFSMShellCtx *shellctx;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
@@ -80,6 +82,14 @@ PetscErrorCode NSSetup_FSM(NS ns)
   /* Create KSP */
   for (d = 0; d < dim; ++d) PetscCall(CreateKSPWithDMClone_Private(dm, &fsm->kspv[d]));
   PetscCall(CreateKSPWithDMClone_Private(dm, &fsm->kspp));
+
+  PetscCall(KSPSetFromOptions(fsm->kspp));
+  PetscCall(KSPGetPC(fsm->kspp, &pc));
+  PetscCall(PCSetType(pc, PCSHELL));
+  PetscCall(NSFSMShellCtxCreate(&shellctx, dm, ns->rho, ns->dt));
+  PetscCall(PCShellSetContext(pc, shellctx));
+  PetscCall(PCShellSetApply(pc, NSFSMShellPCApply));
+  PetscCall(PCShellSetDestroy(pc, NSFSMShellPCDestroy));
 
   switch (dim) {
   case 2:
