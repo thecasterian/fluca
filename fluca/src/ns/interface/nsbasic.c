@@ -1,5 +1,6 @@
 #include <fluca/private/nsimpl.h>
 #include <flucaviewer.h>
+#include <petscdmcomposite.h>
 
 PetscClassId  NS_CLASSID              = 0;
 PetscLogEvent NS_SetUp                = 0;
@@ -104,6 +105,10 @@ PetscErrorCode NSSetUp(NS ns)
 {
   MPI_Comm    comm;
   DM          sdm, vdm, Vdm;
+  NSFieldLink link;
+  IS         *is;
+  Vec        *subvecs;
+  PetscInt    nf, i;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
@@ -126,7 +131,21 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(AddField_Private(ns, "facenormalvelocity", Vdm));
   PetscCall(AddField_Private(ns, "pressure", sdm));
 
-  // TODO: create solution DM and Vec
+  PetscCall(DMCompositeCreate(comm, &ns->soldm));
+  for (link = ns->fieldlink; link; link = link->next) PetscCall(DMCompositeAddDM(ns->soldm, link->dm));
+  PetscCall(DMSetUp(ns->soldm));
+
+  PetscCall(DMCompositeGetGlobalISs(ns->soldm, &is));
+  for (link = ns->fieldlink, i = 0; link; link = link->next, ++i) link->is = is[i];
+
+  PetscCall(NSGetNumFields(ns, &nf));
+  PetscCall(PetscMalloc1(nf, &subvecs));
+  for (link = ns->fieldlink, i = 0; link; link = link->next, ++i) PetscCall(DMCreateGlobalVector(link->dm, &subvecs[i]));
+  PetscCall(VecCreateNest(comm, nf, is, subvecs, &ns->sol));
+
+  PetscCall(PetscFree(is));
+  for (i = 0; i < nf; ++i) PetscCall(VecDestroy(&subvecs[i]));
+  PetscCall(PetscFree(subvecs));
 
   /* Call specific type setup */
   PetscTryTypeMethod(ns, setup);
