@@ -1,16 +1,6 @@
 #include <flucansfsm.h>
 #include <fluca/private/nsfsmimpl.h>
 
-PetscErrorCode NSFSMGetVelocity(NS ns, Vec *v)
-{
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-
-  PetscFunctionBegin;
-  PetscValidHeaderSpecificType(ns, NS_CLASSID, 1, NSFSM);
-  if (v) *v = fsm->v;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 PetscErrorCode NSFSMGetIntermediateVelocity(NS ns, Vec *v_star)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
@@ -38,16 +28,6 @@ PetscErrorCode NSFSMGetPreviousConvection(NS ns, Vec *N_prev)
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(ns, NS_CLASSID, 1, NSFSM);
   if (N_prev) *N_prev = fsm->N_prev;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode NSFSMGetPressure(NS ns, Vec *p)
-{
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-
-  PetscFunctionBegin;
-  PetscValidHeaderSpecificType(ns, NS_CLASSID, 1, NSFSM);
-  if (p) *p = fsm->p;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

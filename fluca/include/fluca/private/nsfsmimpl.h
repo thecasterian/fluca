@@ -4,13 +4,10 @@
 #include <petscksp.h>
 
 typedef struct {
-  Vec v;           /* velocity at n */
-  Vec V;           /* face velocity at n */
   Vec v_star;      /* intermediate velocity between n and n+1 */
   Vec V_star;      /* intermediate face velocity between n and n+1 */
   Vec N;           /* convection at n */
   Vec N_prev;      /* convection at n-1 */
-  Vec p;           /* pressure at n */
   Vec p_half;      /* pressure at n-1/2 */
   Vec p_prime;     /* pressure correction between n-1/2 and n+1/2 */
   Vec p_half_prev; /* pressure at previous half time step n-3/2 */
