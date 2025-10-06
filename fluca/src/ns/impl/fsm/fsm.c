@@ -72,14 +72,11 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(MeshGetDimension(ns->mesh, &dim));
   PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
 
-  /* Create solution */
-  PetscCall(DMCreateGlobalVector(vdm, &fsm->v));
+  /* Create intermediate solution vectors */
   PetscCall(DMCreateGlobalVector(vdm, &fsm->v_star));
   PetscCall(DMCreateGlobalVector(vdm, &fsm->N));
   PetscCall(DMCreateGlobalVector(vdm, &fsm->N_prev));
-  PetscCall(DMCreateGlobalVector(Vdm, &fsm->V));
   PetscCall(DMCreateGlobalVector(Vdm, &fsm->V_star));
-  PetscCall(DMCreateGlobalVector(sdm, &fsm->p));
   PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half));
   PetscCall(DMCreateGlobalVector(sdm, &fsm->p_prime));
   PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half_prev));
@@ -138,13 +135,10 @@ PetscErrorCode NSDestroy_FSM(NS ns)
   PetscInt d;
 
   PetscFunctionBegin;
-  PetscCall(VecDestroy(&fsm->v));
   PetscCall(VecDestroy(&fsm->v_star));
   PetscCall(VecDestroy(&fsm->N));
   PetscCall(VecDestroy(&fsm->N_prev));
-  PetscCall(VecDestroy(&fsm->V));
   PetscCall(VecDestroy(&fsm->V_star));
-  PetscCall(VecDestroy(&fsm->p));
   PetscCall(VecDestroy(&fsm->p_half));
   PetscCall(VecDestroy(&fsm->p_prime));
   PetscCall(VecDestroy(&fsm->p_half_prev));
@@ -199,13 +193,10 @@ PetscErrorCode NSCreate_FSM(NS ns)
   PetscCall(PetscNew(&fsm));
   ns->data = (void *)fsm;
 
-  fsm->v           = NULL;
   fsm->v_star      = NULL;
   fsm->N           = NULL;
   fsm->N_prev      = NULL;
-  fsm->V           = NULL;
   fsm->V_star      = NULL;
-  fsm->p           = NULL;
   fsm->p_half      = NULL;
   fsm->p_prime     = NULL;
   fsm->p_half_prev = NULL;

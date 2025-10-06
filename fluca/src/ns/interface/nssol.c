@@ -72,6 +72,26 @@ PetscErrorCode NSGetFieldByIndex(NS ns, PetscInt index, const char *name[], DM *
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode NSGetSolutionSubVector(NS ns, const char name[], Vec *subvec)
+{
+  IS is;
+
+  PetscFunctionBegin;
+  PetscCall(NSGetField(ns, name, NULL, &is));
+  PetscCall(VecGetSubVector(ns->sol, is, subvec));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSRestoreSolutionSubVector(NS ns, const char name[], Vec *subvec)
+{
+  IS is;
+
+  PetscFunctionBegin;
+  PetscCall(NSGetField(ns, name, NULL, &is));
+  PetscCall(VecRestoreSubVector(ns->sol, is, subvec));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSViewSolution(NS ns, PetscViewer viewer)
 {
   PetscFunctionBegin;

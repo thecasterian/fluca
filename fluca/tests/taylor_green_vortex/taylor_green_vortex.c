@@ -108,7 +108,7 @@ int main(int argc, char **argv)
 
     PetscCall(DMStagGetCorners(sdm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
 
-    PetscCall(NSFSMGetVelocity(ns, &v));
+    PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
     PetscCall(NSFSMGetHalfStepPressure(ns, &p));
     PetscCall(NSFSMGetConvection(ns, &N));
     PetscCall(NSFSMGetPreviousConvection(ns, &N_prev));
@@ -159,6 +159,8 @@ int main(int argc, char **argv)
     PetscCall(VecAssemblyEnd(p));
     PetscCall(VecAssemblyEnd(N));
     PetscCall(VecAssemblyEnd(N_prev));
+
+    PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
   }
 
   PetscCall(NSSolve(ns, nsteps));
@@ -179,8 +181,8 @@ int main(int argc, char **argv)
     PetscCall(MeshGetVectorDM(mesh, &vdm));
     PetscCall(DMStagGetCorners(sdm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
 
-    PetscCall(NSFSMGetVelocity(ns, &v));
-    PetscCall(NSFSMGetPressure(ns, &p));
+    PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+    PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
     PetscCall(DMStagGetProductCoordinateArraysRead(sdm, &arrcx, &arrcy, NULL));
 
     PetscCall(DMCreateGlobalVector(vdm, &v_exact));
@@ -215,6 +217,9 @@ int main(int argc, char **argv)
 
     PetscCall(GetErrorNorm(v, v_exact, &v_norm_2));
     PetscCall(GetErrorNorm(p, p_exact, &p_norm_2));
+
+    PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+    PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
 
     PetscCall(DMRestoreGlobalVector(vdm, &v_exact));
     PetscCall(DMRestoreGlobalVector(sdm, &p_exact));

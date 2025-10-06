@@ -1057,7 +1057,7 @@ static PetscErrorCode ComputeRHSIntermediateVelocity_Private(KSP ksp, Vec b, voi
   NS      ns  = (NS)ctx;
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      vdm;
-  Vec     Gp, Lv, vbc;
+  Vec     Gp, Lv, vbc, v;
 
   PetscFunctionBegin;
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
@@ -1066,19 +1066,23 @@ static PetscErrorCode ComputeRHSIntermediateVelocity_Private(KSP ksp, Vec b, voi
   PetscCall(DMGetGlobalVector(vdm, &Lv));
   PetscCall(DMGetGlobalVector(vdm, &vbc));
 
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+
   PetscCall(MatMult(fsm->Gp, fsm->p_half, Gp));
-  PetscCall(MatMult(fsm->Lv, fsm->v, Lv));
+  PetscCall(MatMult(fsm->Lv, v, Lv));
   PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, vbc));
   PetscCall(VecAXPY(Lv, 1., vbc));
 
   /* RHS of momentum equation */
-  PetscCall(VecAXPBYPCZ(b, 1., 0.5 * ns->mu * ns->dt / ns->rho, 0., fsm->v, Lv));
+  PetscCall(VecAXPBYPCZ(b, 1., 0.5 * ns->mu * ns->dt / ns->rho, 0., v, Lv));
   PetscCall(VecAXPBYPCZ(b, -1.5 * ns->dt, 0.5 * ns->dt, 1., fsm->N, fsm->N_prev));
   PetscCall(VecAXPY(b, -ns->dt / ns->rho, Gp));
 
   /* Add boundary condition */
   PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(b, 0.5 * ns->mu * ns->dt / ns->rho, vbc));
+
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
 
   PetscCall(DMRestoreGlobalVector(vdm, &Gp));
   PetscCall(DMRestoreGlobalVector(vdm, &Lv));
@@ -1208,7 +1212,7 @@ static PetscErrorCode ComputeConvection_Private(NS ns)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      sdm, vdm, Vdm;
-  Vec     v_interp[2], vbc, vmult, N[2];
+  Vec     v_interp[2], vbc, vmult, N[2], v, V;
 
   PetscFunctionBegin;
   PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
@@ -1222,19 +1226,25 @@ static PetscErrorCode ComputeConvection_Private(NS ns)
   PetscCall(DMGetGlobalVector(sdm, &N[0]));
   PetscCall(DMGetGlobalVector(sdm, &N[1]));
 
-  PetscCall(MatMult(fsm->TvN[0], fsm->v, v_interp[0]));
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
+
+  PetscCall(MatMult(fsm->TvN[0], v, v_interp[0]));
   PetscCall(ComputeVelocityInterpolationBoundaryConditionVector_Private(vdm, Vdm, ns->bcs, ns->t + ns->dt, ALL_X, vbc));
   PetscCall(VecAXPY(v_interp[0], 1., vbc));
-  PetscCall(MatMult(fsm->TvN[1], fsm->v, v_interp[1]));
+  PetscCall(MatMult(fsm->TvN[1], v, v_interp[1]));
   PetscCall(ComputeVelocityInterpolationBoundaryConditionVector_Private(vdm, Vdm, ns->bcs, ns->t + ns->dt, ALL_Y, vbc));
   PetscCall(VecAXPY(v_interp[1], 1., vbc));
 
   /* N_i = d(U * v_i)/dx + d(V * v_i)/dy */
-  PetscCall(VecPointwiseMult(vmult, fsm->V, v_interp[0]));
+  PetscCall(VecPointwiseMult(vmult, V, v_interp[0]));
   PetscCall(MatMult(fsm->Dstv, vmult, N[0]));
-  PetscCall(VecPointwiseMult(vmult, fsm->V, v_interp[1]));
+  PetscCall(VecPointwiseMult(vmult, V, v_interp[1]));
   PetscCall(MatMult(fsm->Dstv, vmult, N[1]));
   PetscCall(MergeScalarDMVectors_Private(sdm, vdm, N, fsm->N));
+
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
 
   PetscCall(DMRestoreGlobalVector(Vdm, &v_interp[0]));
   PetscCall(DMRestoreGlobalVector(Vdm, &v_interp[1]));
@@ -1289,7 +1299,7 @@ static PetscErrorCode UpdateToNextTimeStep_Private(NS ns)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      vdm, sdm, Vdm;
-  Vec     Gpp, Gstpp;
+  Vec     Gpp, Gstpp, v, V, p;
 
   PetscFunctionBegin;
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
@@ -1305,11 +1315,19 @@ static PetscErrorCode UpdateToNextTimeStep_Private(NS ns)
   PetscCall(MatMult(fsm->Gp, fsm->p_prime, Gpp));
   PetscCall(MatMult(fsm->Gstp, fsm->p_prime, Gstpp));
 
-  PetscCall(VecWAXPY(fsm->v, -ns->dt / ns->rho, Gpp, fsm->v_star));
-  PetscCall(VecWAXPY(fsm->V, -ns->dt / ns->rho, Gstpp, fsm->V_star));
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
+
+  PetscCall(VecWAXPY(v, -ns->dt / ns->rho, Gpp, fsm->v_star));
+  PetscCall(VecWAXPY(V, -ns->dt / ns->rho, Gstpp, fsm->V_star));
 
   PetscCall(VecWAXPY(fsm->p_half, 1., fsm->p_half_prev, fsm->p_prime));
-  PetscCall(VecAXPBYPCZ(fsm->p, 1.5, -0.5, 0., fsm->p_half, fsm->p_half_prev));
+  PetscCall(VecAXPBYPCZ(p, 1.5, -0.5, 0., fsm->p_half, fsm->p_half_prev));
+
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
 
   PetscCall(DMRestoreGlobalVector(vdm, &Gpp));
   PetscCall(DMRestoreGlobalVector(Vdm, &Gstpp));
