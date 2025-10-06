@@ -127,9 +127,9 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
   PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
 
-  PetscCall(AddField_Private(ns, "velocity", vdm));
-  PetscCall(AddField_Private(ns, "facenormalvelocity", Vdm));
-  PetscCall(AddField_Private(ns, "pressure", sdm));
+  PetscCall(AddField_Private(ns, NS_FIELD_VELOCITY, vdm));
+  PetscCall(AddField_Private(ns, NS_FIELD_FACE_NORMAL_VELOCITY, Vdm));
+  PetscCall(AddField_Private(ns, NS_FIELD_PRESSURE, sdm));
 
   PetscCall(DMCompositeCreate(comm, &ns->soldm));
   for (link = ns->fieldlink; link; link = link->next) PetscCall(DMCompositeAddDM(ns->soldm, link->dm));

@@ -9,6 +9,10 @@ typedef struct _p_NS *NS;
 typedef const char *NSType;
 #define NSFSM "fsm"
 
+#define NS_FIELD_VELOCITY             "velocity"
+#define NS_FIELD_FACE_NORMAL_VELOCITY "facenormalvelocity"
+#define NS_FIELD_PRESSURE             "pressure"
+
 FLUCA_EXTERN PetscClassId NS_CLASSID;
 
 FLUCA_EXTERN PetscErrorCode NSInitializePackage(void);
@@ -42,6 +46,8 @@ FLUCA_EXTERN PetscErrorCode NSGetSolution(NS, Vec *);
 FLUCA_EXTERN PetscErrorCode NSGetNumFields(NS, PetscInt *);
 FLUCA_EXTERN PetscErrorCode NSGetField(NS, const char[], DM *, IS *);
 FLUCA_EXTERN PetscErrorCode NSGetFieldByIndex(NS, PetscInt, const char *[], DM *, IS *);
+FLUCA_EXTERN PetscErrorCode NSGetSolutionSubVector(NS, const char[], Vec *);
+FLUCA_EXTERN PetscErrorCode NSRestoreSolutionSubVector(NS, const char[], Vec *);
 FLUCA_EXTERN PetscErrorCode NSViewSolution(NS, PetscViewer);
 FLUCA_EXTERN PetscErrorCode NSViewSolutionFromOptions(NS, PetscObject, const char[]);
 FLUCA_EXTERN PetscErrorCode NSLoadSolutionFromFile(NS, const char[]);
