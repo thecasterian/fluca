@@ -1344,3 +1344,21 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   PetscCall(UpdateToNextTimeStep_Private(ns));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode NSFSMFormFunction_Internal(SNES snes, Vec x, Vec f, void *ctx)
+{
+  NS ns = (NS)ctx;
+
+  PetscFunctionBegin;
+  // TODO: implement
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFSMFormJacobian_Internal(SNES snes, Vec x, Mat J, Mat Jpre, void *ctx)
+{
+  NS ns = (NS)ctx;
+
+  PetscFunctionBegin;
+  // TODO: implement
+  PetscFunctionReturn(PETSC_SUCCESS);
+}

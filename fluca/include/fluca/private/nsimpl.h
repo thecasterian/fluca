@@ -30,7 +30,7 @@ typedef struct _n_NSFieldLink *NSFieldLink;
 struct _n_NSFieldLink {
   char       *fieldname;
   DM          dm;
-  IS          is;           /* indices in solution vector */
+  IS          is; /* indices in solution vector */
   NSFieldLink prev, next;
 };
 
@@ -55,9 +55,9 @@ struct _p_NS {
   Vec         sol;       /* solution vector */
 
   /* Solver --------------------------------------------------------------- */
-  SNES snes;
-  Vec  b;
-  Vec  x;
+  SNES snes; /* non-linear solver */
+  Mat  J;    /* Jacobian */
+  Vec  r;    /* residual vector */
 
   /* State ---------------------------------------------------------------- */
   PetscBool setupcalled; /* whether NSSetUp() has been called */

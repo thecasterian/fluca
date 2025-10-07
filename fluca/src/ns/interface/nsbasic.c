@@ -1,6 +1,7 @@
 #include <fluca/private/nsimpl.h>
 #include <flucaviewer.h>
 #include <petscdmcomposite.h>
+#include <petscdmstag.h>
 
 PetscClassId  NS_CLASSID              = 0;
 PetscLogEvent NS_SetUp                = 0;
@@ -31,8 +32,8 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns)
   n->soldm       = NULL;
   n->sol         = NULL;
   n->snes        = NULL;
-  n->b           = NULL;
-  n->x           = NULL;
+  n->J           = NULL;
+  n->r           = NULL;
   n->setupcalled = PETSC_FALSE;
   n->num_mons    = 0;
   n->mon_freq    = 1;
@@ -101,13 +102,37 @@ static PetscErrorCode AddField_Private(NS ns, const char *fieldname, DM dm)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode CreateSubMatrix_Private(DM rdm, DM cdm, Mat *submat)
+{
+  PetscInt               rentries, centries;
+  ISLocalToGlobalMapping rltog, cltog;
+  MatType                mattype;
+
+  PetscFunctionBegin;
+  // TODO: rdm and cdm may not be DMStag
+  PetscCall(DMStagGetEntries(rdm, &rentries));
+  PetscCall(DMStagGetEntries(cdm, &centries));
+  PetscCall(DMGetLocalToGlobalMapping(rdm, &rltog));
+  PetscCall(DMGetLocalToGlobalMapping(cdm, &cltog));
+  PetscCall(DMGetMatType(rdm, &mattype));
+
+  PetscCall(MatCreate(PetscObjectComm((PetscObject)cdm), submat));
+  PetscCall(MatSetSizes(*submat, rentries, centries, PETSC_DECIDE, PETSC_DECIDE));
+  PetscCall(MatSetType(*submat, mattype));
+  PetscCall(MatSetLocalToGlobalMapping(*submat, rltog, cltog));
+  PetscCall(MatSetUp(*submat));
+  PetscCall(MatSetOption(*submat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetUp(NS ns)
 {
   MPI_Comm    comm;
   DM          sdm, vdm, Vdm;
-  NSFieldLink link;
+  NSFieldLink link, rlink, clink;
   IS         *is;
   Vec        *subvecs;
+  Mat        *submats;
   PetscInt    nf, i;
 
   PetscFunctionBegin;
@@ -143,9 +168,28 @@ PetscErrorCode NSSetUp(NS ns)
   for (link = ns->fieldlink, i = 0; link; link = link->next, ++i) PetscCall(DMCreateGlobalVector(link->dm, &subvecs[i]));
   PetscCall(VecCreateNest(comm, nf, is, subvecs, &ns->sol));
 
+  /* Create solver */
+  PetscCall(SNESCreate(comm, &ns->snes));
+  PetscCall(SNESSetDM(ns->snes, ns->soldm));
+  PetscCall(PetscMalloc1(nf * nf, &submats));
+  i = 0;
+  for (rlink = ns->fieldlink; rlink; rlink = rlink->next)
+    for (clink = ns->fieldlink; clink; clink = clink->next) {
+      PetscCall(CreateSubMatrix_Private(rlink->dm, clink->dm, &submats[i]));
+      ++i;
+    }
+  PetscCall(MatCreateNest(comm, nf, is, nf, is, submats, &ns->J));
+  PetscCall(MatSetUp(ns->J));
+  PetscCall(MatNestSetVecType(ns->J, VECNEST));
+  PetscCall(MatAssemblyBegin(ns->J, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(ns->J, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatCreateVecs(ns->J, NULL, &ns->r));
+
   PetscCall(PetscFree(is));
   for (i = 0; i < nf; ++i) PetscCall(VecDestroy(&subvecs[i]));
   PetscCall(PetscFree(subvecs));
+  for (i = 0; i < nf * nf; ++i) PetscCall(MatDestroy(&submats[i]));
+  PetscCall(PetscFree(submats));
 
   /* Call specific type setup */
   PetscTryTypeMethod(ns, setup);
@@ -242,6 +286,10 @@ PetscErrorCode NSDestroy(NS *ns)
   }
   PetscCall(DMDestroy(&(*ns)->soldm));
   PetscCall(VecDestroy(&(*ns)->sol));
+
+  PetscCall(SNESDestroy(&(*ns)->snes));
+  PetscCall(MatDestroy(&(*ns)->J));
+  PetscCall(VecDestroy(&(*ns)->r));
 
   PetscCall(NSMonitorCancel(*ns));
 

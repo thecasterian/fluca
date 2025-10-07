@@ -66,6 +66,9 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
 
+  /* Set solver functions */
+  PetscCall(SNESSetPicard(ns->snes, ns->r, NSFSMFormFunction_Internal, ns->J, ns->J, NSFSMFormJacobian_Internal, ns));
+
   PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
   PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
