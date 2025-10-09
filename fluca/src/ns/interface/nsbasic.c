@@ -31,9 +31,12 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns)
   n->fieldlink   = NULL;
   n->soldm       = NULL;
   n->sol         = NULL;
+  n->sol0        = NULL;
   n->snes        = NULL;
   n->J           = NULL;
   n->r           = NULL;
+  n->x           = NULL;
+  n->nullspace   = NULL;
   n->setupcalled = PETSC_FALSE;
   n->num_mons    = 0;
   n->mon_freq    = 1;
@@ -171,6 +174,7 @@ PetscErrorCode NSSetUp(NS ns)
   /* Create solver */
   PetscCall(SNESCreate(comm, &ns->snes));
   PetscCall(SNESSetDM(ns->snes, ns->soldm));
+  PetscCall(SNESSetFromOptions(ns->snes));
   PetscCall(PetscMalloc1(nf * nf, &submats));
   i = 0;
   for (rlink = ns->fieldlink; rlink; rlink = rlink->next)
@@ -183,7 +187,7 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(MatNestSetVecType(ns->J, VECNEST));
   PetscCall(MatAssemblyBegin(ns->J, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(ns->J, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatCreateVecs(ns->J, NULL, &ns->r));
+  PetscCall(MatCreateVecs(ns->J, &ns->x, &ns->r));
 
   PetscCall(PetscFree(is));
   for (i = 0; i < nf; ++i) PetscCall(VecDestroy(&subvecs[i]));
@@ -215,6 +219,9 @@ PetscErrorCode NSSolve(NS ns, PetscInt num_iters)
 
   t_init = ns->t;
   for (i = 0; i < num_iters; ++i) {
+    if (!ns->sol0) PetscCall(VecDuplicate(ns->sol, &ns->sol0));
+    PetscCall(VecCopy(ns->sol, ns->sol0));
+
     PetscTryTypeMethod(ns, iterate);
     ++ns->step;
     ns->t = t_init + (i + 1) * ns->dt;
@@ -286,10 +293,13 @@ PetscErrorCode NSDestroy(NS *ns)
   }
   PetscCall(DMDestroy(&(*ns)->soldm));
   PetscCall(VecDestroy(&(*ns)->sol));
+  PetscCall(VecDestroy(&(*ns)->sol0));
 
   PetscCall(SNESDestroy(&(*ns)->snes));
   PetscCall(MatDestroy(&(*ns)->J));
   PetscCall(VecDestroy(&(*ns)->r));
+  PetscCall(VecDestroy(&(*ns)->x));
+  PetscCall(MatNullSpaceDestroy(&(*ns)->nullspace));
 
   PetscCall(NSMonitorCancel(*ns));
 

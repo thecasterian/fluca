@@ -1345,20 +1345,131 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMFormFunction_Internal(SNES snes, Vec x, Vec f, void *ctx)
+PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ctx)
 {
-  NS ns = (NS)ctx;
+  NS      ns  = (NS)ctx;
+  NS_FSM *fsm = (NS_FSM *)ns->data;
+  DM      vdm, Vdm, pdm;
+  IS      vis, Vis, pis;
+  Vec     v0, V0, momrhs, interprhs, contrhs;
+  Mat     Gp, Lv;
+  Vec     Gp_p_half, Lv_v, vbc;
 
   PetscFunctionBegin;
-  // TODO: implement
+  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, &vdm, &vis));
+  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &Vdm, &Vis));
+  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, &pdm, &pis));
+  PetscCall(VecGetSubVector(ns->sol0, vis, &v0));
+  PetscCall(VecGetSubVector(ns->sol0, Vis, &V0));
+  PetscCall(VecGetSubVector(f, vis, &momrhs));
+  PetscCall(VecGetSubVector(f, Vis, &interprhs));
+  PetscCall(VecGetSubVector(f, pis, &contrhs));
+
+  PetscCall(MatCreateSubMatrix(ns->J, vis, pis, MAT_INITIAL_MATRIX, &Gp));
+  PetscCall(DMCreateMatrix(vdm, &Lv));
+  PetscCall(ComputeVelocityLaplacianOperator_Private(vdm, ns->bcs, Lv));
+  PetscCall(DMGetGlobalVector(vdm, &Gp_p_half));
+  PetscCall(DMGetGlobalVector(vdm, &Lv_v));
+  PetscCall(DMGetGlobalVector(vdm, &vbc));
+  PetscCall(MatMult(Gp, fsm->p_half, Gp_p_half));
+  PetscCall(MatMult(Lv, v0, Lv_v));
+  PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, vbc));
+  PetscCall(VecAXPY(Lv_v, 1., vbc));
+  PetscCall(VecAXPBYPCZ(momrhs, 1., 0.5 * ns->mu * ns->dt / ns->rho, 0., v0, Lv_v));
+  PetscCall(VecAXPBYPCZ(momrhs, -1.5 * ns->dt, 0.5 * ns->dt, 1., fsm->N, fsm->N_prev));
+  PetscCall(VecAXPY(momrhs, -1., Gp_p_half));
+  PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t + ns->dt, vbc));
+  PetscCall(VecAXPY(momrhs, 0.5 * ns->mu * ns->dt / ns->rho, vbc));
+  PetscCall(MatDestroy(&Gp));
+  PetscCall(MatDestroy(&Lv));
+  PetscCall(DMRestoreGlobalVector(vdm, &Gp_p_half));
+  PetscCall(DMRestoreGlobalVector(vdm, &Lv_v));
+  PetscCall(DMRestoreGlobalVector(vdm, &vbc));
+
+  PetscCall(ComputeVelocityInterpolationBoundaryConditionVector_Private(vdm, Vdm, ns->bcs, ns->t + ns->dt, PER_DIR, interprhs));
+
+  PetscCall(VecSet(contrhs, 0.));
+
+  PetscCall(VecRestoreSubVector(ns->sol0, vis, &v0));
+  PetscCall(VecRestoreSubVector(ns->sol0, Vis, &V0));
+  PetscCall(VecRestoreSubVector(f, vis, &momrhs));
+  PetscCall(VecRestoreSubVector(f, Vis, &interprhs));
+  PetscCall(VecRestoreSubVector(f, pis, &contrhs));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMFormJacobian_Internal(SNES snes, Vec x, Mat J, Mat Jpre, void *ctx)
+PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre, void *ctx)
+{
+  NS               ns = (NS)ctx;
+  DM               vdm, Vdm, pdm;
+  IS               vis, Vis, pis;
+  Mat              A, Gp, Tv, negI, TRC, Dstv, Lv, Gstp, TvGp;
+  Vec              diag;
+  static PetscBool firstcalled = PETSC_TRUE;
+
+  PetscFunctionBegin;
+  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, &vdm, &vis));
+  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &Vdm, &Vis));
+  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, &pdm, &pis));
+  PetscCall(MatCreateSubMatrix(Jpre, vis, vis, MAT_INITIAL_MATRIX, &A));
+  PetscCall(MatCreateSubMatrix(Jpre, vis, pis, MAT_INITIAL_MATRIX, &Gp));
+  PetscCall(MatCreateSubMatrix(Jpre, Vis, vis, MAT_INITIAL_MATRIX, &Tv));
+  PetscCall(MatCreateSubMatrix(Jpre, Vis, Vis, MAT_INITIAL_MATRIX, &negI));
+  PetscCall(MatCreateSubMatrix(Jpre, Vis, pis, MAT_INITIAL_MATRIX, &TRC));
+  PetscCall(MatCreateSubMatrix(Jpre, pis, Vis, MAT_INITIAL_MATRIX, &Dstv));
+
+  if (firstcalled) {
+    PetscCall(DMCreateMatrix(vdm, &Lv));
+    PetscCall(ComputeVelocityLaplacianOperator_Private(vdm, ns->bcs, Lv));
+    PetscCall(ComputeIdentityOperator_Private(vdm, A));
+    PetscCall(MatAXPY(A, -0.5 * ns->mu * ns->dt / ns->rho, Lv, DIFFERENT_NONZERO_PATTERN));
+    PetscCall(MatDestroy(&Lv));
+
+    PetscCall(ComputePressureGradientOperator_Private(pdm, vdm, ns->bcs, Gp));
+    PetscCall(MatScale(Gp, ns->dt / ns->rho));
+
+    PetscCall(ComputeVelocityInterpolationOperator_Private(vdm, Vdm, ns->bcs, PER_DIR, Tv));
+
+    PetscCall(DMGetGlobalVector(Vdm, &diag));
+    PetscCall(VecSet(diag, -1.));
+    PetscCall(MatDiagonalSet(negI, diag, INSERT_VALUES));
+    PetscCall(DMRestoreGlobalVector(Vdm, &diag));
+
+    PetscCall(MatDuplicate(TRC, MAT_DO_NOT_COPY_VALUES, &Gstp));
+    PetscCall(ComputeStaggeredPressureGradientOperators_Private(pdm, Vdm, ns->bcs, Gstp));
+    PetscCall(MatScale(Gstp, ns->dt / ns->rho));
+    PetscCall(MatMatMult(Tv, Gp, MAT_INITIAL_MATRIX, 1., &TvGp));
+    PetscCall(MatCopy(TvGp, TRC, DIFFERENT_NONZERO_PATTERN));
+    PetscCall(MatAXPY(TRC, -1., Gstp, DIFFERENT_NONZERO_PATTERN));
+    PetscCall(MatDestroy(&Gstp));
+    PetscCall(MatDestroy(&TvGp));
+
+    PetscCall(ComputeStaggeredVelocityDivergenceOperator_Private(Vdm, pdm, ns->bcs, Dstv));
+
+    firstcalled = PETSC_FALSE;
+  }
+
+  PetscCall(MatDestroy(&A));
+  PetscCall(MatDestroy(&Gp));
+  PetscCall(MatDestroy(&Tv));
+  PetscCall(MatDestroy(&negI));
+  PetscCall(MatDestroy(&TRC));
+  PetscCall(MatDestroy(&Dstv));
+
+  /* Set null space. */
+  if (ns->nullspace) PetscCall(MatSetNullSpace(J, ns->nullspace));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFSMPicardComputeFunction_Internal(SNES snes, Vec x, Vec f, void *ctx)
 {
   NS ns = (NS)ctx;
 
   PetscFunctionBegin;
-  // TODO: implement
+  PetscCall(SNESPicardComputeFunction(snes, x, f, ctx));
+
+  /* Remove null space */
+  PetscAssert(ns->nullspace, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "Null space must be set");
+  PetscCall(MatNullSpaceRemove(ns->nullspace, f));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

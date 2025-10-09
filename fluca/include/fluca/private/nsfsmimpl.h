@@ -23,8 +23,9 @@ typedef struct {
   KSP kspp; /* KSP to solve pressure correction */
 } NS_FSM;
 
-FLUCA_INTERN PetscErrorCode NSFSMFormFunction_Internal(SNES, Vec, Vec, void *);
-FLUCA_INTERN PetscErrorCode NSFSMFormJacobian_Internal(SNES, Vec, Mat, Mat, void *);
+FLUCA_INTERN PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES, Vec, Vec, void *);
+FLUCA_INTERN PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES, Vec, Mat, Mat, void *);
+FLUCA_INTERN PetscErrorCode NSFSMPicardComputeFunction_Internal(SNES, Vec, Vec, void *);
 
 FLUCA_INTERN PetscErrorCode NSFSMComputeSpatialOperators2d_Cart_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSFSMSetKSPComputeFunctions2d_Cart_Internal(NS);

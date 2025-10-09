@@ -59,21 +59,49 @@ PetscErrorCode NSSetup_FSM(NS ns)
   NS_FSM   *fsm = (NS_FSM *)ns->data;
   MPI_Comm  comm;
   DM        sdm, vdm, Vdm;
-  PetscInt  dim, d;
-  PetscBool iscart;
+  PetscInt  dim, nb, d, i;
+  PetscBool neednullspace, iscart;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
+  PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
+
+  /* Compute initial Jacobian as it is used in computing initial RHS also */
+  PetscCall(NSFSMFormJacobian_Cart_Internal(ns->snes, ns->x, ns->J, ns->J, ns));
+
+  /* Create null space */
+  neednullspace = PETSC_TRUE;
+  PetscCall(MeshGetNumberBoundaries(ns->mesh, &nb));
+  for (i = 0; i < nb; ++i) switch (ns->bcs[i].type) {
+    case NS_BC_VELOCITY:
+    case NS_BC_PERIODIC:
+      /* Need null space */
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type");
+    }
+  if (neednullspace) {
+    IS  is;
+    Vec vecs[1], subvec;
+
+    PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &is));
+    PetscCall(MatCreateVecs(ns->J, NULL, &vecs[0]));
+    PetscCall(VecGetSubVector(vecs[0], is, &subvec));
+    PetscCall(VecSet(subvec, 1.));
+    PetscCall(VecRestoreSubVector(vecs[0], is, &subvec));
+    PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, 1, vecs, &ns->nullspace));
+    PetscCall(VecDestroy(&vecs[0]));
+  }
 
   /* Set solver functions */
-  PetscCall(SNESSetPicard(ns->snes, ns->r, NSFSMFormFunction_Internal, ns->J, ns->J, NSFSMFormJacobian_Internal, ns));
+  if (iscart) PetscCall(SNESSetPicard(ns->snes, ns->r, NSFSMFormFunction_Cart_Internal, ns->J, ns->J, NSFSMFormJacobian_Cart_Internal, ns));
+  if (neednullspace) PetscCall(SNESSetFunction(ns->snes, ns->r, NSFSMPicardComputeFunction_Internal, ns));
 
   PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
   PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
   PetscCall(MeshGetDimension(ns->mesh, &dim));
-  PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
 
   /* Create intermediate solution vectors */
   PetscCall(DMCreateGlobalVector(vdm, &fsm->v_star));
