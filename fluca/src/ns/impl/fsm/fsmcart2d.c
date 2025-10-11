@@ -1338,10 +1338,44 @@ static PetscErrorCode UpdateToNextTimeStep_Private(NS ns)
 
 PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
 {
+  NS_FSM *fsm = (NS_FSM *)ns->data;
+  IS      vis, Vis, pis;
+  Vec     v, V, dp, solv, solV, solp;
+
   PetscFunctionBegin;
-  PetscCall(ComputeIntermediateVelocity_Private(ns));
-  PetscCall(ComputePressureCorrection_Private(ns));
-  PetscCall(UpdateToNextTimeStep_Private(ns));
+  // TODO: temporary
+  // PetscCall(ComputeIntermediateVelocity_Private(ns));
+  // PetscCall(ComputePressureCorrection_Private(ns));
+  // PetscCall(UpdateToNextTimeStep_Private(ns));
+
+  PetscCall(SNESSolve(ns->snes, NULL, ns->x));
+
+  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, &vis));
+  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, &Vis));
+  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &pis));
+  PetscCall(VecGetSubVector(ns->x, vis, &v));
+  PetscCall(VecGetSubVector(ns->x, Vis, &V));
+  PetscCall(VecGetSubVector(ns->x, pis, &dp));
+  PetscCall(VecGetSubVector(ns->sol, vis, &solv));
+  PetscCall(VecGetSubVector(ns->sol, Vis, &solV));
+  PetscCall(VecGetSubVector(ns->sol, pis, &solp));
+
+  PetscCall(VecCopy(v, solv));
+  PetscCall(VecCopy(V, solV));
+
+  PetscCall(VecCopy(fsm->p_half, fsm->p_half_prev));
+  PetscCall(VecAXPY(fsm->p_half, 1., dp));
+  PetscCall(VecAXPBYPCZ(solp, 1.5, -0.5, 0., fsm->p_half, fsm->p_half_prev));
+
+  PetscCall(VecCopy(fsm->N, fsm->N_prev));
+  PetscCall(ComputeConvection_Private(ns));
+
+  PetscCall(VecRestoreSubVector(ns->x, vis, &v));
+  PetscCall(VecRestoreSubVector(ns->x, Vis, &V));
+  PetscCall(VecRestoreSubVector(ns->x, pis, &dp));
+  PetscCall(VecRestoreSubVector(ns->sol, vis, &solv));
+  PetscCall(VecRestoreSubVector(ns->sol, Vis, &solV));
+  PetscCall(VecRestoreSubVector(ns->sol, pis, &solp));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
