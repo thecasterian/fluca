@@ -1421,6 +1421,7 @@ PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ct
   PetscCall(DMRestoreGlobalVector(vdm, &vbc));
 
   PetscCall(ComputeVelocityInterpolationBoundaryConditionVector_Private(vdm, Vdm, ns->bcs, ns->t + ns->dt, PER_DIR, interprhs));
+  PetscCall(VecScale(interprhs, -1.));
 
   PetscCall(VecSet(contrhs, 0.));
 
@@ -1457,7 +1458,6 @@ PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre
     PetscCall(ComputeVelocityLaplacianOperator_Private(vdm, ns->bcs, Lv));
     PetscCall(ComputeIdentityOperator_Private(vdm, A));
     PetscCall(MatAXPY(A, -0.5 * ns->mu * ns->dt / ns->rho, Lv, DIFFERENT_NONZERO_PATTERN));
-    PetscCall(MatDestroy(&Lv));
 
     PetscCall(ComputePressureGradientOperator_Private(pdm, vdm, ns->bcs, Gp));
     PetscCall(MatScale(Gp, ns->dt / ns->rho));
@@ -1475,10 +1475,14 @@ PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre
     PetscCall(MatMatMult(Tv, Gp, MAT_INITIAL_MATRIX, 1., &TvGp));
     PetscCall(MatCopy(TvGp, TRC, DIFFERENT_NONZERO_PATTERN));
     PetscCall(MatAXPY(TRC, -1., Gstp, DIFFERENT_NONZERO_PATTERN));
-    PetscCall(MatDestroy(&Gstp));
     PetscCall(MatDestroy(&TvGp));
 
     PetscCall(ComputeStaggeredVelocityDivergenceOperator_Private(Vdm, pdm, ns->bcs, Dstv));
+
+    PetscCall(PetscObjectCompose((PetscObject)Jpre, "Laplacian", (PetscObject)Lv));
+    PetscCall(PetscObjectCompose((PetscObject)Jpre, "StaggeredGradient", (PetscObject)Gstp));
+    PetscCall(MatDestroy(&Lv));
+    PetscCall(MatDestroy(&Gstp));
 
     firstcalled = PETSC_FALSE;
   }
@@ -1495,6 +1499,13 @@ PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode NSFSMFormInitialGuess_Internal(SNES snes, Vec x, void *ctx)
+{
+  PetscFunctionBegin;
+  PetscCall(VecZeroEntries(x));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSFSMPicardComputeFunction_Internal(SNES snes, Vec x, Vec f, void *ctx)
 {
   NS ns = (NS)ctx;
@@ -1505,5 +1516,68 @@ PetscErrorCode NSFSMPicardComputeFunction_Internal(SNES snes, Vec x, Vec f, void
   /* Remove null space */
   PetscAssert(ns->nullspace, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "Null space must be set");
   PetscCall(MatNullSpaceRemove(ns->nullspace, f));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFSMPCApply_Internal(PC pc, Vec x, Vec y)
+{
+  NSFSMPCCtx *ctx;
+  Vec         xv, xV, xp, yv, yV, yp, yprhs, gradyp;
+
+  PetscFunctionBegin;
+  PetscCall(PCShellGetContext(pc, &ctx));
+  PetscCall(VecGetSubVector(x, ctx->vis, &xv));
+  PetscCall(VecGetSubVector(x, ctx->Vis, &xV));
+  PetscCall(VecGetSubVector(x, ctx->pis, &xp));
+  PetscCall(VecGetSubVector(y, ctx->vis, &yv));
+  PetscCall(VecGetSubVector(y, ctx->Vis, &yV));
+  PetscCall(VecGetSubVector(y, ctx->pis, &yp));
+
+  /* Forward step */
+  PetscCall(VecDuplicate(xp, &yprhs));
+  PetscCall(KSPSolve(ctx->kspv, xv, yv));
+  PetscCall(MatMult(ctx->T, yv, yV));
+  PetscCall(VecAXPY(yV, -1., xV));
+  PetscCall(MatMult(ctx->Dst, yV, yprhs));
+  PetscCall(VecAXPY(yprhs, -1., xp));
+  if (ctx->nullspace) PetscCall(MatNullSpaceRemove(ctx->nullspace, yprhs));
+  PetscCall(KSPSolve(ctx->kspp, yprhs, yp));
+  PetscCall(VecDestroy(&yprhs));
+
+  /* Backward step */
+  PetscCall(VecDuplicate(yv, &gradyp));
+  PetscCall(MatMult(ctx->G, yp, gradyp));
+  PetscCall(VecAXPY(yv, -1., gradyp));
+  PetscCall(VecDestroy(&gradyp));
+  PetscCall(VecDuplicate(yV, &gradyp));
+  PetscCall(MatMult(ctx->Gst, yp, gradyp));
+  PetscCall(VecAXPY(yV, -1., gradyp));
+  PetscCall(VecDestroy(&gradyp));
+
+  PetscCall(VecRestoreSubVector(x, ctx->vis, &xv));
+  PetscCall(VecRestoreSubVector(x, ctx->Vis, &xV));
+  PetscCall(VecRestoreSubVector(x, ctx->pis, &xp));
+  PetscCall(VecRestoreSubVector(y, ctx->vis, &yv));
+  PetscCall(VecRestoreSubVector(y, ctx->Vis, &yV));
+  PetscCall(VecRestoreSubVector(y, ctx->pis, &yp));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFSMPCDestroy_Internal(PC pc)
+{
+  NSFSMPCCtx *ctx;
+
+  PetscFunctionBegin;
+  PetscCall(PCShellGetContext(pc, &ctx));
+  PetscCall(MatDestroy(&ctx->A));
+  PetscCall(MatDestroy(&ctx->T));
+  PetscCall(MatDestroy(&ctx->G));
+  PetscCall(MatDestroy(&ctx->Gst));
+  PetscCall(MatDestroy(&ctx->Dst));
+  PetscCall(MatDestroy(&ctx->Lst));
+  PetscCall(KSPDestroy(&ctx->kspv));
+  PetscCall(KSPDestroy(&ctx->kspp));
+  PetscCall(MatNullSpaceDestroy(&ctx->nullspace));
+  PetscCall(PetscFree(ctx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

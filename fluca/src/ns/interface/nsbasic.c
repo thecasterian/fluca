@@ -174,6 +174,8 @@ PetscErrorCode NSSetUp(NS ns)
   /* Create solver */
   PetscCall(SNESCreate(comm, &ns->snes));
   PetscCall(SNESSetDM(ns->snes, ns->soldm));
+  PetscCall(SNESSetTolerances(ns->snes, PETSC_DEFAULT, 1.e-5, PETSC_DEFAULT, PETSC_DEFAULT, PETSC_DEFAULT));
+  PetscCall(SNESSetOptionsPrefix(ns->snes, "ns_"));
   PetscCall(SNESSetFromOptions(ns->snes));
   PetscCall(PetscMalloc1(nf * nf, &submats));
   i = 0;
@@ -296,6 +298,8 @@ PetscErrorCode NSDestroy(NS *ns)
   PetscCall(VecDestroy(&(*ns)->sol0));
 
   PetscCall(SNESDestroy(&(*ns)->snes));
+  PetscCall(PetscObjectCompose((PetscObject)(*ns)->J, "Laplacian", NULL));
+  PetscCall(PetscObjectCompose((PetscObject)(*ns)->J, "StaggeredGradient", NULL));
   PetscCall(MatDestroy(&(*ns)->J));
   PetscCall(VecDestroy(&(*ns)->r));
   PetscCall(VecDestroy(&(*ns)->x));

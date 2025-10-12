@@ -11,6 +11,48 @@ PetscErrorCode NSSetFromOptions_FSM(NS ns, PetscOptionItems PetscOptionsObject)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode CreateNSFSMPCCtx_Private(NS ns, PC pc, NSFSMPCCtx **ctx)
+{
+  NSFSMPCCtx *c;
+  MPI_Comm    comm;
+
+  PetscFunctionBegin;
+  PetscCall(PetscNew(&c));
+
+  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, &c->vis));
+  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, &c->Vis));
+  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &c->pis));
+
+  PetscCall(MatCreateSubMatrix(ns->J, c->vis, c->vis, MAT_INITIAL_MATRIX, &c->A));
+  PetscCall(MatCreateSubMatrix(ns->J, c->Vis, c->vis, MAT_INITIAL_MATRIX, &c->T));
+  PetscCall(MatCreateSubMatrix(ns->J, c->vis, c->pis, MAT_INITIAL_MATRIX, &c->G));
+  PetscCall(PetscObjectQuery((PetscObject)ns->J, "StaggeredGradient", (PetscObject *)&c->Gst));
+  PetscCall(PetscObjectReference((PetscObject)c->Gst));
+  PetscCall(MatCreateSubMatrix(ns->J, c->pis, c->Vis, MAT_INITIAL_MATRIX, &c->Dst));
+  PetscCall(MatMatMult(c->Dst, c->Gst, MAT_INITIAL_MATRIX, 1., &c->Lst));
+
+  PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
+  PetscCall(KSPCreate(comm, &c->kspv));
+  PetscCall(KSPSetOperators(c->kspv, c->A, c->A));
+  PetscCall(PetscObjectIncrementTabLevel((PetscObject)c->kspv, (PetscObject)pc, 1));
+  PetscCall(KSPSetOptionsPrefix(c->kspv, "ns_fsm_v_"));
+  PetscCall(KSPSetFromOptions(c->kspv));
+  PetscCall(KSPCreate(comm, &c->kspp));
+  PetscCall(KSPSetOperators(c->kspp, c->Lst, c->Lst));
+  PetscCall(KSPSetOptionsPrefix(c->kspp, "ns_fsm_p_"));
+  PetscCall(PetscObjectIncrementTabLevel((PetscObject)c->kspp, (PetscObject)pc, 1));
+  PetscCall(KSPSetFromOptions(c->kspp));
+  if (ns->nullspace) {
+    PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &c->nullspace));
+    PetscCall(MatSetNullSpace(c->Lst, c->nullspace));
+  } else {
+    c->nullspace = NULL;
+  }
+
+  *ctx = c;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode CreateOperatorFromDMToDM_Private(DM dmfrom, DM dmto, Mat *A)
 {
   PetscInt               entriesfrom, entriesto;
@@ -56,19 +98,19 @@ static PetscErrorCode CreateKSPWithDMClone_Private(DM dm, KSP *ksp)
 
 PetscErrorCode NSSetup_FSM(NS ns)
 {
-  NS_FSM   *fsm = (NS_FSM *)ns->data;
-  MPI_Comm  comm;
-  DM        sdm, vdm, Vdm;
-  PetscInt  dim, nb, d, i;
-  PetscBool neednullspace, iscart;
+  NS_FSM     *fsm = (NS_FSM *)ns->data;
+  MPI_Comm    comm;
+  DM          sdm, vdm, Vdm;
+  KSP         ksp;
+  PC          pc;
+  NSFSMPCCtx *pcctx;
+  PetscInt    dim, nb, d, i;
+  PetscBool   neednullspace, iscart;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
   PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
-
-  /* Compute initial Jacobian as it is used in computing initial RHS also */
-  PetscCall(NSFSMFormJacobian_Cart_Internal(ns->snes, ns->x, ns->J, ns->J, ns));
 
   /* Create null space */
   neednullspace = PETSC_TRUE;
@@ -97,6 +139,25 @@ PetscErrorCode NSSetup_FSM(NS ns)
   /* Set solver functions */
   if (iscart) PetscCall(SNESSetPicard(ns->snes, ns->r, NSFSMFormFunction_Cart_Internal, ns->J, ns->J, NSFSMFormJacobian_Cart_Internal, ns));
   if (neednullspace) PetscCall(SNESSetFunction(ns->snes, ns->r, NSFSMPicardComputeFunction_Internal, ns));
+  /* Need zero initial guess to ensure least-square solution of pressure poisson equation */
+  PetscCall(SNESSetComputeInitialGuess(ns->snes, NSFSMFormInitialGuess_Internal, NULL));
+
+  /* Compute initial Jacobian as it is used in computing initial RHS also */
+  PetscCall(NSFSMFormJacobian_Cart_Internal(ns->snes, ns->x, ns->J, ns->J, ns));
+
+  /* Set KSP options */
+  PetscCall(SNESGetKSP(ns->snes, &ksp));
+  PetscCall(KSPSetTolerances(ksp, 1.e-6, PETSC_DEFAULT, PETSC_DEFAULT, 100));
+  PetscCall(KSPSetFromOptions(ksp));
+
+  /* Set preconditioner */
+  PetscCall(KSPGetPC(ksp, &pc));
+  PetscCall(PCSetType(pc, PCSHELL));
+  PetscCall(PCShellSetName(pc, "FractionalStepMethod"));
+  PetscCall(PCShellSetApply(pc, NSFSMPCApply_Internal));
+  PetscCall(CreateNSFSMPCCtx_Private(ns, pc, &pcctx));
+  PetscCall(PCShellSetContext(pc, pcctx));
+  PetscCall(PCShellSetDestroy(pc, NSFSMPCDestroy_Internal));
 
   PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
