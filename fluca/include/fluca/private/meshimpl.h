@@ -30,6 +30,7 @@ struct _p_Mesh {
   /* Data ----------------------------------------------------------------- */
   DM    sdm;  /* DM for cell-centered scalar variables */
   DM    vdm;  /* DM for cell-centered vector variables */
+  DM    Sdm;  /* DM for face-centered scalar variables */
   DM    Vdm;  /* DM for face-centered vector variables */
   void *data; /* implementation-specific data */
 

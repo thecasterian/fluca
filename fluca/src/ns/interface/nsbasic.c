@@ -153,7 +153,7 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
   PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Vdm));
 
   PetscCall(AddField_Private(ns, NS_FIELD_VELOCITY, vdm));
   PetscCall(AddField_Private(ns, NS_FIELD_FACE_NORMAL_VELOCITY, Vdm));

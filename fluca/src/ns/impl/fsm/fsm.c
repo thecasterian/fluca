@@ -222,7 +222,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
   /* Create intermediate solution vectors */
   PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Vdm));
   PetscCall(MeshGetDimension(ns->mesh, &dim));
 
   PetscCall(DMCreateGlobalVector(vdm, &fsm->N));

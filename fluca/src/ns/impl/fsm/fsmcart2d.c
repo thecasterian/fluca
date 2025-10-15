@@ -963,7 +963,7 @@ PetscErrorCode NSFSMComputeSpatialOperators2d_Cart_Internal(NS ns)
 
   PetscFunctionBegin;
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Vdm));
 
   PetscCall(ComputeVelocityInterpolationOperator_Private(vdm, Vdm, ns->bcs, ALL_X, fsm->TvN[0]));
   PetscCall(ComputeVelocityInterpolationOperator_Private(vdm, Vdm, ns->bcs, ALL_Y, fsm->TvN[1]));
@@ -1026,7 +1026,7 @@ static PetscErrorCode ComputeConvection_Private(NS ns)
   PetscFunctionBegin;
   PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Vdm));
   PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, &Vis));
   PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &pis));
 
