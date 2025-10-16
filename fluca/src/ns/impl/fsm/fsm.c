@@ -164,7 +164,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PC          pc;
   NSFSMPCCtx *pcctx;
   DM          sdm, vdm, Vdm;
-  PetscInt    dim, nb, d, i;
+  PetscInt    dim, nb, i;
   PetscBool   neednullspace, iscart;
 
   PetscFunctionBegin;
@@ -219,10 +219,10 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(PCShellSetContext(pc, pcctx));
   PetscCall(PCShellSetDestroy(pc, NSFSMPCDestroy_Private));
 
-  /* Create intermediate solution vectors */
+  /* Create intermediate solution vectors and spatial operators */
   PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Vdm));
+  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
   PetscCall(MeshGetDimension(ns->mesh, &dim));
 
   PetscCall(DMCreateGlobalVector(vdm, &fsm->N));
@@ -230,15 +230,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half));
   PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half_prev));
 
-  /* Create other spatial operators */
-  for (d = 0; d < 3; ++d) PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &fsm->TvN[d]));
-  switch (dim) {
-  case 2:
-    if (iscart) PetscCall(NSFSMComputeSpatialOperators2d_Cart_Internal(ns));
-    break;
-  default:
-    SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
-  }
+  PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &fsm->TvN));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -262,15 +254,14 @@ PetscErrorCode NSIterate_FSM(NS ns)
 
 PetscErrorCode NSDestroy_FSM(NS ns)
 {
-  NS_FSM  *fsm = (NS_FSM *)ns->data;
-  PetscInt d;
+  NS_FSM *fsm = (NS_FSM *)ns->data;
 
   PetscFunctionBegin;
   PetscCall(VecDestroy(&fsm->N));
   PetscCall(VecDestroy(&fsm->N_prev));
   PetscCall(VecDestroy(&fsm->p_half));
   PetscCall(VecDestroy(&fsm->p_half_prev));
-  for (d = 0; d < 3; ++d) PetscCall(MatDestroy(&fsm->TvN[d]));
+  PetscCall(MatDestroy(&fsm->TvN));
   PetscCall(PetscFree(ns->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -304,8 +295,7 @@ PetscErrorCode NSLoadSolutionCGNS_FSM(NS ns, PetscInt file_num)
 
 PetscErrorCode NSCreate_FSM(NS ns)
 {
-  NS_FSM  *fsm;
-  PetscInt d;
+  NS_FSM *fsm;
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&fsm));
@@ -315,7 +305,8 @@ PetscErrorCode NSCreate_FSM(NS ns)
   fsm->N_prev      = NULL;
   fsm->p_half      = NULL;
   fsm->p_half_prev = NULL;
-  for (d = 0; d < 3; ++d) fsm->TvN[d] = NULL;
+  fsm->TvN         = NULL;
+  fsm->TvNcomputed = PETSC_FALSE;
 
   ns->ops->setfromoptions   = NSSetFromOptions_FSM;
   ns->ops->setup            = NSSetup_FSM;
