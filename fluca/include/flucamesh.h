@@ -26,6 +26,7 @@ FLUCA_EXTERN PetscErrorCode MeshDestroy(Mesh *);
 
 FLUCA_EXTERN PetscErrorCode MeshGetScalarDM(Mesh, DM *);
 FLUCA_EXTERN PetscErrorCode MeshGetVectorDM(Mesh, DM *);
+FLUCA_EXTERN PetscErrorCode MeshGetStaggeredScalarDM(Mesh, DM *);
 FLUCA_EXTERN PetscErrorCode MeshGetStaggeredVectorDM(Mesh, DM *);
 FLUCA_EXTERN PetscErrorCode MeshGetNumberBoundaries(Mesh, PetscInt *);
 

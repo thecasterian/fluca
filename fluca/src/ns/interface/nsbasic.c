@@ -131,7 +131,7 @@ static PetscErrorCode CreateSubMatrix_Private(DM rdm, DM cdm, Mat *submat)
 PetscErrorCode NSSetUp(NS ns)
 {
   MPI_Comm    comm;
-  DM          sdm, vdm, Vdm;
+  DM          sdm, vdm, Sdm;
   NSFieldLink link, rlink, clink;
   IS         *is;
   Vec        *subvecs;
@@ -153,10 +153,10 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
   PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Sdm));
 
   PetscCall(AddField_Private(ns, NS_FIELD_VELOCITY, vdm));
-  PetscCall(AddField_Private(ns, NS_FIELD_FACE_NORMAL_VELOCITY, Vdm));
+  PetscCall(AddField_Private(ns, NS_FIELD_FACE_NORMAL_VELOCITY, Sdm));
   PetscCall(AddField_Private(ns, NS_FIELD_PRESSURE, sdm));
 
   PetscCall(DMCompositeCreate(comm, &ns->soldm));

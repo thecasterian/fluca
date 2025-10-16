@@ -63,7 +63,7 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   const PetscInt *l[3];
   PetscInt        d;
   DM              cdm;
-  const PetscInt  dofScalar = 1, dofVector = mesh->dim, dofFace = 1, stencilWidth = 1;
+  const PetscInt  dofScalar = 1, dofVector = mesh->dim, stencilWidth = 1;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
@@ -103,25 +103,17 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   PetscCall(DMStagGetOwnershipRanges(mesh->sdm, &l[0], &l[1], &l[2]));
   for (d = 0; d < mesh->dim; ++d) PetscCall(PetscArraycpy(cart->l[d], l[d], cart->nRanks[d]));
 
-  /* Create vector DM */
+  /* Create vector DM and face DMs */
   switch (mesh->dim) {
   case 2:
     PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, 0, dofVector, 0, &mesh->vdm));
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, dofScalar, 0, 0, &mesh->Sdm));
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, dofVector, 0, 0, &mesh->Vdm));
     break;
   case 3:
     PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, 0, 0, dofVector, &mesh->vdm));
-    break;
-  default:
-    SETERRQ(comm, PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, mesh->dim);
-  }
-
-  /* Create face DM */
-  switch (mesh->dim) {
-  case 2:
-    PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, dofFace, 0, 0, &mesh->Vdm));
-    break;
-  case 3:
-    PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, 0, dofFace, 0, &mesh->Vdm));
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, 0, dofScalar, 0, &mesh->Sdm));
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->sdm, 0, 0, dofVector, 0, &mesh->Vdm));
     break;
   default:
     SETERRQ(comm, PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, mesh->dim);
@@ -129,6 +121,7 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
 
   PetscCall(DMSetMatrixPreallocateOnly(mesh->sdm, PETSC_TRUE));
   PetscCall(DMSetMatrixPreallocateOnly(mesh->vdm, PETSC_TRUE));
+  PetscCall(DMSetMatrixPreallocateOnly(mesh->Sdm, PETSC_TRUE));
   PetscCall(DMSetMatrixPreallocateOnly(mesh->Vdm, PETSC_TRUE));
 
   /* Set common coordinate DM */
@@ -136,6 +129,8 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   PetscCall(DMGetCoordinateDM(mesh->sdm, &cdm));
   PetscCall(DMStagSetCoordinateDMType(mesh->vdm, DMPRODUCT));
   PetscCall(DMSetCoordinateDM(mesh->vdm, cdm));
+  PetscCall(DMStagSetCoordinateDMType(mesh->Sdm, DMPRODUCT));
+  PetscCall(DMSetCoordinateDM(mesh->Sdm, cdm));
   PetscCall(DMStagSetCoordinateDMType(mesh->Vdm, DMPRODUCT));
   PetscCall(DMSetCoordinateDM(mesh->Vdm, cdm));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -150,6 +145,7 @@ PetscErrorCode MeshDestroy_Cart(Mesh mesh)
   for (d = 0; d < mesh->dim; ++d) PetscCall(PetscFree(cart->l[d]));
   PetscCall(DMDestroy(&mesh->sdm));
   PetscCall(DMDestroy(&mesh->vdm));
+  PetscCall(DMDestroy(&mesh->Sdm));
   PetscCall(DMDestroy(&mesh->Vdm));
   PetscCall(PetscFree(mesh->data));
   PetscFunctionReturn(PETSC_SUCCESS);

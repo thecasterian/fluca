@@ -19,6 +19,7 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh)
   m->dim         = PETSC_DETERMINE;
   m->sdm         = NULL;
   m->vdm         = NULL;
+  m->Sdm         = NULL;
   m->Vdm         = NULL;
   m->data        = NULL;
   m->setupcalled = PETSC_FALSE;
@@ -141,6 +142,16 @@ PetscErrorCode MeshGetVectorDM(Mesh mesh, DM *vdm)
   PetscAssertPointer(vdm, 2);
   PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
   *vdm = mesh->vdm;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshGetStaggeredScalarDM(Mesh mesh, DM *Sdm)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+  PetscAssertPointer(Sdm, 2);
+  PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
+  *Sdm = mesh->Sdm;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

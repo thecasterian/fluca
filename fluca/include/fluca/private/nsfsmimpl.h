@@ -27,7 +27,8 @@ typedef struct {
   Vec p_half;      /* pressure at n-1/2 */
   Vec p_half_prev; /* pressure at previous half time step n-3/2 */
 
-  Mat TvN[3]; /* velocity interpolation operators for convection */
+  Mat       TvN; /* velocity interpolation operator for convection */
+  PetscBool TvNcomputed;
 } NS_FSM;
 
 FLUCA_INTERN PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES, Vec, Vec, void *);
