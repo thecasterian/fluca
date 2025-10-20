@@ -94,10 +94,10 @@ int main(int argc, char **argv)
   PetscCall(NSSetUp(ns));
 
   {
-    DM                  sdm, vdm;
-    Vec                 v, p, N, N_prev;
-    DMStagStencil       row[2];
-    PetscScalar         val[2];
+    DM                  sdm, vdm, Sdm;
+    Vec                 v, V, p;
+    DMStagStencil       row[3];
+    PetscScalar         val[3];
     const PetscScalar **arrcx, **arrcy;
     PetscInt            x, y, m, n, nExtrax, nExtray;
     PetscInt            iprevc, ielemc;
@@ -105,13 +105,13 @@ int main(int argc, char **argv)
 
     PetscCall(MeshGetScalarDM(mesh, &sdm));
     PetscCall(MeshGetVectorDM(mesh, &vdm));
+    PetscCall(MeshGetStaggeredScalarDM(mesh, &Sdm));
 
     PetscCall(DMStagGetCorners(sdm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
 
     PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+    PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
     PetscCall(NSFSMGetHalfStepPressure(ns, &p));
-    PetscCall(NSFSMGetConvection(ns, &N));
-    PetscCall(NSFSMGetPreviousConvection(ns, &N_prev));
     PetscCall(DMStagGetProductCoordinateArraysRead(sdm, &arrcx, &arrcy, NULL));
 
     PetscCall(DMStagGetProductCoordinateLocationSlot(sdm, DMSTAG_LEFT, &iprevc));
@@ -134,33 +134,46 @@ int main(int argc, char **argv)
         /* Velocity at t = 0 */
         val[0] = PetscSinReal(arrcx[i][ielemc]) * PetscCosReal(arrcy[j][ielemc]);
         val[1] = -PetscCosReal(arrcx[i][ielemc]) * PetscSinReal(arrcy[j][ielemc]);
-        DMStagVecSetValuesStencil(vdm, v, 2, row, val, INSERT_VALUES);
+        PetscCall(DMStagVecSetValuesStencil(vdm, v, 2, row, val, INSERT_VALUES));
         /* Pressure at t = -dt/2 */
         val[0] = rho / 4. * (PetscCosReal(2. * arrcx[i][ielemc]) + PetscCosReal(2. * arrcy[j][ielemc])) * PetscExpReal(2. * mu / rho * dt);
-        DMStagVecSetValuesStencil(sdm, p, 1, &row[0], &val[0], INSERT_VALUES);
-        /* Convection at t = 0 */
-        val[0] = 0.5 * PetscSinReal(2. * arrcx[i][ielemc]);
-        val[1] = 0.5 * PetscSinReal(2. * arrcy[j][ielemc]);
-        DMStagVecSetValuesStencil(vdm, N, 2, row, val, INSERT_VALUES);
-        /* Convection at t = -dt */
-        val[0] = 0.5 * PetscSinReal(2. * arrcx[i][ielemc]) * PetscExpReal(4. * mu / rho * dt);
-        val[1] = 0.5 * PetscSinReal(2. * arrcy[j][ielemc]) * PetscExpReal(4. * mu / rho * dt);
-        DMStagVecSetValuesStencil(vdm, N_prev, 2, row, val, INSERT_VALUES);
+        PetscCall(DMStagVecSetValuesStencil(sdm, p, 1, row, val, INSERT_VALUES));
       }
     }
+
+    row[0].loc = DMSTAG_LEFT;
+    row[0].c   = 0;
+    for (j = y; j < y + n; ++j)
+      for (i = x; i < x + m + nExtrax; ++i) {
+        row[0].i = i;
+        row[0].j = j;
+        /* X-velocity at t = 0 */
+        val[0] = PetscSinReal(arrcx[i][iprevc]) * PetscCosReal(arrcy[j][ielemc]);
+        PetscCall(DMStagVecSetValuesStencil(Sdm, V, 1, row, val, INSERT_VALUES));
+      }
+
+    row[0].loc = DMSTAG_DOWN;
+    row[0].c   = 0;
+    for (j = y; j < y + n + nExtray; ++j)
+      for (i = x; i < x + m; ++i) {
+        row[0].i = i;
+        row[0].j = j;
+        /* Y-velocity at t = 0 */
+        val[0] = -PetscCosReal(arrcx[i][ielemc]) * PetscSinReal(arrcy[j][iprevc]);
+        PetscCall(DMStagVecSetValuesStencil(Sdm, V, 1, row, val, INSERT_VALUES));
+      }
 
     PetscCall(DMStagRestoreProductCoordinateArraysRead(sdm, &arrcx, &arrcy, NULL));
 
     PetscCall(VecAssemblyBegin(v));
+    PetscCall(VecAssemblyBegin(V));
     PetscCall(VecAssemblyBegin(p));
-    PetscCall(VecAssemblyBegin(N));
-    PetscCall(VecAssemblyBegin(N_prev));
     PetscCall(VecAssemblyEnd(v));
+    PetscCall(VecAssemblyEnd(V));
     PetscCall(VecAssemblyEnd(p));
-    PetscCall(VecAssemblyEnd(N));
-    PetscCall(VecAssemblyEnd(N_prev));
 
     PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+    PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
   }
 
   PetscCall(NSSolve(ns, nsteps));

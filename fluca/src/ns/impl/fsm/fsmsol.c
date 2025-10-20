@@ -1,26 +1,6 @@
 #include <flucansfsm.h>
 #include <fluca/private/nsfsmimpl.h>
 
-PetscErrorCode NSFSMGetConvection(NS ns, Vec *N)
-{
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-
-  PetscFunctionBegin;
-  PetscValidHeaderSpecificType(ns, NS_CLASSID, 1, NSFSM);
-  if (N) *N = fsm->N;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode NSFSMGetPreviousConvection(NS ns, Vec *N_prev)
-{
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-
-  PetscFunctionBegin;
-  PetscValidHeaderSpecificType(ns, NS_CLASSID, 1, NSFSM);
-  if (N_prev) *N_prev = fsm->N_prev;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 PetscErrorCode NSFSMGetHalfStepPressure(NS ns, Vec *p_half)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;

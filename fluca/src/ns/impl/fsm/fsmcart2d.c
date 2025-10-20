@@ -486,6 +486,253 @@ static PetscErrorCode ComputeVelocityLaplacianBoundaryConditionVector_Private(DM
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode ComputeConvectionLinearInterpolationPrev_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_prev_f, PetscReal coord_center, PetscReal h, PetscScalar v_f, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  PetscFunctionBegin;
+  v[0]     = -0.5 * v_f / h * (coord_center - coord_prev_f) / (coord_center - coord_prev);
+  v[1]     = -0.5 * v_f / h * (coord_prev_f - coord_prev) / (coord_center - coord_prev);
+  col[0].i = i - (dir == DERIV_X ? 1 : 0);
+  col[0].j = j - (dir == DERIV_Y ? 1 : 0);
+  col[1].i = i;
+  col[1].j = j;
+  *ncols   = 2;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ComputeConvectionLinearInterpolationNext_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_center, PetscReal coord_next_f, PetscReal coord_next, PetscReal h, PetscScalar v_f, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  PetscFunctionBegin;
+  v[0]     = 0.5 * v_f / h * (coord_next - coord_next_f) / (coord_next - coord_center);
+  v[1]     = 0.5 * v_f / h * (coord_next_f - coord_center) / (coord_next - coord_center);
+  col[0].i = i;
+  col[0].j = j;
+  col[1].i = i + (dir == DERIV_X ? 1 : 0);
+  col[1].j = j + (dir == DERIV_Y ? 1 : 0);
+  *ncols   = 2;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ComputeConvectionOperator_Private(DM vdm, DM Sdm, DM Vdm, Vec V0, Vec v0interp, const NSBoundaryCondition *bcs, Mat C)
+{
+  PetscInt             M, N, x, y, m, n, nExtrax, nExtray;
+  DMStagStencil        row, col[2];
+  PetscInt             ncols;
+  PetscScalar          v[2];
+  Vec                  V0local, v0interplocal;
+  const PetscScalar ***arrV0, ***arrv0interp;
+  const PetscScalar  **arrcx, **arrcy;
+  PetscReal            hx, hy;
+  PetscInt             iV0[2], iv0interp[2][2], iprevc, ielemc;
+  PetscInt             i, j, l, c;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetGlobalSizes(vdm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(vdm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
+
+  PetscCall(DMGetLocalVector(Sdm, &V0local));
+  PetscCall(DMGetLocalVector(Vdm, &v0interplocal));
+
+  PetscCall(DMGlobalToLocal(Sdm, V0, INSERT_VALUES, V0local));
+  PetscCall(DMGlobalToLocal(Vdm, v0interp, INSERT_VALUES, v0interplocal));
+  PetscCall(DMStagVecGetArrayRead(Sdm, V0local, &arrV0));
+  PetscCall(DMStagGetLocationSlot(Sdm, DMSTAG_LEFT, 0, &iV0[0]));
+  PetscCall(DMStagGetLocationSlot(Sdm, DMSTAG_DOWN, 0, &iV0[1]));
+  PetscCall(DMStagVecGetArrayRead(Vdm, v0interplocal, &arrv0interp));
+  PetscCall(DMStagGetLocationSlot(Vdm, DMSTAG_LEFT, 0, &iv0interp[0][0]));
+  PetscCall(DMStagGetLocationSlot(Vdm, DMSTAG_DOWN, 0, &iv0interp[0][1]));
+  PetscCall(DMStagGetLocationSlot(Vdm, DMSTAG_LEFT, 1, &iv0interp[1][0]));
+  PetscCall(DMStagGetLocationSlot(Vdm, DMSTAG_DOWN, 1, &iv0interp[1][1]));
+
+  PetscCall(DMStagGetProductCoordinateArraysRead(vdm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(vdm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(vdm, DMSTAG_ELEMENT, &ielemc));
+
+  PetscCall(MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+
+  row.loc = DMSTAG_ELEMENT;
+  for (i = 0; i < 2; ++i) col[i].loc = DMSTAG_ELEMENT;
+
+  /* N_i = (1/2) * d/dx_j (v_i * V0_j + v0interp_i * v_j) */
+  for (c = 0; c < 2; ++c) {
+    row.c = c;
+
+    for (j = y; j < y + n; ++j)
+      for (i = x; i < x + m; ++i) {
+        row.i = i;
+        row.j = j;
+        hx    = arrcx[i + 1][iprevc] - arrcx[i][iprevc];
+        hy    = arrcy[j + 1][iprevc] - arrcy[j][iprevc];
+
+        /* Left cell face */
+        for (l = 0; l < 2; ++l) col[l].c = c;
+        ncols = 0;
+        if (i == 0) {
+          /* Left boundary */
+          switch (bcs[0].type) {
+          case NS_BC_VELOCITY:
+            break;
+          case NS_BC_PERIODIC:
+            PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrV0[j][i][iV0[0]], &ncols, col, v));
+            break;
+          default:
+            SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
+          }
+        } else {
+          PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrV0[j][i][iV0[0]], &ncols, col, v));
+        }
+        if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
+
+        for (l = 0; l < 2; ++l) col[l].c = 0;
+        ncols = 0;
+        if (i == 0) {
+          /* Left boundary */
+          switch (bcs[0].type) {
+          case NS_BC_VELOCITY:
+            break;
+          case NS_BC_PERIODIC:
+            PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrv0interp[j][i][iv0interp[c][0]], &ncols, col, v));
+            break;
+          default:
+            SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
+          }
+        } else {
+          PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrv0interp[j][i][iv0interp[c][0]], &ncols, col, v));
+        }
+        if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
+
+        /* Right cell face */
+        for (l = 0; l < 2; ++l) col[l].c = c;
+        ncols = 0;
+        if (i == M - 1) {
+          /* Right boundary */
+          switch (bcs[1].type) {
+          case NS_BC_VELOCITY:
+            break;
+          case NS_BC_PERIODIC:
+            PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrV0[j][i + 1][iV0[0]], &ncols, col, v));
+            break;
+          default:
+            SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
+          }
+        } else {
+          PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrV0[j][i + 1][iV0[0]], &ncols, col, v));
+        }
+        if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
+
+        for (l = 0; l < 2; ++l) col[l].c = 0;
+        ncols = 0;
+        if (i == M - 1) {
+          /* Right boundary */
+          switch (bcs[1].type) {
+          case NS_BC_VELOCITY:
+            break;
+          case NS_BC_PERIODIC:
+            PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrv0interp[j][i + 1][iv0interp[c][0]], &ncols, col, v));
+            break;
+          default:
+            SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
+          }
+        } else {
+          PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrv0interp[j][i + 1][iv0interp[c][0]], &ncols, col, v));
+        }
+        if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
+
+        /* Bottom cell face */
+        for (l = 0; l < 2; ++l) col[l].c = c;
+        ncols = 0;
+        if (j == 0) {
+          /* Bottom boundary */
+          switch (bcs[2].type) {
+          case NS_BC_VELOCITY:
+            break;
+          case NS_BC_PERIODIC:
+            PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrV0[j][i][iV0[1]], &ncols, col, v));
+            break;
+          default:
+            SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for bottom boundary");
+          }
+        } else {
+          PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrV0[j][i][iV0[1]], &ncols, col, v));
+        }
+        if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
+
+        for (l = 0; l < 2; ++l) col[l].c = 1;
+        ncols = 0;
+        if (j == 0) {
+          /* Bottom boundary */
+          switch (bcs[2].type) {
+          case NS_BC_VELOCITY:
+            break;
+          case NS_BC_PERIODIC:
+            PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrv0interp[j][i][iv0interp[c][1]], &ncols, col, v));
+            break;
+          default:
+            SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for bottom boundary");
+          }
+        } else {
+          PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrv0interp[j][i][iv0interp[c][1]], &ncols, col, v));
+        }
+        if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
+
+        /* Top cell face */
+        for (l = 0; l < 2; ++l) col[l].c = c;
+        ncols = 0;
+        if (j == 0) {
+          /* Top boundary */
+          switch (bcs[3].type) {
+          case NS_BC_VELOCITY:
+            break;
+          case NS_BC_PERIODIC:
+            PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrV0[j + 1][i][iV0[1]], &ncols, col, v));
+            break;
+          default:
+            SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for top boundary");
+          }
+        } else {
+          PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrV0[j + 1][i][iV0[1]], &ncols, col, v));
+        }
+        if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
+
+        for (l = 0; l < 2; ++l) col[l].c = 1;
+        ncols = 0;
+        if (j == 0) {
+          /* Top boundary */
+          switch (bcs[3].type) {
+          case NS_BC_VELOCITY:
+            break;
+          case NS_BC_PERIODIC:
+            PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrv0interp[j + 1][i][iv0interp[c][1]], &ncols, col, v));
+            break;
+          default:
+            SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for top boundary");
+          }
+        } else {
+          PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrv0interp[j + 1][i][iv0interp[c][1]], &ncols, col, v));
+        }
+        if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
+      }
+  }
+
+  /* Assemble the matrix */
+  PetscCall(MatAssemblyBegin(C, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(C, MAT_FINAL_ASSEMBLY));
+
+  PetscCall(DMStagVecRestoreArrayRead(Sdm, V0local, &arrV0));
+  PetscCall(DMStagVecRestoreArrayRead(Vdm, v0interplocal, &arrv0interp));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(vdm, &arrcx, &arrcy, NULL));
+
+  PetscCall(DMRestoreLocalVector(Sdm, &V0local));
+  PetscCall(DMRestoreLocalVector(Vdm, &v0interplocal));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ComputeConvectionBoundaryConditionVector_Private(DM vdm, const NSBoundaryCondition *bcs, PetscReal t0, PetscReal t, Vec vbc)
+{
+  PetscFunctionBegin;
+  // TODO: implement
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode ComputeLinearInterpolation_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_prev_f, PetscReal coord_center, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscFunctionBegin;
@@ -612,7 +859,7 @@ static PetscErrorCode ComputeFaceVelocityInterpolationOperator_Private(DM vdm, D
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFaceVelocityInterpolationBoundaryConditionVector_Private(DM vdm, DM Vdm, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
+static PetscErrorCode ComputeFaceVelocityInterpolationBoundaryConditionVector_Private(DM Vdm, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
 {
   PetscInt            M, N, x, y, m, n, dim;
   PetscBool           isFirstRankx, isFirstRanky, isLastRankx, isLastRanky;
@@ -624,14 +871,14 @@ static PetscErrorCode ComputeFaceVelocityInterpolationBoundaryConditionVector_Pr
   PetscInt            i, j, c;
 
   PetscFunctionBegin;
-  PetscCall(DMStagGetGlobalSizes(vdm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(vdm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
-  PetscCall(DMStagGetIsFirstRank(vdm, &isFirstRankx, &isFirstRanky, NULL));
-  PetscCall(DMStagGetIsLastRank(vdm, &isLastRankx, &isLastRanky, NULL));
-  PetscCall(DMStagGetProductCoordinateArraysRead(vdm, &arrcx, &arrcy, NULL));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(vdm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(vdm, DMSTAG_ELEMENT, &ielemc));
-  PetscCall(DMGetDimension(vdm, &dim));
+  PetscCall(DMStagGetGlobalSizes(Vdm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(Vdm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetIsFirstRank(Vdm, &isFirstRankx, &isFirstRanky, NULL));
+  PetscCall(DMStagGetIsLastRank(Vdm, &isLastRankx, &isLastRanky, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(Vdm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(Vdm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(Vdm, DMSTAG_ELEMENT, &ielemc));
+  PetscCall(DMGetDimension(Vdm, &dim));
 
   PetscCall(VecSet(vbc, 0.));
 
@@ -722,7 +969,7 @@ static PetscErrorCode ComputeFaceVelocityInterpolationBoundaryConditionVector_Pr
   PetscCall(VecAssemblyBegin(vbc));
   PetscCall(VecAssemblyEnd(vbc));
 
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(vdm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(Vdm, &arrcx, &arrcy, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -839,7 +1086,7 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationOperator_Private(DM 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFaceNormalVelocityInterpolationBoundaryConditionVector_Private(DM vdm, DM Sdm, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
+static PetscErrorCode ComputeFaceNormalVelocityInterpolationBoundaryConditionVector_Private(DM Sdm, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
 {
   PetscInt            M, N, x, y, m, n;
   PetscBool           isFirstRankx, isFirstRanky, isLastRankx, isLastRanky;
@@ -851,13 +1098,13 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationBoundaryConditionVec
   PetscInt            i, j;
 
   PetscFunctionBegin;
-  PetscCall(DMStagGetGlobalSizes(vdm, &M, &N, NULL));
-  PetscCall(DMStagGetCorners(vdm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
-  PetscCall(DMStagGetIsFirstRank(vdm, &isFirstRankx, &isFirstRanky, NULL));
-  PetscCall(DMStagGetIsLastRank(vdm, &isLastRankx, &isLastRanky, NULL));
-  PetscCall(DMStagGetProductCoordinateArraysRead(vdm, &arrcx, &arrcy, NULL));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(vdm, DMSTAG_LEFT, &iprevc));
-  PetscCall(DMStagGetProductCoordinateLocationSlot(vdm, DMSTAG_ELEMENT, &ielemc));
+  PetscCall(DMStagGetGlobalSizes(Sdm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(Sdm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetIsFirstRank(Sdm, &isFirstRankx, &isFirstRanky, NULL));
+  PetscCall(DMStagGetIsLastRank(Sdm, &isLastRankx, &isLastRanky, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(Sdm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(Sdm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(Sdm, DMSTAG_ELEMENT, &ielemc));
 
   PetscCall(VecSet(vbc, 0.));
 
@@ -940,7 +1187,7 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationBoundaryConditionVec
   PetscCall(VecAssemblyBegin(vbc));
   PetscCall(VecAssemblyEnd(vbc));
 
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(vdm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(Sdm, &arrcx, &arrcy, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -1140,19 +1387,17 @@ static PetscErrorCode ComputeStaggeredPressureGradientOperators_Private(DM sdm, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeConvection_Private(NS ns)
+PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
 {
   NS_FSM *fsm = (NS_FSM *)ns->data;
-  DM      sdm, vdm, Sdm, Vdm;
-  IS      Vis, pis;
-  Vec     v_interp, vbc, vmult, v, V, v_interp_c[2], N_c[2];
-  Mat     Dst;
+  DM      vdm, Vdm;
+  IS      vis, Vis, pis;
+  Vec     v0, v, V, dp, solv, solV, solp, vbc;
 
   PetscFunctionBegin;
-  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Sdm));
   PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, &vis));
   PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, &Vis));
   PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &pis));
 
@@ -1160,101 +1405,16 @@ static PetscErrorCode ComputeConvection_Private(NS ns)
     PetscCall(ComputeFaceVelocityInterpolationOperator_Private(vdm, Vdm, ns->bcs, fsm->TvN));
     fsm->TvNcomputed = PETSC_TRUE;
   }
-
-  PetscCall(DMGetGlobalVector(Vdm, &v_interp));
   PetscCall(DMGetGlobalVector(Vdm, &vbc));
-  PetscCall(DMGetGlobalVector(Sdm, &vmult));
-  PetscCall(DMGetGlobalVector(Sdm, &v_interp_c[0]));
-  PetscCall(DMGetGlobalVector(Sdm, &v_interp_c[1]));
-  PetscCall(DMGetGlobalVector(sdm, &N_c[0]));
-  PetscCall(DMGetGlobalVector(sdm, &N_c[1]));
-
-  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
-  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
-
-  PetscCall(MatMult(fsm->TvN, v, v_interp));
-  PetscCall(ComputeFaceVelocityInterpolationBoundaryConditionVector_Private(vdm, Vdm, ns->bcs, ns->t + ns->dt, vbc));
-  PetscCall(VecAXPY(v_interp, 1., vbc));
-
-  {
-    PetscInt   begin, end;
-    IS         is[2];
-    VecScatter vs[2];
-
-    PetscCall(VecGetOwnershipRange(v_interp, &begin, &end));
-    PetscCheck((end - begin) % 2 == 0, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Ownership range size must be a multiple of dim");
-    PetscCall(ISCreateStride(PetscObjectComm((PetscObject)ns), (end - begin) / 2, begin, 2, &is[0]));
-    PetscCall(ISCreateStride(PetscObjectComm((PetscObject)ns), (end - begin) / 2, begin + 1, 2, &is[1]));
-    PetscCall(VecScatterCreate(v_interp, is[0], v_interp_c[0], NULL, &vs[0]));
-    PetscCall(VecScatterCreate(v_interp, is[1], v_interp_c[1], NULL, &vs[1]));
-
-    PetscCall(VecScatterBegin(vs[0], v_interp, v_interp_c[0], INSERT_VALUES, SCATTER_FORWARD));
-    PetscCall(VecScatterEnd(vs[0], v_interp, v_interp_c[0], INSERT_VALUES, SCATTER_FORWARD));
-    PetscCall(VecScatterBegin(vs[1], v_interp, v_interp_c[1], INSERT_VALUES, SCATTER_FORWARD));
-    PetscCall(VecScatterEnd(vs[1], v_interp, v_interp_c[1], INSERT_VALUES, SCATTER_FORWARD));
-
-    PetscCall(ISDestroy(&is[0]));
-    PetscCall(ISDestroy(&is[1]));
-    PetscCall(VecScatterDestroy(&vs[0]));
-    PetscCall(VecScatterDestroy(&vs[1]));
-  }
-
-  /* N_i = d(U * v_i)/dx + d(V * v_i)/dy */
-  PetscCall(MatCreateSubMatrix(ns->J, pis, Vis, MAT_INITIAL_MATRIX, &Dst));
-  PetscCall(VecPointwiseMult(vmult, V, v_interp_c[0]));
-  PetscCall(MatMult(Dst, vmult, N_c[0]));
-  PetscCall(VecPointwiseMult(vmult, V, v_interp_c[1]));
-  PetscCall(MatMult(Dst, vmult, N_c[1]));
-  PetscCall(MatDestroy(&Dst));
-
-  {
-    PetscInt   begin, end;
-    IS         is[2];
-    VecScatter vs[2];
-
-    PetscCall(VecGetOwnershipRange(fsm->N, &begin, &end));
-    PetscCheck((end - begin) % 2 == 0, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Ownership range size must be a multiple of dim");
-    PetscCall(ISCreateStride(PetscObjectComm((PetscObject)ns), (end - begin) / 2, begin, 2, &is[0]));
-    PetscCall(ISCreateStride(PetscObjectComm((PetscObject)ns), (end - begin) / 2, begin + 1, 2, &is[1]));
-    PetscCall(VecScatterCreate(fsm->N, is[0], N_c[0], NULL, &vs[0]));
-    PetscCall(VecScatterCreate(fsm->N, is[1], N_c[1], NULL, &vs[1]));
-
-    PetscCall(VecScatterBegin(vs[0], N_c[0], fsm->N, INSERT_VALUES, SCATTER_REVERSE));
-    PetscCall(VecScatterEnd(vs[0], N_c[0], fsm->N, INSERT_VALUES, SCATTER_REVERSE));
-    PetscCall(VecScatterBegin(vs[1], N_c[1], fsm->N, INSERT_VALUES, SCATTER_REVERSE));
-    PetscCall(VecScatterEnd(vs[1], N_c[1], fsm->N, INSERT_VALUES, SCATTER_REVERSE));
-
-    PetscCall(ISDestroy(&is[0]));
-    PetscCall(ISDestroy(&is[1]));
-    PetscCall(VecScatterDestroy(&vs[0]));
-    PetscCall(VecScatterDestroy(&vs[1]));
-  }
-
-  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
-  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
-
-  PetscCall(DMRestoreGlobalVector(Vdm, &v_interp));
+  PetscCall(VecGetSubVector(ns->sol0, vis, &v0));
+  PetscCall(MatMult(fsm->TvN, v0, fsm->v0interp));
+  PetscCall(ComputeFaceVelocityInterpolationBoundaryConditionVector_Private(Vdm, ns->bcs, ns->t, vbc));
+  PetscCall(VecAXPY(fsm->v0interp, 1., vbc));
   PetscCall(DMRestoreGlobalVector(Vdm, &vbc));
-  PetscCall(DMRestoreGlobalVector(Sdm, &vmult));
-  PetscCall(DMRestoreGlobalVector(Sdm, &v_interp_c[0]));
-  PetscCall(DMRestoreGlobalVector(Sdm, &v_interp_c[1]));
-  PetscCall(DMRestoreGlobalVector(sdm, &N_c[0]));
-  PetscCall(DMRestoreGlobalVector(sdm, &N_c[1]));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
+  PetscCall(VecRestoreSubVector(ns->sol0, vis, &v0));
 
-PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
-{
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-  IS      vis, Vis, pis;
-  Vec     v, V, dp, solv, solV, solp;
-
-  PetscFunctionBegin;
   PetscCall(SNESSolve(ns->snes, NULL, ns->x));
 
-  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, &vis));
-  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, &Vis));
-  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &pis));
   PetscCall(VecGetSubVector(ns->x, vis, &v));
   PetscCall(VecGetSubVector(ns->x, Vis, &V));
   PetscCall(VecGetSubVector(ns->x, pis, &dp));
@@ -1268,9 +1428,6 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   PetscCall(VecCopy(fsm->p_half, fsm->p_half_prev));
   PetscCall(VecAXPY(fsm->p_half, 1., dp));
   PetscCall(VecAXPBYPCZ(solp, 1.5, -0.5, 0., fsm->p_half, fsm->p_half_prev));
-
-  PetscCall(VecCopy(fsm->N, fsm->N_prev));
-  PetscCall(ComputeConvection_Private(ns));
 
   PetscCall(VecRestoreSubVector(ns->x, vis, &v));
   PetscCall(VecRestoreSubVector(ns->x, Vis, &V));
@@ -1311,7 +1468,8 @@ PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ct
   PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, vbc));
   PetscCall(VecAXPY(Lv_v, 1., vbc));
   PetscCall(VecAXPBYPCZ(momrhs, 1., 0.5 * ns->mu * ns->dt / ns->rho, 0., v0, Lv_v));
-  PetscCall(VecAXPBYPCZ(momrhs, -1.5 * ns->dt, 0.5 * ns->dt, 1., fsm->N, fsm->N_prev));
+  PetscCall(ComputeConvectionBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, ns->t + ns->dt, vbc));
+  PetscCall(VecAXPY(momrhs, -ns->dt, vbc));
   PetscCall(VecAXPY(momrhs, -1., Gp_p_half));
   PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(momrhs, 0.5 * ns->mu * ns->dt / ns->rho, vbc));
@@ -1320,7 +1478,7 @@ PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ct
   PetscCall(DMRestoreGlobalVector(vdm, &Lv_v));
   PetscCall(DMRestoreGlobalVector(vdm, &vbc));
 
-  PetscCall(ComputeFaceNormalVelocityInterpolationBoundaryConditionVector_Private(vdm, Sdm, ns->bcs, ns->t + ns->dt, interprhs));
+  PetscCall(ComputeFaceNormalVelocityInterpolationBoundaryConditionVector_Private(Sdm, ns->bcs, ns->t + ns->dt, interprhs));
   PetscCall(VecScale(interprhs, -1.));
 
   PetscCall(VecSet(contrhs, 0.));
@@ -1335,17 +1493,22 @@ PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ct
 
 PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre, void *ctx)
 {
-  NS               ns = (NS)ctx;
-  DM               vdm, Sdm, pdm;
+  NS               ns  = (NS)ctx;
+  NS_FSM          *fsm = (NS_FSM *)ns->data;
+  DM               sdm, vdm, Sdm, Vdm;
   IS               vis, Vis, pis;
-  Mat              A, Gp, Tv, negI, TRC, Dstv, Lv, Gstp, TvGp;
-  Vec              diag;
+  Mat              A, Gp, Tv, negI, TRC, Dstv, Lv, Gstp, TvGp, C;
+  Vec              diag, V0;
   static PetscBool firstcalled = PETSC_TRUE;
 
   PetscFunctionBegin;
-  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, &vdm, &vis));
-  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &Sdm, &Vis));
-  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, &pdm, &pis));
+  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
+  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
+  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Sdm));
+  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, &vis));
+  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, &Vis));
+  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &pis));
   PetscCall(MatCreateSubMatrix(Jpre, vis, vis, MAT_INITIAL_MATRIX, &A));
   PetscCall(MatCreateSubMatrix(Jpre, vis, pis, MAT_INITIAL_MATRIX, &Gp));
   PetscCall(MatCreateSubMatrix(Jpre, Vis, vis, MAT_INITIAL_MATRIX, &Tv));
@@ -1354,15 +1517,10 @@ PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre
   PetscCall(MatCreateSubMatrix(Jpre, pis, Vis, MAT_INITIAL_MATRIX, &Dstv));
 
   if (firstcalled) {
-    PetscCall(DMGetGlobalVector(vdm, &diag));
-    PetscCall(VecSet(diag, 1.));
-    PetscCall(MatDiagonalSet(A, diag, INSERT_VALUES));
     PetscCall(DMCreateMatrix(vdm, &Lv));
     PetscCall(ComputeVelocityLaplacianOperator_Private(vdm, ns->bcs, Lv));
-    PetscCall(MatAXPY(A, -0.5 * ns->mu * ns->dt / ns->rho, Lv, DIFFERENT_NONZERO_PATTERN));
-    PetscCall(DMRestoreGlobalVector(vdm, &diag));
 
-    PetscCall(ComputePressureGradientOperator_Private(pdm, vdm, ns->bcs, Gp));
+    PetscCall(ComputePressureGradientOperator_Private(sdm, vdm, ns->bcs, Gp));
     PetscCall(MatScale(Gp, ns->dt / ns->rho));
 
     PetscCall(ComputeFaceNormalVelocityInterpolationOperator_Private(vdm, Sdm, ns->bcs, Tv));
@@ -1373,14 +1531,14 @@ PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre
     PetscCall(DMRestoreGlobalVector(Sdm, &diag));
 
     PetscCall(MatDuplicate(TRC, MAT_DO_NOT_COPY_VALUES, &Gstp));
-    PetscCall(ComputeStaggeredPressureGradientOperators_Private(pdm, Sdm, ns->bcs, Gstp));
+    PetscCall(ComputeStaggeredPressureGradientOperators_Private(sdm, Sdm, ns->bcs, Gstp));
     PetscCall(MatScale(Gstp, ns->dt / ns->rho));
     PetscCall(MatMatMult(Tv, Gp, MAT_INITIAL_MATRIX, 1., &TvGp));
     PetscCall(MatCopy(TvGp, TRC, DIFFERENT_NONZERO_PATTERN));
     PetscCall(MatAXPY(TRC, -1., Gstp, DIFFERENT_NONZERO_PATTERN));
     PetscCall(MatDestroy(&TvGp));
 
-    PetscCall(ComputeStaggeredVelocityDivergenceOperator_Private(Sdm, pdm, ns->bcs, Dstv));
+    PetscCall(ComputeStaggeredVelocityDivergenceOperator_Private(Sdm, sdm, ns->bcs, Dstv));
 
     PetscCall(PetscObjectCompose((PetscObject)Jpre, "Laplacian", (PetscObject)Lv));
     PetscCall(PetscObjectCompose((PetscObject)Jpre, "StaggeredGradient", (PetscObject)Gstp));
@@ -1388,6 +1546,23 @@ PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre
     PetscCall(MatDestroy(&Gstp));
 
     firstcalled = PETSC_FALSE;
+  }
+
+  if (ns->sol0) {
+    PetscCall(MatZeroEntries(A));
+    PetscCall(DMGetGlobalVector(vdm, &diag));
+    PetscCall(VecSet(diag, 1.));
+    PetscCall(MatDiagonalSet(A, diag, INSERT_VALUES));
+    PetscCall(PetscObjectQuery((PetscObject)Jpre, "Laplacian", (PetscObject *)&Lv));
+    PetscCall(ComputeVelocityLaplacianOperator_Private(vdm, ns->bcs, Lv));
+    PetscCall(MatAXPY(A, -0.5 * ns->mu * ns->dt / ns->rho, Lv, DIFFERENT_NONZERO_PATTERN));
+    PetscCall(MatDuplicate(A, MAT_DO_NOT_COPY_VALUES, &C));
+    PetscCall(VecGetSubVector(ns->sol0, Vis, &V0));
+    PetscCall(ComputeConvectionOperator_Private(vdm, Sdm, Vdm, V0, fsm->v0interp, ns->bcs, C));
+    PetscCall(VecRestoreSubVector(ns->sol0, Vis, &V0));
+    PetscCall(MatAXPY(A, ns->dt, C, DIFFERENT_NONZERO_PATTERN));
+    PetscCall(DMRestoreGlobalVector(vdm, &diag));
+    PetscCall(MatDestroy(&C));
   }
 
   PetscCall(MatDestroy(&A));
