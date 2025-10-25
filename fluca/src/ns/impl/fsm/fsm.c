@@ -195,13 +195,15 @@ PetscErrorCode NSSetup_FSM(NS ns)
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type");
     }
   if (neednullspace) {
-    IS  is;
-    Vec vecs[1], subvec;
+    IS       is;
+    Vec      vecs[1], subvec;
+    PetscInt subvecsize;
 
     PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &is));
     PetscCall(MatCreateVecs(ns->J, NULL, &vecs[0]));
     PetscCall(VecGetSubVector(vecs[0], is, &subvec));
-    PetscCall(VecSet(subvec, 1.));
+    PetscCall(VecGetSize(subvec, &subvecsize));
+    PetscCall(VecSet(subvec, 1. / PetscSqrtReal((PetscReal)subvecsize)));
     PetscCall(VecRestoreSubVector(vecs[0], is, &subvec));
     PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, 1, vecs, &ns->nullspace));
     PetscCall(VecDestroy(&vecs[0]));
