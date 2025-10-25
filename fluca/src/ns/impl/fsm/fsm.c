@@ -179,8 +179,6 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(MeshGetDimension(ns->mesh, &dim));
 
   PetscCall(DMCreateGlobalVector(Vdm, &fsm->v0interp));
-  PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half));
-  PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half_prev));
   PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &fsm->TvN));
 
   /* Create null space */
@@ -258,8 +256,6 @@ PetscErrorCode NSDestroy_FSM(NS ns)
 
   PetscFunctionBegin;
   PetscCall(VecDestroy(&fsm->v0interp));
-  PetscCall(VecDestroy(&fsm->p_half));
-  PetscCall(VecDestroy(&fsm->p_half_prev));
   PetscCall(MatDestroy(&fsm->TvN));
   PetscCall(PetscFree(ns->data));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -301,8 +297,6 @@ PetscErrorCode NSCreate_FSM(NS ns)
   ns->data = (void *)fsm;
 
   fsm->v0interp    = NULL;
-  fsm->p_half      = NULL;
-  fsm->p_half_prev = NULL;
   fsm->TvN         = NULL;
   fsm->TvNcomputed = PETSC_FALSE;
 

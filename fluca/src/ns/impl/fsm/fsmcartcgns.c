@@ -3,10 +3,8 @@
 #include <fluca/private/nsfsmimpl.h>
 #include <petscdmstag.h>
 
-static const char *const presname         = "Pressure";
-static const char *const preshalfname     = "PressureHalfStep";
-static const char *const prevpreshalfname = "PrevPressureHalfStep";
-static const char *const velnames[3]      = {"VelocityX", "VelocityY", "VelocityZ"};
+static const char *const presname    = "Pressure";
+static const char *const velnames[3] = {"VelocityX", "VelocityY", "VelocityZ"};
 
 static PetscErrorCode DMStagWriteCoordinatesInSolution_Private(DM dm, int file_num, int base, int zone, int solution)
 {
@@ -161,7 +159,6 @@ static PetscErrorCode DMStagWriteSolution_Private(DM dm, Vec v, PetscInt c, int 
 
 PetscErrorCode NSViewSolution_FSM_Cart_CGNS_Internal(NS ns, PetscViewer viewer)
 {
-  NS_FSM                *fsm = (NS_FSM *)ns->data;
   PetscViewer_FlucaCGNS *cgv = (PetscViewer_FlucaCGNS *)viewer->data;
   DM                     sdm, vdm;
   PetscInt               dim, d;
@@ -202,8 +199,6 @@ PetscErrorCode NSViewSolution_FSM_Cart_CGNS_Internal(NS ns, PetscViewer viewer)
   if (cgv->include_coord) PetscCall(DMStagWriteCoordinatesInSolution_Private(sdm, cgv->file_num, cgv->base, cgv->zone, solution));
   for (d = 0; d < dim; ++d) { PetscCall(DMStagWriteSolution_Private(vdm, v, d, cgv->file_num, cgv->base, cgv->zone, solution, velnames[d])); }
   PetscCall(DMStagWriteSolution_Private(sdm, p, 0, cgv->file_num, cgv->base, cgv->zone, solution, presname));
-  PetscCall(DMStagWriteSolution_Private(sdm, fsm->p_half, 0, cgv->file_num, cgv->base, cgv->zone, solution, preshalfname));
-  PetscCall(DMStagWriteSolution_Private(sdm, fsm->p_half_prev, 0, cgv->file_num, cgv->base, cgv->zone, solution, prevpreshalfname));
 
   /* Restore solution subvectors */
   PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
@@ -348,7 +343,6 @@ static PetscErrorCode DMStagLoadSolution_Private(DM dm, Vec v, PetscInt c, int f
 
 PetscErrorCode NSLoadSolutionCGNS_FSM_Cart_Internal(NS ns, PetscInt file_num)
 {
-  NS_FSM                    *fsm = (NS_FSM *)ns->data;
   DM                         sdm, vdm;
   PetscInt                   dim, M[3], d;
   cgsize_t                   sizes[9];
@@ -394,8 +388,6 @@ PetscErrorCode NSLoadSolutionCGNS_FSM_Cart_Internal(NS ns, PetscInt file_num)
 
   for (d = 0; d < dim; ++d) { PetscCall(DMStagLoadSolution_Private(vdm, v, d, file_num, base, zone, solution, velnames[d])); }
   PetscCall(DMStagLoadSolution_Private(sdm, p, 0, file_num, base, zone, solution, presname));
-  PetscCall(DMStagLoadSolution_Private(sdm, fsm->p_half, 0, file_num, base, zone, solution, preshalfname));
-  PetscCall(DMStagLoadSolution_Private(sdm, fsm->p_half_prev, 0, file_num, base, zone, solution, prevpreshalfname));
 
   /* Restore solution subvectors */
   PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));

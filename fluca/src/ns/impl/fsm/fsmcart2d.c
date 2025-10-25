@@ -1522,7 +1522,7 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      vdm, Vdm;
   IS      vis, Vis, pis;
-  Vec     v0, v, V, dp, solv, solV, solp, vbc;
+  Vec     v0, v, V, dp, solv, solV, solp, solp0, vbc;
 
   PetscFunctionBegin;
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
@@ -1551,13 +1551,12 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   PetscCall(VecGetSubVector(ns->sol, vis, &solv));
   PetscCall(VecGetSubVector(ns->sol, Vis, &solV));
   PetscCall(VecGetSubVector(ns->sol, pis, &solp));
+  PetscCall(VecGetSubVector(ns->sol0, pis, &solp0));
 
   PetscCall(VecCopy(v, solv));
   PetscCall(VecCopy(V, solV));
 
-  PetscCall(VecCopy(fsm->p_half, fsm->p_half_prev));
-  PetscCall(VecAXPY(fsm->p_half, 1., dp));
-  PetscCall(VecAXPBYPCZ(solp, 1.5, -0.5, 0., fsm->p_half, fsm->p_half_prev));
+  PetscCall(VecAXPBYPCZ(solp, 1., 1., 0., solp0, dp));
 
   PetscCall(VecRestoreSubVector(ns->x, vis, &v));
   PetscCall(VecRestoreSubVector(ns->x, Vis, &V));
@@ -1565,18 +1564,18 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   PetscCall(VecRestoreSubVector(ns->sol, vis, &solv));
   PetscCall(VecRestoreSubVector(ns->sol, Vis, &solV));
   PetscCall(VecRestoreSubVector(ns->sol, pis, &solp));
+  PetscCall(VecRestoreSubVector(ns->sol0, pis, &solp0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ctx)
 {
-  NS      ns  = (NS)ctx;
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-  DM      vdm, Sdm, pdm;
-  IS      vis, Vis, pis;
-  Vec     v0, V0, momrhs, interprhs, contrhs;
-  Mat     Gp, Lv;
-  Vec     Gp_p_half, Lv_v, vbc;
+  NS  ns = (NS)ctx;
+  DM  vdm, Sdm, pdm;
+  IS  vis, Vis, pis;
+  Vec v0, V0, p0, momrhs, interprhs, contrhs;
+  Mat Gp, Lv;
+  Vec Gp_p0, Lv_v, vbc;
 
   PetscFunctionBegin;
   PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, &vdm, &vis));
@@ -1584,27 +1583,28 @@ PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ct
   PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, &pdm, &pis));
   PetscCall(VecGetSubVector(ns->sol0, vis, &v0));
   PetscCall(VecGetSubVector(ns->sol0, Vis, &V0));
+  PetscCall(VecGetSubVector(ns->sol0, pis, &p0));
   PetscCall(VecGetSubVector(f, vis, &momrhs));
   PetscCall(VecGetSubVector(f, Vis, &interprhs));
   PetscCall(VecGetSubVector(f, pis, &contrhs));
 
   PetscCall(MatCreateSubMatrix(ns->J, vis, pis, MAT_INITIAL_MATRIX, &Gp));
   PetscCall(PetscObjectQuery((PetscObject)ns->J, "Laplacian", (PetscObject *)&Lv));
-  PetscCall(DMGetGlobalVector(vdm, &Gp_p_half));
+  PetscCall(DMGetGlobalVector(vdm, &Gp_p0));
   PetscCall(DMGetGlobalVector(vdm, &Lv_v));
   PetscCall(DMGetGlobalVector(vdm, &vbc));
-  PetscCall(MatMult(Gp, fsm->p_half, Gp_p_half));
+  PetscCall(MatMult(Gp, p0, Gp_p0));
   PetscCall(MatMult(Lv, v0, Lv_v));
   PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, vbc));
   PetscCall(VecAXPY(Lv_v, 1., vbc));
   PetscCall(VecAXPBYPCZ(momrhs, 1., 0.5 * ns->mu * ns->dt / ns->rho, 0., v0, Lv_v));
   PetscCall(ComputeConvectionBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(momrhs, -ns->dt, vbc));
-  PetscCall(VecAXPY(momrhs, -1., Gp_p_half));
+  PetscCall(VecAXPY(momrhs, -1., Gp_p0));
   PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(momrhs, 0.5 * ns->mu * ns->dt / ns->rho, vbc));
   PetscCall(MatDestroy(&Gp));
-  PetscCall(DMRestoreGlobalVector(vdm, &Gp_p_half));
+  PetscCall(DMRestoreGlobalVector(vdm, &Gp_p0));
   PetscCall(DMRestoreGlobalVector(vdm, &Lv_v));
   PetscCall(DMRestoreGlobalVector(vdm, &vbc));
 
@@ -1615,6 +1615,7 @@ PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ct
 
   PetscCall(VecRestoreSubVector(ns->sol0, vis, &v0));
   PetscCall(VecRestoreSubVector(ns->sol0, Vis, &V0));
+  PetscCall(VecRestoreSubVector(ns->sol0, pis, &p0));
   PetscCall(VecRestoreSubVector(f, vis, &momrhs));
   PetscCall(VecRestoreSubVector(f, Vis, &interprhs));
   PetscCall(VecRestoreSubVector(f, pis, &contrhs));
