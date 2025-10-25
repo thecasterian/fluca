@@ -22,19 +22,17 @@ typedef struct {
 } NSFSMPCCtx;
 
 typedef struct {
-  Vec N;           /* convection at n */
-  Vec N_prev;      /* convection at n-1 */
+  Vec v0interp;    /* velocity at n interpolated on face */
   Vec p_half;      /* pressure at n-1/2 */
   Vec p_half_prev; /* pressure at previous half time step n-3/2 */
 
-  Mat       TvN; /* velocity interpolation operator for convection */
+  Mat       TvN;
   PetscBool TvNcomputed;
 } NS_FSM;
 
 FLUCA_INTERN PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES, Vec, Vec, void *);
 FLUCA_INTERN PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES, Vec, Mat, Mat, void *);
 
-FLUCA_INTERN PetscErrorCode NSFSMComputeSpatialOperators2d_Cart_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSFSMIterate2d_Cart_Internal(NS);
 
 FLUCA_INTERN PetscErrorCode NSViewSolution_FSM_Cart_Internal(NS, PetscViewer);

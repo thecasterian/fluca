@@ -172,6 +172,17 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
   PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
 
+  /* Create intermediate solution vectors and spatial operators */
+  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
+  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
+  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+  PetscCall(MeshGetDimension(ns->mesh, &dim));
+
+  PetscCall(DMCreateGlobalVector(Vdm, &fsm->v0interp));
+  PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half));
+  PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half_prev));
+  PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &fsm->TvN));
+
   /* Create null space */
   neednullspace = PETSC_TRUE;
   PetscCall(MeshGetNumberBoundaries(ns->mesh, &nb));
@@ -184,13 +195,15 @@ PetscErrorCode NSSetup_FSM(NS ns)
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type");
     }
   if (neednullspace) {
-    IS  is;
-    Vec vecs[1], subvec;
+    IS       is;
+    Vec      vecs[1], subvec;
+    PetscInt subvecsize;
 
     PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &is));
     PetscCall(MatCreateVecs(ns->J, NULL, &vecs[0]));
     PetscCall(VecGetSubVector(vecs[0], is, &subvec));
-    PetscCall(VecSet(subvec, 1.));
+    PetscCall(VecGetSize(subvec, &subvecsize));
+    PetscCall(VecSet(subvec, 1. / PetscSqrtReal((PetscReal)subvecsize)));
     PetscCall(VecRestoreSubVector(vecs[0], is, &subvec));
     PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, 1, vecs, &ns->nullspace));
     PetscCall(VecDestroy(&vecs[0]));
@@ -218,19 +231,6 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(CreateNSFSMPCCtx_Private(ns, pc, &pcctx));
   PetscCall(PCShellSetContext(pc, pcctx));
   PetscCall(PCShellSetDestroy(pc, NSFSMPCDestroy_Private));
-
-  /* Create intermediate solution vectors and spatial operators */
-  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
-  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
-  PetscCall(MeshGetDimension(ns->mesh, &dim));
-
-  PetscCall(DMCreateGlobalVector(vdm, &fsm->N));
-  PetscCall(DMCreateGlobalVector(vdm, &fsm->N_prev));
-  PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half));
-  PetscCall(DMCreateGlobalVector(sdm, &fsm->p_half_prev));
-
-  PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &fsm->TvN));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -257,8 +257,7 @@ PetscErrorCode NSDestroy_FSM(NS ns)
   NS_FSM *fsm = (NS_FSM *)ns->data;
 
   PetscFunctionBegin;
-  PetscCall(VecDestroy(&fsm->N));
-  PetscCall(VecDestroy(&fsm->N_prev));
+  PetscCall(VecDestroy(&fsm->v0interp));
   PetscCall(VecDestroy(&fsm->p_half));
   PetscCall(VecDestroy(&fsm->p_half_prev));
   PetscCall(MatDestroy(&fsm->TvN));
@@ -301,8 +300,7 @@ PetscErrorCode NSCreate_FSM(NS ns)
   PetscCall(PetscNew(&fsm));
   ns->data = (void *)fsm;
 
-  fsm->N           = NULL;
-  fsm->N_prev      = NULL;
+  fsm->v0interp    = NULL;
   fsm->p_half      = NULL;
   fsm->p_half_prev = NULL;
   fsm->TvN         = NULL;
