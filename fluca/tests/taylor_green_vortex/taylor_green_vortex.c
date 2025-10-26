@@ -1,5 +1,5 @@
 #include <flucameshcart.h>
-#include <flucansfsm.h>
+#include <flucans.h>
 #include <flucasys.h>
 #include <petscdmstag.h>
 #include <math.h>
@@ -111,7 +111,7 @@ int main(int argc, char **argv)
 
     PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
     PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
-    PetscCall(NSFSMGetHalfStepPressure(ns, &p));
+    PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
     PetscCall(DMStagGetProductCoordinateArraysRead(sdm, &arrcx, &arrcy, NULL));
 
     PetscCall(DMStagGetProductCoordinateLocationSlot(sdm, DMSTAG_LEFT, &iprevc));
@@ -135,8 +135,8 @@ int main(int argc, char **argv)
         val[0] = PetscSinReal(arrcx[i][ielemc]) * PetscCosReal(arrcy[j][ielemc]);
         val[1] = -PetscCosReal(arrcx[i][ielemc]) * PetscSinReal(arrcy[j][ielemc]);
         PetscCall(DMStagVecSetValuesStencil(vdm, v, 2, row, val, INSERT_VALUES));
-        /* Pressure at t = -dt/2 */
-        val[0] = rho / 4. * (PetscCosReal(2. * arrcx[i][ielemc]) + PetscCosReal(2. * arrcy[j][ielemc])) * PetscExpReal(2. * mu / rho * dt);
+        /* Pressure at t = 0 */
+        val[0] = rho / 4. * (PetscCosReal(2. * arrcx[i][ielemc]) + PetscCosReal(2. * arrcy[j][ielemc]));
         PetscCall(DMStagVecSetValuesStencil(sdm, p, 1, row, val, INSERT_VALUES));
       }
     }
@@ -174,6 +174,7 @@ int main(int argc, char **argv)
 
     PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
     PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
+    PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
   }
 
   PetscCall(NSSolve(ns, nsteps));

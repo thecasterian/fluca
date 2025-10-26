@@ -22,9 +22,8 @@ typedef struct {
 } NSFSMPCCtx;
 
 typedef struct {
-  Vec v0interp;    /* velocity at n interpolated on face */
-  Vec p_half;      /* pressure at n-1/2 */
-  Vec p_half_prev; /* pressure at previous half time step n-3/2 */
+  Vec v0interp; /* velocity at n interpolated on face */
+  Vec phalf;    /* pressure at n-1/2 */
 
   Mat       TvN;
   PetscBool TvNcomputed;

@@ -840,7 +840,7 @@ static PetscErrorCode ComputeConvectionBoundaryConditionVector_Private(DM vdm, c
           row[c].j = N - 1;
         }
         xb[0] = arrcx[i][ielemc];
-        xb[1] = arrcy[N - 1][iprevc];
+        xb[1] = arrcy[N - 1][inextc];
         PetscCall(bcs[3].velocity(2, t0, xb, vb0, bcs[3].ctx_velocity));
         PetscCall(bcs[3].velocity(2, t, xb, vb, bcs[3].ctx_velocity));
 
@@ -1522,7 +1522,7 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      vdm, Vdm;
   IS      vis, Vis, pis;
-  Vec     v0, v, V, dp, solv, solV, solp, vbc;
+  Vec     v0, p0, v, V, dp, solv, solV, solp, vbc;
 
   PetscFunctionBegin;
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
@@ -1555,9 +1555,15 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   PetscCall(VecCopy(v, solv));
   PetscCall(VecCopy(V, solV));
 
-  PetscCall(VecCopy(fsm->p_half, fsm->p_half_prev));
-  PetscCall(VecAXPY(fsm->p_half, 1., dp));
-  PetscCall(VecAXPBYPCZ(solp, 1.5, -0.5, 0., fsm->p_half, fsm->p_half_prev));
+  if (ns->step == 0) {
+    PetscCall(VecGetSubVector(ns->sol0, pis, &p0));
+    PetscCall(VecWAXPY(solp, 2., dp, p0));
+    PetscCall(VecWAXPY(fsm->phalf, 1., dp, p0));
+    PetscCall(VecRestoreSubVector(ns->sol0, pis, &p0));
+  } else {
+    PetscCall(VecWAXPY(solp, 1.5, dp, fsm->phalf));
+    PetscCall(VecAXPY(fsm->phalf, 1., dp));
+  }
 
   PetscCall(VecRestoreSubVector(ns->x, vis, &v));
   PetscCall(VecRestoreSubVector(ns->x, Vis, &V));
@@ -1574,9 +1580,9 @@ PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ct
   NS_FSM *fsm = (NS_FSM *)ns->data;
   DM      vdm, Sdm, pdm;
   IS      vis, Vis, pis;
-  Vec     v0, V0, momrhs, interprhs, contrhs;
+  Vec     v0, V0, p0, momrhs, interprhs, contrhs;
   Mat     Gp, Lv;
-  Vec     Gp_p_half, Lv_v, vbc;
+  Vec     Gp_p, Lv_v, vbc;
 
   PetscFunctionBegin;
   PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, &vdm, &vis));
@@ -1590,21 +1596,27 @@ PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ct
 
   PetscCall(MatCreateSubMatrix(ns->J, vis, pis, MAT_INITIAL_MATRIX, &Gp));
   PetscCall(PetscObjectQuery((PetscObject)ns->J, "Laplacian", (PetscObject *)&Lv));
-  PetscCall(DMGetGlobalVector(vdm, &Gp_p_half));
+  PetscCall(DMGetGlobalVector(vdm, &Gp_p));
   PetscCall(DMGetGlobalVector(vdm, &Lv_v));
   PetscCall(DMGetGlobalVector(vdm, &vbc));
-  PetscCall(MatMult(Gp, fsm->p_half, Gp_p_half));
+  if (ns->step == 0) {
+    PetscCall(VecGetSubVector(ns->sol0, pis, &p0));
+    PetscCall(MatMult(Gp, p0, Gp_p));
+    PetscCall(VecRestoreSubVector(ns->sol0, pis, &p0));
+  } else {
+    PetscCall(MatMult(Gp, fsm->phalf, Gp_p));
+  }
   PetscCall(MatMult(Lv, v0, Lv_v));
   PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, vbc));
   PetscCall(VecAXPY(Lv_v, 1., vbc));
   PetscCall(VecAXPBYPCZ(momrhs, 1., 0.5 * ns->mu * ns->dt / ns->rho, 0., v0, Lv_v));
   PetscCall(ComputeConvectionBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(momrhs, -ns->dt, vbc));
-  PetscCall(VecAXPY(momrhs, -1., Gp_p_half));
+  PetscCall(VecAXPY(momrhs, -1., Gp_p));
   PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(momrhs, 0.5 * ns->mu * ns->dt / ns->rho, vbc));
   PetscCall(MatDestroy(&Gp));
-  PetscCall(DMRestoreGlobalVector(vdm, &Gp_p_half));
+  PetscCall(DMRestoreGlobalVector(vdm, &Gp_p));
   PetscCall(DMRestoreGlobalVector(vdm, &Lv_v));
   PetscCall(DMRestoreGlobalVector(vdm, &vbc));
 
