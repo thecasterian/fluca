@@ -28,7 +28,7 @@ PetscErrorCode NSGetNumFields(NS ns, PetscInt *nfields)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSGetField(NS ns, const char name[], DM *dm, IS *is)
+PetscErrorCode NSGetField(NS ns, const char name[], MeshDMType *dmtype, IS *is)
 {
   NSFieldLink link;
   PetscBool   found = PETSC_FALSE;
@@ -45,12 +45,12 @@ PetscErrorCode NSGetField(NS ns, const char name[], DM *dm, IS *is)
   }
   PetscCheck(found, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_OUTOFRANGE, "Field \"%s\" not found", name);
 
-  if (dm) *dm = link->dm;
+  if (dmtype) *dmtype = link->dmtype;
   if (is) *is = link->is;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSGetFieldByIndex(NS ns, PetscInt index, const char *name[], DM *dm, IS *is)
+PetscErrorCode NSGetFieldByIndex(NS ns, PetscInt index, const char *name[], MeshDMType *dmtype, IS *is)
 {
   NSFieldLink link;
   PetscInt    count = 0;
@@ -67,7 +67,7 @@ PetscErrorCode NSGetFieldByIndex(NS ns, PetscInt index, const char *name[], DM *
   PetscCheck(link, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_OUTOFRANGE, "Field index %" PetscInt_FMT " exceeds number of fields", index);
 
   if (name) *name = link->fieldname;
-  if (dm) *dm = link->dm;
+  if (dmtype) *dmtype = link->dmtype;
   if (is) *is = link->is;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

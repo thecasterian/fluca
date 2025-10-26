@@ -103,9 +103,9 @@ int main(int argc, char **argv)
     PetscInt            iprevc, ielemc;
     PetscInt            i, j;
 
-    PetscCall(MeshGetScalarDM(mesh, &sdm));
-    PetscCall(MeshGetVectorDM(mesh, &vdm));
-    PetscCall(MeshGetStaggeredScalarDM(mesh, &Sdm));
+    PetscCall(MeshGetDM(mesh, MESH_DM_SCALAR, &sdm));
+    PetscCall(MeshGetDM(mesh, MESH_DM_VECTOR, &vdm));
+    PetscCall(MeshGetDM(mesh, MESH_DM_STAG_SCALAR, &Sdm));
 
     PetscCall(DMStagGetCorners(sdm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
 
@@ -191,16 +191,16 @@ int main(int argc, char **argv)
     PetscInt            ielemc;
     PetscInt            i, j;
 
-    PetscCall(MeshGetScalarDM(mesh, &sdm));
-    PetscCall(MeshGetVectorDM(mesh, &vdm));
+    PetscCall(MeshGetDM(mesh, MESH_DM_SCALAR, &sdm));
+    PetscCall(MeshGetDM(mesh, MESH_DM_VECTOR, &vdm));
     PetscCall(DMStagGetCorners(sdm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
 
     PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
     PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
     PetscCall(DMStagGetProductCoordinateArraysRead(sdm, &arrcx, &arrcy, NULL));
 
-    PetscCall(DMCreateGlobalVector(vdm, &v_exact));
-    PetscCall(DMCreateGlobalVector(sdm, &p_exact));
+    PetscCall(DMGetGlobalVector(vdm, &v_exact));
+    PetscCall(DMGetGlobalVector(sdm, &p_exact));
 
     PetscCall(DMStagGetProductCoordinateLocationSlot(sdm, DMSTAG_ELEMENT, &ielemc));
 

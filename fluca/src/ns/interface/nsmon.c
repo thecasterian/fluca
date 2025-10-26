@@ -40,7 +40,7 @@ PetscErrorCode NSMonitor(NS ns)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_SCALAR, &sdm));
   PetscCall(DMSetOutputSequenceNumber(sdm, ns->step, ns->t));
   for (i = 0; i < ns->num_mons; ++i) PetscCall((*ns->mons[i])(ns, ns->mon_ctxs[i]));
   PetscFunctionReturn(PETSC_SUCCESS);

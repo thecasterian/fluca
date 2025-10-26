@@ -226,9 +226,9 @@ PetscErrorCode NSViewSolution_FSM_Cart_CGNS_Internal(NS ns, PetscViewer viewer)
   PetscFunctionBegin;
   if (!cgv->file_num || !cgv->base) PetscCall(MeshView(ns->mesh, viewer));
 
-  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
-  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Sdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_SCALAR, &sdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_VECTOR, &vdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_STAG_SCALAR, &Sdm));
   PetscCall(MeshGetDimension(ns->mesh, &dim));
 
   if (!cgv->output_times) PetscCall(PetscSegBufferCreate(sizeof(PetscReal), 20, &cgv->output_times));
@@ -440,8 +440,8 @@ PetscErrorCode NSLoadSolutionCGNS_FSM_Cart_Internal(NS ns, PetscInt file_num)
   Vec                        v, p;
 
   PetscFunctionBegin;
-  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
-  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_SCALAR, &sdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_VECTOR, &vdm));
   PetscCall(MeshGetDimension(ns->mesh, &dim));
 
   /* Read CGNS file info */

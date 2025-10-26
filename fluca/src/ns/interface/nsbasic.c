@@ -80,7 +80,7 @@ PetscErrorCode NSGetType(NS ns, NSType *type)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode AddField_Private(NS ns, const char *fieldname, DM dm)
+static PetscErrorCode AddField_Private(NS ns, const char *fieldname, MeshDMType dmtype)
 {
   NSFieldLink newlink, lastlink;
 
@@ -88,10 +88,10 @@ static PetscErrorCode AddField_Private(NS ns, const char *fieldname, DM dm)
   /* Create new field */
   PetscCall(PetscNew(&newlink));
   PetscCall(PetscStrallocpy(fieldname, &newlink->fieldname));
-  newlink->dm   = dm;
-  newlink->is   = NULL;
-  newlink->prev = NULL;
-  newlink->next = NULL;
+  newlink->dmtype = dmtype;
+  newlink->is     = NULL;
+  newlink->prev   = NULL;
+  newlink->next   = NULL;
 
   /* Append to end of list */
   if (!ns->fieldlink) {
@@ -131,7 +131,7 @@ static PetscErrorCode CreateSubMatrix_Private(DM rdm, DM cdm, Mat *submat)
 PetscErrorCode NSSetUp(NS ns)
 {
   MPI_Comm    comm;
-  DM          sdm, vdm, Sdm;
+  DM          dm, rdm, cdm;
   NSFieldLink link, rlink, clink;
   IS         *is;
   Vec        *subvecs;
@@ -151,16 +151,16 @@ PetscErrorCode NSSetUp(NS ns)
 
   /* Create fields and solution vector */
   PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
-  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
-  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Sdm));
 
-  PetscCall(AddField_Private(ns, NS_FIELD_VELOCITY, vdm));
-  PetscCall(AddField_Private(ns, NS_FIELD_FACE_NORMAL_VELOCITY, Sdm));
-  PetscCall(AddField_Private(ns, NS_FIELD_PRESSURE, sdm));
+  PetscCall(AddField_Private(ns, NS_FIELD_VELOCITY, MESH_DM_VECTOR));
+  PetscCall(AddField_Private(ns, NS_FIELD_FACE_NORMAL_VELOCITY, MESH_DM_STAG_SCALAR));
+  PetscCall(AddField_Private(ns, NS_FIELD_PRESSURE, MESH_DM_SCALAR));
 
   PetscCall(DMCompositeCreate(comm, &ns->soldm));
-  for (link = ns->fieldlink; link; link = link->next) PetscCall(DMCompositeAddDM(ns->soldm, link->dm));
+  for (link = ns->fieldlink; link; link = link->next) {
+    PetscCall(MeshGetDM(ns->mesh, link->dmtype, &dm));
+    PetscCall(DMCompositeAddDM(ns->soldm, dm));
+  }
   PetscCall(DMSetUp(ns->soldm));
 
   PetscCall(DMCompositeGetGlobalISs(ns->soldm, &is));
@@ -168,7 +168,7 @@ PetscErrorCode NSSetUp(NS ns)
 
   PetscCall(NSGetNumFields(ns, &nf));
   PetscCall(PetscMalloc1(nf, &subvecs));
-  for (link = ns->fieldlink, i = 0; link; link = link->next, ++i) PetscCall(DMCreateGlobalVector(link->dm, &subvecs[i]));
+  for (link = ns->fieldlink, i = 0; link; link = link->next, ++i) PetscCall(MeshCreateGlobalVector(ns->mesh, link->dmtype, &subvecs[i]));
   PetscCall(VecCreateNest(comm, nf, is, subvecs, &ns->sol));
 
   /* Create solver */
@@ -179,11 +179,14 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(SNESSetFromOptions(ns->snes));
   PetscCall(PetscMalloc1(nf * nf, &submats));
   i = 0;
-  for (rlink = ns->fieldlink; rlink; rlink = rlink->next)
+  for (rlink = ns->fieldlink; rlink; rlink = rlink->next) {
+    PetscCall(MeshGetDM(ns->mesh, rlink->dmtype, &rdm));
     for (clink = ns->fieldlink; clink; clink = clink->next) {
-      PetscCall(CreateSubMatrix_Private(rlink->dm, clink->dm, &submats[i]));
+      PetscCall(MeshGetDM(ns->mesh, clink->dmtype, &cdm));
+      PetscCall(CreateSubMatrix_Private(rdm, cdm, &submats[i]));
       ++i;
     }
+  }
   PetscCall(MatCreateNest(comm, nf, is, nf, is, submats, &ns->J));
   PetscCall(MatSetUp(ns->J));
   PetscCall(MatNestSetVecType(ns->J, VECNEST));

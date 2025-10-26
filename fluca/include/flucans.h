@@ -44,8 +44,8 @@ FLUCA_EXTERN PetscErrorCode NSDestroy(NS *);
 
 FLUCA_EXTERN PetscErrorCode NSGetSolution(NS, Vec *);
 FLUCA_EXTERN PetscErrorCode NSGetNumFields(NS, PetscInt *);
-FLUCA_EXTERN PetscErrorCode NSGetField(NS, const char[], DM *, IS *);
-FLUCA_EXTERN PetscErrorCode NSGetFieldByIndex(NS, PetscInt, const char *[], DM *, IS *);
+FLUCA_EXTERN PetscErrorCode NSGetField(NS, const char[], MeshDMType *, IS *);
+FLUCA_EXTERN PetscErrorCode NSGetFieldByIndex(NS, PetscInt, const char *[], MeshDMType *, IS *);
 FLUCA_EXTERN PetscErrorCode NSGetSolutionSubVector(NS, const char[], Vec *);
 FLUCA_EXTERN PetscErrorCode NSRestoreSolutionSubVector(NS, const char[], Vec *);
 FLUCA_EXTERN PetscErrorCode NSViewSolution(NS, PetscViewer);
