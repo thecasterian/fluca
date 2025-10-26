@@ -3,9 +3,14 @@
 #include <fluca/private/nsfsmimpl.h>
 #include <petscdmstag.h>
 
-static const char *const presname     = "Pressure";
-static const char *const preshalfname = "PressureHalfStep";
-static const char *const velnames[3]  = {"VelocityX", "VelocityY", "VelocityZ"};
+static const char *const pressure_name                = "Pressure";
+static const char *const pressure_half_step_name      = "PressureHalfStep";
+static const char *const velocity_names[3]            = {"VelocityX", "VelocityY", "VelocityZ"};
+static const char *const face_norma_velocity_names[3] = {"FaceNormalVelocityX", "FaceNormalVelocityY", "FaceNormalVelocityZ"};
+
+static const char *const                face_solution_names[3]           = {"IFaceCenteredSolution", "JFaceCenteredSolution", "KFaceCenteredSolution"};
+static const CGNS_ENUMT(GridLocation_t) face_solution_grid_locationss[3] = {CGNS_ENUMV(IFaceCenter), CGNS_ENUMV(JFaceCenter), CGNS_ENUMV(KFaceCenter)};
+static const int                        face_solution_user_data[3]       = {1, 2, 3};
 
 static PetscErrorCode DMStagWriteCoordinatesInSolution_Private(DM dm, int file_num, int base, int zone, int solution)
 {
@@ -121,7 +126,7 @@ static PetscErrorCode DMStagGetLocalEntries3d_Private(DM dm, Vec v, DMStagStenci
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMStagWriteSolution_Private(DM dm, Vec v, PetscInt c, int file_num, int base, int zone, int solution, const char *name)
+static PetscErrorCode DMStagWriteCellCenteredSolution_Private(DM dm, Vec v, PetscInt c, int file_num, int base, int zone, int solution, const char *name)
 {
   PetscInt               dim, x[3], m[3], d;
   cgsize_t               rmin[3], rmax[3], rsize;
@@ -158,11 +163,57 @@ static PetscErrorCode DMStagWriteSolution_Private(DM dm, Vec v, PetscInt c, int 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode DMStagWriteFaceCenteredSolution_Private(DM dm, Vec v, PetscInt c, int file_num, int base, int zone, int solution, const int user_data[], const char *const names[])
+{
+  PetscInt                    dim, M[3], x[3], m[3], nExtra[3], d, l;
+  PetscBool                   isLastRank[3];
+  cgsize_t                    array_size[3], rmin[3], rmax[3], rsize;
+  int                         array;
+  PetscScalar                *e;
+  CGNS_ENUMT(DataType_t)      datatype;
+  const DMStagStencilLocation locs[3] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
+
+  PetscFunctionBegin;
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(DMStagGetGlobalSizes(dm, &M[0], &M[1], &M[2]));
+  PetscCall(DMStagGetCorners(dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+  PetscCall(DMStagGetIsLastRank(dm, &isLastRank[0], &isLastRank[1], &isLastRank[2]));
+  for (d = 0; d < dim; ++d) nExtra[d] = isLastRank[d] ? 1 : 0;
+  PetscCall(FlucaGetCGNSDataType_Internal(PETSC_SCALAR, &datatype));
+
+  for (l = 0; l < dim; ++l) {
+    rsize = 1;
+    for (d = 0; d < dim; ++d) {
+      array_size[d] = M[d] + (d == l ? 1 : 0);
+      rmin[d]       = x[d] + 1;
+      rmax[d]       = x[d] + m[d] + (d == l ? nExtra[d] : 0);
+      rsize *= rmax[d] - rmin[d] + 1;
+    }
+
+    PetscCall(PetscMalloc1(rsize, &e));
+    switch (dim) {
+    case 2:
+      PetscCall(DMStagGetLocalEntries2d_Private(dm, v, locs[l], c, e));
+      break;
+    case 3:
+      PetscCall(DMStagGetLocalEntries3d_Private(dm, v, locs[l], c, e));
+      break;
+    default:
+      SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
+    }
+    CGNSCall(cg_goto(file_num, base, "Zone_t", zone, "FlowSolution_t", solution, "UserDefinedData_t", user_data[l], NULL));
+    CGNSCall(cgp_array_write(names[l], datatype, dim, array_size, &array));
+    CGNSCall(cgp_array_write_data(array, rmin, rmax, e));
+    PetscCall(PetscFree(e));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSViewSolution_FSM_Cart_CGNS_Internal(NS ns, PetscViewer viewer)
 {
   NS_FSM                *fsm = (NS_FSM *)ns->data;
   PetscViewer_FlucaCGNS *cgv = (PetscViewer_FlucaCGNS *)viewer->data;
-  DM                     sdm, vdm;
+  DM                     sdm, vdm, Sdm;
   PetscInt               dim, d;
   PetscReal              time;
   PetscInt               step;
@@ -170,13 +221,14 @@ PetscErrorCode NSViewSolution_FSM_Cart_CGNS_Internal(NS ns, PetscViewer viewer)
   size_t                *step_slot;
   char                   solution_name[PETSC_MAX_PATH_LEN];
   int                    solution;
-  Vec                    v, p;
+  Vec                    v, V, p;
 
   PetscFunctionBegin;
   if (!cgv->file_num || !cgv->base) PetscCall(MeshView(ns->mesh, viewer));
 
   PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
   PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
+  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Sdm));
   PetscCall(MeshGetDimension(ns->mesh, &dim));
 
   if (!cgv->output_times) PetscCall(PetscSegBufferCreate(sizeof(PetscReal), 20, &cgv->output_times));
@@ -195,16 +247,43 @@ PetscErrorCode NSViewSolution_FSM_Cart_CGNS_Internal(NS ns, PetscViewer viewer)
 
   /* Get solution subvectors */
   PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
   PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
 
-  /* Write solutions */
+  /* Write cell-centered solutions */
   if (cgv->include_coord) PetscCall(DMStagWriteCoordinatesInSolution_Private(sdm, cgv->file_num, cgv->base, cgv->zone, solution));
-  for (d = 0; d < dim; ++d) { PetscCall(DMStagWriteSolution_Private(vdm, v, d, cgv->file_num, cgv->base, cgv->zone, solution, velnames[d])); }
-  PetscCall(DMStagWriteSolution_Private(sdm, p, 0, cgv->file_num, cgv->base, cgv->zone, solution, presname));
-  PetscCall(DMStagWriteSolution_Private(sdm, fsm->phalf, 0, cgv->file_num, cgv->base, cgv->zone, solution, preshalfname));
+  for (d = 0; d < dim; ++d) { PetscCall(DMStagWriteCellCenteredSolution_Private(vdm, v, d, cgv->file_num, cgv->base, cgv->zone, solution, velocity_names[d])); }
+  PetscCall(DMStagWriteCellCenteredSolution_Private(sdm, p, 0, cgv->file_num, cgv->base, cgv->zone, solution, pressure_name));
+  PetscCall(DMStagWriteCellCenteredSolution_Private(sdm, fsm->phalf, 0, cgv->file_num, cgv->base, cgv->zone, solution, pressure_half_step_name));
+
+  /* Write face-centered solutions
+   * Solution tree structure:
+   *  - solution
+   *     - grid location = cell center
+   *     - fields for cell-centered solutions
+   *     - user data for i-face
+   *       - grid location = i-face center
+   *       - arrays for i-face-centered solutions
+   *     - user data for j-face
+   *       - grid location = j-face center
+   *       - arrays for j-face-centered solutions
+   *     - user data for k-face
+   *       - grid location = k-face center
+   *       - arrays for k-face-centered solutions
+   * Be careful to the order of writing user data */
+  CGNSCall(cg_goto(cgv->file_num, cgv->base, "Zone_t", cgv->zone, "FlowSolution_t", solution, NULL));
+  for (d = 0; d < dim; ++d) {
+    CGNSCall(cg_user_data_write(face_solution_names[d]));
+    CGNSCall(cg_gorel(cgv->file_num, "UserDefinedData_t", face_solution_user_data[d], NULL));
+    CGNSCall(cg_gridlocation_write(face_solution_grid_locationss[d]));
+    CGNSCall(cg_gorel(cgv->file_num, "..", 0, NULL));
+  }
+
+  PetscCall(DMStagWriteFaceCenteredSolution_Private(Sdm, V, 0, cgv->file_num, cgv->base, cgv->zone, solution, face_solution_user_data, face_norma_velocity_names));
 
   /* Restore solution subvectors */
   PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
   PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
 
   PetscCall(PetscViewerFlucaCGNSCheckBatch_Internal(viewer));
@@ -390,9 +469,9 @@ PetscErrorCode NSLoadSolutionCGNS_FSM_Cart_Internal(NS ns, PetscInt file_num)
   PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
   PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
 
-  for (d = 0; d < dim; ++d) { PetscCall(DMStagLoadSolution_Private(vdm, v, d, file_num, base, zone, solution, velnames[d])); }
-  PetscCall(DMStagLoadSolution_Private(sdm, p, 0, file_num, base, zone, solution, presname));
-  PetscCall(DMStagLoadSolution_Private(sdm, fsm->phalf, 0, file_num, base, zone, solution, preshalfname));
+  for (d = 0; d < dim; ++d) { PetscCall(DMStagLoadSolution_Private(vdm, v, d, file_num, base, zone, solution, velocity_names[d])); }
+  PetscCall(DMStagLoadSolution_Private(sdm, p, 0, file_num, base, zone, solution, pressure_name));
+  PetscCall(DMStagLoadSolution_Private(sdm, fsm->phalf, 0, file_num, base, zone, solution, pressure_half_step_name));
 
   /* Restore solution subvectors */
   PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
