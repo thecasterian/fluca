@@ -9,9 +9,9 @@ typedef struct _p_NS *NS;
 typedef const char *NSType;
 #define NSFSM "fsm"
 
-#define NS_FIELD_VELOCITY             "velocity"
-#define NS_FIELD_FACE_NORMAL_VELOCITY "facenormalvelocity"
-#define NS_FIELD_PRESSURE             "pressure"
+#define NS_FIELD_VELOCITY             "Velocity"
+#define NS_FIELD_FACE_NORMAL_VELOCITY "FaceNormalVelocity"
+#define NS_FIELD_PRESSURE             "Pressure"
 
 FLUCA_EXTERN PetscClassId NS_CLASSID;
 

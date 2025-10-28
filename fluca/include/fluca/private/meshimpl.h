@@ -18,6 +18,7 @@ struct _MeshOps {
   PetscErrorCode (*setup)(Mesh);
   PetscErrorCode (*destroy)(Mesh);
   PetscErrorCode (*view)(Mesh, PetscViewer);
+  PetscErrorCode (*createglobalvector)(Mesh, MeshDMType, Vec *);
   PetscErrorCode (*getnumberboundaries)(Mesh, PetscInt *);
 };
 

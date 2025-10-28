@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 add_library(fluca_mesh SHARED
     impl/cart/cart.c
     impl/cart/cartcgns.c
+    impl/cart/cartvec.c
     interface/meshbasic.c
     interface/meshopts.c
     interface/meshpkg.c

@@ -13,3 +13,8 @@ typedef struct {
 
   PetscInt refineFactor[MESH_MAX_DIM]; /* refinement factor */
 } Mesh_Cart;
+
+FLUCA_INTERN PetscErrorCode VecView_Cart(Vec, PetscViewer);
+FLUCA_INTERN PetscErrorCode VecView_Cart_Local(Vec, PetscViewer);
+
+FLUCA_INTERN PetscErrorCode VecView_Cart_Local_CGNS(Vec, PetscViewer);

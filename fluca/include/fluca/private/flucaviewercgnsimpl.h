@@ -22,7 +22,7 @@ typedef struct {
 } PetscViewer_FlucaCGNS;
 
 FLUCA_EXTERN PetscErrorCode FlucaGetCGNSDataType_Internal(PetscDataType, CGNS_ENUMT(DataType_t) *);
-FLUCA_EXTERN PetscErrorCode PetscViewerFileOpen_FlucaCGNS_Internal(PetscViewer, PetscInt);
+FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSFileOpen_Internal(PetscViewer, PetscInt);
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSCheckBatch_Internal(PetscViewer);
 
 #define CGNSCall(ierr) \

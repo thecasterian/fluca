@@ -168,7 +168,10 @@ PetscErrorCode NSSetUp(NS ns)
 
   PetscCall(NSGetNumFields(ns, &nf));
   PetscCall(PetscMalloc1(nf, &subvecs));
-  for (link = ns->fieldlink, i = 0; link; link = link->next, ++i) PetscCall(MeshCreateGlobalVector(ns->mesh, link->dmtype, &subvecs[i]));
+  for (link = ns->fieldlink, i = 0; link; link = link->next, ++i) {
+    PetscCall(MeshCreateGlobalVector(ns->mesh, link->dmtype, &subvecs[i]));
+    PetscCall(PetscObjectSetName((PetscObject)subvecs[i], link->fieldname));
+  }
   PetscCall(VecCreateNest(comm, nf, is, subvecs, &ns->sol));
 
   /* Create solver */

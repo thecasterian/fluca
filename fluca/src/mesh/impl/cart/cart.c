@@ -188,6 +188,18 @@ PetscErrorCode MeshView_Cart(Mesh mesh, PetscViewer v)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode MeshCreateGlobalVector_Cart(Mesh mesh, MeshDMType dmtype, Vec *vec)
+{
+  DM dm;
+
+  PetscFunctionBegin;
+  PetscCall(MeshGetDM(mesh, dmtype, &dm));
+  PetscCall(DMCreateGlobalVector(dm, vec));
+  PetscCall(PetscObjectCompose((PetscObject)(*vec), "Fluca_Mesh", (PetscObject)mesh));
+  PetscCall(VecSetOperation(*vec, VECOP_VIEW, (void (*)(void))VecView_Cart));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode MeshGetNumberBoundaries_Cart(Mesh mesh, PetscInt *nb)
 {
   PetscFunctionBegin;
@@ -215,6 +227,7 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh)
   mesh->ops->setup               = MeshSetUp_Cart;
   mesh->ops->destroy             = MeshDestroy_Cart;
   mesh->ops->view                = MeshView_Cart;
+  mesh->ops->createglobalvector  = MeshCreateGlobalVector_Cart;
   mesh->ops->getnumberboundaries = MeshGetNumberBoundaries_Cart;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -152,14 +152,10 @@ PetscErrorCode MeshGetDM(Mesh mesh, MeshDMType type, DM *dm)
 
 PetscErrorCode MeshCreateGlobalVector(Mesh mesh, MeshDMType type, Vec *vec)
 {
-  DM dm;
-
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscAssertPointer(vec, 3);
-  PetscCall(MeshGetDM(mesh, type, &dm));
-  PetscCall(DMCreateGlobalVector(dm, vec));
-  // TODO: set operations
+  PetscUseTypeMethod(mesh, createglobalvector, type, vec);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

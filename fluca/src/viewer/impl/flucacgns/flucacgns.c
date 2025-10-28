@@ -67,7 +67,7 @@ static PetscErrorCode PetscViewerFileClose_FlucaCGNS_Private(PetscViewer viewer)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PetscViewerFileOpen_FlucaCGNS_Internal(PetscViewer viewer, PetscInt sequence_number)
+PetscErrorCode PetscViewerFlucaCGNSFileOpen_Internal(PetscViewer viewer, PetscInt sequence_number)
 {
   PetscViewer_FlucaCGNS *cgv  = (PetscViewer_FlucaCGNS *)viewer->data;
   int                    mode = -1;
@@ -162,7 +162,7 @@ static PetscErrorCode PetscViewerFileSetName_FlucaCGNS(PetscViewer viewer, const
     PetscCall(PetscStrallocpy(filename, &cgv->filename_template));
   } else {
     PetscCall(PetscStrallocpy(filename, &cgv->filename));
-    PetscCall(PetscViewerFileOpen_FlucaCGNS_Internal(viewer, -1));
+    PetscCall(PetscViewerFlucaCGNSFileOpen_Internal(viewer, -1));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
