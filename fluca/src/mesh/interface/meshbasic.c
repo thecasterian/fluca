@@ -16,13 +16,15 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh)
 
   PetscCall(MeshInitializePackage());
   PetscCall(FlucaHeaderCreate(m, MESH_CLASSID, "Mesh", "Mesh", "Mesh", comm, MeshDestroy, MeshView));
-  m->dim         = PETSC_DETERMINE;
-  m->sdm         = NULL;
-  m->vdm         = NULL;
-  m->Sdm         = NULL;
-  m->Vdm         = NULL;
-  m->data        = NULL;
-  m->setupcalled = PETSC_FALSE;
+  m->dim          = PETSC_DETERMINE;
+  m->sdm          = NULL;
+  m->vdm          = NULL;
+  m->Sdm          = NULL;
+  m->Vdm          = NULL;
+  m->data         = NULL;
+  m->outputseqnum = -1;
+  m->outputseqval = 0.;
+  m->setupcalled  = PETSC_FALSE;
 
   *mesh = m;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -166,5 +168,21 @@ PetscErrorCode MeshGetNumberBoundaries(Mesh mesh, PetscInt *nb)
   PetscAssertPointer(nb, 2);
   PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
   PetscTryTypeMethod(mesh, getnumberboundaries, nb);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshSetOutputSequenceNumber(Mesh mesh, PetscInt num, PetscReal val)
+{
+  PetscFunctionBegin;
+  mesh->outputseqnum = num;
+  mesh->outputseqval = val;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshGetOutputSequenceNumber(Mesh mesh, PetscInt *num, PetscReal *val)
+{
+  PetscFunctionBegin;
+  if (num) *num = mesh->outputseqnum;
+  if (val) *val = mesh->outputseqval;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

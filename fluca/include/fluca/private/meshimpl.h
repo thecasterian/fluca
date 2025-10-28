@@ -36,5 +36,7 @@ struct _p_Mesh {
   void *data; /* implementation-specific data */
 
   /* Status --------------------------------------------------------------- */
-  PetscBool setupcalled; /* whether MeshSetUp() has been called */
+  PetscInt  outputseqnum; /* output sequence number */
+  PetscReal outputseqval; /* output sequence value */
+  PetscBool setupcalled;  /* whether MeshSetUp() has been called */
 };

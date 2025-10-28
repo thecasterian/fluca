@@ -35,5 +35,8 @@ FLUCA_EXTERN PetscErrorCode MeshCreateGlobalVector(Mesh, MeshDMType, Vec *);
 
 FLUCA_EXTERN PetscErrorCode MeshGetNumberBoundaries(Mesh, PetscInt *);
 
+FLUCA_EXTERN PetscErrorCode MeshSetOutputSequenceNumber(Mesh, PetscInt, PetscReal);
+FLUCA_EXTERN PetscErrorCode MeshGetOutputSequenceNumber(Mesh, PetscInt *, PetscReal *);
+
 FLUCA_EXTERN PetscFunctionList MeshList;
 FLUCA_EXTERN PetscErrorCode    MeshRegister(const char[], PetscErrorCode (*)(Mesh));

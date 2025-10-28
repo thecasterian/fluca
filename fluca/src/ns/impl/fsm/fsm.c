@@ -181,6 +181,8 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(MeshCreateGlobalVector(ns->mesh, MESH_DM_SCALAR, &fsm->phalf));
   PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &fsm->TvN));
 
+  PetscCall(PetscObjectSetName((PetscObject)fsm->phalf, "PressureHalfStep"));
+
   /* Create null space */
   neednullspace = PETSC_TRUE;
   PetscCall(MeshGetNumberBoundaries(ns->mesh, &nb));
@@ -262,20 +264,19 @@ PetscErrorCode NSDestroy_FSM(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSView_FSM(NS ns, PetscViewer v)
+PetscErrorCode NSView_FSM(NS ns, PetscViewer viewer)
 {
   PetscFunctionBegin;
   // TODO: add view
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSViewSolution_FSM(NS ns, PetscViewer v)
+PetscErrorCode NSViewSolution_FSM(NS ns, PetscViewer viewer)
 {
-  PetscBool iscart;
+  NS_FSM *fsm = (NS_FSM *)ns->data;
 
   PetscFunctionBegin;
-  PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
-  if (iscart) PetscCall(NSViewSolution_FSM_Cart_Internal(ns, v));
+  PetscCall(VecView(fsm->phalf, viewer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

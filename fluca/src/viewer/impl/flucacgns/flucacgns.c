@@ -106,6 +106,7 @@ PetscErrorCode PetscViewerFlucaCGNSCheckBatch_Internal(PetscViewer viewer)
 
   PetscFunctionBegin;
   if (!cgv->filename_template) PetscFunctionReturn(PETSC_SUCCESS);
+  if (!cgv->output_steps) PetscFunctionReturn(PETSC_SUCCESS);
   PetscCall(PetscSegBufferGetSize(cgv->output_steps, &num_steps));
   if (num_steps >= (PetscCount)cgv->batch_size) PetscCall(PetscViewerFileClose_FlucaCGNS_Private(viewer));
   PetscFunctionReturn(PETSC_SUCCESS);

@@ -4,7 +4,7 @@
 #include <flucaviewer.h>
 #include <petscdmstag.h>
 
-extern PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer v);
+extern PetscErrorCode MeshView_Cart_CGNS(Mesh mesh, PetscViewer v);
 
 const char *MeshCartBoundaryTypes[]              = {"NONE", "PERIODIC", "MeshCartBoundaryType", "", NULL};
 const char *MeshCartBoundaryLocations[]          = {"LEFT", "RIGHT", "DOWN", "UP", "BACK", "FRONT", "MeshCartBoundaryLocation", "", NULL};
@@ -183,7 +183,7 @@ PetscErrorCode MeshView_Cart(Mesh mesh, PetscViewer v)
     PetscCall(PetscViewerFlush(v));
     PetscCall(PetscViewerASCIIPopSynchronized(v));
   } else if (iscgns) {
-    PetscCall(MeshView_CartCGNS(mesh, v));
+    PetscCall(MeshView_Cart_CGNS(mesh, v));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -2,7 +2,7 @@
 #include <fluca/private/flucaviewercgnsimpl.h>
 #include <petscdmstag.h>
 
-PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
+PetscErrorCode MeshView_Cart_CGNS(Mesh mesh, PetscViewer viewer)
 {
   Mesh_Cart             *cart = (Mesh_Cart *)mesh->data;
   PetscViewer_FlucaCGNS *cgv  = (PetscViewer_FlucaCGNS *)viewer->data;
@@ -11,12 +11,7 @@ PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer viewer)
   if (!mesh->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
   if (cgv->file_num && cgv->base) PetscFunctionReturn(PETSC_SUCCESS);
 
-  if (!cgv->file_num) {
-    PetscInt timestep;
-
-    PetscCall(DMGetOutputSequenceNumber(mesh->sdm, &timestep, NULL));
-    PetscCall(PetscViewerFlucaCGNSFileOpen_Internal(viewer, timestep));
-  }
+  if (!cgv->file_num) PetscCall(PetscViewerFlucaCGNSFileOpen_Internal(viewer, mesh->outputseqnum));
   CGNSCall(cg_base_write(cgv->file_num, "Base", mesh->dim, mesh->dim, &cgv->base));
 
   {
@@ -290,7 +285,7 @@ PetscErrorCode VecView_Cart_Local_CGNS(Vec v, PetscViewer viewer)
   }
 
   PetscCall(PetscObjectGetName((PetscObject)v, &vec_name));
-  PetscCall(DMGetOutputSequenceNumber(dm, &step, &time));
+  PetscCall(MeshGetOutputSequenceNumber(mesh, &step, &time));
   if (step < 0) {
     step = 0;
     time = 0.;
