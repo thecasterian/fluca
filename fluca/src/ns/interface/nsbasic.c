@@ -244,25 +244,25 @@ PetscErrorCode NSSolve(NS ns, PetscInt num_iters)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSView(NS ns, PetscViewer v)
+PetscErrorCode NSView(NS ns, PetscViewer viewer)
 {
   PetscBool isascii;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  if (!v) PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)ns), &v));
-  PetscValidHeaderSpecific(v, PETSC_VIEWER_CLASSID, 2);
-  PetscCheckSameComm(ns, 1, v, 2);
+  if (!viewer) PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)ns), &viewer));
+  PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
+  PetscCheckSameComm(ns, 1, viewer, 2);
 
-  PetscCall(PetscObjectTypeCompare((PetscObject)v, PETSCVIEWERASCII, &isascii));
+  PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &isascii));
 
   if (isascii) {
-    PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)ns, v));
-    PetscCall(PetscViewerASCIIPrintf(v, "Density: %g, Viscosity: %g, Time step size: %g\n", ns->rho, ns->mu, ns->dt));
-    PetscCall(PetscViewerASCIIPrintf(v, "Current time step: %d, Current time: %g\n", ns->step, ns->t));
-    PetscCall(PetscViewerASCIIPushTab(v));
-    PetscTryTypeMethod(ns, view, v);
-    PetscCall(PetscViewerASCIIPopTab(v));
+    PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)ns, viewer));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Density: %g, Viscosity: %g, Time step size: %g\n", ns->rho, ns->mu, ns->dt));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Current time step: %d, Current time: %g\n", ns->step, ns->t));
+    PetscCall(PetscViewerASCIIPushTab(viewer));
+    PetscTryTypeMethod(ns, view, viewer);
+    PetscCall(PetscViewerASCIIPopTab(viewer));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

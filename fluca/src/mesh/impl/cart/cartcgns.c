@@ -114,6 +114,46 @@ PetscErrorCode MeshView_Cart_CGNS(Mesh mesh, PetscViewer viewer)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode MeshLoad_Cart_CGNS(Mesh mesh, PetscViewer viewer)
+{
+  Mesh_Cart             *cart = (Mesh_Cart *)mesh->data;
+  PetscViewer_FlucaCGNS *cgv  = (PetscViewer_FlucaCGNS *)viewer->data;
+  const int              base = 1, zone = 1;
+  int                    num_bases, num_zones, num_coords;
+  int                    cell_dim, phys_dim;
+  int                    d;
+  char                   base_name[CGIO_MAX_NAME_LENGTH + 1];
+  char                   zone_name[CGIO_MAX_NAME_LENGTH + 1];
+  CGNS_ENUMT(ZoneType_t) zone_type;
+  cgsize_t               sizes[9];
+
+  PetscFunctionBegin;
+  CGNSCall(cg_nbases(cgv->file_num, &num_bases));
+  PetscCheck(num_bases == 1, PETSC_COMM_SELF, PETSC_ERR_LIB, "Only one base is supported");
+  CGNSCall(cg_base_read(cgv->file_num, base, base_name, &cell_dim, &phys_dim));
+  CGNSCall(cg_nzones(cgv->file_num, base, &num_zones));
+  PetscCheck(num_zones == 1, PETSC_COMM_SELF, PETSC_ERR_LIB, "Only one zone is supported");
+  CGNSCall(cg_zone_read(cgv->file_num, base, zone, zone_name, sizes));
+  CGNSCall(cg_zone_type(cgv->file_num, base, zone, &zone_type));
+  PetscCheck(zone_type == CGNS_ENUMV(Structured), PETSC_COMM_SELF, PETSC_ERR_LIB, "Only structured zone is supported");
+
+  CGNSCall(cg_ncoords(cgv->file_num, base, zone, &num_coords));
+  PetscCheck(num_coords == cell_dim, PETSC_COMM_SELF, PETSC_ERR_LIB, "Number of coordinates does not match cell dimension");
+  for (d = 0; d < cell_dim; ++d) {
+    cgsize_t rmin[3] = {1, 1, 1}, rmax[3] = {1, 1, 1};
+
+    rmax[d] = sizes[d];
+    PetscCall(PetscFree(cart->coordLoaded[d]));
+    PetscCall(PetscMalloc1(sizes[d], &cart->coordLoaded[d]));
+    CGNSCall(cgp_coord_read_data(cgv->file_num, base, zone, d + 1, rmin, rmax, cart->coordLoaded[d]));
+  }
+
+  PetscCall(MeshSetDimension(mesh, cell_dim));
+  PetscCall(MeshCartSetBoundaryTypes(mesh, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE));
+  PetscCall(MeshCartSetGlobalSizes(mesh, sizes[cell_dim], sizes[cell_dim + 1], cell_dim == 3 ? sizes[cell_dim + 2] : 1));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode DMStagGetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt c, PetscScalar *e)
 {
   PetscInt       x, y, m, n, nExtrax, nExtray;
