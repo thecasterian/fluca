@@ -16,13 +16,15 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh)
 
   PetscCall(MeshInitializePackage());
   PetscCall(FlucaHeaderCreate(m, MESH_CLASSID, "Mesh", "Mesh", "Mesh", comm, MeshDestroy, MeshView));
-  m->dim         = PETSC_DETERMINE;
-  m->sdm         = NULL;
-  m->vdm         = NULL;
-  m->Sdm         = NULL;
-  m->Vdm         = NULL;
-  m->data        = NULL;
-  m->setupcalled = PETSC_FALSE;
+  m->dim          = PETSC_DETERMINE;
+  m->sdm          = NULL;
+  m->vdm          = NULL;
+  m->Sdm          = NULL;
+  m->Vdm          = NULL;
+  m->data         = NULL;
+  m->outputseqnum = -1;
+  m->outputseqval = 0.;
+  m->setupcalled  = PETSC_FALSE;
 
   *mesh = m;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -125,43 +127,37 @@ PetscErrorCode MeshDestroy(Mesh *mesh)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshGetScalarDM(Mesh mesh, DM *sdm)
+PetscErrorCode MeshGetDM(Mesh mesh, MeshDMType type, DM *dm)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscAssertPointer(sdm, 2);
+  PetscAssertPointer(dm, 3);
   PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
-  *sdm = mesh->sdm;
+  switch (type) {
+  case MESH_DM_SCALAR:
+    *dm = mesh->sdm;
+    break;
+  case MESH_DM_VECTOR:
+    *dm = mesh->vdm;
+    break;
+  case MESH_DM_STAG_SCALAR:
+    *dm = mesh->Sdm;
+    break;
+  case MESH_DM_STAG_VECTOR:
+    *dm = mesh->Vdm;
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_OUTOFRANGE, "Invalid MeshDMType %d", (int)type);
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshGetVectorDM(Mesh mesh, DM *vdm)
+PetscErrorCode MeshCreateGlobalVector(Mesh mesh, MeshDMType type, Vec *vec)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscAssertPointer(vdm, 2);
-  PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
-  *vdm = mesh->vdm;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode MeshGetStaggeredScalarDM(Mesh mesh, DM *Sdm)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscAssertPointer(Sdm, 2);
-  PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
-  *Sdm = mesh->Sdm;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode MeshGetStaggeredVectorDM(Mesh mesh, DM *Vdm)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscAssertPointer(Vdm, 2);
-  PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
-  *Vdm = mesh->Vdm;
+  PetscAssertPointer(vec, 3);
+  PetscUseTypeMethod(mesh, createglobalvector, type, vec);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -172,5 +168,21 @@ PetscErrorCode MeshGetNumberBoundaries(Mesh mesh, PetscInt *nb)
   PetscAssertPointer(nb, 2);
   PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Mesh not setup");
   PetscTryTypeMethod(mesh, getnumberboundaries, nb);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshSetOutputSequenceNumber(Mesh mesh, PetscInt num, PetscReal val)
+{
+  PetscFunctionBegin;
+  mesh->outputseqnum = num;
+  mesh->outputseqval = val;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshGetOutputSequenceNumber(Mesh mesh, PetscInt *num, PetscReal *val)
+{
+  PetscFunctionBegin;
+  if (num) *num = mesh->outputseqnum;
+  if (val) *val = mesh->outputseqval;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

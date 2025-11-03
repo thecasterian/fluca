@@ -18,6 +18,7 @@ struct _MeshOps {
   PetscErrorCode (*setup)(Mesh);
   PetscErrorCode (*destroy)(Mesh);
   PetscErrorCode (*view)(Mesh, PetscViewer);
+  PetscErrorCode (*createglobalvector)(Mesh, MeshDMType, Vec *);
   PetscErrorCode (*getnumberboundaries)(Mesh, PetscInt *);
 };
 
@@ -35,5 +36,7 @@ struct _p_Mesh {
   void *data; /* implementation-specific data */
 
   /* Status --------------------------------------------------------------- */
-  PetscBool setupcalled; /* whether MeshSetUp() has been called */
+  PetscInt  outputseqnum; /* output sequence number */
+  PetscReal outputseqval; /* output sequence value */
+  PetscBool setupcalled;  /* whether MeshSetUp() has been called */
 };

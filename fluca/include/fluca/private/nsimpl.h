@@ -29,7 +29,7 @@ struct _NSOps {
 typedef struct _n_NSFieldLink *NSFieldLink;
 struct _n_NSFieldLink {
   char       *fieldname;
-  DM          dm;
+  MeshDMType  dmtype;
   IS          is; /* indices in solution vector */
   NSFieldLink prev, next;
 };

@@ -4,7 +4,7 @@
 #include <flucaviewer.h>
 #include <petscdmstag.h>
 
-extern PetscErrorCode MeshView_CartCGNS(Mesh mesh, PetscViewer v);
+extern PetscErrorCode MeshView_Cart_CGNS(Mesh mesh, PetscViewer v);
 
 const char *MeshCartBoundaryTypes[]              = {"NONE", "PERIODIC", "MeshCartBoundaryType", "", NULL};
 const char *MeshCartBoundaryLocations[]          = {"LEFT", "RIGHT", "DOWN", "UP", "BACK", "FRONT", "MeshCartBoundaryLocation", "", NULL};
@@ -183,8 +183,20 @@ PetscErrorCode MeshView_Cart(Mesh mesh, PetscViewer v)
     PetscCall(PetscViewerFlush(v));
     PetscCall(PetscViewerASCIIPopSynchronized(v));
   } else if (iscgns) {
-    PetscCall(MeshView_CartCGNS(mesh, v));
+    PetscCall(MeshView_Cart_CGNS(mesh, v));
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshCreateGlobalVector_Cart(Mesh mesh, MeshDMType dmtype, Vec *vec)
+{
+  DM dm;
+
+  PetscFunctionBegin;
+  PetscCall(MeshGetDM(mesh, dmtype, &dm));
+  PetscCall(DMCreateGlobalVector(dm, vec));
+  PetscCall(PetscObjectCompose((PetscObject)(*vec), "Fluca_Mesh", (PetscObject)mesh));
+  PetscCall(VecSetOperation(*vec, VECOP_VIEW, (void (*)(void))VecView_Cart));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -215,6 +227,7 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh)
   mesh->ops->setup               = MeshSetUp_Cart;
   mesh->ops->destroy             = MeshDestroy_Cart;
   mesh->ops->view                = MeshView_Cart;
+  mesh->ops->createglobalvector  = MeshCreateGlobalVector_Cart;
   mesh->ops->getnumberboundaries = MeshGetNumberBoundaries_Cart;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

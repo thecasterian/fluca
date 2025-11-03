@@ -9,9 +9,9 @@ typedef struct _p_NS *NS;
 typedef const char *NSType;
 #define NSFSM "fsm"
 
-#define NS_FIELD_VELOCITY             "velocity"
-#define NS_FIELD_FACE_NORMAL_VELOCITY "facenormalvelocity"
-#define NS_FIELD_PRESSURE             "pressure"
+#define NS_FIELD_VELOCITY             "Velocity"
+#define NS_FIELD_FACE_NORMAL_VELOCITY "FaceNormalVelocity"
+#define NS_FIELD_PRESSURE             "Pressure"
 
 FLUCA_EXTERN PetscClassId NS_CLASSID;
 
@@ -44,8 +44,8 @@ FLUCA_EXTERN PetscErrorCode NSDestroy(NS *);
 
 FLUCA_EXTERN PetscErrorCode NSGetSolution(NS, Vec *);
 FLUCA_EXTERN PetscErrorCode NSGetNumFields(NS, PetscInt *);
-FLUCA_EXTERN PetscErrorCode NSGetField(NS, const char[], DM *, IS *);
-FLUCA_EXTERN PetscErrorCode NSGetFieldByIndex(NS, PetscInt, const char *[], DM *, IS *);
+FLUCA_EXTERN PetscErrorCode NSGetField(NS, const char[], MeshDMType *, IS *);
+FLUCA_EXTERN PetscErrorCode NSGetFieldByIndex(NS, PetscInt, const char *[], MeshDMType *, IS *);
 FLUCA_EXTERN PetscErrorCode NSGetSolutionSubVector(NS, const char[], Vec *);
 FLUCA_EXTERN PetscErrorCode NSRestoreSolutionSubVector(NS, const char[], Vec *);
 FLUCA_EXTERN PetscErrorCode NSViewSolution(NS, PetscViewer);

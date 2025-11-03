@@ -163,7 +163,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
   KSP         ksp;
   PC          pc;
   NSFSMPCCtx *pcctx;
-  DM          sdm, vdm, Vdm;
+  DM          vdm, Vdm;
   PetscInt    dim, nb, i;
   PetscBool   neednullspace, iscart;
 
@@ -173,14 +173,15 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
 
   /* Create intermediate solution vectors and spatial operators */
-  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
-  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_VECTOR, &vdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_STAG_VECTOR, &Vdm));
   PetscCall(MeshGetDimension(ns->mesh, &dim));
 
-  PetscCall(DMCreateGlobalVector(Vdm, &fsm->v0interp));
-  PetscCall(DMCreateGlobalVector(sdm, &fsm->phalf));
+  PetscCall(MeshCreateGlobalVector(ns->mesh, MESH_DM_STAG_VECTOR, &fsm->v0interp));
+  PetscCall(MeshCreateGlobalVector(ns->mesh, MESH_DM_SCALAR, &fsm->phalf));
   PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &fsm->TvN));
+
+  PetscCall(PetscObjectSetName((PetscObject)fsm->phalf, "PressureHalfStep"));
 
   /* Create null space */
   neednullspace = PETSC_TRUE;
@@ -263,20 +264,19 @@ PetscErrorCode NSDestroy_FSM(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSView_FSM(NS ns, PetscViewer v)
+PetscErrorCode NSView_FSM(NS ns, PetscViewer viewer)
 {
   PetscFunctionBegin;
   // TODO: add view
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSViewSolution_FSM(NS ns, PetscViewer v)
+PetscErrorCode NSViewSolution_FSM(NS ns, PetscViewer viewer)
 {
-  PetscBool iscart;
+  NS_FSM *fsm = (NS_FSM *)ns->data;
 
   PetscFunctionBegin;
-  PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
-  if (iscart) PetscCall(NSViewSolution_FSM_Cart_Internal(ns, v));
+  PetscCall(VecView(fsm->phalf, viewer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

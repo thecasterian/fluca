@@ -1525,8 +1525,8 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   Vec     v0, p0, v, V, dp, solv, solV, solp, vbc;
 
   PetscFunctionBegin;
-  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_VECTOR, &vdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_STAG_VECTOR, &Vdm));
   PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, &vis));
   PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, &Vis));
   PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &pis));
@@ -1578,16 +1578,19 @@ PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ct
 {
   NS      ns  = (NS)ctx;
   NS_FSM *fsm = (NS_FSM *)ns->data;
-  DM      vdm, Sdm, pdm;
+  DM      sdm, vdm, Sdm;
   IS      vis, Vis, pis;
   Vec     v0, V0, p0, momrhs, interprhs, contrhs;
   Mat     Gp, Lv;
   Vec     Gp_p, Lv_v, vbc;
 
   PetscFunctionBegin;
-  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, &vdm, &vis));
-  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &Sdm, &Vis));
-  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, &pdm, &pis));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_SCALAR, &sdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_VECTOR, &vdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_STAG_SCALAR, &Sdm));
+  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, &vis));
+  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, &Vis));
+  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &pis));
   PetscCall(VecGetSubVector(ns->sol0, vis, &v0));
   PetscCall(VecGetSubVector(ns->sol0, Vis, &V0));
   PetscCall(VecGetSubVector(f, vis, &momrhs));
@@ -1644,10 +1647,10 @@ PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre
   static PetscBool firstcalled = PETSC_TRUE;
 
   PetscFunctionBegin;
-  PetscCall(MeshGetScalarDM(ns->mesh, &sdm));
-  PetscCall(MeshGetVectorDM(ns->mesh, &vdm));
-  PetscCall(MeshGetStaggeredScalarDM(ns->mesh, &Sdm));
-  PetscCall(MeshGetStaggeredVectorDM(ns->mesh, &Vdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_SCALAR, &sdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_VECTOR, &vdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_STAG_SCALAR, &Sdm));
+  PetscCall(MeshGetDM(ns->mesh, MESH_DM_STAG_VECTOR, &Vdm));
   PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, &vis));
   PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, &Vis));
   PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &pis));
