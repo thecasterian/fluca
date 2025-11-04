@@ -81,7 +81,11 @@ int main(int argc, char **argv)
 
     PetscCall(NSSetFromOptions(ns));
     PetscCall(NSSetUp(ns));
-    if (ns_load_solution_from_file) PetscCall(NSLoadSolutionFromFile(ns, ns_filename));
+    if (ns_load_solution_from_file) {
+      PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, ns_filename, FILE_MODE_READ, &viewer));
+      PetscCall(NSLoadSolution(ns, viewer));
+      PetscCall(PetscViewerDestroy(&viewer));
+    }
     PetscCall(NSSolve(ns, ns_steps));
   }
 

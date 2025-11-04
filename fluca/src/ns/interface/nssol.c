@@ -136,60 +136,24 @@ PetscErrorCode NSViewSolutionFromOptions(NS ns, PetscObject obj, const char name
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode CheckExtension_Private(const char filename[], const char extension[], PetscBool *is_extension)
+PetscErrorCode NSLoadSolution(NS ns, PetscViewer viewer)
 {
-  size_t len_filename, len_extension;
+  NSFieldLink link;
+  Vec         subvec;
 
   PetscFunctionBegin;
-  PetscCall(PetscStrlen(filename, &len_filename));
-  PetscCall(PetscStrlen(extension, &len_extension));
-  if (len_filename < len_extension) {
-    *is_extension = PETSC_FALSE;
-  } else {
-    PetscCall(PetscStrcmp(filename + len_filename - len_extension, extension, is_extension));
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
+  PetscCheckSameComm(ns, 1, viewer, 2);
+  PetscCall(PetscViewerCheckReadable(viewer));
+
+  /* Load fields */
+  for (link = ns->fieldlink; link; link = link->next) {
+    PetscCall(VecGetSubVector(ns->sol, link->is, &subvec));
+    PetscCall(FlucaVecLoad(subvec, viewer));
+    PetscCall(VecRestoreSubVector(ns->sol, link->is, &subvec));
   }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
 
-PetscErrorCode NSLoadSolutionFromFile(NS ns, const char filename[])
-{
-  const char *ext_cgns = ".cgns";
-  PetscBool   iscgns;
-
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  PetscAssertPointer(filename, 2);
-  PetscCall(PetscLogEventBegin(NS_LoadSolutionFromFile, ns, 0, 0, 0));
-
-  PetscCall(CheckExtension_Private(filename, ext_cgns, &iscgns));
-  if (iscgns) PetscCall(NSLoadSolutionCGNSFromFile(ns, filename));
-  else SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot load file %s: unrecognized extension", filename);
-
-  PetscCall(PetscLogEventEnd(NS_LoadSolutionFromFile, ns, 0, 0, 0));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode NSLoadSolutionCGNS(NS ns, PetscInt file_num)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  PetscCheck(ns->mesh, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "Mesh is not set");
-  PetscTryTypeMethod(ns, loadsolutioncgns, file_num);
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode NSLoadSolutionCGNSFromFile(NS ns, const char filename[])
-{
-  int file_num = -1;
-
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  PetscAssertPointer(filename, 2);
-
-  CGNSCall(cgp_mpi_comm(PetscObjectComm((PetscObject)ns)));
-  CGNSCall(cgp_open(filename, CG_MODE_READ, &file_num));
-  PetscCheck(file_num > 0, PETSC_COMM_SELF, PETSC_ERR_LIB, "cgp_open(\"%s\", ...) did not return a valid file number", filename);
-  PetscCall(NSLoadSolutionCGNS(ns, file_num));
-  CGNSCall(cgp_close(file_num));
+  PetscTryTypeMethod(ns, loadsolution, viewer);
   PetscFunctionReturn(PETSC_SUCCESS);
 }

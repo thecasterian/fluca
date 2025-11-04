@@ -33,3 +33,18 @@ PetscErrorCode VecView_Cart_Local(Vec v, PetscViewer viewer)
   if (iscgns) PetscCall(VecView_Cart_Local_CGNS(v, viewer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode VecLoad_Cart(Vec v, PetscViewer viewer)
+{
+  DM        dm;
+  PetscBool iscgns;
+
+  PetscFunctionBegin;
+  PetscCall(PetscViewerCheckReadable(viewer));
+  PetscCall(VecGetDM(v, &dm));
+  PetscCheck(dm, PetscObjectComm((PetscObject)v), PETSC_ERR_ARG_WRONG, "Vector not generated from a Mesh");
+  PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERFLUCACGNS, &iscgns));
+  if (iscgns) PetscCall(VecLoad_Cart_CGNS(v, viewer));
+  else SETERRQ(PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_WRONG, "Invalid viewer; open viewer with PetscViewerFlucaCGNSOpen()");
+  PetscFunctionReturn(PETSC_SUCCESS);
+}

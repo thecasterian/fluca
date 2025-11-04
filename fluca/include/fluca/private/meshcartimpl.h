@@ -22,3 +22,5 @@ FLUCA_INTERN PetscErrorCode MeshLoad_Cart_CGNS(Mesh, PetscViewer);
 FLUCA_INTERN PetscErrorCode VecView_Cart(Vec, PetscViewer);
 FLUCA_INTERN PetscErrorCode VecView_Cart_Local(Vec, PetscViewer);
 FLUCA_INTERN PetscErrorCode VecView_Cart_Local_CGNS(Vec, PetscViewer);
+FLUCA_INTERN PetscErrorCode VecLoad_Cart(Vec, PetscViewer);
+FLUCA_INTERN PetscErrorCode VecLoad_Cart_CGNS(Vec, PetscViewer);

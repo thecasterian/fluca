@@ -2,6 +2,9 @@
 #include <fluca/private/flucaviewercgnsimpl.h>
 #include <petscdmstag.h>
 
+static const char *const                face_sol_names[3]     = {"IFaceCenteredSolution", "JFaceCenteredSolution", "KFaceCenteredSolution"};
+static const CGNS_ENUMT(GridLocation_t) face_sol_grid_locs[3] = {CGNS_ENUMV(IFaceCenter), CGNS_ENUMV(JFaceCenter), CGNS_ENUMV(KFaceCenter)};
+
 PetscErrorCode MeshView_Cart_CGNS(Mesh mesh, PetscViewer viewer)
 {
   Mesh_Cart             *cart = (Mesh_Cart *)mesh->data;
@@ -350,9 +353,6 @@ PetscErrorCode VecView_Cart_Local_CGNS(Vec v, PetscViewer viewer)
   }
 
   if (!cgv->sol) {
-    const char *const                face_sol_names[3]           = {"IFaceCenteredSolution", "JFaceCenteredSolution", "KFaceCenteredSolution"};
-    const CGNS_ENUMT(GridLocation_t) face_sol_grid_locationss[3] = {CGNS_ENUMV(IFaceCenter), CGNS_ENUMV(JFaceCenter), CGNS_ENUMV(KFaceCenter)};
-
     /* Solution tree structure:
      *  - solution
      *     - grid location = cell center
@@ -373,7 +373,7 @@ PetscErrorCode VecView_Cart_Local_CGNS(Vec v, PetscViewer viewer)
     for (d = 0; d < dim; ++d) {
       CGNSCall(cg_user_data_write(face_sol_names[d]));
       CGNSCall(cg_gorel(cgv->file_num, "UserDefinedData_t", d + 1, NULL));
-      CGNSCall(cg_gridlocation_write(face_sol_grid_locationss[d]));
+      CGNSCall(cg_gridlocation_write(face_sol_grid_locs[d]));
       CGNSCall(cg_gorel(cgv->file_num, "..", 0, NULL));
     }
   }
@@ -387,7 +387,7 @@ PetscErrorCode VecView_Cart_Local_CGNS(Vec v, PetscViewer viewer)
         PetscCall(DMStagWriteCellCenteredSolution_Private(dm, v, d, cgv->file_num, cgv->base, cgv->zone, cgv->sol, field_name));
       }
     }
-  } else if (fc) {
+  } else {
     if (dof[dim - 1] == 1) {
       PetscCall(DMStagWriteFaceCenteredSolution_Private(dm, v, 0, cgv->file_num, cgv->base, cgv->zone, cgv->sol, vec_name));
     } else {
@@ -400,82 +400,334 @@ PetscErrorCode VecView_Cart_Local_CGNS(Vec v, PetscViewer viewer)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartCreateCGNS(MPI_Comm comm, PetscInt file_num, Mesh *mesh)
+static PetscErrorCode DMStagSetLocalEntries2d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt c, PetscScalar *e)
 {
-  const int              base = 1, zone = 1;
-  int                    num_bases, num_zones, num_coords;
-  int                    cell_dim, phys_dim;
-  int                    d;
-  char                   base_name[CGIO_MAX_NAME_LENGTH + 1];
-  char                   zone_name[CGIO_MAX_NAME_LENGTH + 1];
-  CGNS_ENUMT(ZoneType_t) zone_type;
-  cgsize_t               sizes[9];
-  PetscScalar           *arr_coord[3];
+  PetscInt       x, y, m, n, nExtrax, nExtray;
+  PetscBool      isLastRankx, isLastRanky;
+  PetscScalar ***arr;
+  PetscInt       iloc, i, j, cnt = 0;
 
   PetscFunctionBegin;
-  PetscAssertPointer(mesh, 3);
+  PetscCall(DMStagGetCorners(dm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetIsLastRank(dm, &isLastRankx, &isLastRanky, NULL));
+  nExtrax = (loc == DMSTAG_LEFT && isLastRankx) ? 1 : 0;
+  nExtray = (loc == DMSTAG_DOWN && isLastRanky) ? 1 : 0;
+  PetscCall(DMStagVecGetArray(dm, v, &arr));
+  PetscCall(DMStagGetLocationSlot(dm, loc, c, &iloc));
+  for (j = y; j < y + n + nExtray; ++j)
+    for (i = x; i < x + m + nExtrax; ++i) arr[j][i][iloc] = e[cnt++];
+  PetscCall(DMStagVecRestoreArray(dm, v, &arr));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
-  PetscCall(MeshCreate(comm, mesh));
-  PetscCall(MeshSetType(*mesh, MESHCART));
+static PetscErrorCode DMStagSetLocalEntries3d_Private(DM dm, Vec v, DMStagStencilLocation loc, PetscInt c, PetscScalar *e)
+{
+  PetscInt        x, y, z, m, n, p, nExtrax, nExtray, nExtraz;
+  PetscBool       isLastRankx, isLastRanky, isLastRankz;
+  PetscScalar ****arr;
+  PetscInt        iloc, i, j, k, cnt = 0;
 
-  /* Read CGNS file. */
-  CGNSCall(cg_nbases(file_num, &num_bases));
-  PetscCheck(num_bases == 1, PETSC_COMM_SELF, PETSC_ERR_LIB, "Only one base is supported");
-  CGNSCall(cg_base_read(file_num, base, base_name, &cell_dim, &phys_dim));
-  CGNSCall(cg_nzones(file_num, base, &num_zones));
-  PetscCheck(num_zones == 1, PETSC_COMM_SELF, PETSC_ERR_LIB, "Only one zone is supported");
-  CGNSCall(cg_zone_read(file_num, base, zone, zone_name, sizes));
-  CGNSCall(cg_zone_type(file_num, base, zone, &zone_type));
-  PetscCheck(zone_type == CGNS_ENUMV(Structured), PETSC_COMM_SELF, PETSC_ERR_LIB, "Only structured zone is supported");
+  PetscFunctionBegin;
+  PetscCall(DMStagGetCorners(dm, &x, &y, &z, &m, &n, &p, NULL, NULL, NULL));
+  PetscCall(DMStagGetIsLastRank(dm, &isLastRankx, &isLastRanky, &isLastRankz));
+  nExtrax = (loc == DMSTAG_LEFT && isLastRankx) ? 1 : 0;
+  nExtray = (loc == DMSTAG_DOWN && isLastRanky) ? 1 : 0;
+  nExtraz = (loc == DMSTAG_BACK && isLastRankz) ? 1 : 0;
+  PetscCall(DMStagVecGetArray(dm, v, &arr));
+  PetscCall(DMStagGetLocationSlot(dm, loc, c, &iloc));
+  for (k = z; k < z + p + nExtraz; ++k)
+    for (j = y; j < y + n + nExtray; ++j)
+      for (i = x; i < x + m + nExtrax; ++i) arr[k][j][i][iloc] = e[cnt++];
+  PetscCall(DMStagVecRestoreArray(dm, v, &arr));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
-  CGNSCall(cg_ncoords(file_num, base, zone, &num_coords));
-  PetscCheck(num_coords == cell_dim, PETSC_COMM_SELF, PETSC_ERR_LIB, "Number of coordinates does not match cell dimension");
-  for (d = 0; d < cell_dim; ++d) {
-    cgsize_t rmin[3] = {1, 1, 1}, rmax[3] = {1, 1, 1};
+static PetscErrorCode FindCellCenteredSolutionFieldInfo_Private(int file_num, int base, int zone, int sol, const char *field_name, int *field, CGNS_ENUMT(DataType_t) *data_type, PetscBool *flg)
+{
+  int                    num_fields, f;
+  char                   field_name_read[CGIO_MAX_NAME_LENGTH + 1];
+  CGNS_ENUMT(DataType_t) data_type_read;
+  PetscBool              flg_name;
 
-    rmax[d] = sizes[d];
-    PetscCall(PetscMalloc1(sizes[d], &arr_coord[d]));
-    CGNSCall(cgp_coord_read_data(file_num, base, zone, d + 1, rmin, rmax, arr_coord[d]));
-  }
-
-  /* Build mesh. */
-  PetscCall(MeshSetDimension(*mesh, cell_dim));
-  PetscCall(MeshCartSetBoundaryTypes(*mesh, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE));
-  PetscCall(MeshCartSetGlobalSizes(*mesh, sizes[cell_dim], sizes[cell_dim + 1], cell_dim == 3 ? sizes[cell_dim + 2] : 1));
-  PetscCall(MeshCartSetNumRanks(*mesh, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE));
-  PetscCall(MeshCartSetOwnershipRanges(*mesh, NULL, NULL, NULL));
-
-  PetscCall(MeshSetUp(*mesh));
-
-  {
-    PetscInt      x[3], m[3];
-    PetscScalar **a[3];
-    PetscInt      i, iprev;
-
-    PetscCall(MeshCartGetCorners(*mesh, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2]));
-    PetscCall(MeshCartGetCoordinateArrays(*mesh, &a[0], &a[1], &a[2]));
-    PetscCall(MeshCartGetCoordinateLocationSlot(*mesh, MESHCART_PREV, &iprev));
-    for (d = 0; d < cell_dim; ++d) {
-      for (i = x[d]; i <= x[d] + m[d]; ++i) a[d][i][iprev] = arr_coord[d][i];
-      PetscCall(PetscFree(arr_coord[d]));
+  PetscFunctionBegin;
+  *flg = PETSC_FALSE;
+  CGNSCall(cg_nfields(file_num, base, zone, sol, &num_fields));
+  for (f = 1; f <= num_fields; ++f) {
+    CGNSCall(cg_field_info(file_num, base, zone, sol, f, &data_type_read, field_name_read));
+    PetscCall(PetscStrcmp(field_name_read, field_name, &flg_name));
+    if (flg_name) {
+      *field     = f;
+      *data_type = data_type_read;
+      *flg       = PETSC_TRUE;
+      break;
     }
-    PetscCall(MeshCartRestoreCoordinateArrays(*mesh, &a[0], &a[1], &a[2]));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshCartCreateCGNSFromFile(MPI_Comm comm, const char filename[], Mesh *mesh)
+static PetscErrorCode FindFaceCenteredSolutionUserData_Private(int file_num, int base, int zone, int sol, const char *user_data_name, int *user_data, PetscBool *flg)
 {
-  int file_num = -1;
+  int       num_user_data, u;
+  char      user_data_name_read[CGIO_MAX_NAME_LENGTH + 1];
+  PetscBool flg_name;
 
   PetscFunctionBegin;
-  PetscAssertPointer(filename, 2);
-  PetscAssertPointer(mesh, 3);
+  *flg = PETSC_FALSE;
+  CGNSCall(cg_goto(file_num, base, "Zone_t", zone, "FlowSolution_t", sol, NULL));
+  CGNSCall(cg_nuser_data(&num_user_data));
+  for (u = 1; u <= num_user_data; ++u) {
+    CGNSCall(cg_user_data_read(u, user_data_name_read));
+    PetscCall(PetscStrcmp(user_data_name_read, user_data_name, &flg_name));
+    if (flg_name) {
+      *user_data = u;
+      *flg       = PETSC_TRUE;
+      break;
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
-  CGNSCall(cgp_mpi_comm(comm));
-  CGNSCall(cgp_open(filename, CG_MODE_READ, &file_num));
-  PetscCheck(file_num > 0, PETSC_COMM_SELF, PETSC_ERR_LIB, "cgp_open(\"%s\", ...) did not return a valid file number", filename);
-  PetscCall(MeshCartCreateCGNS(comm, file_num, mesh));
-  CGNSCall(cgp_close(file_num));
+static PetscErrorCode FindFaceCenteredSolutionArrayInfo_Private(int file_num, int base, int zone, int sol, int user_data, const char *array_name, int *array, CGNS_ENUMT(DataType_t) *data_type, PetscBool *flg)
+{
+  int                    num_arrays, a;
+  char                   array_name_read[CGIO_MAX_NAME_LENGTH + 1];
+  CGNS_ENUMT(DataType_t) data_type_read;
+  int                    data_dim_read;
+  cgsize_t               dim_vec_read[CGIO_MAX_DIMENSIONS];
+  PetscBool              flg_name;
+
+  PetscFunctionBegin;
+  *flg = PETSC_FALSE;
+  CGNSCall(cg_goto(file_num, base, "Zone_t", zone, "FlowSolution_t", sol, "UserDefinedData_t", user_data, NULL));
+  CGNSCall(cg_narrays(&num_arrays));
+  for (a = 1; a <= num_arrays; ++a) {
+    CGNSCall(cg_array_info(a, array_name_read, &data_type_read, &data_dim_read, dim_vec_read));
+    PetscCall(PetscStrcmp(array_name_read, array_name, &flg_name));
+    if (flg_name) {
+      *array     = a;
+      *data_type = data_type_read;
+      *flg       = PETSC_TRUE;
+      break;
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMStagLoadCellCenteredSolution_Private(DM dm, Vec v, PetscInt c, int file_num, int base, int zone, int sol, const char *name)
+{
+  PetscInt               dim, x[3], m[3], d, i;
+  int                    field;
+  CGNS_ENUMT(DataType_t) data_type;
+  cgsize_t               rmin[3], rmax[3], rsize;
+  float                 *e_float;
+  double                *e_double;
+  PetscScalar           *e;
+
+  PetscFunctionBegin;
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(DMStagGetCorners(dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+
+  {
+    PetscBool flg;
+
+    PetscCall(FindCellCenteredSolutionFieldInfo_Private(file_num, base, zone, sol, name, &field, &data_type, &flg));
+    PetscCheck(flg, PETSC_COMM_SELF, PETSC_ERR_LIB, "Cannot find field %s in base %d zone %d solution %d", name, base, zone, sol);
+  }
+
+  rsize = 1;
+  for (d = 0; d < dim; ++d) {
+    rmin[d] = x[d] + 1;
+    rmax[d] = x[d] + m[d];
+    rsize *= rmax[d] - rmin[d] + 1;
+  }
+
+  PetscCall(PetscMalloc1(rsize, &e));
+  switch (data_type) {
+  case CGNS_ENUMV(RealSingle):
+    PetscCall(PetscMalloc1(rsize, &e_float));
+    CGNSCall(cgp_field_read_data(file_num, base, zone, sol, field, rmin, rmax, e_float));
+    for (i = 0; i < rsize; ++i) e[i] = e_float[i];
+    PetscCall(PetscFree(e_float));
+    break;
+  case CGNS_ENUMV(RealDouble):
+    PetscCall(PetscMalloc1(rsize, &e_double));
+    CGNSCall(cgp_field_read_data(file_num, base, zone, sol, field, rmin, rmax, e_double));
+    for (i = 0; i < rsize; ++i) e[i] = e_double[i];
+    PetscCall(PetscFree(e_double));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported data type: %s", DataTypeName[data_type]);
+  }
+
+  switch (dim) {
+  case 2:
+    PetscCall(DMStagSetLocalEntries2d_Private(dm, v, DMSTAG_ELEMENT, c, e));
+    break;
+  case 3:
+    PetscCall(DMStagSetLocalEntries3d_Private(dm, v, DMSTAG_ELEMENT, c, e));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
+  }
+  PetscCall(PetscFree(e));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode DMStagLoadFaceCenteredSolution_Private(DM dm, Vec v, PetscInt c, int file_num, int base, int zone, int sol, int user_data[], const char name[])
+{
+  PetscInt                    dim, M[3], x[3], m[3], nExtra[3], d, l, i;
+  PetscBool                   isLastRank[3];
+  int                         array[3];
+  CGNS_ENUMT(DataType_t)      data_type[3];
+  cgsize_t                    rmin[3], rmax[3], rsize;
+  float                      *e_float;
+  double                     *e_double;
+  PetscScalar                *e;
+  const DMStagStencilLocation locs[3] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
+
+  PetscFunctionBegin;
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(DMStagGetGlobalSizes(dm, &M[0], &M[1], &M[2]));
+  PetscCall(DMStagGetCorners(dm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
+  PetscCall(DMStagGetIsLastRank(dm, &isLastRank[0], &isLastRank[1], &isLastRank[2]));
+  for (d = 0; d < dim; ++d) nExtra[d] = isLastRank[d] ? 1 : 0;
+
+  for (d = 0; d < dim; ++d) {
+    PetscBool flg;
+
+    PetscCall(FindFaceCenteredSolutionArrayInfo_Private(file_num, base, zone, sol, user_data[d], name, &array[d], &data_type[d], &flg));
+    PetscCheck(flg, PETSC_COMM_SELF, PETSC_ERR_LIB, "Cannot find array %s in base %d zone %d solution %d user data %d", name, base, zone, sol, user_data[d]);
+  }
+
+  for (l = 0; l < dim; ++l) {
+    rsize = 1;
+    for (d = 0; d < dim; ++d) {
+      rmin[d] = x[d] + 1;
+      rmax[d] = x[d] + m[d] + (d == l ? nExtra[d] : 0);
+      rsize *= rmax[d] - rmin[d] + 1;
+    }
+
+    PetscCall(PetscMalloc1(rsize, &e));
+    CGNSCall(cg_goto(file_num, base, "Zone_t", zone, "FlowSolution_t", sol, "UserDefinedData_t", user_data[l], NULL));
+    switch (data_type[l]) {
+    case CGNS_ENUMV(RealSingle):
+      PetscCall(PetscMalloc1(rsize, &e_float));
+      CGNSCall(cgp_array_read_data(array[l], rmin, rmax, e_float));
+      for (i = 0; i < rsize; ++i) e[i] = e_float[i];
+      PetscCall(PetscFree(e_float));
+      break;
+    case CGNS_ENUMV(RealDouble):
+      PetscCall(PetscMalloc1(rsize, &e_double));
+      CGNSCall(cgp_array_read_data(array[l], rmin, rmax, e_double));
+      for (i = 0; i < rsize; ++i) e[i] = e_double[i];
+      PetscCall(PetscFree(e_double));
+      break;
+    default:
+      SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported data type: %s", DataTypeName[data_type[l]]);
+    }
+
+    switch (dim) {
+    case 2:
+      PetscCall(DMStagSetLocalEntries2d_Private(dm, v, locs[l], c, e));
+      break;
+    case 3:
+      PetscCall(DMStagSetLocalEntries3d_Private(dm, v, locs[l], c, e));
+      break;
+    default:
+      SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
+    }
+    PetscCall(PetscFree(e));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode VecLoad_Cart_CGNS(Vec v, PetscViewer viewer)
+{
+  PetscViewer_FlucaCGNS     *cgv = (PetscViewer_FlucaCGNS *)viewer->data;
+  DM                         dm;
+  PetscInt                   dim, M[3], dof[4], d;
+  PetscBool                  cc, fc, flg;
+  const char                *vec_name;
+  Vec                        locv;
+  const int                  base = 1, zone = 1;
+  int                        num_bases, num_zones, num_sols, num_fields;
+  int                        cell_dim, phys_dim;
+  int                        sol;
+  char                       base_name[CGIO_MAX_NAME_LENGTH + 1];
+  char                       zone_name[CGIO_MAX_NAME_LENGTH + 1];
+  CGNS_ENUMT(ZoneType_t)     zone_type;
+  CGNS_ENUMT(GridLocation_t) grid_loc;
+  cgsize_t                   sizes[9];
+  char                       field_name[PETSC_MAX_PATH_LEN];
+  int                        face_sol_user_data[3];
+
+  PetscFunctionBegin;
+  PetscCall(VecGetDM(v, &dm));
+  PetscCheck(dm, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Vector not generated from a Mesh");
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(DMStagGetGlobalSizes(dm, &M[0], &M[1], &M[2]));
+  PetscCall(DMStagGetDOF(dm, &dof[0], &dof[1], &dof[2], &dof[3]));
+  switch (dim) {
+  case 2:
+    cc = dof[0] == 0 && dof[1] == 0 && dof[2] > 0;
+    fc = dof[0] == 0 && dof[1] > 0 && dof[2] == 0;
+    break;
+  case 3:
+    cc = dof[0] == 0 && dof[1] == 0 && dof[2] == 0 && dof[3] > 0;
+    fc = dof[0] == 0 && dof[1] == 0 && dof[2] > 0 && dof[3] == 0;
+    break;
+  default:
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported mesh dimension");
+  }
+  PetscCheck(cc || fc, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Vector not cell-centered nor face-centered");
+  PetscCall(PetscObjectGetName((PetscObject)v, &vec_name));
+
+  CGNSCall(cg_nbases(cgv->file_num, &num_bases));
+  PetscCheck(num_bases == 1, PETSC_COMM_SELF, PETSC_ERR_LIB, "Only one base is supported");
+  CGNSCall(cg_base_read(cgv->file_num, base, base_name, &cell_dim, &phys_dim));
+  PetscCheck(cell_dim == dim, PETSC_COMM_SELF, PETSC_ERR_LIB, "Mesh dimension %" PetscInt_FMT " does not match CGNS cell dimension %d", dim, cell_dim);
+  CGNSCall(cg_nzones(cgv->file_num, base, &num_zones));
+  PetscCheck(num_zones == 1, PETSC_COMM_SELF, PETSC_ERR_LIB, "Only one zone is supported");
+  CGNSCall(cg_zone_read(cgv->file_num, base, zone, zone_name, sizes));
+  CGNSCall(cg_zone_type(cgv->file_num, base, zone, &zone_type));
+  PetscCheck(zone_type == CGNS_ENUMV(Structured), PETSC_COMM_SELF, PETSC_ERR_LIB, "Only structured zone is supported");
+  for (d = 0; d < dim; ++d) PetscCheck(M[d] == sizes[dim + d], PETSC_COMM_SELF, PETSC_ERR_LIB, "Mesh size %" PetscInt_FMT " does not match CGNS zone size %ld", M[d], (long)sizes[dim + d]);
+  CGNSCall(cg_nsols(cgv->file_num, base, zone, &num_sols));
+  /* Assume that the last solution is the one we want */
+  sol = num_sols;
+  CGNSCall(cg_nfields(cgv->file_num, base, zone, sol, &num_fields));
+  CGNSCall(cg_goto(cgv->file_num, base, "Zone_t", zone, "FlowSolution_t", sol, NULL));
+  CGNSCall(cg_gridlocation_read(&grid_loc));
+  PetscCheck(grid_loc == CGNS_ENUMV(CellCenter), PETSC_COMM_SELF, PETSC_ERR_LIB, "Grid location is not cell-centered in base %d zone %d solution %d", base, zone, sol);
+
+  PetscCall(DMGetLocalVector(dm, &locv));
+  if (cc) {
+    if (dof[dim] == 1) {
+      PetscCall(DMStagLoadCellCenteredSolution_Private(dm, locv, 0, cgv->file_num, base, zone, sol, vec_name));
+    } else {
+      for (d = 0; d < dof[dim]; ++d) {
+        PetscCall(PetscSNPrintf(field_name, sizeof(field_name), "%s%c", vec_name, 'X' + d));
+        PetscCall(DMStagLoadCellCenteredSolution_Private(dm, locv, d, cgv->file_num, base, zone, sol, field_name));
+      }
+    }
+  } else {
+    for (d = 0; d < dim; ++d) {
+      PetscCall(FindFaceCenteredSolutionUserData_Private(cgv->file_num, base, zone, sol, face_sol_names[d], &face_sol_user_data[d], &flg));
+      PetscCheck(flg, PETSC_COMM_SELF, PETSC_ERR_LIB, "Cannot find user data %s in base %d zone %d solution %d", face_sol_names[d], base, zone, sol);
+      CGNSCall(cg_goto(cgv->file_num, base, "Zone_t", zone, "FlowSolution_t", sol, "UserDefinedData_t", face_sol_user_data[d], NULL));
+      CGNSCall(cg_gridlocation_read(&grid_loc));
+      PetscCheck(grid_loc == face_sol_grid_locs[d], PETSC_COMM_SELF, PETSC_ERR_LIB, "Grid location is not %c-face-centered in base %d zone %d solution %d user data %d", 'i' + d, base, zone, sol, face_sol_user_data[d]);
+    }
+    if (dof[dim - 1] == 1) {
+      PetscCall(DMStagLoadFaceCenteredSolution_Private(dm, locv, 0, cgv->file_num, base, zone, sol, face_sol_user_data, vec_name));
+    } else {
+      for (d = 0; d < dof[dim - 1]; ++d) {
+        PetscCall(PetscSNPrintf(field_name, sizeof(field_name), "%s%c", vec_name, 'X' + d));
+        PetscCall(DMStagLoadFaceCenteredSolution_Private(dm, locv, d, cgv->file_num, base, zone, sol, face_sol_user_data, field_name));
+      }
+    }
+  }
+  PetscCall(DMLocalToGlobal(dm, locv, INSERT_VALUES, v));
+  PetscCall(DMRestoreLocalVector(dm, &locv));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

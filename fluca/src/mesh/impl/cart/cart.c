@@ -218,6 +218,7 @@ PetscErrorCode MeshCreateGlobalVector_Cart(Mesh mesh, MeshDMType dmtype, Vec *ve
   PetscCall(DMCreateGlobalVector(dm, vec));
   PetscCall(PetscObjectCompose((PetscObject)(*vec), "Fluca_Mesh", (PetscObject)mesh));
   PetscCall(VecSetOperation(*vec, VECOP_VIEW, (void (*)(void))VecView_Cart));
+  PetscCall(VecSetOperation(*vec, VECOP_LOAD, (void (*)(void))VecLoad_Cart));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -554,45 +555,5 @@ PetscErrorCode MeshCartGetBoundaryIndex(Mesh mesh, MeshCartBoundaryLocation loc,
   default:
     SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONG, "Invalid boundary location");
   }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode CheckExtension_Private(const char filename[], const char extension[], PetscBool *is_extension)
-{
-  size_t len_filename, len_extension;
-
-  PetscFunctionBegin;
-  PetscCall(PetscStrlen(filename, &len_filename));
-  PetscCall(PetscStrlen(extension, &len_extension));
-  if (len_filename < len_extension) {
-    *is_extension = PETSC_FALSE;
-  } else {
-    PetscCall(PetscStrcmp(filename + len_filename - len_extension, extension, is_extension));
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode MeshCartCreateFromFile(MPI_Comm comm, const char filename[], const char meshname[], Mesh *mesh)
-{
-  const char *ext_cgns = ".cgns";
-  PetscBool   is_cgns;
-  size_t      len = 0;
-
-  PetscFunctionBegin;
-  PetscAssertPointer(filename, 2);
-  if (meshname) PetscAssertPointer(meshname, 3);
-  PetscAssertPointer(mesh, 4);
-
-  PetscCall(MeshInitializePackage());
-  PetscCall(PetscLogEventBegin(MESHCART_CreateFromFile, 0, 0, 0, 0));
-
-  PetscCall(CheckExtension_Private(filename, ext_cgns, &is_cgns));
-  if (is_cgns) PetscCall(MeshCartCreateCGNSFromFile(comm, filename, mesh));
-  else SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Cannot load file %s: unrecognized extension", filename);
-
-  PetscCall(PetscStrlen(meshname, &len));
-  if (len) PetscCall(PetscObjectSetName((PetscObject)*mesh, meshname));
-
-  PetscCall(PetscLogEventEnd(MESHCART_CreateFromFile, 0, 0, 0, 0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

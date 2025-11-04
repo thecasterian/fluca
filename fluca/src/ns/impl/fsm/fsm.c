@@ -280,13 +280,12 @@ PetscErrorCode NSViewSolution_FSM(NS ns, PetscViewer viewer)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSLoadSolutionCGNS_FSM(NS ns, PetscInt file_num)
+PetscErrorCode NSLoadSolution_FSM(NS ns, PetscViewer viewer)
 {
-  PetscBool iscart;
+  NS_FSM *fsm = (NS_FSM *)ns->data;
 
   PetscFunctionBegin;
-  PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
-  if (iscart) PetscCall(NSLoadSolutionCGNS_FSM_Cart_Internal(ns, file_num));
+  PetscCall(FlucaVecLoad(fsm->phalf, viewer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -303,12 +302,12 @@ PetscErrorCode NSCreate_FSM(NS ns)
   fsm->TvN         = NULL;
   fsm->TvNcomputed = PETSC_FALSE;
 
-  ns->ops->setfromoptions   = NSSetFromOptions_FSM;
-  ns->ops->setup            = NSSetup_FSM;
-  ns->ops->iterate          = NSIterate_FSM;
-  ns->ops->destroy          = NSDestroy_FSM;
-  ns->ops->view             = NSView_FSM;
-  ns->ops->viewsolution     = NSViewSolution_FSM;
-  ns->ops->loadsolutioncgns = NSLoadSolutionCGNS_FSM;
+  ns->ops->setfromoptions = NSSetFromOptions_FSM;
+  ns->ops->setup          = NSSetup_FSM;
+  ns->ops->iterate        = NSIterate_FSM;
+  ns->ops->destroy        = NSDestroy_FSM;
+  ns->ops->view           = NSView_FSM;
+  ns->ops->viewsolution   = NSViewSolution_FSM;
+  ns->ops->loadsolution   = NSLoadSolution_FSM;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
