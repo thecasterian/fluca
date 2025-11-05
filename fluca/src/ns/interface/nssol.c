@@ -140,12 +140,16 @@ PetscErrorCode NSLoadSolution(NS ns, PetscViewer viewer)
 {
   NSFieldLink link;
   Vec         subvec;
+  PetscInt    step;
+  PetscReal   time;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
   PetscCheckSameComm(ns, 1, viewer, 2);
   PetscCall(PetscViewerCheckReadable(viewer));
+
+  PetscCall(MeshSetOutputSequenceNumber(ns->mesh, -1, 0.));
 
   /* Load fields */
   for (link = ns->fieldlink; link; link = link->next) {
@@ -155,5 +159,9 @@ PetscErrorCode NSLoadSolution(NS ns, PetscViewer viewer)
   }
 
   PetscTryTypeMethod(ns, loadsolution, viewer);
+
+  PetscCall(MeshGetOutputSequenceNumber(ns->mesh, &step, &time));
+  ns->step = step;
+  ns->t    = time;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -644,6 +644,7 @@ static PetscErrorCode DMStagLoadFaceCenteredSolution_Private(DM dm, Vec v, Petsc
 PetscErrorCode VecLoad_Cart_CGNS(Vec v, PetscViewer viewer)
 {
   PetscViewer_FlucaCGNS     *cgv = (PetscViewer_FlucaCGNS *)viewer->data;
+  Mesh                       mesh;
   DM                         dm;
   PetscInt                   dim, M[3], dof[4], d;
   PetscBool                  cc, fc, flg;
@@ -656,14 +657,16 @@ PetscErrorCode VecLoad_Cart_CGNS(Vec v, PetscViewer viewer)
   char                       base_name[CGIO_MAX_NAME_LENGTH + 1];
   char                       zone_name[CGIO_MAX_NAME_LENGTH + 1];
   CGNS_ENUMT(ZoneType_t)     zone_type;
+  char                       sol_name[CGIO_MAX_NAME_LENGTH + 1];
   CGNS_ENUMT(GridLocation_t) grid_loc;
   cgsize_t                   sizes[9];
   char                       field_name[PETSC_MAX_PATH_LEN];
   int                        face_sol_user_data[3];
 
   PetscFunctionBegin;
+  PetscCall(PetscObjectQuery((PetscObject)v, "Fluca_Mesh", (PetscObject *)&mesh));
   PetscCall(VecGetDM(v, &dm));
-  PetscCheck(dm, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Vector not generated from a Mesh");
+  PetscCheck(mesh && dm, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Vector not generated from a Mesh");
   PetscCall(DMGetDimension(dm, &dim));
   PetscCall(DMStagGetGlobalSizes(dm, &M[0], &M[1], &M[2]));
   PetscCall(DMStagGetDOF(dm, &dof[0], &dof[1], &dof[2], &dof[3]));
@@ -696,9 +699,31 @@ PetscErrorCode VecLoad_Cart_CGNS(Vec v, PetscViewer viewer)
   /* Assume that the last solution is the one we want */
   sol = num_sols;
   CGNSCall(cg_nfields(cgv->file_num, base, zone, sol, &num_fields));
-  CGNSCall(cg_goto(cgv->file_num, base, "Zone_t", zone, "FlowSolution_t", sol, NULL));
-  CGNSCall(cg_gridlocation_read(&grid_loc));
+  CGNSCall(cg_sol_info(cgv->file_num, base, zone, sol, sol_name, &grid_loc));
   PetscCheck(grid_loc == CGNS_ENUMV(CellCenter), PETSC_COMM_SELF, PETSC_ERR_LIB, "Grid location is not cell-centered in base %d zone %d solution %d", base, zone, sol);
+
+  {
+    PetscInt               step, sol_step;
+    PetscReal              time, sol_time;
+    PetscReal             *times;
+    size_t                 len;
+    int                    count, ret, nsteps;
+    char                   biter_name[CGIO_MAX_NAME_LENGTH + 1];
+    CGNS_ENUMT(DataType_t) datatype;
+
+    PetscCall(MeshGetOutputSequenceNumber(mesh, &step, &time));
+    PetscCall(PetscStrlen(sol_name, &len));
+    ret = sscanf(sol_name, "FlowSolution%" PetscInt_FMT "%n", &sol_step, &count);
+    PetscCheck(ret == 1 && (int)len == count, PETSC_COMM_SELF, PETSC_ERR_LIB, "%s is not a valid solution name", sol_name);
+    CGNSCall(cg_biter_read(cgv->file_num, base, biter_name, &nsteps));
+    CGNSCall(cg_goto(cgv->file_num, base, "BaseIterativeData_t", 1, NULL));
+    PetscCall(FlucaGetCGNSDataType_Internal(PETSC_REAL, &datatype));
+    PetscCall(PetscMalloc1(nsteps, &times));
+    CGNSCall(cg_array_read_as(1, datatype, times));
+    sol_time = times[nsteps - 1];
+    if (step == -1 && time == 0.) PetscCall(MeshSetOutputSequenceNumber(mesh, sol_step, sol_time));
+    else PetscCheck(step == sol_step && time == sol_time, PETSC_COMM_SELF, PETSC_ERR_LIB, "Cannot load a vector of different time step");
+  }
 
   PetscCall(DMGetLocalVector(dm, &locv));
   if (cc) {

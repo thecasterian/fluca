@@ -27,11 +27,12 @@ static PetscErrorCode PetscViewerFileClose_FlucaCGNS_Private(PetscViewer viewer)
   if (!cgv->file_num) PetscFunctionReturn(PETSC_SUCCESS);
 
   if (cgv->output_times) {
-    PetscCount       size, *steps;
-    char            *solnames;
-    PetscReal       *times;
-    cgsize_t         num_times;
-    const PetscCount width = 32;
+    PetscCount             size, *steps;
+    char                  *solnames;
+    PetscReal             *times;
+    cgsize_t               num_times;
+    const PetscCount       width = 32;
+    CGNS_ENUMT(DataType_t) datatype;
 
     PetscCall(PetscSegBufferGetSize(cgv->output_times, &size));
     PetscCall(PetscSegBufferExtractInPlace(cgv->output_times, &times));
@@ -39,7 +40,8 @@ static PetscErrorCode PetscViewerFileClose_FlucaCGNS_Private(PetscViewer viewer)
     num_times = size;
     CGNSCall(cg_biter_write(cgv->file_num, cgv->base, "TimeIterValues", num_times));
     CGNSCall(cg_goto(cgv->file_num, cgv->base, "BaseIterativeData_t", 1, NULL));
-    CGNSCall(cg_array_write("TimeValues", CGNS_ENUMV(RealDouble), 1, &num_times, times));
+    PetscCall(FlucaGetCGNSDataType_Internal(PETSC_REAL, &datatype));
+    CGNSCall(cg_array_write("TimeValues", datatype, 1, &num_times, times));
     PetscCall(PetscSegBufferDestroy(&cgv->output_times));
     CGNSCall(cg_ziter_write(cgv->file_num, cgv->base, cgv->zone, "ZoneIterativeData"));
     CGNSCall(cg_goto(cgv->file_num, cgv->base, "Zone_t", cgv->zone, "ZoneIterativeData_t", 1, NULL));
