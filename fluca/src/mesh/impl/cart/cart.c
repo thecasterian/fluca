@@ -61,7 +61,7 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   const PetscInt *l[3];
   PetscInt        x[3], m[3];
   PetscScalar   **arrc[3];
-  PetscInt        d, i, iprev;
+  PetscInt        d, i, iprev, ielem;
   DM              cdm;
   const PetscInt  dofScalar = 1, dofVector = mesh->dim, stencilWidth = 1;
 
@@ -129,9 +129,15 @@ PetscErrorCode MeshSetUp_Cart(Mesh mesh)
   PetscCall(DMStagGetCorners(mesh->sdm, &x[0], &x[1], &x[2], &m[0], &m[1], &m[2], NULL, NULL, NULL));
   PetscCall(DMStagGetProductCoordinateArrays(mesh->sdm, &arrc[0], &arrc[1], &arrc[2]));
   PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->sdm, DMSTAG_LEFT, &iprev));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->sdm, DMSTAG_ELEMENT, &ielem));
   for (d = 0; d < mesh->dim; ++d)
-    if (cart->coordLoaded[d])
-      for (i = x[d]; i <= x[d] + m[d]; ++i) arrc[d][i][iprev] = cart->coordLoaded[d][i];
+    if (cart->coordLoaded[d]) {
+      for (i = x[d]; i <= x[d] + m[d]; ++i) {
+        arrc[d][i][iprev] = cart->coordLoaded[d][i];
+        if (i < x[d] + m[d]) arrc[d][i][ielem] = (cart->coordLoaded[d][i] + cart->coordLoaded[d][i + 1]) / 2.;
+      }
+      // TODO: set ghost coordinates
+    }
   PetscCall(DMStagRestoreProductCoordinateArrays(mesh->sdm, &arrc[0], &arrc[1], &arrc[2]));
 
   PetscCall(DMGetCoordinateDM(mesh->sdm, &cdm));
@@ -464,6 +470,7 @@ PetscErrorCode MeshCartRestoreCoordinateArrays(Mesh mesh, PetscScalar ***ax, Pet
   PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->sdm, DMSTAG_ELEMENT, &ielemc));
   for (d = 0; d < mesh->dim; ++d)
     for (i = x[d]; i < x[d] + m[d]; ++i) (*a[d])[i][ielemc] = ((*a[d])[i][iprevc] + (*a[d])[i][inextc]) / 2.0;
+  // TODO: set ghost coordinates
 
   PetscCall(DMStagRestoreProductCoordinateArrays(mesh->sdm, ax, ay, az));
   PetscFunctionReturn(PETSC_SUCCESS);

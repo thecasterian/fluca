@@ -147,8 +147,10 @@ PetscErrorCode NSLoadSolution(NS ns, PetscViewer viewer)
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
   PetscCheckSameComm(ns, 1, viewer, 2);
+  PetscCheck(ns->setupcalled, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "This function must be called after NSSetUp()");
   PetscCall(PetscViewerCheckReadable(viewer));
 
+  /* Output sequence number is reset here and will be set in VecLoad() */
   PetscCall(MeshSetOutputSequenceNumber(ns->mesh, -1, 0.));
 
   /* Load fields */
@@ -158,7 +160,7 @@ PetscErrorCode NSLoadSolution(NS ns, PetscViewer viewer)
     PetscCall(VecRestoreSubVector(ns->sol, link->is, &subvec));
   }
 
-  PetscTryTypeMethod(ns, loadsolution, viewer);
+  PetscUseTypeMethod(ns, loadsolution, viewer);
 
   PetscCall(MeshGetOutputSequenceNumber(ns->mesh, &step, &time));
   ns->step = step;

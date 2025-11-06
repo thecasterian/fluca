@@ -121,7 +121,7 @@ PetscErrorCode MeshLoad(Mesh mesh, PetscViewer viewer)
   PetscCheckSameComm(mesh, 1, viewer, 2);
   PetscCall(PetscViewerCheckReadable(viewer));
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERFLUCACGNS, &iscgns));
-  if (iscgns) PetscTryTypeMethod(mesh, load, viewer);
+  if (iscgns) PetscUseTypeMethod(mesh, load, viewer);
   else SETERRQ(PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_WRONG, "Invalid viewer; open viewer with PetscViewerFlucaCGNSOpen()");
   PetscFunctionReturn(PETSC_SUCCESS);
 }

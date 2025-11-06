@@ -304,8 +304,6 @@ PetscErrorCode NSDestroy(NS *ns)
   PetscCall(VecDestroy(&(*ns)->sol0));
 
   PetscCall(SNESDestroy(&(*ns)->snes));
-  PetscCall(PetscObjectCompose((PetscObject)(*ns)->J, "Laplacian", NULL));
-  PetscCall(PetscObjectCompose((PetscObject)(*ns)->J, "StaggeredGradient", NULL));
   PetscCall(MatDestroy(&(*ns)->J));
   PetscCall(VecDestroy(&(*ns)->r));
   PetscCall(VecDestroy(&(*ns)->x));
