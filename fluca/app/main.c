@@ -1,6 +1,6 @@
 #include <flucameshcart.h>
 #include <flucans.h>
-#include <flucasys.h>
+#include <flucaviewer.h>
 #include <math.h>
 
 const char *help = "lid-driven cavity flow test\n";
@@ -23,12 +23,13 @@ static PetscErrorCode moving_wall_velocity(PetscInt dim, PetscReal t, const Pets
 
 int main(int argc, char **argv)
 {
-  Mesh      mesh;
-  NS        ns;
-  PetscBool mesh_cart_create_from_file, ns_load_solution_from_file;
-  char      mesh_cart_filename[PETSC_MAX_PATH_LEN];
-  char      ns_filename[PETSC_MAX_PATH_LEN];
-  PetscInt  ns_steps = 10;
+  Mesh        mesh;
+  NS          ns;
+  PetscViewer viewer;
+  PetscBool   mesh_cart_create_from_file, ns_load_solution_from_file;
+  char        mesh_cart_filename[PETSC_MAX_PATH_LEN];
+  char        ns_filename[PETSC_MAX_PATH_LEN];
+  PetscInt    ns_steps = 10;
 
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
@@ -40,22 +41,13 @@ int main(int argc, char **argv)
     PetscCall(MeshCartCreate2d(PETSC_COMM_WORLD, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE, 8, 8, PETSC_DECIDE, PETSC_DECIDE, NULL, NULL, &mesh));
     PetscCall(MeshSetFromOptions(mesh));
     PetscCall(MeshSetUp(mesh));
-
-    {
-      PetscInt      M, N, x, y, m, n;
-      PetscScalar **arrcx, **arrcy;
-      PetscInt      i, j, iprev;
-
-      PetscCall(MeshCartGetGlobalSizes(mesh, &M, &N, NULL));
-      PetscCall(MeshCartGetCorners(mesh, &x, &y, NULL, &m, &n, NULL));
-      PetscCall(MeshCartGetCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
-      PetscCall(MeshCartGetCoordinateLocationSlot(mesh, MESHCART_PREV, &iprev));
-      for (i = x; i <= x + m; ++i) arrcx[i][iprev] = (PetscScalar)i / M;
-      for (j = y; j <= y + n; ++j) arrcy[j][iprev] = (PetscScalar)j / N;
-      PetscCall(MeshCartRestoreCoordinateArrays(mesh, &arrcx, &arrcy, NULL));
-    }
   } else {
-    PetscCall(MeshCartCreateFromFile(PETSC_COMM_WORLD, mesh_cart_filename, NULL, &mesh));
+    PetscCall(MeshCreate(PETSC_COMM_WORLD, &mesh));
+    PetscCall(MeshSetType(mesh, MESHCART));
+    PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, mesh_cart_filename, FILE_MODE_READ, &viewer));
+    PetscCall(MeshLoad(mesh, viewer));
+    PetscCall(PetscViewerDestroy(&viewer));
+    PetscCall(MeshSetUp(mesh));
   }
 
   {
@@ -89,7 +81,11 @@ int main(int argc, char **argv)
 
     PetscCall(NSSetFromOptions(ns));
     PetscCall(NSSetUp(ns));
-    if (ns_load_solution_from_file) PetscCall(NSLoadSolutionFromFile(ns, ns_filename));
+    if (ns_load_solution_from_file) {
+      PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, ns_filename, FILE_MODE_READ, &viewer));
+      PetscCall(NSLoadSolution(ns, viewer));
+      PetscCall(PetscViewerDestroy(&viewer));
+    }
     PetscCall(NSSolve(ns, ns_steps));
   }
 

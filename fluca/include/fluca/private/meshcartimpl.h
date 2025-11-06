@@ -12,9 +12,15 @@ typedef struct {
   MeshCartBoundaryType bndTypes[MESH_MAX_DIM]; /* boundary types */
 
   PetscInt refineFactor[MESH_MAX_DIM]; /* refinement factor */
+
+  PetscScalar *coordLoaded[MESH_MAX_DIM]; /* Coordinates loaded from viewer */
 } Mesh_Cart;
+
+FLUCA_INTERN PetscErrorCode MeshView_Cart_CGNS(Mesh, PetscViewer);
+FLUCA_INTERN PetscErrorCode MeshLoad_Cart_CGNS(Mesh, PetscViewer);
 
 FLUCA_INTERN PetscErrorCode VecView_Cart(Vec, PetscViewer);
 FLUCA_INTERN PetscErrorCode VecView_Cart_Local(Vec, PetscViewer);
-
 FLUCA_INTERN PetscErrorCode VecView_Cart_Local_CGNS(Vec, PetscViewer);
+FLUCA_INTERN PetscErrorCode VecLoad_Cart(Vec, PetscViewer);
+FLUCA_INTERN PetscErrorCode VecLoad_Cart_CGNS(Vec, PetscViewer);

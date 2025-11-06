@@ -90,16 +90,16 @@ PetscErrorCode MeshSetUp(Mesh mesh)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshView(Mesh mesh, PetscViewer v)
+PetscErrorCode MeshView(Mesh mesh, PetscViewer viewer)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  if (!v) PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)mesh), &v));
-  PetscValidHeaderSpecific(v, PETSC_VIEWER_CLASSID, 2);
-  PetscCheckSameComm(mesh, 1, v, 2);
+  if (!viewer) PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)mesh), &viewer));
+  PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
+  PetscCheckSameComm(mesh, 1, viewer, 2);
 
-  PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)mesh, v));
-  PetscTryTypeMethod(mesh, view, v);
+  PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)mesh, viewer));
+  PetscTryTypeMethod(mesh, view, viewer);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -108,6 +108,21 @@ PetscErrorCode MeshViewFromOptions(Mesh mesh, PetscObject obj, const char name[]
   PetscFunctionBegin;
   PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscCall(FlucaObjectViewFromOptions((PetscObject)mesh, obj, name));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshLoad(Mesh mesh, PetscViewer viewer)
+{
+  PetscBool iscgns;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+  PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
+  PetscCheckSameComm(mesh, 1, viewer, 2);
+  PetscCall(PetscViewerCheckReadable(viewer));
+  PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERFLUCACGNS, &iscgns));
+  if (iscgns) PetscUseTypeMethod(mesh, load, viewer);
+  else SETERRQ(PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_WRONG, "Invalid viewer; open viewer with PetscViewerFlucaCGNSOpen()");
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

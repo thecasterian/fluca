@@ -23,7 +23,7 @@ struct _NSOps {
   PetscErrorCode (*destroy)(NS);
   PetscErrorCode (*view)(NS, PetscViewer);
   PetscErrorCode (*viewsolution)(NS, PetscViewer);
-  PetscErrorCode (*loadsolutioncgns)(NS, PetscInt);
+  PetscErrorCode (*loadsolution)(NS, PetscViewer);
 };
 
 typedef struct _n_NSFieldLink *NSFieldLink;

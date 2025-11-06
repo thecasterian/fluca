@@ -22,6 +22,7 @@ FLUCA_EXTERN PetscErrorCode MeshSetFromOptions(Mesh);
 FLUCA_EXTERN PetscErrorCode MeshSetUp(Mesh);
 FLUCA_EXTERN PetscErrorCode MeshView(Mesh, PetscViewer);
 FLUCA_EXTERN PetscErrorCode MeshViewFromOptions(Mesh, PetscObject, const char[]);
+FLUCA_EXTERN PetscErrorCode MeshLoad(Mesh, PetscViewer);
 FLUCA_EXTERN PetscErrorCode MeshDestroy(Mesh *);
 
 typedef enum {
