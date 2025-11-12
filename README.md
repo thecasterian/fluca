@@ -44,6 +44,10 @@ make
 - `CGNS_DIR`: Path to CGNS
 - `FLUCA_USE_PETSC_CC`: Use the C compiler that was used to build PETSc (default: ON); if OFF, Fluca uses the compiler defined in `CMAKE_C_COMPILER`
 
+## Theory Guide
+
+For detailed information on the theoretical foundations and numerical methods implemented in Fluca, see [THEORY_GUIDE.md](THEORY_GUIDE.md).
+
 ## Output
 
 Fluca uses the CGNS format for output files. You can visualize it using standard CFD post-processing tools such as ParaView or Tecplot.
