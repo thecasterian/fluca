@@ -44,6 +44,10 @@ make
 - `CGNS_DIR`: Path to CGNS
 - `FLUCA_USE_PETSC_CC`: Use the C compiler that was used to build PETSc (default: ON); if OFF, Fluca uses the compiler defined in `CMAKE_C_COMPILER`
 
+## Getting Started
+
+For a step-by-step guide to using Fluca, including brief API documentation and examples, see [QUICK_START.md](QUICK_START.md).
+
 ## Theory Guide
 
 For detailed information on the theoretical foundations and numerical methods implemented in Fluca, see [THEORY_GUIDE.md](THEORY_GUIDE.md).
