@@ -12,8 +12,8 @@ typedef struct {
   Mat T;   /* veloctiy interpolation operator */
   Mat G;   /* pressure gradient operator */
   Mat Gst; /* staggered pressure gradient operator */
-  Mat Dst; /* staggered veloctiy divergence operator */
-  Mat Lst; /* staggered pressure laplacian operator */
+  Mat D;   /* face-normal veloctiy divergence operator */
+  Mat Lst; /* operator of pressure equation: Lst = D * Gst */
 
   KSP kspv; /* KSP to solve velocity equation */
   KSP kspp; /* KSP to solve pressure equation */
@@ -25,8 +25,8 @@ typedef struct {
   Vec v0interp; /* velocity at n interpolated on face */
   Vec phalf;    /* pressure at n-1/2 */
 
-  Mat       TvN;
-  PetscBool TvNcomputed;
+  Mat       B;
+  PetscBool Bcomputed;
 } NS_FSM;
 
 FLUCA_INTERN PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES, Vec, Vec, void *);

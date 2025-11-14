@@ -48,8 +48,8 @@ static PetscErrorCode CreateNSFSMPCCtx_Private(NS ns, PC pc, NSFSMPCCtx **ctx)
   PetscCall(MatCreateSubMatrix(ns->J, c->vis, c->pis, MAT_INITIAL_MATRIX, &c->G));
   PetscCall(PetscObjectQuery((PetscObject)ns->J, "StaggeredGradient", (PetscObject *)&c->Gst));
   PetscCall(PetscObjectReference((PetscObject)c->Gst));
-  PetscCall(MatCreateSubMatrix(ns->J, c->pis, c->Vis, MAT_INITIAL_MATRIX, &c->Dst));
-  PetscCall(MatMatMult(c->Dst, c->Gst, MAT_INITIAL_MATRIX, 1., &c->Lst));
+  PetscCall(MatCreateSubMatrix(ns->J, c->pis, c->Vis, MAT_INITIAL_MATRIX, &c->D));
+  PetscCall(MatMatMult(c->D, c->Gst, MAT_INITIAL_MATRIX, 1., &c->Lst));
 
   PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
   PetscCall(KSPCreate(comm, &c->kspv));
@@ -92,7 +92,7 @@ static PetscErrorCode NSFSMPCApply_Private(PC pc, Vec x, Vec y)
   PetscCall(KSPSolve(ctx->kspv, xv, yv));
   PetscCall(MatMult(ctx->T, yv, yV));
   PetscCall(VecAXPY(yV, -1., xV));
-  PetscCall(MatMult(ctx->Dst, yV, yprhs));
+  PetscCall(MatMult(ctx->D, yV, yprhs));
   PetscCall(VecAXPY(yprhs, -1., xp));
   if (ctx->nullspace) PetscCall(MatNullSpaceRemove(ctx->nullspace, yprhs));
   PetscCall(KSPSolve(ctx->kspp, yprhs, yp));
@@ -127,7 +127,7 @@ static PetscErrorCode NSFSMPCDestroy_Private(PC pc)
   PetscCall(MatDestroy(&ctx->T));
   PetscCall(MatDestroy(&ctx->G));
   PetscCall(MatDestroy(&ctx->Gst));
-  PetscCall(MatDestroy(&ctx->Dst));
+  PetscCall(MatDestroy(&ctx->D));
   PetscCall(MatDestroy(&ctx->Lst));
   PetscCall(KSPDestroy(&ctx->kspv));
   PetscCall(KSPDestroy(&ctx->kspp));
@@ -179,7 +179,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
 
   PetscCall(MeshCreateGlobalVector(ns->mesh, MESH_DM_STAG_VECTOR, &fsm->v0interp));
   PetscCall(MeshCreateGlobalVector(ns->mesh, MESH_DM_SCALAR, &fsm->phalf));
-  PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &fsm->TvN));
+  PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &fsm->B));
 
   PetscCall(PetscObjectSetName((PetscObject)fsm->phalf, "PressureHalfStep"));
 
@@ -259,7 +259,7 @@ PetscErrorCode NSDestroy_FSM(NS ns)
   PetscFunctionBegin;
   PetscCall(VecDestroy(&fsm->v0interp));
   PetscCall(VecDestroy(&fsm->phalf));
-  PetscCall(MatDestroy(&fsm->TvN));
+  PetscCall(MatDestroy(&fsm->B));
   PetscCall(PetscFree(ns->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -297,10 +297,10 @@ PetscErrorCode NSCreate_FSM(NS ns)
   PetscCall(PetscNew(&fsm));
   ns->data = (void *)fsm;
 
-  fsm->v0interp    = NULL;
-  fsm->phalf       = NULL;
-  fsm->TvN         = NULL;
-  fsm->TvNcomputed = PETSC_FALSE;
+  fsm->v0interp  = NULL;
+  fsm->phalf     = NULL;
+  fsm->B         = NULL;
+  fsm->Bcomputed = PETSC_FALSE;
 
   ns->ops->setfromoptions = NSSetFromOptions_FSM;
   ns->ops->setup          = NSSetup_FSM;
