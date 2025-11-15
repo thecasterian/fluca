@@ -15,6 +15,10 @@ typedef struct {
   Mat D;   /* face-normal veloctiy divergence operator */
   Mat Lst; /* operator of pressure equation: Lst = D * Gst */
 
+  Vec divvstar;
+  Vec gradpcorr;
+  Vec gradstpcorr;
+
   KSP kspv; /* KSP to solve velocity equation */
   KSP kspp; /* KSP to solve pressure equation */
 

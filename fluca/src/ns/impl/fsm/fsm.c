@@ -31,10 +31,11 @@ static PetscErrorCode NSFSMPicardComputeFunction_Private(SNES snes, Vec x, Vec f
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode CreateNSFSMPCCtx_Private(NS ns, PC pc, NSFSMPCCtx **ctx)
+static PetscErrorCode NSFSMPCCtxCreate_Private(NS ns, PC pc, NSFSMPCCtx **ctx)
 {
   NSFSMPCCtx *c;
   MPI_Comm    comm;
+  Vec         v, V, p;
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&c));
@@ -50,6 +51,16 @@ static PetscErrorCode CreateNSFSMPCCtx_Private(NS ns, PC pc, NSFSMPCCtx **ctx)
   PetscCall(PetscObjectReference((PetscObject)c->Gst));
   PetscCall(MatCreateSubMatrix(ns->J, c->pis, c->Vis, MAT_INITIAL_MATRIX, &c->D));
   PetscCall(MatMatMult(c->D, c->Gst, MAT_INITIAL_MATRIX, 1., &c->Lst));
+
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
+  PetscCall(VecDuplicate(p, &c->divvstar));
+  PetscCall(VecDuplicate(v, &c->gradpcorr));
+  PetscCall(VecDuplicate(V, &c->gradstpcorr));
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
 
   PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
   PetscCall(KSPCreate(comm, &c->kspv));
@@ -76,7 +87,7 @@ static PetscErrorCode CreateNSFSMPCCtx_Private(NS ns, PC pc, NSFSMPCCtx **ctx)
 static PetscErrorCode NSFSMPCApply_Private(PC pc, Vec x, Vec y)
 {
   NSFSMPCCtx *ctx;
-  Vec         xv, xV, xp, yv, yV, yp, yprhs, gradyp;
+  Vec         xv, xV, xp, yv, yV, yp;
 
   PetscFunctionBegin;
   PetscCall(PCShellGetContext(pc, &ctx));
@@ -88,25 +99,19 @@ static PetscErrorCode NSFSMPCApply_Private(PC pc, Vec x, Vec y)
   PetscCall(VecGetSubVector(y, ctx->pis, &yp));
 
   /* Forward step */
-  PetscCall(VecDuplicate(xp, &yprhs));
   PetscCall(KSPSolve(ctx->kspv, xv, yv));
   PetscCall(MatMult(ctx->T, yv, yV));
   PetscCall(VecAXPY(yV, -1., xV));
-  PetscCall(MatMult(ctx->D, yV, yprhs));
-  PetscCall(VecAXPY(yprhs, -1., xp));
-  if (ctx->nullspace) PetscCall(MatNullSpaceRemove(ctx->nullspace, yprhs));
-  PetscCall(KSPSolve(ctx->kspp, yprhs, yp));
-  PetscCall(VecDestroy(&yprhs));
+  PetscCall(MatMult(ctx->D, yV, ctx->divvstar));
+  PetscCall(VecAXPY(ctx->divvstar, -1., xp));
+  if (ctx->nullspace) PetscCall(MatNullSpaceRemove(ctx->nullspace, ctx->divvstar));
+  PetscCall(KSPSolve(ctx->kspp, ctx->divvstar, yp));
 
   /* Backward step */
-  PetscCall(VecDuplicate(yv, &gradyp));
-  PetscCall(MatMult(ctx->G, yp, gradyp));
-  PetscCall(VecAXPY(yv, -1., gradyp));
-  PetscCall(VecDestroy(&gradyp));
-  PetscCall(VecDuplicate(yV, &gradyp));
-  PetscCall(MatMult(ctx->Gst, yp, gradyp));
-  PetscCall(VecAXPY(yV, -1., gradyp));
-  PetscCall(VecDestroy(&gradyp));
+  PetscCall(MatMult(ctx->G, yp, ctx->gradpcorr));
+  PetscCall(VecAXPY(yv, -1., ctx->gradpcorr));
+  PetscCall(MatMult(ctx->Gst, yp, ctx->gradstpcorr));
+  PetscCall(VecAXPY(yV, -1., ctx->gradstpcorr));
 
   PetscCall(VecRestoreSubVector(x, ctx->vis, &xv));
   PetscCall(VecRestoreSubVector(x, ctx->Vis, &xV));
@@ -129,6 +134,9 @@ static PetscErrorCode NSFSMPCDestroy_Private(PC pc)
   PetscCall(MatDestroy(&ctx->Gst));
   PetscCall(MatDestroy(&ctx->D));
   PetscCall(MatDestroy(&ctx->Lst));
+  PetscCall(VecDestroy(&ctx->divvstar));
+  PetscCall(VecDestroy(&ctx->gradpcorr));
+  PetscCall(VecDestroy(&ctx->gradstpcorr));
   PetscCall(KSPDestroy(&ctx->kspv));
   PetscCall(KSPDestroy(&ctx->kspp));
   PetscCall(MatNullSpaceDestroy(&ctx->nullspace));
@@ -228,7 +236,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(PCSetType(pc, PCSHELL));
   PetscCall(PCShellSetName(pc, "FractionalStepMethod"));
   PetscCall(PCShellSetApply(pc, NSFSMPCApply_Private));
-  PetscCall(CreateNSFSMPCCtx_Private(ns, pc, &pcctx));
+  PetscCall(NSFSMPCCtxCreate_Private(ns, pc, &pcctx));
   PetscCall(PCShellSetContext(pc, pcctx));
   PetscCall(PCShellSetDestroy(pc, NSFSMPCDestroy_Private));
   PetscFunctionReturn(PETSC_SUCCESS);
