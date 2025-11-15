@@ -20,6 +20,7 @@ struct _MeshOps {
   PetscErrorCode (*view)(Mesh, PetscViewer);
   PetscErrorCode (*load)(Mesh, PetscViewer);
   PetscErrorCode (*createglobalvector)(Mesh, MeshDMType, Vec *);
+  PetscErrorCode (*creatematrix)(Mesh, MeshDMType, MeshDMType, Mat *);
   PetscErrorCode (*getnumberboundaries)(Mesh, PetscInt *);
 };
 

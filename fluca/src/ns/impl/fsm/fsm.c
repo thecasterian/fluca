@@ -40,9 +40,9 @@ static PetscErrorCode NSFSMPCCtxCreate_Private(NS ns, PC pc, NSFSMPCCtx **ctx)
   PetscFunctionBegin;
   PetscCall(PetscNew(&c));
 
-  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, &c->vis));
-  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, &c->Vis));
-  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &c->pis));
+  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, NULL, &c->vis));
+  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, NULL, &c->Vis));
+  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, NULL, &c->pis));
 
   PetscCall(MatCreateSubMatrix(ns->J, c->vis, c->vis, MAT_INITIAL_MATRIX, &c->A));
   PetscCall(MatCreateSubMatrix(ns->J, c->Vis, c->vis, MAT_INITIAL_MATRIX, &c->T));
@@ -191,6 +191,10 @@ PetscErrorCode NSSetup_FSM(NS ns)
 
   PetscCall(PetscObjectSetName((PetscObject)fsm->phalf, "PressureHalfStep"));
 
+  /* Preallocate Jacobian */
+  if (iscart) PetscCall(NSFSMFormJacobian_Cart_Internal(ns->snes, ns->x, ns->J, ns->J, ns));
+  else SETERRQ(comm, PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
+
   /* Create null space */
   neednullspace = PETSC_TRUE;
   PetscCall(MeshGetNumberBoundaries(ns->mesh, &nb));
@@ -207,7 +211,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
     Vec      vecs[1], subvec;
     PetscInt subvecsize;
 
-    PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &is));
+    PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, NULL, &is));
     PetscCall(MatCreateVecs(ns->J, NULL, &vecs[0]));
     PetscCall(VecGetSubVector(vecs[0], is, &subvec));
     PetscCall(VecGetSize(subvec, &subvecsize));
@@ -219,12 +223,10 @@ PetscErrorCode NSSetup_FSM(NS ns)
 
   /* Set solver functions */
   if (iscart) PetscCall(SNESSetPicard(ns->snes, ns->r, NSFSMFormFunction_Cart_Internal, ns->J, ns->J, NSFSMFormJacobian_Cart_Internal, ns));
+  else SETERRQ(comm, PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
   if (neednullspace) PetscCall(SNESSetFunction(ns->snes, ns->r, NSFSMPicardComputeFunction_Private, ns));
   /* Need zero initial guess to ensure least-square solution of pressure poisson equation */
   PetscCall(SNESSetComputeInitialGuess(ns->snes, NSFSMFormInitialGuess_Private, NULL));
-
-  /* Compute initial Jacobian as it is used in computing initial RHS also */
-  PetscCall(NSFSMFormJacobian_Cart_Internal(ns->snes, ns->x, ns->J, ns->J, ns));
 
   /* Set KSP options */
   PetscCall(SNESGetKSP(ns->snes, &ksp));
