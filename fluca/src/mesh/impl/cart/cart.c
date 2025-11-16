@@ -249,7 +249,6 @@ PetscErrorCode MeshCreateMatrix_Cart(Mesh mesh, MeshDMType rdmtype, MeshDMType c
   PetscCall(MatSetType(*mat, mattype));
   PetscCall(MatSetLocalToGlobalMapping(*mat, rltog, cltog));
   PetscCall(MatSetUp(*mat));
-  PetscCall(MatSetOption(*mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
