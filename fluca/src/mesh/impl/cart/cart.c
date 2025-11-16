@@ -228,6 +228,30 @@ PetscErrorCode MeshCreateGlobalVector_Cart(Mesh mesh, MeshDMType dmtype, Vec *ve
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode MeshCreateMatrix_Cart(Mesh mesh, MeshDMType rdmtype, MeshDMType cdmtype, Mat *mat)
+{
+  DM                     rdm, cdm;
+  PetscInt               rentries, centries;
+  ISLocalToGlobalMapping rltog, cltog;
+  MatType                mattype;
+
+  PetscFunctionBegin;
+  PetscCall(MeshGetDM(mesh, rdmtype, &rdm));
+  PetscCall(MeshGetDM(mesh, cdmtype, &cdm));
+  PetscCall(DMStagGetEntries(rdm, &rentries));
+  PetscCall(DMStagGetEntries(cdm, &centries));
+  PetscCall(DMGetLocalToGlobalMapping(rdm, &rltog));
+  PetscCall(DMGetLocalToGlobalMapping(cdm, &cltog));
+  PetscCall(DMGetMatType(rdm, &mattype));
+
+  PetscCall(MatCreate(PetscObjectComm((PetscObject)mesh), mat));
+  PetscCall(MatSetSizes(*mat, rentries, centries, PETSC_DECIDE, PETSC_DECIDE));
+  PetscCall(MatSetType(*mat, mattype));
+  PetscCall(MatSetLocalToGlobalMapping(*mat, rltog, cltog));
+  PetscCall(MatSetUp(*mat));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode MeshGetNumberBoundaries_Cart(Mesh mesh, PetscInt *nb)
 {
   PetscFunctionBegin;
@@ -258,6 +282,7 @@ PetscErrorCode MeshCreate_Cart(Mesh mesh)
   mesh->ops->view                = MeshView_Cart;
   mesh->ops->load                = MeshLoad_Cart;
   mesh->ops->createglobalvector  = MeshCreateGlobalVector_Cart;
+  mesh->ops->creatematrix        = MeshCreateMatrix_Cart;
   mesh->ops->getnumberboundaries = MeshGetNumberBoundaries_Cart;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

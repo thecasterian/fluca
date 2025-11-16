@@ -33,6 +33,7 @@ typedef enum {
 } MeshDMType;
 FLUCA_EXTERN PetscErrorCode MeshGetDM(Mesh, MeshDMType, DM *);
 FLUCA_EXTERN PetscErrorCode MeshCreateGlobalVector(Mesh, MeshDMType, Vec *);
+FLUCA_EXTERN PetscErrorCode MeshCreateMatrix(Mesh, MeshDMType, MeshDMType, Mat *);
 
 FLUCA_EXTERN PetscErrorCode MeshGetNumberBoundaries(Mesh, PetscInt *);
 

@@ -28,9 +28,10 @@ PetscErrorCode NSGetNumFields(NS ns, PetscInt *nfields)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSGetField(NS ns, const char name[], MeshDMType *dmtype, IS *is)
+PetscErrorCode NSGetField(NS ns, const char name[], PetscInt *idx, MeshDMType *dmtype, IS *is)
 {
   NSFieldLink link;
+  PetscInt    i;
   PetscBool   found = PETSC_FALSE;
 
   PetscFunctionBegin;
@@ -38,13 +39,16 @@ PetscErrorCode NSGetField(NS ns, const char name[], MeshDMType *dmtype, IS *is)
   PetscAssertPointer(name, 2);
 
   link = ns->fieldlink;
+  i    = 0;
   while (link) {
     PetscCall(PetscStrcmp(link->fieldname, name, &found));
     if (found) break;
     link = link->next;
+    ++i;
   }
   PetscCheck(found, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_OUTOFRANGE, "Field \"%s\" not found", name);
 
+  if (idx) *idx = i;
   if (dmtype) *dmtype = link->dmtype;
   if (is) *is = link->is;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -77,7 +81,7 @@ PetscErrorCode NSGetSolutionSubVector(NS ns, const char name[], Vec *subvec)
   IS is;
 
   PetscFunctionBegin;
-  PetscCall(NSGetField(ns, name, NULL, &is));
+  PetscCall(NSGetField(ns, name, NULL, NULL, &is));
   PetscCall(VecGetSubVector(ns->sol, is, subvec));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -87,7 +91,7 @@ PetscErrorCode NSRestoreSolutionSubVector(NS ns, const char name[], Vec *subvec)
   IS is;
 
   PetscFunctionBegin;
-  PetscCall(NSGetField(ns, name, NULL, &is));
+  PetscCall(NSGetField(ns, name, NULL, NULL, &is));
   PetscCall(VecRestoreSubVector(ns->sol, is, subvec));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

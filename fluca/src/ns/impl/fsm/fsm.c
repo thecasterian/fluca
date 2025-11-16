@@ -31,25 +31,36 @@ static PetscErrorCode NSFSMPicardComputeFunction_Private(SNES snes, Vec x, Vec f
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode CreateNSFSMPCCtx_Private(NS ns, PC pc, NSFSMPCCtx **ctx)
+static PetscErrorCode NSFSMPCCtxCreate_Private(NS ns, PC pc, NSFSMPCCtx **ctx)
 {
   NSFSMPCCtx *c;
   MPI_Comm    comm;
+  Vec         v, V, p;
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&c));
 
-  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, &c->vis));
-  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, &c->Vis));
-  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &c->pis));
+  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, NULL, &c->vis));
+  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, NULL, &c->Vis));
+  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, NULL, &c->pis));
 
   PetscCall(MatCreateSubMatrix(ns->J, c->vis, c->vis, MAT_INITIAL_MATRIX, &c->A));
   PetscCall(MatCreateSubMatrix(ns->J, c->Vis, c->vis, MAT_INITIAL_MATRIX, &c->T));
   PetscCall(MatCreateSubMatrix(ns->J, c->vis, c->pis, MAT_INITIAL_MATRIX, &c->G));
   PetscCall(PetscObjectQuery((PetscObject)ns->J, "StaggeredGradient", (PetscObject *)&c->Gst));
   PetscCall(PetscObjectReference((PetscObject)c->Gst));
-  PetscCall(MatCreateSubMatrix(ns->J, c->pis, c->Vis, MAT_INITIAL_MATRIX, &c->Dst));
-  PetscCall(MatMatMult(c->Dst, c->Gst, MAT_INITIAL_MATRIX, 1., &c->Lst));
+  PetscCall(MatCreateSubMatrix(ns->J, c->pis, c->Vis, MAT_INITIAL_MATRIX, &c->D));
+  PetscCall(MatMatMult(c->D, c->Gst, MAT_INITIAL_MATRIX, 1., &c->Lst));
+
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
+  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
+  PetscCall(VecDuplicate(p, &c->divvstar));
+  PetscCall(VecDuplicate(v, &c->gradpcorr));
+  PetscCall(VecDuplicate(V, &c->gradstpcorr));
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
+  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
 
   PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
   PetscCall(KSPCreate(comm, &c->kspv));
@@ -76,7 +87,7 @@ static PetscErrorCode CreateNSFSMPCCtx_Private(NS ns, PC pc, NSFSMPCCtx **ctx)
 static PetscErrorCode NSFSMPCApply_Private(PC pc, Vec x, Vec y)
 {
   NSFSMPCCtx *ctx;
-  Vec         xv, xV, xp, yv, yV, yp, yprhs, gradyp;
+  Vec         xv, xV, xp, yv, yV, yp;
 
   PetscFunctionBegin;
   PetscCall(PCShellGetContext(pc, &ctx));
@@ -88,25 +99,19 @@ static PetscErrorCode NSFSMPCApply_Private(PC pc, Vec x, Vec y)
   PetscCall(VecGetSubVector(y, ctx->pis, &yp));
 
   /* Forward step */
-  PetscCall(VecDuplicate(xp, &yprhs));
   PetscCall(KSPSolve(ctx->kspv, xv, yv));
   PetscCall(MatMult(ctx->T, yv, yV));
   PetscCall(VecAXPY(yV, -1., xV));
-  PetscCall(MatMult(ctx->Dst, yV, yprhs));
-  PetscCall(VecAXPY(yprhs, -1., xp));
-  if (ctx->nullspace) PetscCall(MatNullSpaceRemove(ctx->nullspace, yprhs));
-  PetscCall(KSPSolve(ctx->kspp, yprhs, yp));
-  PetscCall(VecDestroy(&yprhs));
+  PetscCall(MatMult(ctx->D, yV, ctx->divvstar));
+  PetscCall(VecAXPY(ctx->divvstar, -1., xp));
+  if (ctx->nullspace) PetscCall(MatNullSpaceRemove(ctx->nullspace, ctx->divvstar));
+  PetscCall(KSPSolve(ctx->kspp, ctx->divvstar, yp));
 
   /* Backward step */
-  PetscCall(VecDuplicate(yv, &gradyp));
-  PetscCall(MatMult(ctx->G, yp, gradyp));
-  PetscCall(VecAXPY(yv, -1., gradyp));
-  PetscCall(VecDestroy(&gradyp));
-  PetscCall(VecDuplicate(yV, &gradyp));
-  PetscCall(MatMult(ctx->Gst, yp, gradyp));
-  PetscCall(VecAXPY(yV, -1., gradyp));
-  PetscCall(VecDestroy(&gradyp));
+  PetscCall(MatMult(ctx->G, yp, ctx->gradpcorr));
+  PetscCall(VecAXPY(yv, -1., ctx->gradpcorr));
+  PetscCall(MatMult(ctx->Gst, yp, ctx->gradstpcorr));
+  PetscCall(VecAXPY(yV, -1., ctx->gradstpcorr));
 
   PetscCall(VecRestoreSubVector(x, ctx->vis, &xv));
   PetscCall(VecRestoreSubVector(x, ctx->Vis, &xV));
@@ -127,8 +132,11 @@ static PetscErrorCode NSFSMPCDestroy_Private(PC pc)
   PetscCall(MatDestroy(&ctx->T));
   PetscCall(MatDestroy(&ctx->G));
   PetscCall(MatDestroy(&ctx->Gst));
-  PetscCall(MatDestroy(&ctx->Dst));
+  PetscCall(MatDestroy(&ctx->D));
   PetscCall(MatDestroy(&ctx->Lst));
+  PetscCall(VecDestroy(&ctx->divvstar));
+  PetscCall(VecDestroy(&ctx->gradpcorr));
+  PetscCall(VecDestroy(&ctx->gradstpcorr));
   PetscCall(KSPDestroy(&ctx->kspv));
   PetscCall(KSPDestroy(&ctx->kspp));
   PetscCall(MatNullSpaceDestroy(&ctx->nullspace));
@@ -179,9 +187,13 @@ PetscErrorCode NSSetup_FSM(NS ns)
 
   PetscCall(MeshCreateGlobalVector(ns->mesh, MESH_DM_STAG_VECTOR, &fsm->v0interp));
   PetscCall(MeshCreateGlobalVector(ns->mesh, MESH_DM_SCALAR, &fsm->phalf));
-  PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &fsm->TvN));
+  PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &fsm->B));
 
   PetscCall(PetscObjectSetName((PetscObject)fsm->phalf, "PressureHalfStep"));
+
+  /* Preallocate Jacobian */
+  if (iscart) PetscCall(NSFSMFormJacobian_Cart_Internal(ns->snes, ns->x, ns->J, ns->J, ns));
+  else SETERRQ(comm, PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
 
   /* Create null space */
   neednullspace = PETSC_TRUE;
@@ -199,7 +211,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
     Vec      vecs[1], subvec;
     PetscInt subvecsize;
 
-    PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, &is));
+    PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, NULL, &is));
     PetscCall(MatCreateVecs(ns->J, NULL, &vecs[0]));
     PetscCall(VecGetSubVector(vecs[0], is, &subvec));
     PetscCall(VecGetSize(subvec, &subvecsize));
@@ -211,12 +223,10 @@ PetscErrorCode NSSetup_FSM(NS ns)
 
   /* Set solver functions */
   if (iscart) PetscCall(SNESSetPicard(ns->snes, ns->r, NSFSMFormFunction_Cart_Internal, ns->J, ns->J, NSFSMFormJacobian_Cart_Internal, ns));
+  else SETERRQ(comm, PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
   if (neednullspace) PetscCall(SNESSetFunction(ns->snes, ns->r, NSFSMPicardComputeFunction_Private, ns));
   /* Need zero initial guess to ensure least-square solution of pressure poisson equation */
   PetscCall(SNESSetComputeInitialGuess(ns->snes, NSFSMFormInitialGuess_Private, NULL));
-
-  /* Compute initial Jacobian as it is used in computing initial RHS also */
-  PetscCall(NSFSMFormJacobian_Cart_Internal(ns->snes, ns->x, ns->J, ns->J, ns));
 
   /* Set KSP options */
   PetscCall(SNESGetKSP(ns->snes, &ksp));
@@ -228,7 +238,7 @@ PetscErrorCode NSSetup_FSM(NS ns)
   PetscCall(PCSetType(pc, PCSHELL));
   PetscCall(PCShellSetName(pc, "FractionalStepMethod"));
   PetscCall(PCShellSetApply(pc, NSFSMPCApply_Private));
-  PetscCall(CreateNSFSMPCCtx_Private(ns, pc, &pcctx));
+  PetscCall(NSFSMPCCtxCreate_Private(ns, pc, &pcctx));
   PetscCall(PCShellSetContext(pc, pcctx));
   PetscCall(PCShellSetDestroy(pc, NSFSMPCDestroy_Private));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -259,7 +269,7 @@ PetscErrorCode NSDestroy_FSM(NS ns)
   PetscFunctionBegin;
   PetscCall(VecDestroy(&fsm->v0interp));
   PetscCall(VecDestroy(&fsm->phalf));
-  PetscCall(MatDestroy(&fsm->TvN));
+  PetscCall(MatDestroy(&fsm->B));
   PetscCall(PetscFree(ns->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -297,10 +307,10 @@ PetscErrorCode NSCreate_FSM(NS ns)
   PetscCall(PetscNew(&fsm));
   ns->data = (void *)fsm;
 
-  fsm->v0interp    = NULL;
-  fsm->phalf       = NULL;
-  fsm->TvN         = NULL;
-  fsm->TvNcomputed = PETSC_FALSE;
+  fsm->v0interp  = NULL;
+  fsm->phalf     = NULL;
+  fsm->B         = NULL;
+  fsm->Bcomputed = PETSC_FALSE;
 
   ns->ops->setfromoptions = NSSetFromOptions_FSM;
   ns->ops->setup          = NSSetup_FSM;

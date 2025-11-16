@@ -176,6 +176,15 @@ PetscErrorCode MeshCreateGlobalVector(Mesh mesh, MeshDMType type, Vec *vec)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode MeshCreateMatrix(Mesh mesh, MeshDMType rtype, MeshDMType ctype, Mat *mat)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+  PetscAssertPointer(mat, 4);
+  PetscUseTypeMethod(mesh, creatematrix, rtype, ctype, mat);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode MeshGetNumberBoundaries(Mesh mesh, PetscInt *nb)
 {
   PetscFunctionBegin;
