@@ -1,6 +1,6 @@
 # Theory Guide
 
-This document provides a comprehensive overview of the theoretical foundations and numerical methods implemented in Fluca. The guide is intended for users who wish to understand the mathematical and numerical principles underlying the software, as well as developers who are contributing to or extending the codebase.
+This document presents the theoretical foundations and numerical methods implemented in Fluca. It is intended for researchers and developers seeking to understand the mathematical formulation and numerical algorithms underlying the software.
 
 ## Table of Contents
 
@@ -9,163 +9,349 @@ This document provides a comprehensive overview of the theoretical foundations a
 - [Temporal Discretization](#temporal-discretization)
 - [Spatial Discretization](#spatial-discretization)
 - [Immersed Boundary Method](#immersed-boundary-method)
-- [Solvers](#solvers)
+- [Segregated Solvers](#segregated-solvers)
 
 ## Governing Equations
 
-Fluca is designed to simulate unsteady incompressible viscous flow. Assuming constant density $\rho$ and constant dynamic viscosity $\mu$ (or equivalently, constant kinematic viscosity $\nu = \mu/\rho$), the governing equations consist of the continuity equation (mass conservation) and the Navier-Stokes equations (momentum conservation):
+Fluca is designed to simulate unsteady incompressible viscous flow. Assuming constant density $\rho$, the governing equations consist of the continuity equation (mass conservation) and the Navier-Stokes equations (momentum conservation):
 
-$$ \frac{\partial u_i}{\partial x_i} = 0 $$
+```math
+\frac{\partial u_i}{\partial x_i} = 0 \tag{1}
+```
 
-$$ \frac{\partial u_i}{\partial t} + \frac{\partial}{\partial x_j} u_i u_j = -\frac{1}{\rho} \frac{\partial p}{\partial x_i} + \nu \frac{\partial}{\partial x_j} \frac{\partial}{\partial x_j} u_i $$
+```math
+\frac{\partial u_i}{\partial t} + \frac{\partial}{\partial x_j} u_i u_j = -\frac{1}{\rho} \frac{\partial p}{\partial x_i} + \frac{\partial}{\partial x_j} \left( \nu \frac{\partial u_i}{\partial x_j} \right) \tag{2}
+```
 
 ## Grid System
 
-Fluca employs a non-staggered (collocated) grid system, where all variables such as velocity components and pressure are stored at the cell centers. This approach offers several advantages over staggered grids, including simplified implementation, easier handling of boundary conditions, and better suitability for unstructured or hybrid grids. The collocated arrangement also facilitates straightforward extension to three dimensions and complex geometries.
+Fluca employs a non-staggered (collocated) grid system, in which all variables, including velocity components and pressure, are stored at cell centers. This arrangement offers several advantages over staggered grids: simplified implementation, more straightforward treatment of boundary conditions, and improved suitability for unstructured or hybrid grids. The collocated arrangement also facilitates extension to three-dimensional domains and complex geometries.
 
-However, the traditional non-staggered grid is known to suffer from the checkerboard (odd-even decoupling) problem, where spurious pressure oscillations can appear in the solution. This instability arises because the pressure gradient at a cell center, calculated from neighboring cell center pressures, does not "see" the pressure at that very cell, allowing non-physical pressure modes to persist. To overcome this well-known issue, Fluca introduces a staggered face-normal velocity component, which provides the necessary coupling between pressure and velocity fields.
+However, collocated grids are susceptible to the checkerboard (odd-even decoupling) instability, which manifests as spurious pressure oscillations in the solution. This phenomenon arises because the pressure gradient at a cell center, computed from neighboring cell-center pressures, is decoupled from the pressure at that cell itself, permitting non-physical pressure modes to persist. To address this issue, Fluca introduces a staggered face-normal velocity component that provides the necessary coupling between the pressure and velocity fields.
 
 The face-normal velocity $U$ is defined as
 
-$$ U = \mathbf{u}_\text{face} \cdot \mathbf{n} $$
+```math
+U = \mathbf{u}_\text{face} \cdot \mathbf{n}
+```
 
-where $\mathbf{u}_\text{face}$ is the velocity vector evaluated at the face center and $\mathbf{n}$ is the unit normal vector on the face. Since each face has two possible normal directions, a consistent choice must be made. On Cartesian grids, Fluca adopts the convention that the face normal vector coincides with the positive direction of the standard basis vector corresponding to the coordinate axis perpendicular to the face. This choice ensures consistency across all faces and simplifies implementation.
+where $\mathbf{u}_\text{face}$ denotes the velocity vector evaluated at the face center and $\mathbf{n}$ is the unit outward normal vector of the face. Since each face admits two possible normal directions, a consistent convention must be established. On Cartesian grids, Fluca adopts the convention that the face normal vector is oriented in the positive direction of the coordinate axis perpendicular to the face.
 
-Critically, the face velocity is not simply linearly interpolated from the neighboring cell centers; instead, it is computed using the Rhie-Chow interpolation scheme, which adds a pressure-gradient correction term. This correction ensures proper coupling between the pressure and velocity fields, effectively suppressing the checkerboard instability while maintaining the advantages of the collocated grid. The details of this interpolation are discussed later in the temporal discretization section.
+The face velocity is not obtained by simple linear interpolation from neighboring cell centers; rather, it is computed using the Rhie-Chow interpolation scheme, which incorporates a pressure-gradient correction term. This correction establishes proper coupling between the pressure and velocity fields, thereby suppressing the checkerboard instability while preserving the advantages of the collocated grid. The details of this interpolation are presented in the temporal discretization section.
 
 ## Temporal Discretization
 
 ### Navier-Stokes Equation
 
-Fluca employs a second-order accurate time advancement scheme based on the method introduced by Kim & Choi [1]. Achieving second-order temporal accuracy is crucial for minimizing numerical dissipation and dispersion errors, which is especially important for capturing unsteady flow phenomena such as vortex shedding and transition to turbulence. The scheme is designed to be unconditionally stable and suitable for both explicit and implicit treatments of different terms.
+Fluca employs a second-order accurate time advancement scheme based on the method of Kim & Choi [1]. Second-order temporal accuracy is essential for minimizing numerical dissipation and dispersion errors, which is particularly important for resolving unsteady flow phenomena such as vortex shedding and transition to turbulence. The scheme is unconditionally stable and accommodates both explicit and implicit treatment of different terms.
 
-The discretization begins by applying the Crank-Nicolson scheme to both the convective and viscous terms of the Navier-Stokes equation. The Crank-Nicolson scheme is a centered, second-order accurate implicit method that averages the terms at time levels $n$ and $n+1$:
+The discretization begins by applying the Crank-Nicolson scheme to both the convective and viscous terms of the Navier-Stokes equation (2):
 
-$$ \frac{u_i^{n+1} - u_i^n}{\Delta t} + \frac{1}{2} \frac{\partial}{\partial x_j} (u_i^{n+1} u_j^{n+1} + u_i^n u_j^n) = -\frac{1}{\rho} \frac{\partial p^{n+1/2}}{\partial x_i} + \frac{\nu}{2} \frac{\partial}{\partial x_j} \frac{\partial}{\partial x_j} (u_i^{n+1} + u_i^n) $$
+```math
+\frac{u_i^{n+1} - u_i^n}{\Delta t} + \frac{1}{2} \frac{\partial}{\partial x_j} (u_i^{n+1} u_j^{n+1} + u_i^n u_j^n) = -\frac{1}{\rho} \frac{\partial p^{n+1/2}}{\partial x_i} + \frac{1}{2} \frac{\partial}{\partial x_j} \left( \nu^{n+1} \frac{\partial u_i^{n+1}}{\partial x_j} + \nu^n \frac{\partial u_i^n}{\partial x_j} \right) \tag{3}
+```
 
-Here, the pressure is evaluated at the _half_ time step $n+1/2$, which is consistent with the time-centered nature of the scheme. However, the product $u_i^{n+1} u_j^{n+1}$ in the convective term introduces a nonlinearity that would require iterative solution methods. To avoid this computational expense while maintaining second-order accuracy, the convective term is linearized using a Taylor series expansion:
+Here, the pressure is evaluated at the half time step $n+1/2$, consistent with the time-centered nature of the scheme. The product $u_i^{n+1} u_j^{n+1}$ in the convective term introduces strong nonlinearity. To circumvent this difficulty, the convective term is linearized as follows:
 
-$$ u_i^{n+1} u_j^{n+1} + u_i^n u_j^n = u_i^{n+1} u_j^n + u_i^n u_j^{n+1} + O(\Delta t^2) $$
+```math
+u_i^{n+1} u_j^{n+1} + u_i^n u_j^n = u_i^{n+1} u_j^n + u_i^n u_j^{n+1} + O(\Delta t^2) \tag{4}
+```
 
-This linearization is exact to second order in $\Delta t$, so the overall temporal accuracy of the scheme remains second-order. The linearized form allows the equations to be solved without inner iterations, significantly reducing computational cost. The resulting fully implicit time advancement scheme can be written as:
+This linearization preserves second-order accuracy in $\Delta t$. The linearized form permits direct solution without inner iterations when viscosity is constant. The resulting fully implicit time advancement scheme is:
 
-$$ \frac{u^{n+1} - u^n}{\Delta t} + \frac{1}{2} \frac{\partial}{\partial x_j} (u_i^{n+1} u_j^n + u_i^n u_j^{n+1}) = -\frac{1}{\rho} \frac{\partial p^{n+1/2}}{\partial x_i} + \frac{\nu}{2} \frac{\partial}{\partial x_j} \frac{\partial}{\partial x_j} (u_i^{n+1} + u_i^n) $$
+```math
+\frac{u^{n+1} - u^n}{\Delta t} + \frac{1}{2} \frac{\partial}{\partial x_j} (u_i^{n+1} u_j^n + u_i^n u_j^{n+1}) = -\frac{1}{\rho} \frac{\partial p^{n+1/2}}{\partial x_i} + \frac{1}{2} \frac{\partial}{\partial x_j} \left( \nu^{n+1} \frac{\partial u_i^{n+1}}{\partial x_j} + \nu^n \frac{\partial u_i^n}{\partial x_j} \right) \tag{5}
+```
 
-Rearranging this equation to separate known quantities from unknowns, we obtain:
+Rearranging to isolate known quantities from unknowns yields:
 
-$$ u_i^{n+1} + \frac{\Delta t}{2} \frac{\partial}{\partial x_j} (u_i^{n+1} u_j^n + u_i^n u_j^{n+1}) - \frac{\nu \Delta t}{2} \frac{\partial}{\partial x_j} \frac{\partial}{\partial x_j} u_i^{n+1} + \frac{\Delta t}{\rho} \frac{\partial}{\partial x_i} (p^{n+1/2} - q) = u_i^n + \frac{\nu \Delta t}{2} \frac{\partial}{\partial x_j} \frac{\partial}{\partial x_j} u_i^n - \frac{\Delta t}{\rho} \frac{\partial q}{\partial x_i} $$
+```math
+u_i^{n+1} + \frac{\Delta t}{2} \frac{\partial}{\partial x_j} (u_i^{n+1} u_j^n + u_i^n u_j^{n+1}) - \frac{\Delta t}{2} \frac{\partial}{\partial x_j} \left( \nu^{n+1} \frac{\partial u_i^{n+1}}{\partial x_j} \right) + \frac{\Delta t}{\rho} \frac{\partial p'}{\partial x_i} = u_i^n + \frac{\Delta t}{2} \frac{\partial}{\partial x_j} \left( \nu^n \frac{\partial u_i^n}{\partial x_j} \right) - \frac{\Delta t}{\rho} \frac{\partial q}{\partial x_i} \tag{6}
+```
 
-Here, $q$ is an auxiliary pressure-like scalar field used in the Rhie-Chow interpolation. The introduction of $q$ allows us to subtract and add specific pressure gradient terms to properly formulate the face velocity calculation. In Fluca's implementation, $q$ is set to the pressure at the previous half time step, $p^{n-1/2}$, except for the very first time step ($n=0$), when the initial pressure field $p^0$ is used instead, as it is the only available pressure field at that point.
+Here, $p'=p^{n+1/2}-q$ denotes the pressure correction and $q$ represents a known pressure field from the previous step. Employing the pressure correction rather than the pressure itself as an unknown enhances accuracy when the governing equation operators are approximated in the solver, since $p'=O(\Delta t)$. The field $q$ is defined as the pressure at the previous half time step, $p^{n-1/2}$, except at the initial time step ($n=0$), where the initial pressure field $p^0$ is used.
 
-The pressure field $p^{n+1}$ can be obtained by extrapolation from known pressure values at previous time steps, $p^{n+1/2}$ and $p^{n-1/2}$. Armfield & Street [3] showed that this extrapolation maintains second-order temporal accuracy for the pressure field.
+The pressure field $p^{n+1}$ is obtained by extrapolation from the known values $p^{n+1/2}$ and $q$. Armfield & Street [3] demonstrated that this extrapolation preserves second-order temporal accuracy for the pressure field.
 
 ### Rhie-Chow Interpolation
 
-Based on the temporal discretization described above, the Rhie-Chow interpolation for computing the face velocity is given by:
+Based on the temporal discretization presented above, the Rhie-Chow interpolation for the face velocity takes the form:
 
-$$ \mathbf{u}_\text{face}^{n+1} = \overline{\mathbf{u}}^{n+1} + \frac{\Delta t}{\rho} \left[ \overline{\nabla (p^{n+1/2} - q)} - \left. \nabla (p^{n+1/2} - q) \right|_\text{face} \right] $$
+```math
+\mathbf{u}_\text{face}^{n+1} = \overline{\mathbf{u}}^{n+1} + \frac{\Delta t}{\rho} \left[ \overline{\nabla p'} - \left. \nabla p' \right|_\text{face} \right] \tag{7}
+```
 
-where $\overline{\phi}$ denotes the linear interpolation of the values of $\phi$ from the neighboring cell centers to the face. The first term $\overline{\mathbf{u}}^{n+1}$ is the straightforward linear interpolation of the cell-centered velocities. The second term is the pressure correction, which consists of the difference between the interpolated pressure gradient (from cell centers) and the pressure gradient directly calculated at the face. This correction term effectively couples the pressure field to the velocity field at the face, preventing the checkerboard oscillations.
+where $\overline{\phi}$ denotes linear interpolation of $\phi$ from neighboring cell centers to the face. The first term $\overline{\mathbf{u}}^{n+1}$ represents the linear interpolation of cell-centered velocities. The second term is the correction, comprising the difference between the interpolated pressure gradient (from cell centers) and the pressure gradient computed directly at the face. This correction couples the pressure and velocity fields at the face, suppressing checkerboard oscillations.
 
-Note that the pressure correction coefficient is fixed as $\Delta t / \rho$, unlike the classical Rhie-Chow interpolation which uses coefficients from the discretized momentum equation. This approach follows Zang et al. [2], who developed a similar formulation for collocated grids, though not explicitly presented as the form of the Rhie-Chow interpolation.
+The coefficient of the correction term is fixed as $\Delta t / \rho$, in contrast to the classical Rhie-Chow interpolation, which employs coefficients derived from the discretized momentum equation. This formulation follows Zang et al. [2], who developed a similar approach for collocated grids.
 
 ### Continuity Equation
 
-The continuity equation is enforced at the new time step $n+1$:
+The continuity equation (1) is enforced at the new time step $n+1$:
 
-$$ \frac{\partial u_i^{n+1}}{\partial x_i} = 0 $$
+```math
+\frac{\partial u_i^{n+1}}{\partial x_i} = 0 \tag{8}
+```
 
 ## Spatial Discretization
 
 ### Cartesian Grid
 
-Fluca employs the finite difference method (FDM) for spatial discretization on Cartesian grids. The finite difference approach is well-suited for structured grids. The method discretizes spatial derivatives by approximating them with differences of function values at discrete grid points.
+Fluca employs the finite difference method (FDM) for spatial discretization on Cartesian grids. This approach is well-suited for structured grids, approximating spatial derivatives by finite differences of function values at discrete grid points.
 
-As an example, consider the second derivative of a variable $\phi$ in the x-direction at cell $(i, j)$ (assuming a 2D configuration for simplicity):
+As an illustrative example, consider the second derivative of a variable $\phi$ in the $x$-direction at cell $(i, j)$, assuming a two-dimensional configuration:
 
-$$ \begin{aligned}
+```math
+\begin{aligned}
 \left. \frac{\partial}{\partial x} \frac{\partial}{\partial x} \phi \right|_{i,j} & \approx \frac{\delta}{\delta x} \left( \frac{\delta}{\delta x} \phi_\text{cell} \right)_\text{face} \\
 & = \frac{\left.\frac{\delta}{\delta x}\phi_\text{cell}\right|_{i+1/2,j} - \left.\frac{\delta}{\delta x}\phi_\text{cell}\right|_{i-1/2,j}}{\Delta x_{i-1/2,i+1/2}} \\
 & = \frac{(\phi_{i+1,j} - \phi_{i,j}) / \Delta x_{i,i+1} - (\phi_{i,j} - \phi_{i-1,j}) / \Delta x_{i-1,i}}{\Delta x_{i-1/2,i+1/2}}
-\end{aligned} $$
+\end{aligned}
+```
 
-Here, $\delta$ denotes a finite difference operator, and the subscripts denote cell indices or face locations (indicated by half-integer indices). This nested difference approach &mdash; computing the derivative of a derivative &mdash; ensures consistency with the control volume formulation and guarantees second-order spatial accuracy, at least on uniform grids. For non-uniform grids, the scheme remains second-order provided the grid stretching is smooth. All other spatial derivatives appearing in the governing equations are discretized in a similar manner, maintaining second-order accuracy throughout.
+Here, $\delta$ denotes a finite difference operator, and subscripts indicate cell indices or face locations (half-integer indices denote face positions). This nested difference formulation ensures consistency with the control volume approach and provides second-order spatial accuracy on uniform grids. On non-uniform grids, second-order accuracy is preserved provided the grid stretching is sufficiently smooth. All spatial derivatives in the governing equations are discretized analogously.
 
-When the value of a variable is needed at a face location, it is typically obtained through linear interpolation from the neighboring cell centers. However, for the convective and continuity terms, Fluca leverages the face-normal velocity $U$ computed via Rhie-Chow interpolation. This provides stronger coupling between the pressure and velocity fields [1]:
+When variable values are required at face locations, they are typically obtained by linear interpolation from neighboring cell centers. However, for the convective and continuity terms, Fluca employs the face-normal velocity $U$ computed via Rhie-Chow interpolation, which provides enhanced coupling between the pressure and velocity fields [1]:
 
-$$ \frac{\partial}{\partial x_j} (u_i^{n+1} u_j^n + u_i^n u_j^{n+1}) \approx \frac{\delta}{\delta x_j} (\overline{u}_i^{n+1} U^n + \overline{u}_i^n \overline{u}_j^{n+1}) $$
+```math
+\frac{\partial}{\partial x_j} (u_i^{n+1} u_j^n + u_i^n u_j^{n+1}) \approx \frac{\delta}{\delta x_j} (\overline{u}_i^{n+1} U^n + \overline{u}_i^n \overline{u}_j^{n+1})
+```
 
-$$ \frac{\partial u_i^{n+1}}{\partial x_i} \approx \sum_i \frac{\delta U^{n+1}}{\delta x_i} $$
+```math
+\frac{\partial u_i^{n+1}}{\partial x_i} \approx \sum_i \frac{\delta U^{n+1}}{\delta x_i}
+```
 
-As a concrete example, the discrete divergence of velocity at cell $(i, j)$ in a 2D Cartesian grid is:
+For a two-dimensional Cartesian grid, the discrete divergence of velocity at cell $(i, j)$ is:
 
-$$ \left( \frac{\delta U}{\delta x} + \frac{\delta U}{\delta y} \right)_{i,j} = \frac{U_{i+1/2,j} - U_{i-1/2,j}}{\Delta x_{i-1/2,i+1/2}} + \frac{U_{i,j+1/2} - U_{i,j-1/2}}{\Delta y_{j-1/2,j+1/2}} $$
+```math
+\left( \frac{\delta U}{\delta x} + \frac{\delta U}{\delta y} \right)_{i,j} = \frac{U_{i+1/2,j} - U_{i-1/2,j}}{\Delta x_{i-1/2,i+1/2}} + \frac{U_{i,j+1/2} - U_{i,j-1/2}}{\Delta y_{j-1/2,j+1/2}}
+```
 
 ## Immersed Boundary Method
 
 <!-- TODO: -->
 
-## Solvers
+## Segregated Solvers
 
 ### Matrix Form of the Discretized Governing Equations
 
-To facilitate the development and analysis of solution algorithms, it is convenient to express the discretized governing equations in matrix form using discrete operators. This abstract representation clarifies the structure of the coupled system and enables rigorous analysis of solution methods.
+To facilitate the development and analysis of solution algorithms, the discretized governing equations are expressed in matrix form using discrete operators. This representation elucidates the structure of the coupled system and enables rigorous analysis of solution methods.
 
-Let us define the following discrete operators. The operator $\mathbf{A}$ represents the implicit part of the momentum equation, including the identity (from the time derivative), the convective terms, and the viscous terms:
+The following discrete operators are defined. The operator $\mathbf{A}$ represents the implicit part of the momentum equation, comprising the identity (from the time derivative), the convective terms, and the viscous terms:
 
-$$ (\mathbf{A}\mathbf{u}^{n+1})_i = u_i^{n+1} + \frac{\Delta t}{2} \frac{\delta}{\delta x_j} (\overline{u}_i^{n+1} U^n + \overline{u}_i^n \overline{u}_j^{n+1})  - \frac{\nu \Delta t}{2} \frac{\delta}{\delta x_j} \frac{\delta}{\delta x_j} u_i^{n+1}$$
+```math
+(\mathbf{A}\mathbf{u}^{n+1})_i = u_i^{n+1} + \frac{\Delta t}{2} \frac{\delta}{\delta x_j} (\overline{u}_i^{n+1} U^n + \overline{u}_i^n \overline{u}_j^{n+1})  - \frac{\Delta t}{2} \frac{\delta}{\delta x_j} \left( \nu^{n+1} \frac{\delta u_i^{n+1}}{\delta x_j} \right)
+```
 
 The operator $\mathbf{G}$ represents the (scaled) cell-centered pressure gradient:
 
-$$ (\mathbf{G}p)_i = \frac{\Delta t}{\rho} \frac{\delta p}{\delta x_i} $$
+```math
+(\mathbf{G}p)_i = \frac{\Delta t}{\rho} \frac{\delta p}{\delta x_i}
+```
 
 The operator $\mathbf{D}$ represents the discrete divergence operator applied to the face-normal velocities:
 
-$$ \mathbf{D}U^{n+1} = \sum_i \frac{\delta U^{n+1}}{\delta x_i} $$
+```math
+\mathbf{D}U^{n+1} = \sum_i \frac{\delta U^{n+1}}{\delta x_i}
+```
 
-Using these operators, the discretized momentum equation can be written compactly as:
+Using these operators, the discretized momentum equation (6) takes the compact form:
 
-$$ \mathbf{A}\mathbf{u}^{n+1} + \mathbf{G}(p^{n+1/2} - q) = u_i^n + \frac{\nu \Delta t}{2} \frac{\delta}{\delta x_j} \frac{\delta}{\delta x_j} u_i^n - \frac{\Delta t}{\rho} \frac{\delta q}{\delta x_i} \equiv \mathbf{r} $$
+```math
+\mathbf{A}\mathbf{u}^{n+1} + \mathbf{G}p' = u_i^n + \frac{\Delta t}{2} \frac{\delta}{\delta x_j} \left( \nu^n \frac{\delta u_i^n}{\delta x_j} \right) - \frac{\Delta t}{\rho} \frac{\delta q}{\delta x_i} \equiv \mathbf{r} \tag{9}
+```
 
-where $\mathbf{r}$ represents the right-hand side consisting of known quantities from the previous time step. The discretized continuity equation becomes:
+where $\mathbf{r}$ represents the right-hand side consisting of known quantities from the previous time step. The discretized continuity equation (8) becomes:
 
-$$ \mathbf{D}U^{n+1} = 0 $$
+```math
+\mathbf{D}U^{n+1} = 0 \tag{10}
+```
 
-To complete the operator notation, we express the Rhie-Chow interpolation using two additional operators. Let $\mathbf{T}$ be the operator that interpolates a cell-centered vector to the faces and takes its normal component:
+To complete the operator notation, the Rhie-Chow interpolation is expressed using two additional operators. Let $\mathbf{T}$ denote the operator that linearly interpolates a cell-centered vector to the faces and extracts its normal component:
 
-$$ \mathbf{T}\mathbf{v} = \overline{\mathbf{v}} \cdot \mathbf{n} $$
+```math
+\mathbf{T}\mathbf{v} = \overline{\mathbf{v}} \cdot \mathbf{n}
+```
 
-and let $\mathbf{G}^\text{st}$ be the operator that computes the (scaled) face-normal pressure gradient directly at the face (the "staggered" gradient):
+Let $\mathbf{G}^\text{st}$ denote the operator that computes the scaled face-normal pressure gradient directly at the face (the staggered gradient):
 
-$$ \mathbf{G}^\text{st}p = \frac{\Delta t}{\rho} \left. \frac{\delta p}{\delta n} \right|_\text{face} $$
+```math
+\mathbf{G}^\text{st}p = \frac{\Delta t}{\rho} \left. \frac{\delta p}{\delta n} \right|_\text{face}
+```
 
-The Rhie-Chow interpolation formula can then be written as:
+The Rhie-Chow interpolation (7) then takes the form:
 
-$$ U^{n+1} = \mathbf{T}\mathbf{u}^{n+1} + \mathbf{T}\mathbf{G}(p^{n+1/2} - q) - \mathbf{G}^\text{st}(p^{n+1/2} - q) $$
+```math
+U^{n+1} = \mathbf{T}\mathbf{u}^{n+1} + \mathbf{T}\mathbf{G}p' - \mathbf{G}^\text{st}p' = \mathbf{T}\mathbf{u}^{n+1} + \mathbf{R}p' \tag{11}
+```
 
-Combining these three equations (momentum, Rhie-Chow interpolation, and continuity), we obtain a fully coupled matrix system for the unknowns $\mathbf{u}^{n+1}$, $U^{n+1}$, and $p^{n+1/2} - q$:
+where $\mathbf{R} = \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st}$ represents the Rhie-Chow correction operator. Combining equations (9), (10), and (11) yields a fully coupled matrix system for the unknowns $\mathbf{u}^{n+1}$, $U^{n+1}$, and $p'$:
 
-$$ \begin{bmatrix} \mathbf{A} & 0 & \mathbf{G} \\ \mathbf{T} & -\mathbf{I} & \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st} \\ 0 & \mathbf{D} & 0 \end{bmatrix} \begin{bmatrix} \mathbf{u}^{n+1} \\ U^{n+1} \\ p^{n+1/2} - q \end{bmatrix} = \begin{bmatrix} \mathbf{r} \\ 0 \\ 0 \end{bmatrix} $$
+```math
+\begin{bmatrix} \mathbf{A} & 0 & \mathbf{G} \\ -\mathbf{T} & \mathbf{I} & -\mathbf{R} \\ 0 & \mathbf{D} & 0 \end{bmatrix} \begin{bmatrix} \mathbf{u}^{n+1} \\ U^{n+1} \\ p' \end{bmatrix} = \begin{bmatrix} \mathbf{r} \\ 0 \\ 0 \end{bmatrix} \tag{12}
+```
 
-This is a large, sparse, saddle-point system. Solving it directly is computationally expensive, so Fluca employs various solution strategies based on approximate factorizations and iterative methods. Every solver type in Fluca ultimately solves this matrix system, either directly or through various preconditioners and approximate factorizations.
+In practice, boundary conditions introduce additional constant terms in the right-hand side vector:
+
+```math
+\begin{bmatrix} \mathbf{A} & 0 & \mathbf{G} \\ -\mathbf{T} & \mathbf{I} & -\mathbf{R} \\ 0 & \mathbf{D} & 0 \end{bmatrix} \begin{bmatrix} \mathbf{u}^{n+1} \\ U^{n+1} \\ p' \end{bmatrix} = \begin{bmatrix} \mathbf{r} + \mathbf{b}_\text{mom} \\ b_\text{interp} \\ b_\text{cont} \end{bmatrix} \tag{13}
+```
+
+For non-constant viscosity, such as eddy viscosity dependent on the velocity field from a turbulence model, the matrix depends on the unknowns, necessitating iterative solution. Some formulations treat the Rhie-Chow correction term via _deferred correction_:
+
+```math
+\begin{bmatrix} \mathbf{A} & 0 & \mathbf{G} \\ -\mathbf{T} & \mathbf{I} & 0 \\ 0 & \mathbf{D} & 0 \end{bmatrix} \begin{bmatrix} \mathbf{u}^{n+1} \\ U^{n+1} \\ p' \end{bmatrix} = \begin{bmatrix} \mathbf{r} + \mathbf{b}_\text{mom} \\ \mathbf{R}p' + b_\text{interp} \\ b_\text{cont} \end{bmatrix}
+```
+
+This form requires iteration even for constant viscosity, but yields a simpler matrix structure.
+
+The resulting systems are large, sparse, and possess saddle-point structure. Direct solution is computationally expensive. Fluca employs solution strategies based on approximate block factorization preconditioners.
+
+### Approximate Block Factorization Preconditioners
+
+Elman et al. [4] demonstrated that several classical solvers, including SIMPLE, can be formulated as stationary iterations:
+
+```math
+\mathbf{x}^{k+1} = \mathbf{x}^k + (\widetilde{\mathbf{M}}^k)^{-1} (\mathbf{f}^k - \mathbf{M}^k \mathbf{x}^k) \tag{14}
+```
+
+where $\widetilde{\mathbf{M}}$ is an approximation to the matrix $\mathbf{M}$. This is equivalent to one step of preconditioned Richardson iteration, with $\widetilde{\mathbf{M}}^{-1}$ serving as the preconditioner. For rapid convergence, $\widetilde{\mathbf{M}}$ must satisfy two conditions:
+
+1. The approximation error $\mathbf{M} - \widetilde{\mathbf{M}}$ should be small.
+2. The system $\widetilde{\mathbf{M}} \mathbf{y} = \mathbf{r}$ should be efficiently solvable.
+
+Block factorizations of the original matrix provide natural candidates for such approximations.
+
+Fluca employs the following decomposition to construct the approximation:
+
+```math
+\mathbf{M} =
+\begin{bmatrix}
+\mathbf{I} & 0 & 0 \\ 0 & \mathbf{I} & 0 \\ \mathbf{D}\mathbf{T}\mathbf{A}^{-1} & \mathbf{D} & \mathbf{I}
+\end{bmatrix}
+\begin{bmatrix}
+\mathbf{A} & 0 & 0 \\ -\mathbf{T} & \mathbf{I} & 0 \\ 0 & 0 & \mathbf{S}
+\end{bmatrix}
+\begin{bmatrix}
+\mathbf{I} & 0 & \mathbf{A}^{-1}\mathbf{G} \\ 0 & \mathbf{I} & \mathbf{T}\mathbf{A}^{-1}\mathbf{G} - \mathbf{R} \\ 0 & 0 & \mathbf{I}
+\end{bmatrix} \tag{15}
+```
+
+This decomposition is derived from the LDU decomposition of $\mathbf{M}$ viewed as a $2 \times 2$ block matrix:
+
+```math
+\mathbf{M} =
+\begin{bmatrix}
+\mathbf{M}_{11} & \mathbf{M}_{12} \\ \mathbf{M}_{21} & \mathbf{M}_{22}
+\end{bmatrix}
+```
+
+```math
+\mathbf{M}_{11} =
+\begin{bmatrix}
+\mathbf{A} & 0 \\ -\mathbf{T} & \mathbf{I}
+\end{bmatrix}
+, \quad
+\mathbf{M}_{12} =
+\begin{bmatrix}
+\mathbf{G} \\ -\mathbf{R}
+\end{bmatrix}
+, \quad
+\mathbf{M}_{21} =
+\begin{bmatrix}
+0 & \mathbf{D}
+\end{bmatrix}
+, \quad
+\mathbf{M}_{22} =
+\begin{bmatrix}
+0
+\end{bmatrix}
+```
+
+where $\mathbf{S} = -\mathbf{D}\mathbf{T}\mathbf{A}^{-1}\mathbf{G}+\mathbf{D}\mathbf{R}$ denotes the Schur complement.
+
+Fluca groups the lower triangular matrix and the diagonal matrix to form the following (LD)U decomposition:
+
+```math
+\mathbf{M} =
+\begin{bmatrix}
+\mathbf{A} & 0 & 0 \\ -\mathbf{T} & \mathbf{I} & 0 \\ 0 & \mathbf{D} & \mathbf{S}
+\end{bmatrix}
+\begin{bmatrix}
+\mathbf{I} & 0 & \mathbf{A}^{-1}\mathbf{G} \\ 0 & \mathbf{I} & \mathbf{T}\mathbf{A}^{-1}\mathbf{G} - \mathbf{R} \\ 0 & 0 & \mathbf{I}
+\end{bmatrix}
+```
+
+Let $\widetilde{\mathbf{A}}_1$ denote the approximation to $\mathbf{A}$ appearing in the Schur complement, and $\widetilde{\mathbf{A}}_2$ denote the approximation to $\mathbf{A}$ appearing in the upper triangular matrix. The approximate matrix $\widetilde{\mathbf{M}}$ is then:
+
+```math
+\widetilde{\mathbf{M}} =
+\begin{bmatrix}
+\mathbf{A} & 0 & 0 \\ -\mathbf{T} & \mathbf{I} & 0 \\ 0 & \mathbf{D} & \widetilde{\mathbf{S}}
+\end{bmatrix}
+\begin{bmatrix}
+\mathbf{I} & 0 & \widetilde{\mathbf{A}}_2^{-1}\mathbf{G} \\ 0 & \mathbf{I} & \mathbf{T}\widetilde{\mathbf{A}}_2^{-1}\mathbf{G} - \mathbf{R} \\ 0 & 0 & \mathbf{I}
+\end{bmatrix} \tag{16}
+```
+
+with the approximate Schur complement $\widetilde{\mathbf{S}}=-\mathbf{D}\mathbf{T}\widetilde{\mathbf{A}}_1^{-1}\mathbf{G}+\mathbf{D}\mathbf{R}$.
+
+The error of this approximation is:
+
+```math
+\mathbf{E} = \mathbf{M} - \widetilde{\mathbf{M}} =
+\begin{bmatrix}
+0 & 0 & (\mathbf{I}-\mathbf{A}\widetilde{\mathbf{A}}_2^{-1})\mathbf{G} \\
+0 & 0 & 0 \\
+0 & 0 & \mathbf{D}\mathbf{T}(\widetilde{\mathbf{A}}_1^{-1}-\widetilde{\mathbf{A}}_2^{-1})\mathbf{G}
+\end{bmatrix} \tag{17}
+```
+
+From this expression, it can be concluded that:
+
+1. The momentum equation is unperturbed if $\widetilde{\mathbf{A}}_2 = \mathbf{A}$.
+2. The Rhie-Chow interpolation is always unperturbed.
+3. The continuity equation is unperturbed if $\widetilde{\mathbf{A}}_1 = \widetilde{\mathbf{A}}_2$.
+
+The following sections describe how specific solvers construct the matrix decomposition and select $\widetilde{\mathbf{A}}_1$ and $\widetilde{\mathbf{A}}_2$ to satisfy these conditions.
 
 ### Fractional Step Method
 
-The fractional step method (FSM), also known as the projection method or pressure-correction method, is a widely used approach for solving the coupled velocity-pressure system in incompressible flow simulations. Rather than solving the fully coupled system directly, the FSM splits the solution process into sequential steps involving intermediate velocity fields. This decomposition dramatically reduces the computational cost compared to monolithic approaches while maintaining good accuracy.
+Perot [5] demonstrated that the fractional step method (FSM) can be interpreted as an approximate block LU decomposition of the coupled matrix system. This perspective establishes the FSM as a member of the approximate block factorization preconditioner family.
 
-Perot [4] provided important theoretical insight by showing that the FSM can be understood as an approximate block LU decomposition of the coupled matrix system. This perspective clarifies why the method works and how errors arise. For the matrix form derived above, Fluca uses the following block LU decomposition as a preconditioner:
+Zang et al. [2] presented the FSM for collocated grids. Applied to the matrix system (13), the solution procedure consists of the following steps:
 
-$$ \mathbf{P} = \begin{bmatrix} \mathbf{A} & 0 & 0 \\ \mathbf{T} & -\mathbf{I} & 0 \\ 0 & \mathbf{D} & -\mathbf{D}\mathbf{G}^\text{st} \end{bmatrix} \begin{bmatrix} \mathbf{I} & 0 & \mathbf{G} \\ 0 & \mathbf{I} & \mathbf{G}^\text{st} \\ 0 & 0 & \mathbf{I} \end{bmatrix} = \begin{bmatrix} \mathbf{A} & 0 & \mathbf{A}\mathbf{G} \\ \mathbf{T} & -\mathbf{I} & \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st} \\ 0 & \mathbf{D} & 0 \end{bmatrix} $$
+1. Solve $\mathbf{A}\mathbf{u}^* = \mathbf{r} + \mathbf{b}_\text{mom}$ for the intermediate velocity $\mathbf{u}^*$.
+2. Compute the face-normal intermediate velocity: $U^* = \mathbf{T}\mathbf{u}^* + b_\text{interp}$.
+3. Solve the pressure Poisson equation $\mathbf{D}\mathbf{G}^\text{st}p' = \mathbf{D}U^* + b_\text{cont}$ for $p'$.
+4. Correct the velocity: $\mathbf{u}^{n+1} = \mathbf{u}^* - \mathbf{G}p'$.
+5. Correct the face-normal velocity: $U^{n+1} = U^* - \mathbf{G}^\text{st}p'$.
 
-This approximate factorization $\mathbf{P}$ is close to, but not exactly equal to, the original matrix $\mathbf{M}$. The difference between them is:
+The corresponding matrix decomposition is:
 
-$$ \mathbf{P} - \mathbf{M} = \begin{bmatrix} 0 & 0 & (\mathbf{A} - \mathbf{I}) \mathbf{G} \\ 0 & 0 & 0 \\ 0 & 0 & 0 \end{bmatrix} $$
+```math
+\widetilde{\mathbf{M}} =
+\begin{bmatrix}
+\mathbf{A} & 0 & 0 \\ \mathbf{T} & -\mathbf{I} & 0 \\ 0 & \mathbf{D} & -\mathbf{D}\mathbf{G}^\text{st}
+\end{bmatrix}
+\begin{bmatrix} \mathbf{I} & 0 & \mathbf{G} \\ 0 & \mathbf{I} & \mathbf{G}^\text{st} \\ 0 & 0 & \mathbf{I}
+\end{bmatrix} \tag{18}
+```
 
-Examining this error term is crucial for understanding the accuracy of the method. By the definition of $\mathbf{A}$, the operator $(\mathbf{A} - \mathbf{I})$ contains terms proportional to $\Delta t$ (from the convective and viscous contributions). Additionally, the operator $\mathbf{G}$ itself is proportional to $\Delta t$. Therefore, the product $(\mathbf{A} - \mathbf{I})\mathbf{G}$ is $O(\Delta t^2)$, meaning that the approximation error introduced by using $\mathbf{P}$ instead of $\mathbf{M}$ is second-order in time. This ensures that the overall temporal accuracy of the solution remains second-order, consistent with the time discretization scheme. Consequently, $\mathbf{P}$ serves as an effective and efficient preconditioner for iteratively solving the full system, or it can be used directly as an approximate solver with controlled error.
+This decomposition is easily invertible due to its simple approximate Schur complement $\widetilde{\mathbf{S}} = -\mathbf{D}\mathbf{G}^\text{st}$, which corresponds to a discrete Laplacian operator.
+
+Comparing (18) with (16), the approximations to $\mathbf{A}$ are identified as:
+
+```math
+\widetilde{\mathbf{A}}_1 = \widetilde{\mathbf{A}}_2 = \mathbf{I} \tag{19}
+```
+
+The continuity equation remains unperturbed.
 
 ## References
 
-1. D. Kim and H. Choi, A Second-Order Time-Accurate Finite Volume Method for Unsteady Incompressible Flow on Hybrid Unstructured Grids, J. Comput. Phys., 162, 411&ndash;428 (2000).
-2. Y. Zang, R. L. Street, and J. R. Koseff, A non-staggered grid, fractional step method for time-dependent incompressible Navier–Stokes equations in curvilinear coordinates, J. Comput. Phys., 114, 18&ndash;33 (1994).
-3. S. Armfield and R. Street, The pressure accuracy of fractional-step methods for the Navier-Stokes equations on staggered grids, ANZIAM J., 44, C20&ndash;C39 (2003).
-4. J. Perot, An analysis of the fractional step method, J. Comput. Phys., 108, 51&ndash;58 (1993).
+1. D. Kim and H. Choi, A Second-Order Time-Accurate Finite Volume Method for Unsteady Incompressible Flow on Hybrid Unstructured Grids, _J. Comput. Phys._, 162, 411&ndash;428 (2000).
+2. Y. Zang, R. L. Street, and J. R. Koseff, A non-staggered grid, fractional step method for time-dependent incompressible Navier–Stokes equations in curvilinear coordinates, _J. Comput. Phys._, 114, 18&ndash;33 (1994).
+3. S. Armfield and R. Street, The pressure accuracy of fractional-step methods for the Navier-Stokes equations on staggered grids, _ANZIAM J._, 44, C20&ndash;C39 (2003).
+4. H. Elman, V. E. Howle, J. Shadid, R. Shuttleworth, and R. Tuminaro, A taxonomy and comparison of parallel block multi-level preconditioners for the incompressible Navier–Stokes equations, _J. Comput. Phys._, 227, 1790&ndash;1808 (2008)
+5. J. Perot, An analysis of the fractional step method, _J. Comput. Phys._, 108, 51&ndash;58 (1993).
