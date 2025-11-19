@@ -112,7 +112,7 @@ The `NS` object represents the Navier-Stokes solver. It manages the governing eq
   ```c
   NS ns;
   PetscCall(NSCreate(PETSC_COMM_WORLD, &ns));
-  PetscCall(NSSetType(ns, NSFSM));  // Fractional Step Method
+  PetscCall(NSSetType(ns, NSCNLINEAR));  // Linearized Crank-Nicolson
   ```
 
 - **Associating with Mesh**:
@@ -248,7 +248,7 @@ int main(int argc, char **argv)
 
   // 3. Create and configure Navier-Stokes solver
   PetscCall(NSCreate(PETSC_COMM_WORLD, &ns));
-  PetscCall(NSSetType(ns, NSFSM));           // Fractional step method
+  PetscCall(NSSetType(ns, NSCNLINEAR));      // Linearized Crank-Nicolson
   PetscCall(NSSetMesh(ns, mesh));
   PetscCall(NSSetDensity(ns, 400.0));        // Set density
   PetscCall(NSSetViscosity(ns, 1.0));        // Set viscosity

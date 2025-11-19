@@ -32,6 +32,7 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns)
   n->soldm       = NULL;
   n->sol         = NULL;
   n->sol0        = NULL;
+  n->solver      = NS_FSM;
   n->snes        = NULL;
   n->J           = NULL;
   n->r           = NULL;
@@ -121,7 +122,7 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(PetscLogEventBegin(NS_SetUp, (PetscObject)ns, 0, 0, 0));
 
   /* Set default type */
-  if (!((PetscObject)ns)->type_name) PetscCall(NSSetType(ns, NSFSM));
+  if (!((PetscObject)ns)->type_name) PetscCall(NSSetType(ns, NSCNLINEAR));
 
   /* Validate */
   PetscCheck(ns->mesh, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "Mesh not set");
@@ -172,6 +173,9 @@ PetscErrorCode NSSetUp(NS ns)
 
   /* Call specific type setup */
   PetscTryTypeMethod(ns, setup);
+
+  /* Jacobian is built; create preconditioner */
+  PetscCall(NSSetPreconditioner_FSM(ns));
 
   PetscCall(PetscLogEventEnd(NS_SetUp, (PetscObject)ns, 0, 0, 0));
 

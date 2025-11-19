@@ -143,9 +143,9 @@ PetscErrorCode NSSetFromOptions(NS ns)
 
   PetscObjectOptionsBegin((PetscObject)ns);
 
-  PetscCall(PetscOptionsFList("-ns_type", "NS type", "NSSetType", NSList, (char *)(((PetscObject)ns)->type_name ? ((PetscObject)ns)->type_name : NSFSM), type, sizeof(type), &flg));
+  PetscCall(PetscOptionsFList("-ns_type", "NS type", "NSSetType", NSList, (char *)(((PetscObject)ns)->type_name ? ((PetscObject)ns)->type_name : NSCNLINEAR), type, sizeof(type), &flg));
   if (flg) PetscCall(NSSetType(ns, type));
-  else if (!((PetscObject)ns)->type_name) PetscCall(NSSetType(ns, NSFSM));
+  else if (!((PetscObject)ns)->type_name) PetscCall(NSSetType(ns, NSCNLINEAR));
 
   PetscCall(PetscOptionsReal("-ns_density", "Fluid density", "NSSetDensity", ns->rho, &ns->rho, NULL));
   PetscCall(PetscOptionsReal("-ns_viscosity", "Fluid viscosity", "NSSetViscosity", ns->mu, &ns->mu, NULL));

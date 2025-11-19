@@ -56,6 +56,7 @@ struct _p_NS {
   Vec         sol0;      /* solution vector at the beginning of time step */
 
   /* Solver --------------------------------------------------------------- */
+  NSSolver     solver;    /* solver type */
   SNES         snes;      /* non-linear solver */
   Mat          J;         /* Jacobian */
   Vec          r;         /* residual vector */
@@ -72,3 +73,27 @@ struct _p_NS {
   PetscErrorCode (*mon_ctx_destroys[MAXNSMONITORS])(void **);
   PetscInt mon_freq;
 };
+
+typedef struct {
+  IS vis; /* index set of velocity component */
+  IS Vis; /* index set of face normal velocity component */
+  IS pis; /* index set of pressure component */
+
+  Mat A;   /* operator of momentum equation */
+  Mat T;   /* velocity interpolation operator */
+  Mat G;   /* pressure gradient operator */
+  Mat Gst; /* staggered pressure gradient operator */
+  Mat D;   /* face-normal velocity divergence operator */
+  Mat Lst; /* operator of pressure equation: Lst = D * Gst */
+
+  Vec divvstar;
+  Vec gradpcorr;
+  Vec gradstpcorr;
+
+  KSP kspv; /* KSP to solve velocity equation */
+  KSP kspp; /* KSP to solve pressure equation */
+
+  MatNullSpace nullspace;
+} NSFSMPCCtx;
+
+FLUCA_INTERN PetscErrorCode NSSetPreconditioner_FSM(NS);

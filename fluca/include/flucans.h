@@ -7,7 +7,11 @@
 typedef struct _p_NS *NS;
 
 typedef const char *NSType;
-#define NSFSM "fsm"
+#define NSCNLINEAR "cnlinear"
+
+typedef enum {
+  NS_FSM,
+} NSSolver;
 
 #define NS_FIELD_VELOCITY             "Velocity"
 #define NS_FIELD_FACE_NORMAL_VELOCITY "FaceNormalVelocity"

@@ -64,7 +64,7 @@ int main(int argc, char **argv)
     };
 
     PetscCall(NSCreate(PETSC_COMM_WORLD, &ns));
-    PetscCall(NSSetType(ns, NSFSM));
+    PetscCall(NSSetType(ns, NSCNLINEAR));
     PetscCall(NSSetMesh(ns, mesh));
     PetscCall(NSSetDensity(ns, 400.0));
     PetscCall(NSSetViscosity(ns, 1.0));

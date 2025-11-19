@@ -1,4 +1,4 @@
-#include <fluca/private/nsfsmimpl.h>
+#include <fluca/private/nslinearcnimpl.h>
 #include <petscdmstag.h>
 
 typedef enum {
@@ -1517,12 +1517,12 @@ static PetscErrorCode ComputeStaggeredPressureGradientOperators_Private(DM sdm, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
+PetscErrorCode NSCNLinearIterate2d_Cart_Internal(NS ns)
 {
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-  DM      vdm, Vdm;
-  IS      vis, Vis, pis;
-  Vec     v0, p0, v, V, dp, solv, solV, solp, vbc;
+  NS_CNLinear *cnl = (NS_CNLinear *)ns->data;
+  DM           vdm, Vdm;
+  IS           vis, Vis, pis;
+  Vec          v0, p0, v, V, dp, solv, solV, solp, vbc;
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, MESH_DM_VECTOR, &vdm));
@@ -1531,15 +1531,15 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, NULL, &Vis));
   PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, NULL, &pis));
 
-  if (!fsm->Bcomputed) {
-    PetscCall(ComputeFaceVelocityInterpolationOperator_Private(vdm, Vdm, ns->bcs, fsm->B));
-    fsm->Bcomputed = PETSC_TRUE;
+  if (!cnl->Bcomputed) {
+    PetscCall(ComputeFaceVelocityInterpolationOperator_Private(vdm, Vdm, ns->bcs, cnl->B));
+    cnl->Bcomputed = PETSC_TRUE;
   }
   PetscCall(DMGetGlobalVector(Vdm, &vbc));
   PetscCall(VecGetSubVector(ns->sol0, vis, &v0));
-  PetscCall(MatMult(fsm->B, v0, fsm->v0interp));
+  PetscCall(MatMult(cnl->B, v0, cnl->v0interp));
   PetscCall(ComputeFaceVelocityInterpolationBoundaryConditionVector_Private(Vdm, ns->bcs, ns->t, vbc));
-  PetscCall(VecAXPY(fsm->v0interp, 1., vbc));
+  PetscCall(VecAXPY(cnl->v0interp, 1., vbc));
   PetscCall(DMRestoreGlobalVector(Vdm, &vbc));
   PetscCall(VecRestoreSubVector(ns->sol0, vis, &v0));
 
@@ -1558,11 +1558,11 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   if (ns->step == 0) {
     PetscCall(VecGetSubVector(ns->sol0, pis, &p0));
     PetscCall(VecWAXPY(solp, 2., dp, p0));
-    PetscCall(VecWAXPY(fsm->phalf, 1., dp, p0));
+    PetscCall(VecWAXPY(cnl->phalf, 1., dp, p0));
     PetscCall(VecRestoreSubVector(ns->sol0, pis, &p0));
   } else {
-    PetscCall(VecWAXPY(solp, 1.5, dp, fsm->phalf));
-    PetscCall(VecAXPY(fsm->phalf, 1., dp));
+    PetscCall(VecWAXPY(solp, 1.5, dp, cnl->phalf));
+    PetscCall(VecAXPY(cnl->phalf, 1., dp));
   }
 
   PetscCall(VecRestoreSubVector(ns->x, vis, &v));
@@ -1574,15 +1574,15 @@ PetscErrorCode NSFSMIterate2d_Cart_Internal(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ctx)
+PetscErrorCode NSCNLinearFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ctx)
 {
-  NS      ns  = (NS)ctx;
-  NS_FSM *fsm = (NS_FSM *)ns->data;
-  DM      sdm, vdm, Sdm;
-  IS      vis, Vis, pis;
-  Vec     v0, V0, p0, momrhs, interprhs, contrhs;
-  Mat     G, L;
-  Vec     Gp, Lv, vbc;
+  NS           ns  = (NS)ctx;
+  NS_CNLinear *cnl = (NS_CNLinear *)ns->data;
+  DM           sdm, vdm, Sdm;
+  IS           vis, Vis, pis;
+  Vec          v0, V0, p0, momrhs, interprhs, contrhs;
+  Mat          G, L;
+  Vec          Gp, Lv, vbc;
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, MESH_DM_SCALAR, &sdm));
@@ -1607,7 +1607,7 @@ PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ct
     PetscCall(MatMult(G, p0, Gp));
     PetscCall(VecRestoreSubVector(ns->sol0, pis, &p0));
   } else {
-    PetscCall(MatMult(G, fsm->phalf, Gp));
+    PetscCall(MatMult(G, cnl->phalf, Gp));
   }
   PetscCall(MatMult(L, v0, Lv));
   PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, vbc));
@@ -1636,10 +1636,10 @@ PetscErrorCode NSFSMFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ct
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre, void *ctx)
+PetscErrorCode NSCNLinearFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre, void *ctx)
 {
   NS               ns  = (NS)ctx;
-  NS_FSM          *fsm = (NS_FSM *)ns->data;
+  NS_CNLinear     *cnl = (NS_CNLinear *)ns->data;
   DM               sdm, vdm, Sdm, Vdm;
   PetscInt         vidx, Vidx, pidx, entries;
   MeshDMType       vdmtype, Vdmtype, pdmtype;
@@ -1709,7 +1709,7 @@ PetscErrorCode NSFSMFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre
     /* A = I + dt * C - (nu*dt/2) * L */
     PetscCall(MatZeroEntries(A));
     PetscCall(VecGetSubVector(ns->sol0, Vis, &V0));
-    PetscCall(ComputeConvectionOperator_Private(vdm, Sdm, Vdm, V0, fsm->v0interp, ns->bcs, A));
+    PetscCall(ComputeConvectionOperator_Private(vdm, Sdm, Vdm, V0, cnl->v0interp, ns->bcs, A));
     PetscCall(VecRestoreSubVector(ns->sol0, Vis, &V0));
     PetscCall(MatScale(A, ns->dt));
     PetscCall(PetscObjectQuery((PetscObject)Jpre, "Laplacian", (PetscObject *)&L));
