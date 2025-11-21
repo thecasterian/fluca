@@ -71,6 +71,7 @@ int main(int argc, char **argv)
   PetscCall(NSSetDensity(ns, rho));
   PetscCall(NSSetViscosity(ns, mu));
   PetscCall(NSSetTimeStepSize(ns, dt));
+  PetscCall(NSSetMaxSteps(ns, nsteps));
 
   {
     NSBoundaryCondition bc = {
@@ -177,7 +178,7 @@ int main(int argc, char **argv)
     PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
   }
 
-  PetscCall(NSSolve(ns, nsteps));
+  PetscCall(NSSolve(ns));
 
   {
     DM                  sdm, vdm;

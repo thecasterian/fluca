@@ -108,6 +108,38 @@ PetscErrorCode NSGetTime(NS ns, PetscReal *t)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode NSSetMaxTime(NS ns, PetscReal max_time)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  ns->max_time = max_time;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSGetMaxTime(NS ns, PetscReal *max_time)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  if (max_time) *max_time = ns->max_time;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSSetMaxSteps(NS ns, PetscInt max_steps)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  ns->max_steps = max_steps;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSGetMaxSteps(NS ns, PetscInt *max_steps)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  if (max_steps) *max_steps = ns->max_steps;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetBoundaryCondition(NS ns, PetscInt index, NSBoundaryCondition bc)
 {
   PetscInt nb;
@@ -132,6 +164,24 @@ PetscErrorCode NSGetBoundaryCondition(NS ns, PetscInt index, NSBoundaryCondition
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode NSSetSolver(NS ns, NSSolver solver)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  if (ns->solver != solver) PetscCall(NSSetPreconditioner_Internal(ns, solver));
+  ns->solver = solver;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSGetSolver(NS ns, NSSolver *solver)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscAssertPointer(solver, 2);
+  *solver = ns->solver;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetFromOptions(NS ns)
 {
   char      type[256];
@@ -150,8 +200,11 @@ PetscErrorCode NSSetFromOptions(NS ns)
   PetscCall(PetscOptionsReal("-ns_density", "Fluid density", "NSSetDensity", ns->rho, &ns->rho, NULL));
   PetscCall(PetscOptionsReal("-ns_viscosity", "Fluid viscosity", "NSSetViscosity", ns->mu, &ns->mu, NULL));
   PetscCall(PetscOptionsReal("-ns_time_step_size", "Time step size", "NSSetTimeStepSize", ns->dt, &ns->dt, NULL));
+  PetscCall(PetscOptionsReal("-ns_max_time", "Maximum time", "NSSetMaxTime", ns->max_time, &ns->max_time, NULL));
+  PetscCall(PetscOptionsInt("-ns_max_steps", "Maximum number of steps", "NSSetMaxSteps", ns->max_steps, &ns->max_steps, NULL));
+  PetscCall(PetscOptionsBool("-ns_error_if_step_failed", "Error if step fails", "NSSetErrorIfStepFailed", ns->errorifstepfailed, &ns->errorifstepfailed, NULL));
+  PetscCall(PetscOptionsEnum("-ns_solver", "Solver algorithm", "NSSetSolver", NSSolvers, (PetscEnum)ns->solver, (PetscEnum *)&ns->solver, NULL));
 
-  PetscCall(PetscOptionsInt("-ns_monitor_frequency", "Monitor frequency", "NSMonitorSetFrequency", ns->mon_freq, &ns->mon_freq, NULL));
   PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor", "Monitor current step and time", "NSMonitorDefault", NSMonitorDefault, NULL));
   PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor_solution", "Monitor solution", "NSMonitorSolution", NSMonitorSolution, NULL));
   flg = PETSC_FALSE;
@@ -161,5 +214,39 @@ PetscErrorCode NSSetFromOptions(NS ns)
   PetscTryTypeMethod(ns, setfromoptions, PetscOptionsObject);
 
   PetscOptionsEnd();
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSSetConvergedReason(NS ns, NSConvergedReason reason)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  ns->reason = reason;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSGetConvergedReason(NS ns, NSConvergedReason *reason)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscAssertPointer(reason, 2);
+  *reason = ns->reason;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSSetErrorIfStepFailed(NS ns, PetscBool flg)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  ns->errorifstepfailed = flg;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSGetErrorIfStepFailed(NS ns, PetscBool *flg)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscAssertPointer(flg, 2);
+  *flg = ns->errorifstepfailed;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

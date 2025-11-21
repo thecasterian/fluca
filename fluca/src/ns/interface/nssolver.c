@@ -113,7 +113,7 @@ static PetscErrorCode NSFSMPCDestroy_Private(PC pc)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSSetPreconditioner_FSM(NS ns)
+static PetscErrorCode NSSetPreconditioner_FSM_Private(NS ns)
 {
   KSP         ksp;
   PC          pc;
@@ -129,5 +129,19 @@ PetscErrorCode NSSetPreconditioner_FSM(NS ns)
   PetscCall(NSFSMPCCtxCreate_Private(ns, pc, &pcctx));
   PetscCall(PCShellSetContext(pc, pcctx));
   PetscCall(PCShellSetDestroy(pc, NSFSMPCDestroy_Private));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSSetPreconditioner_Internal(NS ns, NSSolver solver)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  switch (solver) {
+  case NS_FSM:
+    PetscCall(NSSetPreconditioner_FSM_Private(ns));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported solver");
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

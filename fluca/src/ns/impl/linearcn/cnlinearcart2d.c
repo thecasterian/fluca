@@ -1517,7 +1517,7 @@ static PetscErrorCode ComputeStaggeredPressureGradientOperators_Private(DM sdm, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSCNLinearIterate2d_Cart_Internal(NS ns)
+PetscErrorCode NSStep_CNLinear_Cart2d_Internal(NS ns)
 {
   NS_CNLinear *cnl = (NS_CNLinear *)ns->data;
   DM           vdm, Vdm;
@@ -1544,6 +1544,7 @@ PetscErrorCode NSCNLinearIterate2d_Cart_Internal(NS ns)
   PetscCall(VecRestoreSubVector(ns->sol0, vis, &v0));
 
   PetscCall(SNESSolve(ns->snes, NULL, ns->x));
+  PetscCall(NSCheckDiverged(ns));
 
   PetscCall(VecGetSubVector(ns->x, vis, &v));
   PetscCall(VecGetSubVector(ns->x, Vis, &V));
@@ -1574,7 +1575,7 @@ PetscErrorCode NSCNLinearIterate2d_Cart_Internal(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSCNLinearFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, void *ctx)
+PetscErrorCode NSFormFunction_CNLinear_Cart2d_Internal(SNES snes, Vec x, Vec f, void *ctx)
 {
   NS           ns  = (NS)ctx;
   NS_CNLinear *cnl = (NS_CNLinear *)ns->data;
@@ -1636,7 +1637,7 @@ PetscErrorCode NSCNLinearFormFunction_Cart_Internal(SNES snes, Vec x, Vec f, voi
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSCNLinearFormJacobian_Cart_Internal(SNES snes, Vec x, Mat J, Mat Jpre, void *ctx)
+PetscErrorCode NSFormJacobian_CNLinear_Cart2d_Internal(SNES snes, Vec x, Mat J, Mat Jpre, void *ctx)
 {
   NS               ns  = (NS)ctx;
   NS_CNLinear     *cnl = (NS_CNLinear *)ns->data;

@@ -3,10 +3,13 @@
 #include <petscdmcomposite.h>
 #include <petscdmstag.h>
 
-PetscClassId  NS_CLASSID              = 0;
-PetscLogEvent NS_SetUp                = 0;
-PetscLogEvent NS_LoadSolutionFromFile = 0;
-PetscLogEvent NS_Solve                = 0;
+const char *const  NSSolvers[]                  = {"FSM", "NSSolver", "", NULL};
+const char *const  NSConvergedReasons_Shifted[] = {"DIVERGED_NONLINEAR_SOLVE", "CONVERGED_ITERATING", "CONVERGED_TIME", "CONVERGED_ITS", "NSConvergedReason", "", NULL};
+const char *const *NSConvergedReasons           = NSConvergedReasons_Shifted + 1;
+
+PetscClassId  NS_CLASSID = 0;
+PetscLogEvent NS_SetUp   = 0;
+PetscLogEvent NS_Step    = 0;
 
 PetscFunctionList NSList              = NULL;
 PetscBool         NSRegisterAllCalled = PETSC_FALSE;
@@ -20,27 +23,30 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns)
 
   PetscCall(NSInitializePackage());
   PetscCall(FlucaHeaderCreate(n, NS_CLASSID, "NS", "Navier-Stokes solver", "NS", comm, NSDestroy, NSView));
-  n->rho         = 0.0;
-  n->mu          = 0.0;
-  n->dt          = 0.0;
-  n->step        = 0;
-  n->t           = 0.0;
-  n->mesh        = NULL;
-  n->bcs         = NULL;
-  n->data        = NULL;
-  n->fieldlink   = NULL;
-  n->soldm       = NULL;
-  n->sol         = NULL;
-  n->sol0        = NULL;
-  n->solver      = NS_FSM;
-  n->snes        = NULL;
-  n->J           = NULL;
-  n->r           = NULL;
-  n->x           = NULL;
-  n->nullspace   = NULL;
-  n->setupcalled = PETSC_FALSE;
-  n->num_mons    = 0;
-  n->mon_freq    = 1;
+  n->rho               = 0.0;
+  n->mu                = 0.0;
+  n->dt                = 0.0;
+  n->max_time          = PETSC_MAX_REAL;
+  n->max_steps         = PETSC_INT_MAX;
+  n->step              = 0;
+  n->t                 = 0.0;
+  n->mesh              = NULL;
+  n->bcs               = NULL;
+  n->data              = NULL;
+  n->fieldlink         = NULL;
+  n->soldm             = NULL;
+  n->sol               = NULL;
+  n->sol0              = NULL;
+  n->solver            = NS_FSM;
+  n->snes              = NULL;
+  n->J                 = NULL;
+  n->r                 = NULL;
+  n->x                 = NULL;
+  n->nullspace         = NULL;
+  n->errorifstepfailed = PETSC_TRUE;
+  n->reason            = NS_CONVERGED_ITERATING;
+  n->setupcalled       = PETSC_FALSE;
+  n->num_mons          = 0;
 
   *ns = n;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -174,9 +180,6 @@ PetscErrorCode NSSetUp(NS ns)
   /* Call specific type setup */
   PetscTryTypeMethod(ns, setup);
 
-  /* Jacobian is built; create preconditioner */
-  PetscCall(NSSetPreconditioner_FSM(ns));
-
   PetscCall(PetscLogEventEnd(NS_SetUp, (PetscObject)ns, 0, 0, 0));
 
   /* NSViewFromOptions() is called in NSSolve(). */
@@ -185,33 +188,56 @@ PetscErrorCode NSSetUp(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSSolve(NS ns, PetscInt num_iters)
+PetscErrorCode NSStep(NS ns)
 {
-  PetscReal t_init;
-  PetscInt  i;
-
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  PetscCall(PetscLogEventBegin(NS_Solve, (PetscObject)ns, 0, 0, 0));
+
+  if (!ns->sol0) PetscCall(VecDuplicate(ns->sol, &ns->sol0));
+  PetscCall(VecCopy(ns->sol, ns->sol0));
+
+  PetscCall(PetscLogEventBegin(NS_Step, (PetscObject)ns, 0, 0, 0));
+  PetscUseTypeMethod(ns, step);
+  PetscCall(PetscLogEventEnd(NS_Step, (PetscObject)ns, 0, 0, 0));
+
+  if (ns->reason >= 0) {
+    ++ns->step;
+    ns->t += ns->dt;
+  }
+
+  if (ns->reason < 0 && ns->errorifstepfailed) {
+    PetscCall(NSMonitorCancel(ns));
+    PetscCall(SNESMonitorCancel(ns->snes));
+    SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_NOT_CONVERGED, "NSStep has failed due to %s", NSConvergedReasons[ns->reason]);
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSSolve(NS ns)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscCheck(ns->max_time < PETSC_MAX_REAL || ns->max_steps != PETSC_INT_MAX, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "At least one of max time or max steps must be specified");
 
   PetscCall(NSViewFromOptions(ns, NULL, "-ns_view_pre"));
 
-  t_init = ns->t;
-  for (i = 0; i < num_iters; ++i) {
-    if (!ns->sol0) PetscCall(VecDuplicate(ns->sol, &ns->sol0));
-    PetscCall(VecCopy(ns->sol, ns->sol0));
+  if (ns->step >= ns->max_steps) ns->reason = NS_CONVERGED_ITS;
+  else if (ns->t >= ns->max_time) ns->reason = NS_CONVERGED_TIME;
 
-    PetscTryTypeMethod(ns, iterate);
-    ++ns->step;
-    ns->t = t_init + (i + 1) * ns->dt;
+  while (ns->reason == NS_CONVERGED_ITERATING) {
+    PetscCall(NSMonitor(ns));
+    PetscCall(NSStep(ns));
 
-    if (ns->step % ns->mon_freq == 0) PetscCall(NSMonitor(ns));
+    /* Check convergence */
+    if (ns->reason == NS_CONVERGED_ITERATING) {
+      if (ns->step >= ns->max_steps) ns->reason = NS_CONVERGED_ITS;
+      else if (ns->t >= ns->max_time) ns->reason = NS_CONVERGED_TIME;
+    }
   }
+  PetscCall(NSMonitor(ns));
 
   PetscCall(NSViewFromOptions(ns, NULL, "-ns_view"));
   PetscCall(NSViewSolutionFromOptions(ns, NULL, "-ns_view_solution"));
-
-  PetscCall(PetscLogEventEnd(NS_Solve, (PetscObject)ns, 0, 0, 0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -284,5 +310,15 @@ PetscErrorCode NSDestroy(NS *ns)
 
   PetscTryTypeMethod((*ns), destroy);
   PetscCall(PetscHeaderDestroy(ns));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSCheckDiverged(NS ns)
+{
+  SNESConvergedReason snesreason;
+
+  PetscFunctionBegin;
+  PetscCall(SNESGetConvergedReason(ns->snes, &snesreason));
+  if (snesreason < 0) ns->reason = NS_DIVERGED_NONLINEAR_SOLVE;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
