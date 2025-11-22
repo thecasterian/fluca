@@ -112,6 +112,44 @@ static PetscErrorCode AddField_Private(NS ns, const char *fieldname, MeshDMType 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode FormJacobian_Private(SNES snes, Vec x, Mat J, Mat Jpre, void *ctx)
+{
+  NS ns = (NS)ctx;
+
+  PetscFunctionBegin;
+  PetscCall(NSFormJacobian(ns, x, Jpre, NS_UPDATE_JACOBIAN));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode FormFunction_Private(SNES snes, Vec x, Vec f, void *ctx)
+{
+  NS ns = (NS)ctx;
+
+  PetscFunctionBegin;
+  PetscCall(NSFormFunction(ns, x, f));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PicardComputeFunction_Private(SNES snes, Vec x, Vec f, void *ctx)
+{
+  NS ns = (NS)ctx;
+
+  PetscFunctionBegin;
+  PetscCall(SNESPicardComputeFunction(snes, x, f, ctx));
+
+  /* Remove null space */
+  PetscAssert(ns->nullspace, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "Null space must be set");
+  PetscCall(MatNullSpaceRemove(ns->nullspace, f));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode FormInitialGuess_Private(SNES snes, Vec x, void *ctx)
+{
+  PetscFunctionBegin;
+  PetscCall(VecZeroEntries(x));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetUp(NS ns)
 {
   MPI_Comm    comm;
@@ -120,7 +158,8 @@ PetscErrorCode NSSetUp(NS ns)
   IS         *is;
   Vec        *subvecs;
   Mat        *submats;
-  PetscInt    nf, i;
+  PetscInt    nf, nb, i;
+  PetscBool   neednullspace;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
@@ -169,13 +208,47 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(MatCreateNest(comm, nf, is, nf, is, submats, &ns->J));
   PetscCall(MatSetUp(ns->J));
   PetscCall(MatNestSetVecType(ns->J, VECNEST));
-  PetscCall(VecDuplicate(ns->sol, &ns->x));
-  PetscCall(VecDuplicate(ns->sol, &ns->r));
+  /* Initialize Jacobian */
+  PetscCall(NSFormJacobian(ns, ns->x, ns->J, NS_INIT_JACOBIAN));
+  PetscCall(MatCreateVecs(ns->J, &ns->x, &ns->r));
 
   PetscCall(PetscFree(is));
   for (i = 0; i < nf; ++i) PetscCall(VecDestroy(&subvecs[i]));
   PetscCall(PetscFree(subvecs));
   PetscCall(PetscFree(submats));
+
+  /* Create null space for pressure */
+  neednullspace = PETSC_TRUE;
+  PetscCall(MeshGetNumberBoundaries(ns->mesh, &nb));
+  for (i = 0; i < nb; ++i) switch (ns->bcs[i].type) {
+    case NS_BC_VELOCITY:
+    case NS_BC_PERIODIC:
+      /* Need null space */
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type");
+    }
+  if (neednullspace) {
+    IS       is;
+    Vec      vecs[1], subvec;
+    PetscInt subvecsize;
+
+    PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, NULL, &is));
+    PetscCall(MatCreateVecs(ns->J, NULL, &vecs[0]));
+    PetscCall(VecGetSubVector(vecs[0], is, &subvec));
+    PetscCall(VecGetSize(subvec, &subvecsize));
+    PetscCall(VecSet(subvec, 1. / PetscSqrtReal((PetscReal)subvecsize)));
+    PetscCall(VecRestoreSubVector(vecs[0], is, &subvec));
+    PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, 1, vecs, &ns->nullspace));
+    PetscCall(VecDestroy(&vecs[0]));
+    PetscCall(MatSetNullSpace(ns->J, ns->nullspace));
+  }
+
+  /* Set solver callbacks */
+  PetscCall(SNESSetPicard(ns->snes, ns->r, FormFunction_Private, ns->J, ns->J, FormJacobian_Private, ns));
+  if (neednullspace) PetscCall(SNESSetFunction(ns->snes, ns->r, PicardComputeFunction_Private, ns));
+  /* Need zero initial guess to ensure least-square solution of pressure */
+  PetscCall(SNESSetComputeInitialGuess(ns->snes, FormInitialGuess_Private, NULL));
 
   /* Call specific type setup */
   PetscTryTypeMethod(ns, setup);
@@ -210,6 +283,26 @@ PetscErrorCode NSStep(NS ns)
     PetscCall(SNESMonitorCancel(ns->snes));
     SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_NOT_CONVERGED, "NSStep has failed due to %s", NSConvergedReasons[ns->reason]);
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFormJacobian(NS ns, Vec x, Mat J, NSFormJacobianType type)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
+  PetscValidHeaderSpecific(J, MAT_CLASSID, 3);
+  PetscUseTypeMethod(ns, formjacobian, x, J, type);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFormFunction(NS ns, Vec x, Vec f)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
+  PetscValidHeaderSpecific(f, VEC_CLASSID, 3);
+  PetscUseTypeMethod(ns, formfunction, x, f);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

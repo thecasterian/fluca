@@ -68,6 +68,13 @@ FLUCA_EXTERN PetscErrorCode NSSetErrorIfStepFailed(NS, PetscBool);
 FLUCA_EXTERN PetscErrorCode NSGetErrorIfStepFailed(NS, PetscBool *);
 FLUCA_EXTERN PetscErrorCode NSCheckDiverged(NS);
 
+typedef enum {
+  NS_INIT_JACOBIAN,
+  NS_UPDATE_JACOBIAN,
+} NSFormJacobianType;
+FLUCA_EXTERN PetscErrorCode NSFormJacobian(NS, Vec, Mat, NSFormJacobianType);
+FLUCA_EXTERN PetscErrorCode NSFormFunction(NS, Vec, Vec);
+
 FLUCA_EXTERN PetscErrorCode NSGetSolution(NS, Vec *);
 FLUCA_EXTERN PetscErrorCode NSGetNumFields(NS, PetscInt *);
 FLUCA_EXTERN PetscErrorCode NSGetField(NS, const char[], PetscInt *, MeshDMType *, IS *);

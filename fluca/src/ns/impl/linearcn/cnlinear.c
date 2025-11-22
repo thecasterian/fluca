@@ -11,26 +11,6 @@ PetscErrorCode NSSetFromOptions_CNLinear(NS ns, PetscOptionItems PetscOptionsObj
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFormInitialGuess_CNLinear_Private(SNES snes, Vec x, void *ctx)
-{
-  PetscFunctionBegin;
-  PetscCall(VecZeroEntries(x));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode NSPicartComputeFunction_CNLinear_Private(SNES snes, Vec x, Vec f, void *ctx)
-{
-  NS ns = (NS)ctx;
-
-  PetscFunctionBegin;
-  PetscCall(SNESPicardComputeFunction(snes, x, f, ctx));
-
-  /* Remove null space */
-  PetscAssert(ns->nullspace, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "Null space must be set");
-  PetscCall(MatNullSpaceRemove(ns->nullspace, f));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode CreateOperatorFromDMToDM_Private(DM dmfrom, DM dmto, Mat *A)
 {
   PetscInt               entriesfrom, entriesto;
@@ -56,8 +36,7 @@ PetscErrorCode NSSetup_CNLinear(NS ns)
   NS_CNLinear *cnl = (NS_CNLinear *)ns->data;
   MPI_Comm     comm;
   DM           vdm, Vdm;
-  PetscInt     dim, nb, i;
-  PetscBool    neednullspace, iscart;
+  PetscBool    iscart;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
@@ -67,64 +46,12 @@ PetscErrorCode NSSetup_CNLinear(NS ns)
   /* Create intermediate solution vectors and spatial operators */
   PetscCall(MeshGetDM(ns->mesh, MESH_DM_VECTOR, &vdm));
   PetscCall(MeshGetDM(ns->mesh, MESH_DM_STAG_VECTOR, &Vdm));
-  PetscCall(MeshGetDimension(ns->mesh, &dim));
 
   PetscCall(MeshCreateGlobalVector(ns->mesh, MESH_DM_STAG_VECTOR, &cnl->v0interp));
   PetscCall(MeshCreateGlobalVector(ns->mesh, MESH_DM_SCALAR, &cnl->phalf));
   PetscCall(CreateOperatorFromDMToDM_Private(vdm, Vdm, &cnl->B));
 
   PetscCall(PetscObjectSetName((PetscObject)cnl->phalf, "PressureHalfStep"));
-
-  /* Preallocate Jacobian */
-  if (iscart) PetscCall(NSFormJacobian_CNLinear_Cart2d_Internal(ns->snes, ns->x, ns->J, ns->J, ns));
-  else SETERRQ(comm, PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
-
-  /* Create null space */
-  neednullspace = PETSC_TRUE;
-  PetscCall(MeshGetNumberBoundaries(ns->mesh, &nb));
-  for (i = 0; i < nb; ++i) switch (ns->bcs[i].type) {
-    case NS_BC_VELOCITY:
-    case NS_BC_PERIODIC:
-      /* Need null space */
-      break;
-    default:
-      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type");
-    }
-  if (neednullspace) {
-    IS       is;
-    Vec      vecs[1], subvec;
-    PetscInt subvecsize;
-
-    PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, NULL, &is));
-    PetscCall(MatCreateVecs(ns->J, NULL, &vecs[0]));
-    PetscCall(VecGetSubVector(vecs[0], is, &subvec));
-    PetscCall(VecGetSize(subvec, &subvecsize));
-    PetscCall(VecSet(subvec, 1. / PetscSqrtReal((PetscReal)subvecsize)));
-    PetscCall(VecRestoreSubVector(vecs[0], is, &subvec));
-    PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, 1, vecs, &ns->nullspace));
-    PetscCall(VecDestroy(&vecs[0]));
-  }
-
-  /* Set solver functions */
-  switch (dim) {
-  case 2:
-    if (iscart) PetscCall(SNESSetPicard(ns->snes, ns->r, NSFormFunction_CNLinear_Cart2d_Internal, ns->J, ns->J, NSFormJacobian_CNLinear_Cart2d_Internal, ns));
-    else SETERRQ(comm, PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
-    break;
-  default:
-    SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
-  }
-  if (neednullspace) PetscCall(SNESSetFunction(ns->snes, ns->r, NSPicartComputeFunction_CNLinear_Private, ns));
-  /* Need zero initial guess to ensure least-square solution of pressure poisson equation */
-  PetscCall(SNESSetComputeInitialGuess(ns->snes, NSFormInitialGuess_CNLinear_Private, NULL));
-
-  /* Set KSP options */
-  {
-    KSP ksp;
-    PetscCall(SNESGetKSP(ns->snes, &ksp));
-    PetscCall(KSPSetTolerances(ksp, 1.e-6, PETSC_DEFAULT, PETSC_DEFAULT, 100));
-    PetscCall(KSPSetFromOptions(ksp));
-  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -139,6 +66,44 @@ PetscErrorCode NSStep_CNLinear(NS ns)
   switch (dim) {
   case 2:
     if (iscart) PetscCall(NSStep_CNLinear_Cart2d_Internal(ns));
+    else SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFormJacobian_CNLinear(NS ns, Vec x, Mat J, NSFormJacobianType type)
+{
+  PetscInt  dim;
+  PetscBool iscart;
+
+  PetscFunctionBegin;
+  PetscCall(MeshGetDimension(ns->mesh, &dim));
+  PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
+  switch (dim) {
+  case 2:
+    if (iscart) PetscCall(NSFormJacobian_CNLinear_Cart2d_Internal(ns, x, J, type));
+    else SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSFormFunction_CNLinear(NS ns, Vec x, Vec f)
+{
+  PetscInt  dim;
+  PetscBool iscart;
+
+  PetscFunctionBegin;
+  PetscCall(MeshGetDimension(ns->mesh, &dim));
+  PetscCall(PetscObjectTypeCompare((PetscObject)ns->mesh, MESHCART, &iscart));
+  switch (dim) {
+  case 2:
+    if (iscart) PetscCall(NSFormFunction_CNLinear_Cart2d_Internal(ns, x, f));
     else SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
     break;
   default:
@@ -200,6 +165,8 @@ PetscErrorCode NSCreate_CNLinear(NS ns)
   ns->ops->setfromoptions = NSSetFromOptions_CNLinear;
   ns->ops->setup          = NSSetup_CNLinear;
   ns->ops->step           = NSStep_CNLinear;
+  ns->ops->formjacobian   = NSFormJacobian_CNLinear;
+  ns->ops->formfunction   = NSFormFunction_CNLinear;
   ns->ops->destroy        = NSDestroy_CNLinear;
   ns->ops->view           = NSView_CNLinear;
   ns->ops->viewsolution   = NSViewSolution_CNLinear;

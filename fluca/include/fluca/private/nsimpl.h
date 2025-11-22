@@ -19,6 +19,8 @@ struct _NSOps {
   PetscErrorCode (*setfromoptions)(NS, PetscOptionItems);
   PetscErrorCode (*setup)(NS);
   PetscErrorCode (*step)(NS);
+  PetscErrorCode (*formjacobian)(NS, Vec, Mat, NSFormJacobianType);
+  PetscErrorCode (*formfunction)(NS, Vec, Vec);
   PetscErrorCode (*destroy)(NS);
   PetscErrorCode (*view)(NS, PetscViewer);
   PetscErrorCode (*viewsolution)(NS, PetscViewer);
