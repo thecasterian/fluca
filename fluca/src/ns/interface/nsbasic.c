@@ -7,9 +7,11 @@ const char *const  NSSolvers[]                  = {"FSM", "NSSolver", "", NULL};
 const char *const  NSConvergedReasons_Shifted[] = {"DIVERGED_NONLINEAR_SOLVE", "CONVERGED_ITERATING", "CONVERGED_TIME", "CONVERGED_ITS", "NSConvergedReason", "", NULL};
 const char *const *NSConvergedReasons           = NSConvergedReasons_Shifted + 1;
 
-PetscClassId  NS_CLASSID = 0;
-PetscLogEvent NS_SetUp   = 0;
-PetscLogEvent NS_Step    = 0;
+PetscClassId  NS_CLASSID      = 0;
+PetscLogEvent NS_SetUp        = 0;
+PetscLogEvent NS_Step         = 0;
+PetscLogEvent NS_FormJacobian = 0;
+PetscLogEvent NS_FormFunction = 0;
 
 PetscFunctionList NSList              = NULL;
 PetscBool         NSRegisterAllCalled = PETSC_FALSE;
@@ -292,7 +294,9 @@ PetscErrorCode NSFormJacobian(NS ns, Vec x, Mat J, NSFormJacobianType type)
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
   PetscValidHeaderSpecific(J, MAT_CLASSID, 3);
+  PetscLogEventBegin(NS_FormJacobian, ns, x, J, NULL);
   PetscUseTypeMethod(ns, formjacobian, x, J, type);
+  PetscLogEventEnd(NS_FormJacobian, ns, x, J, NULL);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -302,7 +306,9 @@ PetscErrorCode NSFormFunction(NS ns, Vec x, Vec f)
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
   PetscValidHeaderSpecific(f, VEC_CLASSID, 3);
+  PetscLogEventBegin(NS_FormFunction, ns, x, f, NULL);
   PetscUseTypeMethod(ns, formfunction, x, f);
+  PetscLogEventEnd(NS_FormFunction, ns, x, f, NULL);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -412,6 +418,9 @@ PetscErrorCode NSCheckDiverged(NS ns)
 
   PetscFunctionBegin;
   PetscCall(SNESGetConvergedReason(ns->snes, &snesreason));
-  if (snesreason < 0) ns->reason = NS_DIVERGED_NONLINEAR_SOLVE;
+  if (snesreason < 0) {
+    PetscCall(PetscInfo(ns, "Step=%" PetscInt_FMT ", nonlinear solve failure: %s\n", ns->step, SNESConvergedReasons[snesreason]));
+    ns->reason = NS_DIVERGED_NONLINEAR_SOLVE;
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

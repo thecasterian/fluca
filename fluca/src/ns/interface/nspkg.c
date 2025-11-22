@@ -19,6 +19,8 @@ PetscErrorCode NSInitializePackage(void)
   /* Register events */
   PetscCall(PetscLogEventRegister("NSSetUp", NS_CLASSID, &NS_SetUp));
   PetscCall(PetscLogEventRegister("NSStep", NS_CLASSID, &NS_Step));
+  PetscCall(PetscLogEventRegister("NSFormJacobian", NS_CLASSID, &NS_FormJacobian));
+  PetscCall(PetscLogEventRegister("NSFormFunction", NS_CLASSID, &NS_FormFunction));
 
   /* Process Info */
   classids[0] = NS_CLASSID;
