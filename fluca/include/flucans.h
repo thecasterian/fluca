@@ -3,6 +3,7 @@
 #include <flucamesh.h>
 #include <flucansbc.h>
 #include <petscis.h>
+#include <petscsnes.h>
 
 typedef struct _p_NS *NS;
 
@@ -52,8 +53,6 @@ FLUCA_EXTERN PetscErrorCode NSSetMaxSteps(NS, PetscInt);
 FLUCA_EXTERN PetscErrorCode NSGetMaxSteps(NS, PetscInt *);
 FLUCA_EXTERN PetscErrorCode NSSetBoundaryCondition(NS, PetscInt, NSBoundaryCondition);
 FLUCA_EXTERN PetscErrorCode NSGetBoundaryCondition(NS, PetscInt, NSBoundaryCondition *);
-FLUCA_EXTERN PetscErrorCode NSSetSolver(NS, NSSolver);
-FLUCA_EXTERN PetscErrorCode NSGetSolver(NS, NSSolver *);
 FLUCA_EXTERN PetscErrorCode NSSetFromOptions(NS);
 FLUCA_EXTERN PetscErrorCode NSSetUp(NS);
 FLUCA_EXTERN PetscErrorCode NSStep(NS);
@@ -75,6 +74,7 @@ typedef enum {
 FLUCA_EXTERN PetscErrorCode NSFormJacobian(NS, Vec, Mat, NSFormJacobianType);
 FLUCA_EXTERN PetscErrorCode NSFormFunction(NS, Vec, Vec);
 
+FLUCA_EXTERN PetscErrorCode NSGetSNES(NS, SNES *);
 FLUCA_EXTERN PetscErrorCode NSGetSolution(NS, Vec *);
 FLUCA_EXTERN PetscErrorCode NSGetNumFields(NS, PetscInt *);
 FLUCA_EXTERN PetscErrorCode NSGetField(NS, const char[], PetscInt *, MeshDMType *, IS *);

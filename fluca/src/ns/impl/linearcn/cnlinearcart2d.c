@@ -1582,7 +1582,7 @@ PetscErrorCode NSFormJacobian_CNLinear_Cart2d_Internal(NS ns, Vec x, Mat J, NSFo
   PetscInt     vidx, Vidx, pidx, entries;
   MeshDMType   vdmtype, Vdmtype, pdmtype;
   IS           vis, Vis, pis;
-  Mat          A, G, T, negI, RhieChow, D, L, Gst;
+  Mat          A, G, negT, Identity, negR, D, L, Gst;
   Vec          V0;
 
   PetscFunctionBegin;
@@ -1603,13 +1603,14 @@ PetscErrorCode NSFormJacobian_CNLinear_Cart2d_Internal(NS ns, Vec x, Mat J, NSFo
     PetscCall(MatScale(G, ns->dt / ns->rho));
     PetscCall(MatNestSetSubMat(J, vidx, pidx, G));
 
-    PetscCall(MeshCreateMatrix(ns->mesh, MESH_DM_STAG_SCALAR, MESH_DM_VECTOR, &T));
-    PetscCall(ComputeFaceNormalVelocityInterpolationOperator_Private(vdm, Sdm, ns->bcs, T));
-    PetscCall(MatNestSetSubMat(J, Vidx, vidx, T));
+    PetscCall(MeshCreateMatrix(ns->mesh, MESH_DM_STAG_SCALAR, MESH_DM_VECTOR, &negT));
+    PetscCall(ComputeFaceNormalVelocityInterpolationOperator_Private(vdm, Sdm, ns->bcs, negT));
+    PetscCall(MatScale(negT, -1.));
+    PetscCall(MatNestSetSubMat(J, Vidx, vidx, negT));
 
     PetscCall(DMStagGetEntries(Sdm, &entries));
-    PetscCall(MatCreateConstantDiagonal(PetscObjectComm((PetscObject)J), entries, entries, PETSC_DETERMINE, PETSC_DETERMINE, -1., &negI));
-    PetscCall(MatNestSetSubMat(J, Vidx, Vidx, negI));
+    PetscCall(MatCreateConstantDiagonal(PetscObjectComm((PetscObject)J), entries, entries, PETSC_DETERMINE, PETSC_DETERMINE, 1., &Identity));
+    PetscCall(MatNestSetSubMat(J, Vidx, Vidx, Identity));
 
     PetscCall(MeshCreateMatrix(ns->mesh, MESH_DM_VECTOR, MESH_DM_VECTOR, &L));
     PetscCall(ComputeVelocityLaplacianOperator_Private(vdm, ns->bcs, L));
@@ -1618,9 +1619,9 @@ PetscErrorCode NSFormJacobian_CNLinear_Cart2d_Internal(NS ns, Vec x, Mat J, NSFo
     PetscCall(ComputeStaggeredPressureGradientOperators_Private(sdm, Sdm, ns->bcs, Gst));
     PetscCall(MatScale(Gst, ns->dt / ns->rho));
 
-    PetscCall(MatMatMult(T, G, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &RhieChow));
-    PetscCall(MatAXPY(RhieChow, -1., Gst, DIFFERENT_NONZERO_PATTERN));
-    PetscCall(MatNestSetSubMat(J, Vidx, pidx, RhieChow));
+    PetscCall(MatMatMult(negT, G, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &negR));
+    PetscCall(MatAXPY(negR, 1., Gst, DIFFERENT_NONZERO_PATTERN));
+    PetscCall(MatNestSetSubMat(J, Vidx, pidx, negR));
 
     PetscCall(MeshCreateMatrix(ns->mesh, MESH_DM_SCALAR, MESH_DM_STAG_SCALAR, &D));
     PetscCall(ComputeStaggeredVelocityDivergenceOperator_Private(Sdm, sdm, ns->bcs, D));
@@ -1631,9 +1632,9 @@ PetscErrorCode NSFormJacobian_CNLinear_Cart2d_Internal(NS ns, Vec x, Mat J, NSFo
 
     PetscCall(MatDestroy(&A));
     PetscCall(MatDestroy(&G));
-    PetscCall(MatDestroy(&T));
-    PetscCall(MatDestroy(&negI));
-    PetscCall(MatDestroy(&RhieChow));
+    PetscCall(MatDestroy(&negT));
+    PetscCall(MatDestroy(&Identity));
+    PetscCall(MatDestroy(&negR));
     PetscCall(MatDestroy(&D));
     PetscCall(MatDestroy(&L));
     PetscCall(MatDestroy(&Gst));
@@ -1705,7 +1706,6 @@ PetscErrorCode NSFormFunction_CNLinear_Cart2d_Internal(NS ns, Vec x, Vec f)
   /* interprhs is not a vector on Sdm so setting values directly on it is not safe */
   PetscCall(DMGetGlobalVector(Sdm, &vbc));
   PetscCall(ComputeFaceNormalVelocityInterpolationBoundaryConditionVector_Private(Sdm, ns->bcs, ns->t + ns->dt, vbc));
-  PetscCall(VecScale(vbc, -1.));
   PetscCall(VecCopy(vbc, interprhs));
   PetscCall(DMRestoreGlobalVector(Sdm, &vbc));
 

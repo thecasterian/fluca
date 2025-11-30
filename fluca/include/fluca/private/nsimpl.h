@@ -80,27 +80,3 @@ struct _p_NS {
   void *mon_ctxs[MAXNSMONITORS];
   PetscErrorCode (*mon_ctx_destroys[MAXNSMONITORS])(void **);
 };
-
-typedef struct {
-  IS vis; /* index set of velocity component */
-  IS Vis; /* index set of face normal velocity component */
-  IS pis; /* index set of pressure component */
-
-  Mat A;   /* operator of momentum equation */
-  Mat T;   /* velocity interpolation operator */
-  Mat G;   /* pressure gradient operator */
-  Mat Gst; /* staggered pressure gradient operator */
-  Mat D;   /* face-normal velocity divergence operator */
-  Mat Lst; /* operator of pressure equation: Lst = D * Gst */
-
-  Vec divvstar;
-  Vec gradpcorr;
-  Vec gradstpcorr;
-
-  KSP kspv; /* KSP to solve velocity equation */
-  KSP kspp; /* KSP to solve pressure equation */
-
-  MatNullSpace nullspace;
-} NSFSMPCCtx;
-
-FLUCA_INTERN PetscErrorCode NSSetPreconditioner_Internal(NS, NSSolver);

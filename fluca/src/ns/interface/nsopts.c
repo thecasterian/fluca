@@ -164,24 +164,6 @@ PetscErrorCode NSGetBoundaryCondition(NS ns, PetscInt index, NSBoundaryCondition
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSSetSolver(NS ns, NSSolver solver)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  if (ns->solver != solver) PetscCall(NSSetPreconditioner_Internal(ns, solver));
-  ns->solver = solver;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode NSGetSolver(NS ns, NSSolver *solver)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  PetscAssertPointer(solver, 2);
-  *solver = ns->solver;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 PetscErrorCode NSSetFromOptions(NS ns)
 {
   char      type[256];

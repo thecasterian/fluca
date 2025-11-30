@@ -160,6 +160,7 @@ PetscErrorCode NSSetUp(NS ns)
   IS         *is;
   Vec        *subvecs;
   Mat        *submats;
+  SNES        snes;
   PetscInt    nf, nb, i;
   PetscBool   neednullspace;
 
@@ -200,11 +201,6 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(VecCreateNest(comm, nf, is, subvecs, &ns->sol));
 
   /* Create solver */
-  PetscCall(SNESCreate(comm, &ns->snes));
-  PetscCall(SNESSetDM(ns->snes, ns->soldm));
-  PetscCall(SNESSetTolerances(ns->snes, PETSC_DEFAULT, 1.e-5, PETSC_DEFAULT, PETSC_DEFAULT, PETSC_DEFAULT));
-  PetscCall(SNESSetOptionsPrefix(ns->snes, "ns_"));
-  PetscCall(SNESSetFromOptions(ns->snes));
   PetscCall(PetscMalloc1(nf * nf, &submats));
   for (i = 0; i < nf * nf; ++i) submats[i] = NULL;
   PetscCall(MatCreateNest(comm, nf, is, nf, is, submats, &ns->J));
@@ -247,10 +243,11 @@ PetscErrorCode NSSetUp(NS ns)
   }
 
   /* Set solver callbacks */
-  PetscCall(SNESSetPicard(ns->snes, ns->r, FormFunction_Private, ns->J, ns->J, FormJacobian_Private, ns));
-  if (neednullspace) PetscCall(SNESSetFunction(ns->snes, ns->r, PicardComputeFunction_Private, ns));
+  PetscCall(NSGetSNES(ns, &snes));
+  PetscCall(SNESSetPicard(snes, ns->r, FormFunction_Private, ns->J, ns->J, FormJacobian_Private, ns));
+  if (neednullspace) PetscCall(SNESSetFunction(snes, ns->r, PicardComputeFunction_Private, ns));
   /* Need zero initial guess to ensure least-square solution of pressure */
-  PetscCall(SNESSetComputeInitialGuess(ns->snes, FormInitialGuess_Private, NULL));
+  PetscCall(SNESSetComputeInitialGuess(snes, FormInitialGuess_Private, NULL));
 
   /* Call specific type setup */
   PetscTryTypeMethod(ns, setup);

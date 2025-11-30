@@ -1,147 +1,248 @@
 #include <fluca/private/nslinearcnimpl.h>
 
-static PetscErrorCode NSFSMPCCtxCreate_Private(NS ns, PC pc, NSFSMPCCtx **ctx)
+typedef struct {
+  NS ns;
+
+  KSP kspA;
+  KSP kspS;
+
+  Mat A;    /* momentum equation operator */
+  Mat negT; /* negative face-normal velocity interpolation operator */
+  Mat G;    /* pressure gradient operator */
+  Mat D;    /* face-normal velocity divergence operator */
+  Mat negR; /* Rhie-Chow interpolation correction operator */
+
+  Mat invA2; /* inverse of approximation of A in the upper triangular matrix */
+  Mat S;     /* approximate Schur complement */
+
+  MatNullSpace nullspace;
+} ABFCtx;
+
+static PetscErrorCode ABFCtxCreateKSP_Private(NS ns, PC pc, const char prefix[], KSP *ksp)
 {
-  NSFSMPCCtx *c;
-  MPI_Comm    comm;
-  Vec         v, V, p;
+  KSP         k;
+  const char *nsprefix;
+
+  PetscFunctionBegin;
+  PetscCall(KSPCreate(PetscObjectComm((PetscObject)pc), &k));
+  PetscCall(PetscObjectIncrementTabLevel((PetscObject)k, (PetscObject)pc, 1));
+  PetscCall(PetscObjectSetOptions((PetscObject)k, ((PetscObject)pc)->options));
+  PetscCall(PetscObjectGetOptionsPrefix((PetscObject)ns, &nsprefix));
+  PetscCall(KSPSetOptionsPrefix(k, nsprefix));
+  PetscCall(KSPAppendOptionsPrefix(k, prefix));
+  *ksp = k;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ABFCtxCreate_Private(NS ns, PC pc, ABFCtx **ctx)
+{
+  ABFCtx *c;
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&c));
+  c->ns = ns;
+  PetscCall(ABFCtxCreateKSP_Private(ns, pc, "ns_abf_A_", &c->kspA));
+  PetscCall(ABFCtxCreateKSP_Private(ns, pc, "ns_abf_S_", &c->kspS));
+  c->A         = NULL;
+  c->negT      = NULL;
+  c->G         = NULL;
+  c->D         = NULL;
+  c->negR      = NULL;
+  c->invA2     = NULL;
+  c->S         = NULL;
+  c->nullspace = NULL;
+  *ctx         = c;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
-  PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, NULL, NULL, &c->vis));
-  PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, NULL, &c->Vis));
-  PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, NULL, &c->pis));
+static PetscErrorCode ABFSetUp_Private(PC pc)
+{
+  ABFCtx      *ctx;
+  IS           vis, Vis, pis;
+  Mat          Jpre, tmp;
+  PetscInt     m, n;
+  MatNullSpace nullspace;
 
-  PetscCall(MatCreateSubMatrix(ns->J, c->vis, c->vis, MAT_INITIAL_MATRIX, &c->A));
-  PetscCall(MatCreateSubMatrix(ns->J, c->Vis, c->vis, MAT_INITIAL_MATRIX, &c->T));
-  PetscCall(MatCreateSubMatrix(ns->J, c->vis, c->pis, MAT_INITIAL_MATRIX, &c->G));
-  PetscCall(PetscObjectQuery((PetscObject)ns->J, "StaggeredGradient", (PetscObject *)&c->Gst));
-  PetscCall(PetscObjectReference((PetscObject)c->Gst));
-  PetscCall(MatCreateSubMatrix(ns->J, c->pis, c->Vis, MAT_INITIAL_MATRIX, &c->D));
-  PetscCall(MatMatMult(c->D, c->Gst, MAT_INITIAL_MATRIX, 1., &c->Lst));
+  PetscFunctionBegin;
+  PetscCall(PCShellGetContext(pc, &ctx));
+  PetscCall(NSGetField(ctx->ns, NS_FIELD_VELOCITY, NULL, NULL, &vis));
+  PetscCall(NSGetField(ctx->ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, NULL, &Vis));
+  PetscCall(NSGetField(ctx->ns, NS_FIELD_PRESSURE, NULL, NULL, &pis));
+  PetscCall(PCGetOperators(pc, NULL, &Jpre));
 
-  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
-  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
-  PetscCall(NSGetSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
-  PetscCall(VecDuplicate(p, &c->divvstar));
-  PetscCall(VecDuplicate(v, &c->gradpcorr));
-  PetscCall(VecDuplicate(V, &c->gradstpcorr));
-  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_VELOCITY, &v));
-  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &V));
-  PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
+  PetscCall(MatDestroy(&ctx->A));
+  PetscCall(MatDestroy(&ctx->negT));
+  PetscCall(MatDestroy(&ctx->G));
+  PetscCall(MatDestroy(&ctx->D));
+  PetscCall(MatDestroy(&ctx->negR));
+  PetscCall(MatDestroy(&ctx->invA2));
+  PetscCall(MatDestroy(&ctx->S));
+  PetscCall(MatNullSpaceDestroy(&ctx->nullspace));
 
-  PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
-  PetscCall(KSPCreate(comm, &c->kspv));
-  PetscCall(KSPSetOperators(c->kspv, c->A, c->A));
-  PetscCall(PetscObjectIncrementTabLevel((PetscObject)c->kspv, (PetscObject)pc, 1));
-  PetscCall(KSPSetOptionsPrefix(c->kspv, "ns_fsm_v_"));
-  PetscCall(KSPSetFromOptions(c->kspv));
-  PetscCall(KSPCreate(comm, &c->kspp));
-  PetscCall(KSPSetOperators(c->kspp, c->Lst, c->Lst));
-  PetscCall(KSPSetOptionsPrefix(c->kspp, "ns_fsm_p_"));
-  PetscCall(PetscObjectIncrementTabLevel((PetscObject)c->kspp, (PetscObject)pc, 1));
-  PetscCall(KSPSetFromOptions(c->kspp));
-  if (ns->nullspace) {
-    PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &c->nullspace));
-    PetscCall(MatSetNullSpace(c->Lst, c->nullspace));
-  } else {
-    c->nullspace = NULL;
+  PetscCall(MatCreateSubMatrix(Jpre, vis, vis, MAT_INITIAL_MATRIX, &ctx->A));
+  PetscCall(MatCreateSubMatrix(Jpre, Vis, vis, MAT_INITIAL_MATRIX, &ctx->negT));
+  PetscCall(MatCreateSubMatrix(Jpre, vis, pis, MAT_INITIAL_MATRIX, &ctx->G));
+  PetscCall(MatCreateSubMatrix(Jpre, pis, Vis, MAT_INITIAL_MATRIX, &ctx->D));
+  PetscCall(MatCreateSubMatrix(Jpre, Vis, pis, MAT_INITIAL_MATRIX, &ctx->negR));
+
+  // TODO: create invA2 and S based on options
+  PetscCall(MatGetLocalSize(ctx->A, &m, &n));
+  PetscCall(MatCreateConstantDiagonal(PetscObjectComm((PetscObject)Jpre), m, n, PETSC_DETERMINE, PETSC_DETERMINE, 1., &ctx->invA2));
+
+  PetscCall(MatMatMult(ctx->negT, ctx->G, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &tmp));
+  PetscCall(MatAXPY(tmp, -1., ctx->negR, DIFFERENT_NONZERO_PATTERN));
+  PetscCall(MatMatMult(ctx->D, tmp, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &ctx->S));
+  PetscCall(MatDestroy(&tmp));
+
+  PetscCall(MatGetNullSpace(Jpre, &nullspace));
+  if (nullspace) {
+    PetscCall(MatNullSpaceCreate(PetscObjectComm((PetscObject)Jpre), PETSC_TRUE, 0, NULL, &ctx->nullspace));
+    PetscCall(MatSetNullSpace(ctx->S, ctx->nullspace));
   }
 
-  *ctx = c;
+  PetscCall(KSPSetOperators(ctx->kspA, ctx->A, ctx->A));
+  PetscCall(KSPSetOperators(ctx->kspS, ctx->S, ctx->S));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMPCApply_Private(PC pc, Vec x, Vec y)
+static PetscErrorCode ABFApply_Private(PC pc, Vec b, Vec x)
 {
-  NSFSMPCCtx *ctx;
-  Vec         xv, xV, xp, yv, yV, yp;
+  ABFCtx *ctx;
+  DM      sdm, vdm, Sdm;
+  IS      vis, Vis, pis;
+  Vec     momrhs, interprhs, contrhs, v, V, pcorr, vstar, Vstar, Srhs, invA2Gpcorr, tmp;
 
   PetscFunctionBegin;
   PetscCall(PCShellGetContext(pc, &ctx));
-  PetscCall(VecGetSubVector(x, ctx->vis, &xv));
-  PetscCall(VecGetSubVector(x, ctx->Vis, &xV));
-  PetscCall(VecGetSubVector(x, ctx->pis, &xp));
-  PetscCall(VecGetSubVector(y, ctx->vis, &yv));
-  PetscCall(VecGetSubVector(y, ctx->Vis, &yV));
-  PetscCall(VecGetSubVector(y, ctx->pis, &yp));
+  PetscCall(MeshGetDM(ctx->ns->mesh, MESH_DM_SCALAR, &sdm));
+  PetscCall(MeshGetDM(ctx->ns->mesh, MESH_DM_VECTOR, &vdm));
+  PetscCall(MeshGetDM(ctx->ns->mesh, MESH_DM_STAG_SCALAR, &Sdm));
+  PetscCall(NSGetField(ctx->ns, NS_FIELD_VELOCITY, NULL, NULL, &vis));
+  PetscCall(NSGetField(ctx->ns, NS_FIELD_FACE_NORMAL_VELOCITY, NULL, NULL, &Vis));
+  PetscCall(NSGetField(ctx->ns, NS_FIELD_PRESSURE, NULL, NULL, &pis));
 
-  /* Forward step */
-  PetscCall(KSPSolve(ctx->kspv, xv, yv));
-  PetscCall(MatMult(ctx->T, yv, yV));
-  PetscCall(VecAXPY(yV, -1., xV));
-  PetscCall(MatMult(ctx->D, yV, ctx->divvstar));
-  PetscCall(VecAXPY(ctx->divvstar, -1., xp));
-  if (ctx->nullspace) PetscCall(MatNullSpaceRemove(ctx->nullspace, ctx->divvstar));
-  PetscCall(KSPSolve(ctx->kspp, ctx->divvstar, yp));
+  PetscCall(VecGetSubVector(b, vis, &momrhs));
+  PetscCall(VecGetSubVector(b, Vis, &interprhs));
+  PetscCall(VecGetSubVector(b, pis, &contrhs));
+  PetscCall(VecGetSubVector(x, vis, &v));
+  PetscCall(VecGetSubVector(x, Vis, &V));
+  PetscCall(VecGetSubVector(x, pis, &pcorr));
+  PetscCall(DMGetGlobalVector(vdm, &vstar));
+  PetscCall(DMGetGlobalVector(Sdm, &Vstar));
+  PetscCall(DMGetGlobalVector(sdm, &Srhs));
+  PetscCall(DMGetGlobalVector(vdm, &invA2Gpcorr));
 
-  /* Backward step */
-  PetscCall(MatMult(ctx->G, yp, ctx->gradpcorr));
-  PetscCall(VecAXPY(yv, -1., ctx->gradpcorr));
-  PetscCall(MatMult(ctx->Gst, yp, ctx->gradstpcorr));
-  PetscCall(VecAXPY(yV, -1., ctx->gradstpcorr));
+  /* Stage 1: solve the lower triangular matrix */
+  PetscCall(KSPSolve(ctx->kspA, momrhs, vstar));
+  PetscCall(MatMult(ctx->negT, vstar, Vstar));
+  PetscCall(VecAYPX(Vstar, -1, interprhs));
+  PetscCall(MatMult(ctx->D, Vstar, Srhs));
+  PetscCall(VecAYPX(Srhs, -1., contrhs));
+  PetscCall(KSPSolve(ctx->kspS, Srhs, pcorr));
 
-  PetscCall(VecRestoreSubVector(x, ctx->vis, &xv));
-  PetscCall(VecRestoreSubVector(x, ctx->Vis, &xV));
-  PetscCall(VecRestoreSubVector(x, ctx->pis, &xp));
-  PetscCall(VecRestoreSubVector(y, ctx->vis, &yv));
-  PetscCall(VecRestoreSubVector(y, ctx->Vis, &yV));
-  PetscCall(VecRestoreSubVector(y, ctx->pis, &yp));
+  /* Stage 2: solve the upper triangular matrix */
+  PetscCall(DMGetGlobalVector(vdm, &tmp));
+  PetscCall(MatMult(ctx->G, pcorr, tmp));
+  PetscCall(MatMult(ctx->invA2, tmp, invA2Gpcorr));
+  PetscCall(DMRestoreGlobalVector(vdm, &tmp));
+  PetscCall(VecWAXPY(v, -1., invA2Gpcorr, vstar));
+  PetscCall(MatMultAdd(ctx->negT, invA2Gpcorr, Vstar, V));
+  if (ctx->negR) {
+    PetscCall(DMGetGlobalVector(Sdm, &tmp));
+    PetscCall(MatMult(ctx->negR, pcorr, tmp));
+    PetscCall(VecAXPY(V, -1., tmp));
+    PetscCall(DMRestoreGlobalVector(Sdm, &tmp));
+  }
+
+  PetscCall(VecRestoreSubVector(b, vis, &momrhs));
+  PetscCall(VecRestoreSubVector(b, Vis, &interprhs));
+  PetscCall(VecRestoreSubVector(b, pis, &contrhs));
+  PetscCall(VecRestoreSubVector(x, vis, &v));
+  PetscCall(VecRestoreSubVector(x, Vis, &V));
+  PetscCall(VecRestoreSubVector(x, pis, &pcorr));
+  PetscCall(DMRestoreGlobalVector(vdm, &vstar));
+  PetscCall(DMRestoreGlobalVector(Sdm, &Vstar));
+  PetscCall(DMRestoreGlobalVector(sdm, &Srhs));
+  PetscCall(DMRestoreGlobalVector(vdm, &invA2Gpcorr));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSFSMPCDestroy_Private(PC pc)
+static PetscErrorCode ABFDestroy_Private(PC pc)
 {
-  NSFSMPCCtx *ctx;
+  ABFCtx *ctx;
 
   PetscFunctionBegin;
   PetscCall(PCShellGetContext(pc, &ctx));
+  PetscCall(KSPDestroy(&ctx->kspS));
   PetscCall(MatDestroy(&ctx->A));
-  PetscCall(MatDestroy(&ctx->T));
+  PetscCall(MatDestroy(&ctx->negT));
   PetscCall(MatDestroy(&ctx->G));
-  PetscCall(MatDestroy(&ctx->Gst));
   PetscCall(MatDestroy(&ctx->D));
-  PetscCall(MatDestroy(&ctx->Lst));
-  PetscCall(VecDestroy(&ctx->divvstar));
-  PetscCall(VecDestroy(&ctx->gradpcorr));
-  PetscCall(VecDestroy(&ctx->gradstpcorr));
-  PetscCall(KSPDestroy(&ctx->kspv));
-  PetscCall(KSPDestroy(&ctx->kspp));
+  PetscCall(MatDestroy(&ctx->invA2));
+  PetscCall(MatDestroy(&ctx->S));
   PetscCall(MatNullSpaceDestroy(&ctx->nullspace));
   PetscCall(PetscFree(ctx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode NSSetPreconditioner_FSM_Private(NS ns)
+static PetscErrorCode ABFView_Private(PC pc, PetscViewer viewer)
 {
-  KSP         ksp;
-  PC          pc;
-  NSFSMPCCtx *pcctx;
+  ABFCtx   *ctx;
+  PetscBool isascii;
 
   PetscFunctionBegin;
-  /* Set preconditioner */
-  PetscCall(SNESGetKSP(ns->snes, &ksp));
-  PetscCall(KSPGetPC(ksp, &pc));
-  PetscCall(PCSetType(pc, PCSHELL));
-  PetscCall(PCShellSetName(pc, "FractionalStepMethod"));
-  PetscCall(PCShellSetApply(pc, NSFSMPCApply_Private));
-  PetscCall(NSFSMPCCtxCreate_Private(ns, pc, &pcctx));
-  PetscCall(PCShellSetContext(pc, pcctx));
-  PetscCall(PCShellSetDestroy(pc, NSFSMPCDestroy_Private));
+  PetscCall(PCShellGetContext(pc, &ctx));
+  PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &isascii));
+
+  if (isascii) {
+    PetscCall(PetscViewerASCIIPrintf(viewer, "KSP solver for momentum equation operator\n"));
+    PetscCall(PetscViewerASCIIPushTab(viewer));
+    PetscCall(KSPView(ctx->kspA, viewer));
+    PetscCall(PetscViewerASCIIPopTab(viewer));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "KSP solver for Schur complement\n"));
+    PetscCall(PetscViewerASCIIPushTab(viewer));
+    PetscCall(KSPView(ctx->kspS, viewer));
+    PetscCall(PetscViewerASCIIPopTab(viewer));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSSetPreconditioner_Internal(NS ns, NSSolver solver)
+PetscErrorCode NSGetSNES(NS ns, SNES *snes)
 {
+  const char *prefix;
+  KSP         ksp;
+  PC          pc;
+  ABFCtx     *ctx;
+
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  switch (solver) {
-  case NS_FSM:
-    PetscCall(NSSetPreconditioner_FSM_Private(ns));
-    break;
-  default:
-    SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported solver");
+  PetscAssertPointer(snes, 2);
+  if (!ns->snes) {
+    PetscCall(SNESCreate(PetscObjectComm((PetscObject)ns), &ns->snes));
+    PetscCall(PetscObjectIncrementTabLevel((PetscObject)ns->snes, (PetscObject)ns, 1));
+    PetscCall(PetscObjectSetOptions((PetscObject)ns->snes, ((PetscObject)ns)->options));
+    PetscCall(PetscObjectGetOptionsPrefix((PetscObject)ns, &prefix));
+    PetscCall(SNESSetOptionsPrefix(ns->snes, prefix));
+    PetscCall(SNESAppendOptionsPrefix(ns->snes, "ns_"));
+
+    /* Default SNES and KSP options */
+    PetscCall(SNESSetTolerances(ns->snes, PETSC_DECIDE, 1.e-5, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE));
+    PetscCall(SNESGetKSP(ns->snes, &ksp));
+    PetscCall(KSPSetTolerances(ksp, 1.e-5, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE));
+    PetscCall(KSPSetNormType(ksp, KSP_NORM_UNPRECONDITIONED));
+
+    /* Construct approximate block factorization preconditioner (ABF) */
+    PetscCall(PCCreate(PetscObjectComm((PetscObject)ns), &pc));
+    PetscCall(PCSetType(pc, PCSHELL));
+    PetscCall(PCShellSetName(pc, "Approxmiate Block Factorization Preconditioner (ABF)"));
+    PetscCall(ABFCtxCreate_Private(ns, pc, &ctx));
+    PetscCall(PCShellSetContext(pc, ctx));
+    PetscCall(PCShellSetSetUp(pc, ABFSetUp_Private));
+    PetscCall(PCShellSetApply(pc, ABFApply_Private));
+    PetscCall(PCShellSetDestroy(pc, ABFDestroy_Private));
+    PetscCall(PCShellSetView(pc, ABFView_Private));
+    PetscCall(KSPSetPC(ksp, pc));
   }
+  *snes = ns->snes;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
