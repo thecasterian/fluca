@@ -168,6 +168,7 @@ PetscErrorCode NSSetFromOptions(NS ns)
 {
   char      type[256];
   PetscBool flg, opt;
+  SNES      snes;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
@@ -196,6 +197,9 @@ PetscErrorCode NSSetFromOptions(NS ns)
   PetscTryTypeMethod(ns, setfromoptions, PetscOptionsObject);
 
   PetscOptionsEnd();
+
+  PetscCall(NSGetSNES(ns, &snes));
+  PetscCall(SNESSetFromOptions(snes));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

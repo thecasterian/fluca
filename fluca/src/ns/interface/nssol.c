@@ -1,6 +1,37 @@
 #include <fluca/private/nsimpl.h>
 #include <fluca/private/flucaviewercgnsimpl.h>
 
+PetscErrorCode NSGetSNES(NS ns, SNES *snes)
+{
+  const char *prefix;
+  KSP         ksp;
+  PC          pc;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscAssertPointer(snes, 2);
+  if (!ns->snes) {
+    PetscCall(SNESCreate(PetscObjectComm((PetscObject)ns), &ns->snes));
+    PetscCall(PetscObjectIncrementTabLevel((PetscObject)ns->snes, (PetscObject)ns, 1));
+    PetscCall(PetscObjectSetOptions((PetscObject)ns->snes, ((PetscObject)ns)->options));
+    PetscCall(PetscObjectGetOptionsPrefix((PetscObject)ns, &prefix));
+    PetscCall(SNESSetOptionsPrefix(ns->snes, prefix));
+    PetscCall(SNESAppendOptionsPrefix(ns->snes, "ns_"));
+
+    /* Default SNES and KSP options */
+    PetscCall(SNESSetTolerances(ns->snes, PETSC_DECIDE, 1.e-5, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE));
+    PetscCall(SNESGetKSP(ns->snes, &ksp));
+    PetscCall(KSPSetTolerances(ksp, 1.e-5, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE));
+    PetscCall(KSPSetNormType(ksp, KSP_NORM_UNPRECONDITIONED));
+
+    /* Construct approximate block factorization preconditioner (ABF) */
+    PetscCall(KSPGetPC(ksp, &pc));
+    PetscCall(PCSetType(pc, PCABF));
+  }
+  *snes = ns->snes;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSGetSolution(NS ns, Vec *sol)
 {
   PetscFunctionBegin;

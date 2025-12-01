@@ -159,10 +159,11 @@ PetscErrorCode NSSetUp(NS ns)
   NSFieldLink link;
   IS         *is;
   Vec        *subvecs;
-  Mat        *submats;
   SNES        snes;
+  KSP         ksp;
+  PC          pc;
   PetscInt    nf, nb, i;
-  PetscBool   neednullspace;
+  PetscBool   neednullspace, isabf;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
@@ -200,10 +201,8 @@ PetscErrorCode NSSetUp(NS ns)
   }
   PetscCall(VecCreateNest(comm, nf, is, subvecs, &ns->sol));
 
-  /* Create solver */
-  PetscCall(PetscMalloc1(nf * nf, &submats));
-  for (i = 0; i < nf * nf; ++i) submats[i] = NULL;
-  PetscCall(MatCreateNest(comm, nf, is, nf, is, submats, &ns->J));
+  /* Create Jacobian */
+  PetscCall(MatCreateNest(comm, nf, is, nf, is, NULL, &ns->J));
   PetscCall(MatSetUp(ns->J));
   PetscCall(MatNestSetVecType(ns->J, VECNEST));
   /* Initialize Jacobian */
@@ -213,7 +212,6 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(PetscFree(is));
   for (i = 0; i < nf; ++i) PetscCall(VecDestroy(&subvecs[i]));
   PetscCall(PetscFree(subvecs));
-  PetscCall(PetscFree(submats));
 
   /* Create null space for pressure */
   neednullspace = PETSC_TRUE;
@@ -242,12 +240,24 @@ PetscErrorCode NSSetUp(NS ns)
     PetscCall(MatSetNullSpace(ns->J, ns->nullspace));
   }
 
-  /* Set solver callbacks */
+  /* Create solver */
   PetscCall(NSGetSNES(ns, &snes));
   PetscCall(SNESSetPicard(snes, ns->r, FormFunction_Private, ns->J, ns->J, FormJacobian_Private, ns));
   if (neednullspace) PetscCall(SNESSetFunction(snes, ns->r, PicardComputeFunction_Private, ns));
   /* Need zero initial guess to ensure least-square solution of pressure */
   PetscCall(SNESSetComputeInitialGuess(snes, FormInitialGuess_Private, NULL));
+
+  PetscCall(SNESGetKSP(snes, &ksp));
+  PetscCall(KSPGetPC(ksp, &pc));
+  PetscCall(PetscObjectTypeCompare((PetscObject)pc, PCABF, &isabf));
+  if (isabf) {
+    PetscInt vidx, Vidx, pidx;
+
+    PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, &vidx, NULL, NULL));
+    PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &Vidx, NULL, NULL));
+    PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, &pidx, NULL, NULL));
+    PetscCall(PCABFSetFields(pc, vidx, Vidx, pidx));
+  }
 
   /* Call specific type setup */
   PetscTryTypeMethod(ns, setup);

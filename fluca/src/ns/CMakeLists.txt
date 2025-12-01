@@ -10,7 +10,8 @@ add_library(fluca_ns SHARED
     interface/nspkg.c
     interface/nsreg.c
     interface/nssol.c
-    interface/nssolver.c
+    utils/nspcreg.c
+    utils/abfpc/abfpc.c
 )
 
 target_include_directories(fluca_ns PUBLIC

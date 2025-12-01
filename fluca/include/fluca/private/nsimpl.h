@@ -10,6 +10,7 @@
 
 FLUCA_EXTERN PetscBool      NSRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode NSRegisterAll(void);
+FLUCA_EXTERN PetscErrorCode NSPCRegisterAll(void);
 FLUCA_EXTERN PetscLogEvent  NS_SetUp;
 FLUCA_EXTERN PetscLogEvent  NS_Step;
 FLUCA_EXTERN PetscLogEvent  NS_FormJacobian;
