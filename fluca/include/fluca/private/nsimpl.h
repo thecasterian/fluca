@@ -62,7 +62,6 @@ struct _p_NS {
   Vec         sol0;      /* solution vector at the beginning of time step */
 
   /* Solver --------------------------------------------------------------- */
-  NSSolver     solver;    /* solver type */
   SNES         snes;      /* non-linear solver */
   Mat          J;         /* Jacobian */
   Vec          r;         /* residual vector */

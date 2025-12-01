@@ -3,7 +3,6 @@
 #include <petscdmcomposite.h>
 #include <petscdmstag.h>
 
-const char *const  NSSolvers[]                  = {"FSM", "NSSolver", "", NULL};
 const char *const  NSConvergedReasons_Shifted[] = {"DIVERGED_NONLINEAR_SOLVE", "CONVERGED_ITERATING", "CONVERGED_TIME", "CONVERGED_ITS", "NSConvergedReason", "", NULL};
 const char *const *NSConvergedReasons           = NSConvergedReasons_Shifted + 1;
 
@@ -39,7 +38,6 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns)
   n->soldm             = NULL;
   n->sol               = NULL;
   n->sol0              = NULL;
-  n->solver            = NS_FSM;
   n->snes              = NULL;
   n->J                 = NULL;
   n->r                 = NULL;

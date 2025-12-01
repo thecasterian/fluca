@@ -186,7 +186,6 @@ PetscErrorCode NSSetFromOptions(NS ns)
   PetscCall(PetscOptionsReal("-ns_max_time", "Maximum time", "NSSetMaxTime", ns->max_time, &ns->max_time, NULL));
   PetscCall(PetscOptionsInt("-ns_max_steps", "Maximum number of steps", "NSSetMaxSteps", ns->max_steps, &ns->max_steps, NULL));
   PetscCall(PetscOptionsBool("-ns_error_if_step_failed", "Error if step fails", "NSSetErrorIfStepFailed", ns->errorifstepfailed, &ns->errorifstepfailed, NULL));
-  PetscCall(PetscOptionsEnum("-ns_solver", "Solver algorithm", "NSSetSolver", NSSolvers, (PetscEnum)ns->solver, (PetscEnum *)&ns->solver, NULL));
 
   PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor", "Monitor current step and time", "NSMonitorDefault", NSMonitorDefault, NULL));
   PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor_solution", "Monitor solution", "NSMonitorSolution", NSMonitorSolution, NULL));

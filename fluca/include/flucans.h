@@ -11,11 +11,6 @@ typedef const char *NSType;
 #define NSCNLINEAR "cnlinear"
 
 typedef enum {
-  NS_FSM,
-} NSSolver;
-FLUCA_EXTERN const char *const NSSolvers[];
-
-typedef enum {
   NS_CONVERGED_ITERATING      = 0,
   NS_CONVERGED_TIME           = 1,
   NS_CONVERGED_ITS            = 2,
