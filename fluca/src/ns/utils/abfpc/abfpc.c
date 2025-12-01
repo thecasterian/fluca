@@ -1,10 +1,14 @@
 #include <petsc/private/pcimpl.h>
 #include <flucans.h>
 
+const char *const PCABFAinvTypes[] = {"ID", "DIAG", "ROWSUM", "PCABFAinvType", "", NULL};
+
 typedef struct {
-  PetscInt vidx; /* index of velocity field */
-  PetscInt Vidx; /* index of face-normal velocity field */
-  PetscInt pidx; /* index of pressure field */
+  PetscInt      vidx; /* index of velocity field */
+  PetscInt      Vidx; /* index of face-normal velocity field */
+  PetscInt      pidx; /* index of pressure field */
+  PCABFAinvType schurainv;
+  PCABFAinvType upperainv;
 
   KSP kspA;
   KSP kspS;
@@ -18,6 +22,7 @@ typedef struct {
 
   MatNullSpace nullspace;
 
+  Vec Adiag;
   Vec vstar;
   Vec Vstar;
   Vec Srhs;
@@ -73,7 +78,20 @@ static PetscErrorCode PCApply_ABF(PC pc, Vec b, Vec x)
 
   /* Stage 2: solve the upper triangular matrix */
   PetscCall(MatMult(abf->G, p, abf->invA2Gp));
-  // TODO: mult invA2
+  switch (abf->upperainv) {
+  case PC_ABF_AINV_ID:
+    break;
+  case PC_ABF_AINV_DIAG:
+  case PC_ABF_AINV_ROWSUM:
+    if (!abf->Adiag) PetscCall(MatCreateVecs(abf->A, &abf->Adiag, NULL));
+    if (abf->upperainv == PC_ABF_AINV_DIAG) PetscCall(MatGetDiagonal(abf->A, abf->Adiag));
+    else PetscCall(MatGetRowSum(abf->A, abf->Adiag));
+    PetscCall(VecReciprocal(abf->Adiag));
+    PetscCall(VecPointwiseMult(abf->invA2Gp, abf->Adiag, abf->invA2Gp));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)pc), PETSC_ERR_SUP, "Unsupported Ainv type");
+  }
   PetscCall(VecWAXPY(v, -1., abf->invA2Gp, abf->vstar));
   PetscCall(MatMultAdd(abf->negT, abf->invA2Gp, abf->Vstar, V));
   if (abf->negR) {
@@ -98,7 +116,7 @@ static PetscErrorCode PCSetUp_ABF(PC pc)
   PetscBool    isnest;
   PetscInt     m, n;
   IS          *rowis, *colis;
-  Mat          tmp;
+  Mat          Gdup, tmp;
   MatNullSpace nullspace;
 
   PetscFunctionBegin;
@@ -112,6 +130,7 @@ static PetscErrorCode PCSetUp_ABF(PC pc)
   PetscCall(MatDestroy(&abf->negR));
   PetscCall(MatDestroy(&abf->S));
   PetscCall(MatNullSpaceDestroy(&abf->nullspace));
+  PetscCall(VecDestroy(&abf->Adiag));
   PetscCall(VecDestroy(&abf->vstar));
   PetscCall(VecDestroy(&abf->Vstar));
   PetscCall(VecDestroy(&abf->Srhs));
@@ -128,9 +147,26 @@ static PetscErrorCode PCSetUp_ABF(PC pc)
   PetscCall(MatCreateSubMatrix(pc->mat, rowis[abf->Vidx], colis[abf->pidx], MAT_INITIAL_MATRIX, &abf->negR));
   PetscCall(PetscFree2(rowis, colis));
 
-  // TODO: create S based on options
-  PetscCall(MatMatMult(abf->negT, abf->G, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &tmp));
-  PetscCall(MatAXPY(tmp, -1., abf->negR, DIFFERENT_NONZERO_PATTERN));
+  /* S = D ((-T) A^-1 G - (-R)) */
+  switch (abf->schurainv) {
+  case PC_ABF_AINV_ID:
+    PetscCall(MatMatMult(abf->negT, abf->G, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &tmp));
+    break;
+  case PC_ABF_AINV_DIAG:
+  case PC_ABF_AINV_ROWSUM:
+    if (!abf->Adiag) PetscCall(MatCreateVecs(abf->A, &abf->Adiag, NULL));
+    if (abf->schurainv == PC_ABF_AINV_DIAG) PetscCall(MatGetDiagonal(abf->A, abf->Adiag));
+    else PetscCall(MatGetRowSum(abf->A, abf->Adiag));
+    PetscCall(VecReciprocal(abf->Adiag));
+    PetscCall(MatDuplicate(abf->G, MAT_COPY_VALUES, &Gdup));
+    PetscCall(MatDiagonalScale(Gdup, abf->Adiag, NULL));
+    PetscCall(MatMatMult(abf->negT, Gdup, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &tmp));
+    PetscCall(MatDestroy(&Gdup));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)pc), PETSC_ERR_SUP, "Unsupported Ainv type");
+  }
+  if (abf->negR) PetscCall(MatAXPY(tmp, -1., abf->negR, DIFFERENT_NONZERO_PATTERN));
   PetscCall(MatMatMult(abf->D, tmp, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &abf->S));
   PetscCall(MatDestroy(&tmp));
 
@@ -159,6 +195,7 @@ static PetscErrorCode PCReset_ABF(PC pc)
   PetscCall(MatDestroy(&abf->S));
   PetscCall(MatDestroy(&abf->negR));
   PetscCall(MatNullSpaceDestroy(&abf->nullspace));
+  PetscCall(VecDestroy(&abf->Adiag));
   PetscCall(VecDestroy(&abf->vstar));
   PetscCall(VecDestroy(&abf->Vstar));
   PetscCall(VecDestroy(&abf->Srhs));
@@ -184,6 +221,7 @@ static PetscErrorCode PCDestroy_ABF(PC pc)
   PetscCall(MatDestroy(&abf->S));
   PetscCall(MatDestroy(&abf->negR));
   PetscCall(MatNullSpaceDestroy(&abf->nullspace));
+  PetscCall(VecDestroy(&abf->Adiag));
   PetscCall(VecDestroy(&abf->vstar));
   PetscCall(VecDestroy(&abf->Vstar));
   PetscCall(VecDestroy(&abf->Srhs));
@@ -194,6 +232,8 @@ static PetscErrorCode PCDestroy_ABF(PC pc)
 
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetFields_C", NULL));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFGetSubKSPs_C", NULL));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetSchurComplementAinvType_C", NULL));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetUpperTriangularAinvType_C", NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -203,6 +243,8 @@ PetscErrorCode PCSetFromOptions_ABF(PC pc, PetscOptionItems PetscOptionsObject)
 
   PetscFunctionBegin;
   PetscOptionsHeadBegin(PetscOptionsObject, "ABF options");
+  PetscCall(PetscOptionsEnum("-pc_abf_schur_ainv_type", "Type of approximation used in Schur complement", "PCABFSetSchurComplementAinvType", PCABFAinvTypes, (PetscEnum)abf->schurainv, (PetscEnum *)&abf->schurainv, NULL));
+  PetscCall(PetscOptionsEnum("-pc_abf_upper_ainv_type", "Type of approximation used in upper triangular matrix", "PCABFSetUpperTriangularAinvType", PCABFAinvTypes, (PetscEnum)abf->upperainv, (PetscEnum *)&abf->upperainv, NULL));
   PetscCall(KSPSetFromOptions(abf->kspA));
   PetscCall(KSPSetFromOptions(abf->kspS));
   PetscOptionsHeadEnd();
@@ -219,6 +261,8 @@ PetscErrorCode PCView_ABF(PC pc, PetscViewer viewer)
   if (isascii) {
     PetscCall(PetscViewerASCIIPrintf(viewer, "  Approximate Block Factorization (ABF) preconditioner\n"));
     PetscCall(PetscViewerASCIIPushTab(viewer));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Schur complement A inverse type: %s\n", PCABFAinvTypes[abf->schurainv]));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Upper triangular A inverse type: %s\n", PCABFAinvTypes[abf->upperainv]));
     PetscCall(PetscViewerASCIIPrintf(viewer, "KSP solver for momentum equation operator\n"));
     PetscCall(PetscViewerASCIIPushTab(viewer));
     PetscCall(KSPView(abf->kspA, viewer));
@@ -253,6 +297,24 @@ PetscErrorCode PCABFGetSubKSPs_ABF(PC pc, KSP *kspA, KSP *kspS)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode PCABFSetSchurComplementAinvType_ABF(PC pc, PCABFAinvType type)
+{
+  PC_ABF *abf = (PC_ABF *)pc->data;
+
+  PetscFunctionBegin;
+  abf->schurainv = type;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PCABFSetUpperTriangularAinvType_ABF(PC pc, PCABFAinvType type)
+{
+  PC_ABF *abf = (PC_ABF *)pc->data;
+
+  PetscFunctionBegin;
+  abf->upperainv = type;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode PCCreate_ABF(PC pc)
 {
   PC_ABF *abf;
@@ -260,9 +322,11 @@ PetscErrorCode PCCreate_ABF(PC pc)
   PetscFunctionBegin;
   PetscCall(PetscNew(&abf));
 
-  abf->vidx = 0;
-  abf->Vidx = 1;
-  abf->pidx = 2;
+  abf->vidx      = 0;
+  abf->Vidx      = 1;
+  abf->pidx      = 2;
+  abf->schurainv = PC_ABF_AINV_ID;
+  abf->upperainv = PC_ABF_AINV_ID;
   PetscCall(PCABFCreateKSP_Private(pc, "abf_momentum_", &abf->kspA));
   PetscCall(PCABFCreateKSP_Private(pc, "abf_schur_", &abf->kspS));
   abf->A         = NULL;
@@ -272,6 +336,7 @@ PetscErrorCode PCCreate_ABF(PC pc)
   abf->negR      = NULL;
   abf->S         = NULL;
   abf->nullspace = NULL;
+  abf->Adiag     = NULL;
   abf->vstar     = NULL;
   abf->Vstar     = NULL;
   abf->Srhs      = NULL;
@@ -288,6 +353,8 @@ PetscErrorCode PCCreate_ABF(PC pc)
   pc->ops->view           = PCView_ABF;
 
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetFields_C", PCABFSetFields_ABF));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetSchurComplementAinvType_C", PCABFSetSchurComplementAinvType_ABF));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetUpperTriangularAinvType_C", PCABFSetUpperTriangularAinvType_ABF));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFGetSubKSPs_C", PCABFGetSubKSPs_ABF));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -305,5 +372,21 @@ PetscErrorCode PCABFGetSubKSPs(PC pc, KSP *kspA, KSP *kspS)
   PetscFunctionBegin;
   PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
   PetscTryMethod(pc, "PCABFGetSubKSPs_C", (PC, KSP *, KSP *), (pc, kspA, kspS));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PCABFSetSchurComplementAinvType(PC pc, PCABFAinvType type)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscTryMethod(pc, "PCABFSetSchurComplementAinvType_C", (PC, PCABFAinvType), (pc, type));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PCABFSetUpperTriangularAinvType(PC pc, PCABFAinvType type)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscTryMethod(pc, "PCABFSetUpperTriangularAinvType_C", (PC, PCABFAinvType), (pc, type));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

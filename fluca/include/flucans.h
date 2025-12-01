@@ -71,6 +71,7 @@ typedef enum {
   NS_INIT_JACOBIAN,
   NS_UPDATE_JACOBIAN,
 } NSFormJacobianType;
+
 FLUCA_EXTERN PetscErrorCode NSFormJacobian(NS, Vec, Mat, NSFormJacobianType);
 FLUCA_EXTERN PetscErrorCode NSFormFunction(NS, Vec, Vec);
 
@@ -99,3 +100,13 @@ FLUCA_EXTERN PetscErrorCode    NSRegister(const char[], PetscErrorCode (*)(NS));
 
 FLUCA_EXTERN PetscErrorCode PCABFSetFields(PC, PetscInt, PetscInt, PetscInt);
 FLUCA_EXTERN PetscErrorCode PCABFGetSubKSPs(PC, KSP *, KSP *);
+
+typedef enum {
+  PC_ABF_AINV_ID,
+  PC_ABF_AINV_DIAG,
+  PC_ABF_AINV_ROWSUM,
+} PCABFAinvType;
+FLUCA_EXTERN const char *const PCABFAinvTypes[];
+
+FLUCA_EXTERN PetscErrorCode PCABFSetSchurComplementAinvType(PC, PCABFAinvType);
+FLUCA_EXTERN PetscErrorCode PCABFSetUpperTriangularAinvType(PC, PCABFAinvType);
