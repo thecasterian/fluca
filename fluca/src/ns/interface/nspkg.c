@@ -16,10 +16,12 @@ PetscErrorCode NSInitializePackage(void)
   PetscCall(PetscClassIdRegister("NS", &NS_CLASSID));
   /* Register constructors */
   PetscCall(NSRegisterAll());
+  PetscCall(NSPCRegisterAll());
   /* Register events */
   PetscCall(PetscLogEventRegister("NSSetUp", NS_CLASSID, &NS_SetUp));
-  PetscCall(PetscLogEventRegister("NSLoadSolutionFromFile", NS_CLASSID, &NS_LoadSolutionFromFile));
-  PetscCall(PetscLogEventRegister("NSSolve", NS_CLASSID, &NS_Solve));
+  PetscCall(PetscLogEventRegister("NSStep", NS_CLASSID, &NS_Step));
+  PetscCall(PetscLogEventRegister("NSFormJacobian", NS_CLASSID, &NS_FormJacobian));
+  PetscCall(PetscLogEventRegister("NSFormFunction", NS_CLASSID, &NS_FormFunction));
 
   /* Process Info */
   classids[0] = NS_CLASSID;

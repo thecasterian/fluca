@@ -44,14 +44,6 @@ PetscErrorCode NSMonitor(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSMonitorSetFrequency(NS ns, PetscInt freq)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  ns->mon_freq = freq;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 PetscErrorCode NSMonitorSetFromOptions(NS ns, const char name[], const char help[], const char manual[], PetscErrorCode (*mon)(NS, PetscViewerAndFormat *), PetscErrorCode (*mon_setup)(NS, PetscViewerAndFormat *))
 {
   PetscViewer       viewer;
@@ -62,8 +54,13 @@ PetscErrorCode NSMonitorSetFromOptions(NS ns, const char name[], const char help
   PetscCall(FlucaOptionsCreateViewer(PetscObjectComm((PetscObject)ns), ((PetscObject)ns)->options, ((PetscObject)ns)->prefix, name, &viewer, &format, &flg));
   if (flg) {
     PetscViewerAndFormat *vf;
+    char                  interval_key[1024];
 
+    PetscCall(PetscSNPrintf(interval_key, sizeof(interval_key), "%s_interval", name));
     PetscCall(PetscViewerAndFormatCreate(viewer, format, &vf));
+    vf->view_interval = 1;
+    PetscCall(PetscOptionsGetInt(((PetscObject)ns)->options, ((PetscObject)ns)->prefix, interval_key, &vf->view_interval, NULL));
+
     PetscCall(PetscViewerDestroy(&viewer));
     if (mon_setup) PetscCall((*mon_setup)(ns, vf));
     PetscCall(NSMonitorSet(ns, (PetscErrorCode(*)(NS, void *))mon, vf, (PetscErrorCode(*)(void **))PetscViewerAndFormatDestroy));
@@ -73,28 +70,30 @@ PetscErrorCode NSMonitorSetFromOptions(NS ns, const char name[], const char help
 
 PetscErrorCode NSMonitorDefault(NS ns, PetscViewerAndFormat *vf)
 {
-  PetscViewer       viewer = vf->viewer;
-  PetscViewerFormat format = vf->format;
-  PetscBool         isascii;
+  PetscViewer viewer = vf->viewer;
+  PetscBool   isascii;
 
   PetscFunctionBegin;
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &isascii));
-  PetscCall(PetscViewerPushFormat(viewer, format));
-
-  if (isascii) PetscCall(PetscViewerASCIIPrintf(viewer, "step %" PetscInt_FMT ", time %g\n", ns->step, (double)ns->t));
-
-  PetscCall(PetscViewerPopFormat(viewer));
+  if (vf->view_interval > 0 && ns->step % vf->view_interval == 0) {
+    PetscCall(PetscViewerPushFormat(viewer, vf->format));
+    if (isascii) {
+      PetscCall(PetscViewerASCIIAddTab(vf->viewer, ((PetscObject)ns)->tablevel));
+      PetscCall(PetscViewerASCIIPrintf(viewer, "%" PetscInt_FMT " NS dt %g time %g\n", ns->step, (double)ns->dt, (double)ns->t));
+      PetscCall(PetscViewerASCIISubtractTab(vf->viewer, ((PetscObject)ns)->tablevel));
+    }
+    PetscCall(PetscViewerPopFormat(viewer));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode NSMonitorSolution(NS ns, PetscViewerAndFormat *vf)
 {
-  PetscViewer       viewer = vf->viewer;
-  PetscViewerFormat format = vf->format;
-
   PetscFunctionBegin;
-  PetscCall(PetscViewerPushFormat(viewer, format));
-  PetscCall(NSViewSolution(ns, viewer));
-  PetscCall(PetscViewerPopFormat(viewer));
+  if (vf->view_interval > 0 && ns->step % vf->view_interval == 0) {
+    PetscCall(PetscViewerPushFormat(vf->viewer, vf->format));
+    PetscCall(NSViewSolution(ns, vf->viewer));
+    PetscCall(PetscViewerPopFormat(vf->viewer));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

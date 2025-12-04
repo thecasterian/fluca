@@ -66,11 +66,12 @@ int main(int argc, char **argv)
   PetscCall(MeshCartSetUniformCoordinates(mesh, 0., 2. * PETSC_PI, 0., 2. * PETSC_PI, 0., 0.));
 
   PetscCall(NSCreate(PETSC_COMM_WORLD, &ns));
-  PetscCall(NSSetType(ns, NSFSM));
+  PetscCall(NSSetType(ns, NSCNLINEAR));
   PetscCall(NSSetMesh(ns, mesh));
   PetscCall(NSSetDensity(ns, rho));
   PetscCall(NSSetViscosity(ns, mu));
   PetscCall(NSSetTimeStepSize(ns, dt));
+  PetscCall(NSSetMaxSteps(ns, nsteps));
 
   {
     NSBoundaryCondition bc = {
@@ -177,7 +178,7 @@ int main(int argc, char **argv)
     PetscCall(NSRestoreSolutionSubVector(ns, NS_FIELD_PRESSURE, &p));
   }
 
-  PetscCall(NSSolve(ns, nsteps));
+  PetscCall(NSSolve(ns));
 
   {
     DM                  sdm, vdm;

@@ -10,16 +10,20 @@
 
 FLUCA_EXTERN PetscBool      NSRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode NSRegisterAll(void);
+FLUCA_EXTERN PetscErrorCode NSPCRegisterAll(void);
 FLUCA_EXTERN PetscLogEvent  NS_SetUp;
-FLUCA_EXTERN PetscLogEvent  NS_LoadSolutionFromFile;
-FLUCA_EXTERN PetscLogEvent  NS_Solve;
+FLUCA_EXTERN PetscLogEvent  NS_Step;
+FLUCA_EXTERN PetscLogEvent  NS_FormJacobian;
+FLUCA_EXTERN PetscLogEvent  NS_FormFunction;
 
 typedef struct _NSOps *NSOps;
 
 struct _NSOps {
   PetscErrorCode (*setfromoptions)(NS, PetscOptionItems);
   PetscErrorCode (*setup)(NS);
-  PetscErrorCode (*iterate)(NS);
+  PetscErrorCode (*step)(NS);
+  PetscErrorCode (*formjacobian)(NS, Vec, Mat, NSFormJacobianType);
+  PetscErrorCode (*formfunction)(NS, Vec, Vec);
   PetscErrorCode (*destroy)(NS);
   PetscErrorCode (*view)(NS, PetscViewer);
   PetscErrorCode (*viewsolution)(NS, PetscViewer);
@@ -38,9 +42,11 @@ struct _p_NS {
   PETSCHEADER(struct _NSOps);
 
   /* Parameters ----------------------------------------------------------- */
-  PetscReal rho; /* density */
-  PetscReal mu;  /* dynamic viscosity */
-  PetscReal dt;  /* time step size */
+  PetscReal rho;       /* density */
+  PetscReal mu;        /* dynamic viscosity */
+  PetscReal dt;        /* time step size */
+  PetscReal max_time;  /* maximum time */
+  PetscInt  max_steps; /* maximum number of steps */
 
   /* Data ----------------------------------------------------------------- */
   PetscInt             step; /* current time step */
@@ -62,6 +68,9 @@ struct _p_NS {
   Vec          x;         /* solver solution vector */
   MatNullSpace nullspace; /* null space of Jacobian */
 
+  PetscBool         errorifstepfailed; /* error if step fails */
+  NSConvergedReason reason;            /* convergence reason */
+
   /* State ---------------------------------------------------------------- */
   PetscBool setupcalled; /* whether NSSetUp() has been called */
 
@@ -70,5 +79,4 @@ struct _p_NS {
   PetscErrorCode (*mons[MAXNSMONITORS])(NS, void *);
   void *mon_ctxs[MAXNSMONITORS];
   PetscErrorCode (*mon_ctx_destroys[MAXNSMONITORS])(void **);
-  PetscInt mon_freq;
 };

@@ -1,6 +1,6 @@
 #include <fluca/private/nsimpl.h>
 
-extern PetscErrorCode NSCreate_FSM(NS);
+FLUCA_EXTERN PetscErrorCode NSCreate_CNLinear(NS);
 
 PetscErrorCode NSRegister(const char type[], PetscErrorCode (*function)(NS))
 {
@@ -13,7 +13,8 @@ PetscErrorCode NSRegister(const char type[], PetscErrorCode (*function)(NS))
 PetscErrorCode NSRegisterAll(void)
 {
   PetscFunctionBegin;
-  PetscCall(NSRegister(NSFSM, NSCreate_FSM));
+  if (NSRegisterAllCalled) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(NSRegister(NSCNLINEAR, NSCreate_CNLinear));
   NSRegisterAllCalled = PETSC_TRUE;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

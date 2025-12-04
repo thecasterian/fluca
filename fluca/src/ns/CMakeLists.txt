@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 
 add_library(fluca_ns SHARED
-    impl/fsm/fsm.c
-    impl/fsm/fsmcart2d.c
+    impl/linearcn/cnlinear.c
+    impl/linearcn/cnlinearcart2d.c
     interface/nsbasic.c
     interface/nsbc.c
     interface/nsmon.c
@@ -10,6 +10,8 @@ add_library(fluca_ns SHARED
     interface/nspkg.c
     interface/nsreg.c
     interface/nssol.c
+    utils/nspcreg.c
+    utils/abfpc/abfpc.c
 )
 
 target_include_directories(fluca_ns PUBLIC
