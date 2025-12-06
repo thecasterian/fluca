@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 add_library(fluca_ns SHARED
     impl/linearcn/cnlinear.c
     impl/linearcn/cnlinearcart2d.c
+    impl/linearcn/cnlinearcart3d.c
     interface/nsbasic.c
     interface/nsbc.c
     interface/nsmon.c

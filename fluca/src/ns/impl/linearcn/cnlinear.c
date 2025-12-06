@@ -68,6 +68,10 @@ PetscErrorCode NSStep_CNLinear(NS ns)
     if (iscart) PetscCall(NSStep_CNLinear_Cart2d_Internal(ns));
     else SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
     break;
+  case 3:
+    if (iscart) PetscCall(NSStep_CNLinear_Cart3d_Internal(ns));
+    else SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
+    break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
   }
@@ -87,6 +91,10 @@ PetscErrorCode NSFormJacobian_CNLinear(NS ns, Vec x, Mat J, NSFormJacobianType t
     if (iscart) PetscCall(NSFormJacobian_CNLinear_Cart2d_Internal(ns, x, J, type));
     else SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
     break;
+  case 3:
+    if (iscart) PetscCall(NSFormJacobian_CNLinear_Cart3d_Internal(ns, x, J, type));
+    else SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
+    break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
   }
@@ -104,6 +112,10 @@ PetscErrorCode NSFormFunction_CNLinear(NS ns, Vec x, Vec f)
   switch (dim) {
   case 2:
     if (iscart) PetscCall(NSFormFunction_CNLinear_Cart2d_Internal(ns, x, f));
+    else SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
+    break;
+  case 3:
+    if (iscart) PetscCall(NSFormFunction_CNLinear_Cart3d_Internal(ns, x, f));
     else SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONG, "Unsupported Mesh type");
     break;
   default:

@@ -677,7 +677,7 @@ static PetscErrorCode ComputeConvectionOperator_Private(DM vdm, DM Sdm, DM Vdm, 
         /* Top cell face */
         for (l = 0; l < 2; ++l) col[l].c = c;
         ncols = 0;
-        if (j == 0) {
+        if (j == N - 1) {
           /* Top boundary */
           switch (bcs[3].type) {
           case NS_BC_VELOCITY:
@@ -695,7 +695,7 @@ static PetscErrorCode ComputeConvectionOperator_Private(DM vdm, DM Sdm, DM Vdm, 
 
         for (l = 0; l < 2; ++l) col[l].c = 1;
         ncols = 0;
-        if (j == 0) {
+        if (j == N - 1) {
           /* Top boundary */
           switch (bcs[3].type) {
           case NS_BC_VELOCITY:
@@ -1167,7 +1167,7 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationOperator_Private(DM 
       }
     }
 
-  /* Compute y-interpolation operator */
+  /* Interpolation in y-direction */
   row.loc = DMSTAG_DOWN;
   for (i = 0; i < 2; ++i) col[i].c = 1;
 

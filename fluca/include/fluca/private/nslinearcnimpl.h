@@ -13,3 +13,7 @@ typedef struct {
 FLUCA_INTERN PetscErrorCode NSStep_CNLinear_Cart2d_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSFormJacobian_CNLinear_Cart2d_Internal(NS, Vec, Mat, NSFormJacobianType);
 FLUCA_INTERN PetscErrorCode NSFormFunction_CNLinear_Cart2d_Internal(NS, Vec, Vec);
+
+FLUCA_INTERN PetscErrorCode NSStep_CNLinear_Cart3d_Internal(NS);
+FLUCA_INTERN PetscErrorCode NSFormJacobian_CNLinear_Cart3d_Internal(NS, Vec, Mat, NSFormJacobianType);
+FLUCA_INTERN PetscErrorCode NSFormFunction_CNLinear_Cart3d_Internal(NS, Vec, Vec);
