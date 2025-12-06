@@ -297,7 +297,7 @@ PetscErrorCode NSFormJacobian(NS ns, Vec x, Mat J, NSFormJacobianType type)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
+  if (x) PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
   PetscValidHeaderSpecific(J, MAT_CLASSID, 3);
   PetscLogEventBegin(NS_FormJacobian, ns, x, J, NULL);
   PetscUseTypeMethod(ns, formjacobian, x, J, type);
@@ -309,7 +309,7 @@ PetscErrorCode NSFormFunction(NS ns, Vec x, Vec f)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
+  if (x) PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
   PetscValidHeaderSpecific(f, VEC_CLASSID, 3);
   PetscLogEventBegin(NS_FormFunction, ns, x, f, NULL);
   PetscUseTypeMethod(ns, formfunction, x, f);
