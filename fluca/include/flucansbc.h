@@ -5,6 +5,7 @@
 typedef enum {
   NS_BC_NONE,
   NS_BC_VELOCITY,
+  NS_BC_PRESSURE_OUTLET,
   NS_BC_PERIODIC,
 } NSBoundaryConditionType;
 FLUCA_EXTERN const char *NSBoundaryConditionTypes[];
@@ -15,4 +16,6 @@ typedef struct {
   NSBoundaryConditionType     type;
   NSBoundaryConditionFunction velocity;
   void                       *ctx_velocity;
+  NSBoundaryConditionFunction pressure;
+  void                       *ctx_pressure;
 } NSBoundaryCondition;

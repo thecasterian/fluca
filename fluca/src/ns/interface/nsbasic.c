@@ -219,6 +219,10 @@ PetscErrorCode NSSetUp(NS ns)
     case NS_BC_PERIODIC:
       /* Need null space */
       break;
+    case NS_BC_PRESSURE_OUTLET:
+      /* Does not need null space */
+      neednullspace = PETSC_FALSE;
+      break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type");
     }
