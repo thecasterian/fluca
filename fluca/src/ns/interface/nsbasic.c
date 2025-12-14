@@ -217,6 +217,7 @@ PetscErrorCode NSSetUp(NS ns)
   for (i = 0; i < nb; ++i) switch (ns->bcs[i].type) {
     case NS_BC_VELOCITY:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       /* Need null space */
       break;
     case NS_BC_PRESSURE_OUTLET:

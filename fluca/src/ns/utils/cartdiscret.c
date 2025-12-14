@@ -99,7 +99,7 @@ PetscErrorCode NSComputeFirstDerivBackwardDiffNoCond_Cart(Direction dir, PetscIn
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSComputeFirstDerivBackwardDirichletCond_Cart(Direction dir, PetscInt i, PetscInt j, PetscInt k, PetscReal xW, PetscReal xP, PetscReal xe, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+PetscErrorCode NSComputeFirstDerivBackwardDiffDirichletCond_Cart(Direction dir, PetscInt i, PetscInt j, PetscInt k, PetscReal xW, PetscReal xP, PetscReal xe, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2;
 
@@ -117,7 +117,7 @@ PetscErrorCode NSComputeFirstDerivBackwardDirichletCond_Cart(Direction dir, Pets
   *ncols   = 2;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
-PetscErrorCode NSComputeFirstDerivBackwardNeumannCond_Cart(Direction dir, PetscInt i, PetscInt j, PetscInt k, PetscReal xW, PetscReal xP, PetscReal xe, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+PetscErrorCode NSComputeFirstDerivBackwardDiffNeumannCond_Cart(Direction dir, PetscInt i, PetscInt j, PetscInt k, PetscReal xW, PetscReal xP, PetscReal xe, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscReal h1, h2;
 
