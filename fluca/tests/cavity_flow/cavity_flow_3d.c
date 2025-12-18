@@ -36,10 +36,10 @@ int main(int argc, char **argv)
   rho = 1.;
   mu  = 1. / Re;
 
-  PetscCall(MeshCartCreate3d(PETSC_COMM_WORLD, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE, 64, 64, 64, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE, NULL, NULL, NULL, &mesh));
+  PetscCall(MeshCartCreate3d(PETSC_COMM_WORLD, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE, MESHCART_BOUNDARY_NONE, 64, 64, 32, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE, NULL, NULL, NULL, &mesh));
   PetscCall(MeshSetFromOptions(mesh));
   PetscCall(MeshSetUp(mesh));
-  PetscCall(MeshCartSetUniformCoordinates(mesh, 0., 1., 0., 1., 0., 1.));
+  PetscCall(MeshCartSetUniformCoordinates(mesh, 0., 1., 0., 1., 0., 0.5));
 
   PetscCall(NSCreate(PETSC_COMM_WORLD, &ns));
   PetscCall(NSSetType(ns, NSCNLINEAR));
@@ -58,6 +58,9 @@ int main(int argc, char **argv)
       .velocity     = moving_wall_velocity,
       .ctx_velocity = NULL,
     };
+    NSBoundaryCondition symbc = {
+      .type = NS_BC_SYMMETRY,
+    };
     PetscInt ileftb, irightb, idownb, iupb, ibackb, ifrontb;
 
     PetscCall(MeshCartGetBoundaryIndex(mesh, MESHCART_LEFT, &ileftb));
@@ -70,7 +73,7 @@ int main(int argc, char **argv)
     PetscCall(NSSetBoundaryCondition(ns, irightb, wallbc));
     PetscCall(NSSetBoundaryCondition(ns, idownb, wallbc));
     PetscCall(NSSetBoundaryCondition(ns, iupb, movingwallbc));
-    PetscCall(NSSetBoundaryCondition(ns, ibackb, wallbc));
+    PetscCall(NSSetBoundaryCondition(ns, ibackb, symbc));
     PetscCall(NSSetBoundaryCondition(ns, ifrontb, wallbc));
   }
 
