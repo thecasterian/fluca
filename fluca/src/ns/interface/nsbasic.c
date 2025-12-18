@@ -217,7 +217,12 @@ PetscErrorCode NSSetUp(NS ns)
   for (i = 0; i < nb; ++i) switch (ns->bcs[i].type) {
     case NS_BC_VELOCITY:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       /* Need null space */
+      break;
+    case NS_BC_PRESSURE_OUTLET:
+      /* Does not need null space */
+      neednullspace = PETSC_FALSE;
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type");

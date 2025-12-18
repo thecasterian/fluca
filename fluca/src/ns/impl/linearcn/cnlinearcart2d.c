@@ -1,63 +1,5 @@
 #include <fluca/private/nslinearcnimpl.h>
-#include <petscdmstag.h>
-
-typedef enum {
-  DERIV_X,
-  DERIV_Y,
-} DerivDirection;
-
-static PetscErrorCode ComputeFirstDerivForwardDiffNoCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal xP, PetscReal xE, PetscReal xEE, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  PetscReal h1, h2;
-
-  PetscFunctionBegin;
-  h1       = xE - xP;
-  h2       = xEE - xP;
-  v[0]     = -(h1 + h2) / (h1 * h2);
-  v[1]     = -h2 / (h1 * (h1 - h2));
-  v[2]     = h1 / (h2 * (h1 - h2));
-  col[0].i = i;
-  col[0].j = j;
-  col[1].i = i + (dir == DERIV_X ? 1 : 0);
-  col[1].j = j + (dir == DERIV_Y ? 1 : 0);
-  col[2].i = i + (dir == DERIV_X ? 2 : 0);
-  col[2].j = j + (dir == DERIV_Y ? 2 : 0);
-  *ncols   = 3;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode ComputeFirstDerivCentralDiff_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal xW, PetscReal xE, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  PetscFunctionBegin;
-  v[0]     = -1. / (xE - xW);
-  v[1]     = 1. / (xE - xW);
-  col[0].i = i - (dir == DERIV_X ? 1 : 0);
-  col[0].j = j - (dir == DERIV_Y ? 1 : 0);
-  col[1].i = i + (dir == DERIV_X ? 1 : 0);
-  col[1].j = j + (dir == DERIV_Y ? 1 : 0);
-  *ncols   = 2;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode ComputeFirstDerivBackwardDiffNoCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal xWW, PetscReal xW, PetscReal xP, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  PetscReal h1, h2;
-
-  PetscFunctionBegin;
-  h1       = xP - xW;
-  h2       = xP - xWW;
-  v[0]     = -h1 / (h2 * (h1 - h2));
-  v[1]     = h2 / (h1 * (h1 - h2));
-  v[2]     = (h1 + h2) / (h1 * h2);
-  col[0].i = i - (dir == DERIV_X ? 2 : 0);
-  col[0].j = j - (dir == DERIV_Y ? 2 : 0);
-  col[1].i = i - (dir == DERIV_X ? 1 : 0);
-  col[1].j = j - (dir == DERIV_Y ? 1 : 0);
-  col[2].i = i;
-  col[2].j = j;
-  *ncols   = 3;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
+#include "../src/ns/utils/cartdiscret.h"
 
 static PetscErrorCode ComputePressureGradientOperator_Private(DM sdm, DM vdm, const NSBoundaryCondition *bcs, Mat G)
 {
@@ -97,10 +39,19 @@ static PetscErrorCode ComputePressureGradientOperator_Private(DM sdm, DM vdm, co
         /* Left boundary */
         switch (bcs[0].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivForwardDiffNoCond_Private(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], &ncols, col, v));
+          /* No boundary condition for pressure */
+          PetscCall(NSComputeFirstDerivForwardDiffNoCond_Cart(DIR_X, i, j, 0, arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Pressure is specified */
+          PetscCall(NSComputeFirstDerivForwardDiffDirichletCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          PetscCall(NSComputeFirstDerivCentralDiff_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_SYMMETRY:
+          /* Zero pressure gradient */
+          PetscCall(NSComputeFirstDerivForwardDiffNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
@@ -109,16 +60,25 @@ static PetscErrorCode ComputePressureGradientOperator_Private(DM sdm, DM vdm, co
         /* Right boundary */
         switch (bcs[1].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivBackwardDiffNoCond_Private(DERIV_X, i, j, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
+          /* No boundary condition for pressure */
+          PetscCall(NSComputeFirstDerivBackwardDiffNoCond_Cart(DIR_X, i, j, 0, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Pressure is specified */
+          PetscCall(NSComputeFirstDerivBackwardDiffDirichletCond_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          PetscCall(NSComputeFirstDerivCentralDiff_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_SYMMETRY:
+          /* Zero pressure gradient */
+          PetscCall(NSComputeFirstDerivBackwardDiffNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
         }
       } else {
-        PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+        PetscCall(NSComputeFirstDerivCentralDiff_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
       }
 
       PetscCall(DMStagStencilToIndexLocal(vdm, dim, 1, &row, &ir));
@@ -137,10 +97,19 @@ static PetscErrorCode ComputePressureGradientOperator_Private(DM sdm, DM vdm, co
         /* Down boundary */
         switch (bcs[2].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivForwardDiffNoCond_Private(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], &ncols, col, v));
+          /* No boundary condition for pressure */
+          PetscCall(NSComputeFirstDerivForwardDiffNoCond_Cart(DIR_Y, i, j, 0, arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Pressure is specified */
+          PetscCall(NSComputeFirstDerivForwardDiffDirichletCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          PetscCall(NSComputeFirstDerivCentralDiff_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_SYMMETRY:
+          /* Zero pressure gradient */
+          PetscCall(NSComputeFirstDerivForwardDiffNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
@@ -149,16 +118,25 @@ static PetscErrorCode ComputePressureGradientOperator_Private(DM sdm, DM vdm, co
         /* Up boundary */
         switch (bcs[3].type) {
         case NS_BC_VELOCITY:
-          PetscCall(ComputeFirstDerivBackwardDiffNoCond_Private(DERIV_Y, i, j, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
+          /* No boundary condition for pressure */
+          PetscCall(NSComputeFirstDerivBackwardDiffNoCond_Cart(DIR_Y, i, j, 0, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Pressure is specified */
+          PetscCall(NSComputeFirstDerivBackwardDiffDirichletCond_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          PetscCall(NSComputeFirstDerivCentralDiff_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_SYMMETRY:
+          /* Zero pressure gradient */
+          PetscCall(NSComputeFirstDerivBackwardDiffNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
         }
       } else {
-        PetscCall(ComputeFirstDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+        PetscCall(NSComputeFirstDerivCentralDiff_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
       }
 
       PetscCall(DMStagStencilToIndexLocal(vdm, dim, 1, &row, &ir));
@@ -174,75 +152,149 @@ static PetscErrorCode ComputePressureGradientOperator_Private(DM sdm, DM vdm, co
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeSecondDerivForwardDiffDirichletCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal xw, PetscReal xP, PetscReal xE, PetscReal xEE, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode ComputePressureGradientBoundaryConditionVector_Private(DM vdm, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
 {
-  PetscReal h1, h2, h3;
+  PetscInt            M, N, x, y, m, n;
+  PetscBool           isFirstRankx, isFirstRanky, isLastRankx, isLastRanky;
+  DMStagStencil       row;
+  PetscScalar         v;
+  PetscReal           xb[2];
+  PetscScalar         pb;
+  const PetscScalar **arrcx, **arrcy;
+  PetscInt            iprevc, inextc, ielemc;
+  PetscReal           h1, h2;
+  PetscInt            i, j;
+  const PetscInt      dim = 2;
 
   PetscFunctionBegin;
-  h1 = xP - xw;
-  h2 = xE - xP;
-  h3 = xEE - xP;
+  PetscCall(DMStagGetGlobalSizes(vdm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(vdm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetIsFirstRank(vdm, &isFirstRankx, &isFirstRanky, NULL));
+  PetscCall(DMStagGetIsLastRank(vdm, &isLastRankx, &isLastRanky, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(vdm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(vdm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(vdm, DMSTAG_RIGHT, &inextc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(vdm, DMSTAG_ELEMENT, &ielemc));
 
-  v[0] += 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
-  v[*ncols]     = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
-  v[*ncols + 1] = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+  PetscCall(VecSet(vbc, 0.));
 
-  col[*ncols].i     = i + (dir == DERIV_X ? 1 : 0);
-  col[*ncols].j     = j + (dir == DERIV_Y ? 1 : 0);
-  col[*ncols + 1].i = i + (dir == DERIV_X ? 2 : 0);
-  col[*ncols + 1].j = j + (dir == DERIV_Y ? 2 : 0);
-  *ncols += 2;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
+  row.loc = DMSTAG_ELEMENT;
 
-static PetscErrorCode ComputeSecondDerivCentralDiff_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal xW, PetscReal xw, PetscReal xP, PetscReal xe, PetscReal xE, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  PetscReal h1, h2, h3;
+  /* Left boundary */
+  row.c = 0;
+  if (isFirstRankx) switch (bcs[0].type) {
+    case NS_BC_PRESSURE_OUTLET:
+      for (j = y; j < y + n; ++j) {
+        row.i = 0;
+        row.j = j;
+        xb[0] = arrcx[0][iprevc];
+        xb[1] = arrcy[j][ielemc];
+        PetscCall(bcs[0].pressure(dim, t, xb, &pb, bcs[0].ctx_pressure));
 
-  PetscFunctionBegin;
-  h1 = xP - xW;
-  h2 = xE - xP;
-  h3 = xe - xw;
+        h1 = arrcx[0][ielemc] - arrcx[0][iprevc];
+        h2 = arrcx[1][ielemc] - arrcx[0][ielemc];
 
-  v[0] -= (1. / (h1 * h3) + 1. / (h2 * h3));
-  v[*ncols]     = 1. / (h1 * h3);
-  v[*ncols + 1] = 1. / (h2 * h3);
+        v = -h2 / (h1 * (h1 + h2)) * pb;
+        PetscCall(DMStagVecSetValuesStencil(vdm, vbc, 1, &row, &v, ADD_VALUES));
+      }
+      break;
+    case NS_BC_VELOCITY:
+    case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary");
+    }
 
-  col[*ncols].i     = i - (dir == DERIV_X ? 1 : 0);
-  col[*ncols].j     = j - (dir == DERIV_Y ? 1 : 0);
-  col[*ncols + 1].i = i + (dir == DERIV_X ? 1 : 0);
-  col[*ncols + 1].j = j + (dir == DERIV_Y ? 1 : 0);
-  *ncols += 2;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
+  /* Right boundary */
+  if (isLastRankx) switch (bcs[1].type) {
+    case NS_BC_PRESSURE_OUTLET:
+      for (j = y; j < y + n; ++j) {
+        row.i = M - 1;
+        row.j = j;
+        xb[0] = arrcx[M - 1][inextc];
+        xb[1] = arrcy[j][ielemc];
+        PetscCall(bcs[1].pressure(dim, t, xb, &pb, bcs[1].ctx_pressure));
 
-static PetscErrorCode ComputeSecondDerivBackwardDiffDirichletCond_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal xWW, PetscReal xW, PetscReal xP, PetscReal xe, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  PetscReal h1, h2, h3;
+        h1 = arrcx[M - 1][inextc] - arrcx[M - 1][ielemc];
+        h2 = arrcx[M - 1][ielemc] - arrcx[M - 2][ielemc];
 
-  PetscFunctionBegin;
-  h1 = xe - xP;
-  h2 = xP - xW;
-  h3 = xP - xWW;
+        v = h2 / (h1 * (h1 + h2)) * pb;
+        PetscCall(DMStagVecSetValuesStencil(vdm, vbc, 1, &row, &v, ADD_VALUES));
+      }
+      break;
+    case NS_BC_VELOCITY:
+    case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary");
+    }
 
-  v[0] += 2. * (h1 - h2 - h3) / (h1 * h2 * h3);
-  v[*ncols]     = 2. * (h1 - h3) / (h2 * (h1 + h2) * (h2 - h3));
-  v[*ncols + 1] = 2. * (h2 - h1) / (h3 * (h1 + h3) * (h2 - h3));
+  /* Down boundary */
+  row.c = 1;
+  if (isFirstRanky) switch (bcs[2].type) {
+    case NS_BC_PRESSURE_OUTLET:
+      for (i = x; i < x + m; ++i) {
+        row.i = i;
+        row.j = 0;
+        xb[0] = arrcx[i][ielemc];
+        xb[1] = arrcy[0][iprevc];
+        PetscCall(bcs[2].pressure(dim, t, xb, &pb, bcs[2].ctx_pressure));
 
-  col[*ncols].i     = i - (dir == DERIV_X ? 1 : 0);
-  col[*ncols].j     = j - (dir == DERIV_Y ? 1 : 0);
-  col[*ncols + 1].i = i - (dir == DERIV_X ? 2 : 0);
-  col[*ncols + 1].j = j - (dir == DERIV_Y ? 2 : 0);
-  *ncols += 2;
+        h1 = arrcy[0][ielemc] - arrcy[0][iprevc];
+        h2 = arrcy[1][ielemc] - arrcy[0][ielemc];
+
+        v = -h2 / (h1 * (h1 + h2)) * pb;
+        PetscCall(DMStagVecSetValuesStencil(vdm, vbc, 1, &row, &v, ADD_VALUES));
+      }
+      break;
+    case NS_BC_VELOCITY:
+    case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary");
+    }
+
+  /* Up boundary */
+  if (isLastRanky) switch (bcs[3].type) {
+    case NS_BC_PRESSURE_OUTLET:
+      for (i = x; i < x + m; ++i) {
+        row.i = i;
+        row.j = N - 1;
+        xb[0] = arrcx[i][ielemc];
+        xb[1] = arrcy[N - 1][inextc];
+        PetscCall(bcs[3].pressure(dim, t, xb, &pb, bcs[3].ctx_pressure));
+
+        h1 = arrcy[N - 1][inextc] - arrcy[N - 1][ielemc];
+        h2 = arrcy[N - 1][ielemc] - arrcy[N - 2][ielemc];
+
+        v = h2 / (h1 * (h1 + h2)) * pb;
+        PetscCall(DMStagVecSetValuesStencil(vdm, vbc, 1, &row, &v, ADD_VALUES));
+      }
+      break;
+    case NS_BC_VELOCITY:
+    case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary");
+    }
+
+  PetscCall(VecAssemblyBegin(vbc));
+  PetscCall(VecAssemblyEnd(vbc));
+
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(vdm, &arrcx, &arrcy, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode ComputeVelocityLaplacianOperator_Private(DM dm, const NSBoundaryCondition *bcs, Mat L)
 {
   PetscInt            M, N, x, y, m, n, dim;
-  DMStagStencil       row, col[5];
+  DMStagStencil       row, col[4];
   PetscInt            ncols;
-  PetscScalar         v[5];
+  PetscScalar         v[4];
   const PetscScalar **arrcx, **arrcy;
   PetscInt            iprevc, inextc, ielemc;
   PetscInt            i, j, c;
@@ -261,28 +313,38 @@ static PetscErrorCode ComputeVelocityLaplacianOperator_Private(DM dm, const NSBo
   for (c = 0; c < dim; ++c) {
     row.loc = DMSTAG_ELEMENT;
     row.c   = c;
-    for (i = 0; i < 5; ++i) {
+    for (i = 0; i < 4; ++i) {
       col[i].loc = DMSTAG_ELEMENT;
       col[i].c   = c;
     }
 
     for (j = y; j < y + n; ++j)
       for (i = x; i < x + m; ++i) {
-        row.i    = i;
-        row.j    = j;
-        col[0].i = i;
-        col[0].j = j;
-        v[0]     = 0.;
-        ncols    = 1;
+        row.i = i;
+        row.j = j;
 
         if (i == 0) {
           /* Left boundary */
           switch (bcs[0].type) {
           case NS_BC_VELOCITY:
-            PetscCall(ComputeSecondDerivForwardDiffDirichletCond_Private(DERIV_X, i, j, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], &ncols, col, v));
+            /* Velocity is specified */
+            PetscCall(NSComputeSecondDerivForwardDiffDirichletCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], &ncols, col, v));
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeSecondDerivForwardDiffNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
+            PetscCall(NSComputeSecondDerivCentralDiff_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 0) {
+              /* Zero velocity */
+              PetscCall(NSComputeSecondDerivForwardDiffDirichletCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], arrcx[i + 2][ielemc], &ncols, col, v));
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeSecondDerivForwardDiffNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
+            }
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary");
@@ -291,26 +353,55 @@ static PetscErrorCode ComputeVelocityLaplacianOperator_Private(DM dm, const NSBo
           /* Right boundary */
           switch (bcs[1].type) {
           case NS_BC_VELOCITY:
-            PetscCall(ComputeSecondDerivBackwardDiffDirichletCond_Private(DERIV_X, i, j, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
+            /* Velocity is specified */
+            PetscCall(NSComputeSecondDerivBackwardDiffDirichletCond_Cart(DIR_X, i, j, 0, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeSecondDerivBackwardDiffNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
+            PetscCall(NSComputeSecondDerivCentralDiff_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 0) {
+              /* Zero velocity */
+              PetscCall(NSComputeSecondDerivBackwardDiffDirichletCond_Cart(DIR_X, i, j, 0, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeSecondDerivBackwardDiffNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], &ncols, col, v));
+            }
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary");
           }
         } else {
-          PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
+          PetscCall(NSComputeSecondDerivCentralDiff_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i][inextc], arrcx[i + 1][ielemc], &ncols, col, v));
         }
+        PetscCall(DMStagMatSetValuesStencil(dm, L, 1, &row, ncols, col, v, ADD_VALUES));
 
         if (j == 0) {
           /* Down boundary */
           switch (bcs[2].type) {
           case NS_BC_VELOCITY:
-            PetscCall(ComputeSecondDerivForwardDiffDirichletCond_Private(DERIV_Y, i, j, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], &ncols, col, v));
+            /* Velocity is specified */
+            PetscCall(NSComputeSecondDerivForwardDiffDirichletCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], &ncols, col, v));
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeSecondDerivForwardDiffNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
+            PetscCall(NSComputeSecondDerivCentralDiff_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 1) {
+              /* Zero velocity */
+              PetscCall(NSComputeSecondDerivForwardDiffDirichletCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], arrcy[j + 2][ielemc], &ncols, col, v));
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeSecondDerivForwardDiffNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
+            }
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary");
@@ -319,19 +410,32 @@ static PetscErrorCode ComputeVelocityLaplacianOperator_Private(DM dm, const NSBo
           /* Up boundary */
           switch (bcs[3].type) {
           case NS_BC_VELOCITY:
-            PetscCall(ComputeSecondDerivBackwardDiffDirichletCond_Private(DERIV_Y, i, j, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
+            /* Velocity is specified */
+            PetscCall(NSComputeSecondDerivBackwardDiffDirichletCond_Cart(DIR_Y, i, j, 0, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeSecondDerivBackwardDiffNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
+            PetscCall(NSComputeSecondDerivCentralDiff_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 1) {
+              /* Zero velocity */
+              PetscCall(NSComputeSecondDerivBackwardDiffDirichletCond_Cart(DIR_Y, i, j, 0, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeSecondDerivBackwardDiffNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], &ncols, col, v));
+            }
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary");
           }
         } else {
-          PetscCall(ComputeSecondDerivCentralDiff_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
+          PetscCall(NSComputeSecondDerivCentralDiff_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j][inextc], arrcy[j + 1][ielemc], &ncols, col, v));
         }
-
-        PetscCall(DMStagMatSetValuesStencil(dm, L, 1, &row, ncols, col, v, INSERT_VALUES));
+        PetscCall(DMStagMatSetValuesStencil(dm, L, 1, &row, ncols, col, v, ADD_VALUES));
       }
   }
 
@@ -395,7 +499,9 @@ static PetscErrorCode ComputeVelocityLaplacianBoundaryConditionVector_Private(DM
         PetscCall(DMStagVecSetValuesStencil(vdm, vbc, dim, row, v, ADD_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for left boundary");
@@ -421,7 +527,9 @@ static PetscErrorCode ComputeVelocityLaplacianBoundaryConditionVector_Private(DM
         PetscCall(DMStagVecSetValuesStencil(vdm, vbc, dim, row, v, ADD_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for right boundary");
@@ -447,7 +555,9 @@ static PetscErrorCode ComputeVelocityLaplacianBoundaryConditionVector_Private(DM
         PetscCall(DMStagVecSetValuesStencil(vdm, vbc, dim, row, v, ADD_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for down boundary");
@@ -473,7 +583,9 @@ static PetscErrorCode ComputeVelocityLaplacianBoundaryConditionVector_Private(DM
         PetscCall(DMStagVecSetValuesStencil(vdm, vbc, dim, row, v, ADD_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Unsupported boundary condition type for up boundary");
@@ -483,32 +595,6 @@ static PetscErrorCode ComputeVelocityLaplacianBoundaryConditionVector_Private(DM
   PetscCall(VecAssemblyEnd(vbc));
 
   PetscCall(DMStagRestoreProductCoordinateArraysRead(vdm, &arrcx, &arrcy, NULL));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode ComputeConvectionLinearInterpolationPrev_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal xW, PetscReal xw, PetscReal xP, PetscReal h, PetscScalar v_f, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  PetscFunctionBegin;
-  v[0]     = -0.5 * v_f / h * (xP - xw) / (xP - xW);
-  v[1]     = -0.5 * v_f / h * (xw - xW) / (xP - xW);
-  col[0].i = i - (dir == DERIV_X ? 1 : 0);
-  col[0].j = j - (dir == DERIV_Y ? 1 : 0);
-  col[1].i = i;
-  col[1].j = j;
-  *ncols   = 2;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode ComputeConvectionLinearInterpolationNext_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal xP, PetscReal xe, PetscReal xE, PetscReal h, PetscScalar v_f, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  PetscFunctionBegin;
-  v[0]     = 0.5 * v_f / h * (xE - xe) / (xE - xP);
-  v[1]     = 0.5 * v_f / h * (xe - xP) / (xE - xP);
-  col[0].i = i;
-  col[0].j = j;
-  col[1].i = i + (dir == DERIV_X ? 1 : 0);
-  col[1].j = j + (dir == DERIV_Y ? 1 : 0);
-  *ncols   = 2;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -570,15 +656,28 @@ static PetscErrorCode ComputeConvectionOperator_Private(DM vdm, DM Sdm, DM Vdm, 
           /* Left boundary */
           switch (bcs[0].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeConvectionLinearForwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], hx, arrV0[j][i][iV0[0]], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrV0[j][i][iV0[0]], &ncols, col, v));
+            PetscCall(NSComputeConvectionLinearInterpolationPrev_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrV0[j][i][iV0[0]], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 0) {
+              /* Zero velocity */
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeConvectionLinearForwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], hx, arrV0[j][i][iV0[0]], &ncols, col, v));
+            }
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
           }
         } else {
-          PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrV0[j][i][iV0[0]], &ncols, col, v));
+          PetscCall(NSComputeConvectionLinearInterpolationPrev_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrV0[j][i][iV0[0]], &ncols, col, v));
         }
         if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
 
@@ -588,15 +687,23 @@ static PetscErrorCode ComputeConvectionOperator_Private(DM vdm, DM Sdm, DM Vdm, 
           /* Left boundary */
           switch (bcs[0].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeConvectionLinearForwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], hx, arrv0interp[j][i][iv0interp[c][0]], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrv0interp[j][i][iv0interp[c][0]], &ncols, col, v));
+            PetscCall(NSComputeConvectionLinearInterpolationPrev_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrv0interp[j][i][iv0interp[c][0]], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            /* Zero velocity */
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
           }
         } else {
-          PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrv0interp[j][i][iv0interp[c][0]], &ncols, col, v));
+          PetscCall(NSComputeConvectionLinearInterpolationPrev_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], hx, arrv0interp[j][i][iv0interp[c][0]], &ncols, col, v));
         }
         if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
 
@@ -607,15 +714,28 @@ static PetscErrorCode ComputeConvectionOperator_Private(DM vdm, DM Sdm, DM Vdm, 
           /* Right boundary */
           switch (bcs[1].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeConvectionLinearBackwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i + 1][iprevc], hx, arrV0[j][i + 1][iV0[0]], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrV0[j][i + 1][iV0[0]], &ncols, col, v));
+            PetscCall(NSComputeConvectionLinearInterpolationNext_Cart(DIR_X, i, j, 0, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrV0[j][i + 1][iV0[0]], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 0) {
+              /* Zero velocity */
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeConvectionLinearBackwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i + 1][iprevc], hx, arrV0[j][i + 1][iV0[0]], &ncols, col, v));
+            }
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
           }
         } else {
-          PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrV0[j][i + 1][iV0[0]], &ncols, col, v));
+          PetscCall(NSComputeConvectionLinearInterpolationNext_Cart(DIR_X, i, j, 0, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrV0[j][i + 1][iV0[0]], &ncols, col, v));
         }
         if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
 
@@ -625,15 +745,23 @@ static PetscErrorCode ComputeConvectionOperator_Private(DM vdm, DM Sdm, DM Vdm, 
           /* Right boundary */
           switch (bcs[1].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeConvectionLinearBackwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][ielemc], arrcx[i + 1][iprevc], hx, arrv0interp[j][i + 1][iv0interp[c][0]], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrv0interp[j][i + 1][iv0interp[c][0]], &ncols, col, v));
+            PetscCall(NSComputeConvectionLinearInterpolationNext_Cart(DIR_X, i, j, 0, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrv0interp[j][i + 1][iv0interp[c][0]], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            /* Zero velocity */
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
           }
         } else {
-          PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_X, i, j, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrv0interp[j][i + 1][iv0interp[c][0]], &ncols, col, v));
+          PetscCall(NSComputeConvectionLinearInterpolationNext_Cart(DIR_X, i, j, 0, arrcx[i][ielemc], arrcx[i + 1][iprevc], arrcx[i + 1][ielemc], hx, arrv0interp[j][i + 1][iv0interp[c][0]], &ncols, col, v));
         }
         if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
 
@@ -644,15 +772,28 @@ static PetscErrorCode ComputeConvectionOperator_Private(DM vdm, DM Sdm, DM Vdm, 
           /* Bottom boundary */
           switch (bcs[2].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeConvectionLinearForwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], hy, arrV0[j][i][iV0[1]], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrV0[j][i][iV0[1]], &ncols, col, v));
+            PetscCall(NSComputeConvectionLinearInterpolationPrev_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrV0[j][i][iV0[1]], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 1) {
+              /* Zero velocity */
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeConvectionLinearForwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], hy, arrV0[j][i][iV0[1]], &ncols, col, v));
+            }
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for bottom boundary");
           }
         } else {
-          PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrV0[j][i][iV0[1]], &ncols, col, v));
+          PetscCall(NSComputeConvectionLinearInterpolationPrev_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrV0[j][i][iV0[1]], &ncols, col, v));
         }
         if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
 
@@ -662,15 +803,23 @@ static PetscErrorCode ComputeConvectionOperator_Private(DM vdm, DM Sdm, DM Vdm, 
           /* Bottom boundary */
           switch (bcs[2].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeConvectionLinearForwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], hy, arrv0interp[j][i][iv0interp[c][1]], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrv0interp[j][i][iv0interp[c][1]], &ncols, col, v));
+            PetscCall(NSComputeConvectionLinearInterpolationPrev_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrv0interp[j][i][iv0interp[c][1]], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            /* Zero velocity */
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for bottom boundary");
           }
         } else {
-          PetscCall(ComputeConvectionLinearInterpolationPrev_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrv0interp[j][i][iv0interp[c][1]], &ncols, col, v));
+          PetscCall(NSComputeConvectionLinearInterpolationPrev_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], hy, arrv0interp[j][i][iv0interp[c][1]], &ncols, col, v));
         }
         if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
 
@@ -681,15 +830,28 @@ static PetscErrorCode ComputeConvectionOperator_Private(DM vdm, DM Sdm, DM Vdm, 
           /* Top boundary */
           switch (bcs[3].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeConvectionLinearBackwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j + 1][iprevc], hy, arrV0[j + 1][i][iV0[1]], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrV0[j + 1][i][iV0[1]], &ncols, col, v));
+            PetscCall(NSComputeConvectionLinearInterpolationNext_Cart(DIR_Y, i, j, 0, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrV0[j + 1][i][iV0[1]], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 1) {
+              /* Zero velocity */
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeConvectionLinearBackwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j + 1][iprevc], hy, arrV0[j + 1][i][iV0[1]], &ncols, col, v));
+            }
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for top boundary");
           }
         } else {
-          PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrV0[j + 1][i][iV0[1]], &ncols, col, v));
+          PetscCall(NSComputeConvectionLinearInterpolationNext_Cart(DIR_Y, i, j, 0, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrV0[j + 1][i][iV0[1]], &ncols, col, v));
         }
         if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
 
@@ -699,15 +861,23 @@ static PetscErrorCode ComputeConvectionOperator_Private(DM vdm, DM Sdm, DM Vdm, 
           /* Top boundary */
           switch (bcs[3].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeConvectionLinearBackwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][ielemc], arrcy[j + 1][iprevc], hy, arrv0interp[j + 1][i][iv0interp[c][1]], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrv0interp[j + 1][i][iv0interp[c][1]], &ncols, col, v));
+            PetscCall(NSComputeConvectionLinearInterpolationNext_Cart(DIR_Y, i, j, 0, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrv0interp[j + 1][i][iv0interp[c][1]], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            /* Zero velocity */
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for top boundary");
           }
         } else {
-          PetscCall(ComputeConvectionLinearInterpolationNext_Private(DERIV_Y, i, j, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrv0interp[j + 1][i][iv0interp[c][1]], &ncols, col, v));
+          PetscCall(NSComputeConvectionLinearInterpolationNext_Cart(DIR_Y, i, j, 0, arrcy[j][ielemc], arrcy[j + 1][iprevc], arrcy[j + 1][ielemc], hy, arrv0interp[j + 1][i][iv0interp[c][1]], &ncols, col, v));
         }
         if (ncols > 0) PetscCall(DMStagMatSetValuesStencil(vdm, C, 1, &row, ncols, col, v, ADD_VALUES));
       }
@@ -775,7 +945,9 @@ static PetscErrorCode ComputeConvectionBoundaryConditionVector_Private(DM vdm, c
         PetscCall(DMStagVecSetValuesStencil(vdm, vbc, 2, row, v, ADD_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
@@ -800,7 +972,9 @@ static PetscErrorCode ComputeConvectionBoundaryConditionVector_Private(DM vdm, c
         PetscCall(DMStagVecSetValuesStencil(vdm, vbc, 2, row, v, ADD_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
@@ -825,7 +999,9 @@ static PetscErrorCode ComputeConvectionBoundaryConditionVector_Private(DM vdm, c
         PetscCall(DMStagVecSetValuesStencil(vdm, vbc, 2, row, v, ADD_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for bottom boundary");
@@ -850,7 +1026,9 @@ static PetscErrorCode ComputeConvectionBoundaryConditionVector_Private(DM vdm, c
         PetscCall(DMStagVecSetValuesStencil(vdm, vbc, 2, row, v, ADD_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for bottom boundary");
@@ -860,19 +1038,6 @@ static PetscErrorCode ComputeConvectionBoundaryConditionVector_Private(DM vdm, c
   PetscCall(VecAssemblyEnd(vbc));
 
   PetscCall(DMStagRestoreProductCoordinateArraysRead(vdm, &arrcx, &arrcy, NULL));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode ComputeLinearInterpolation_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal coord_prev, PetscReal coord_prev_f, PetscReal coord_center, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  PetscFunctionBegin;
-  v[0]     = (coord_center - coord_prev_f) / (coord_center - coord_prev);
-  v[1]     = (coord_prev_f - coord_prev) / (coord_center - coord_prev);
-  col[0].i = i - (dir == DERIV_X ? 1 : 0);
-  col[0].j = j - (dir == DERIV_Y ? 1 : 0);
-  col[1].i = i;
-  col[1].j = j;
-  *ncols   = 2;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -914,9 +1079,22 @@ static PetscErrorCode ComputeFaceVelocityInterpolationOperator_Private(DM vdm, D
           /* Left boundary */
           switch (bcs[0].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeLinearForwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeLinearInterpolation_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], &ncols, col, v));
+            PetscCall(NSComputeLinearInterpolation_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 0) {
+              /* Zero velocity */
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeLinearForwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
+            }
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
@@ -925,13 +1103,26 @@ static PetscErrorCode ComputeFaceVelocityInterpolationOperator_Private(DM vdm, D
           /* Right boundary */
           switch (bcs[1].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeLinearBackwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][iprevc], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 0) {
+              /* Zero velocity */
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeLinearBackwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][iprevc], &ncols, col, v));
+            }
             break;
           case NS_BC_PERIODIC: /* Cannot happen */
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
           }
         } else {
-          PetscCall(ComputeLinearInterpolation_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], &ncols, col, v));
+          PetscCall(NSComputeLinearInterpolation_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], &ncols, col, v));
         }
 
         if (ncols > 0) {
@@ -953,9 +1144,22 @@ static PetscErrorCode ComputeFaceVelocityInterpolationOperator_Private(DM vdm, D
           /* Down boundary */
           switch (bcs[2].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeLinearForwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
             break;
           case NS_BC_PERIODIC:
-            PetscCall(ComputeLinearInterpolation_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], &ncols, col, v));
+            PetscCall(NSComputeLinearInterpolation_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 1) {
+              /* Zero velocity */
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeLinearForwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
+            }
             break;
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
@@ -964,13 +1168,26 @@ static PetscErrorCode ComputeFaceVelocityInterpolationOperator_Private(DM vdm, D
           /* Up boundary */
           switch (bcs[3].type) {
           case NS_BC_VELOCITY:
+            /* Velocity is specified */
+            break;
+          case NS_BC_PRESSURE_OUTLET:
+            /* Zero velocity gradient */
+            PetscCall(NSComputeLinearBackwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][iprevc], &ncols, col, v));
+            break;
+          case NS_BC_SYMMETRY:
+            if (c == 1) {
+              /* Zero velocity */
+            } else {
+              /* Zero velocity gradient */
+              PetscCall(NSComputeLinearBackwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][iprevc], &ncols, col, v));
+            }
             break;
           case NS_BC_PERIODIC: /* Cannot happen */
           default:
             SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
           }
         } else {
-          PetscCall(ComputeLinearInterpolation_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], &ncols, col, v));
+          PetscCall(NSComputeLinearInterpolation_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], &ncols, col, v));
         }
 
         if (ncols > 0) {
@@ -1029,7 +1246,9 @@ static PetscErrorCode ComputeFaceVelocityInterpolationBoundaryConditionVector_Pr
         PetscCall(DMStagVecSetValuesStencil(Vdm, vbc, dim, row, vb, INSERT_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
@@ -1049,7 +1268,9 @@ static PetscErrorCode ComputeFaceVelocityInterpolationBoundaryConditionVector_Pr
         PetscCall(DMStagVecSetValuesStencil(Vdm, vbc, dim, row, vb, INSERT_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
@@ -1070,7 +1291,9 @@ static PetscErrorCode ComputeFaceVelocityInterpolationBoundaryConditionVector_Pr
         PetscCall(DMStagVecSetValuesStencil(Vdm, vbc, dim, row, vb, INSERT_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
@@ -1090,7 +1313,9 @@ static PetscErrorCode ComputeFaceVelocityInterpolationBoundaryConditionVector_Pr
         PetscCall(DMStagVecSetValuesStencil(Vdm, vbc, dim, row, vb, INSERT_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
@@ -1140,9 +1365,17 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationOperator_Private(DM 
         /* Left boundary */
         switch (bcs[0].type) {
         case NS_BC_VELOCITY:
+          /* Velocity is specified */
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Zero velocity gradient */
+          PetscCall(NSComputeLinearForwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeLinearInterpolation_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], &ncols, col, v));
+          PetscCall(NSComputeLinearInterpolation_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_SYMMETRY:
+          /* Zero velocity */
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
@@ -1151,13 +1384,21 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationOperator_Private(DM 
         /* Right boundary */
         switch (bcs[1].type) {
         case NS_BC_VELOCITY:
+          /* Velocity is specified */
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Zero velocity gradient */
+          PetscCall(NSComputeLinearBackwardExtrapolationNeumannCond_Cart(DIR_X, i, j, 0, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][iprevc], &ncols, col, v));
+          break;
+        case NS_BC_SYMMETRY:
+          /* Zero velocity */
           break;
         case NS_BC_PERIODIC: /* Cannot happen */
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
         }
       } else {
-        PetscCall(ComputeLinearInterpolation_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], &ncols, col, v));
+        PetscCall(NSComputeLinearInterpolation_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][iprevc], arrcx[i][ielemc], &ncols, col, v));
       }
 
       if (ncols > 0) {
@@ -1181,9 +1422,17 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationOperator_Private(DM 
         /* Down boundary */
         switch (bcs[2].type) {
         case NS_BC_VELOCITY:
+          /* Velocity is specified */
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Zero velocity gradient */
+          PetscCall(NSComputeLinearForwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeLinearInterpolation_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], &ncols, col, v));
+          PetscCall(NSComputeLinearInterpolation_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], &ncols, col, v));
+          break;
+        case NS_BC_SYMMETRY:
+          /* Zero velocity */
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
@@ -1192,13 +1441,21 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationOperator_Private(DM 
         /* Up boundary */
         switch (bcs[3].type) {
         case NS_BC_VELOCITY:
+          /* Velocity is specified */
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Zero velocity gradient */
+          PetscCall(NSComputeLinearBackwardExtrapolationNeumannCond_Cart(DIR_Y, i, j, 0, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][iprevc], &ncols, col, v));
+          break;
+        case NS_BC_SYMMETRY:
+          /* Zero velocity */
           break;
         case NS_BC_PERIODIC: /* Cannot happen */
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
         }
       } else {
-        PetscCall(ComputeLinearInterpolation_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], &ncols, col, v));
+        PetscCall(NSComputeLinearInterpolation_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][iprevc], arrcy[j][ielemc], &ncols, col, v));
       }
 
       if (ncols > 0) {
@@ -1253,7 +1510,9 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationBoundaryConditionVec
         PetscCall(DMStagVecSetValuesStencil(Sdm, vbc, 1, &row, &vb[0], INSERT_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
@@ -1271,7 +1530,9 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationBoundaryConditionVec
         PetscCall(DMStagVecSetValuesStencil(Sdm, vbc, 1, &row, &vb[0], INSERT_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
@@ -1290,7 +1551,9 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationBoundaryConditionVec
         PetscCall(DMStagVecSetValuesStencil(Sdm, vbc, 1, &row, &vb[1], INSERT_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
@@ -1308,7 +1571,9 @@ static PetscErrorCode ComputeFaceNormalVelocityInterpolationBoundaryConditionVec
         PetscCall(DMStagVecSetValuesStencil(Sdm, vbc, 1, &row, &vb[1], INSERT_VALUES));
       }
       break;
+    case NS_BC_PRESSURE_OUTLET:
     case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
       break;
     default:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
@@ -1394,27 +1659,14 @@ static PetscErrorCode ComputeStaggeredVelocityDivergenceOperator_Private(DM Sdm,
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFaceDerivative_Private(DerivDirection dir, PetscInt i, PetscInt j, PetscReal xW, PetscReal xP, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  PetscFunctionBegin;
-  v[0]     = -1. / (xP - xW);
-  v[1]     = 1. / (xP - xW);
-  col[0].i = i - (dir == DERIV_X ? 1 : 0);
-  col[0].j = j - (dir == DERIV_Y ? 1 : 0);
-  col[1].i = i;
-  col[1].j = j;
-  *ncols   = 2;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode ComputeStaggeredPressureGradientOperators_Private(DM sdm, DM Sdm, const NSBoundaryCondition *bcs, Mat Gst)
+static PetscErrorCode ComputeStaggeredPressureGradientOperator_Private(DM sdm, DM Sdm, const NSBoundaryCondition *bcs, Mat Gst)
 {
   PetscInt            M, N, x, y, m, n, nExtrax, nExtray;
   DMStagStencil       row, col[2];
   PetscInt            ncols, ir, ic[2];
   PetscScalar         v[2];
   const PetscScalar **arrcx, **arrcy;
-  PetscInt            ielemc;
+  PetscInt            iprevc, ielemc;
   PetscInt            i, j;
   const PetscInt      dim = 2;
 
@@ -1422,6 +1674,7 @@ static PetscErrorCode ComputeStaggeredPressureGradientOperators_Private(DM sdm, 
   PetscCall(DMStagGetGlobalSizes(sdm, &M, &N, NULL));
   PetscCall(DMStagGetCorners(sdm, &x, &y, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
   PetscCall(DMStagGetProductCoordinateArraysRead(sdm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(sdm, DMSTAG_LEFT, &iprevc));
   PetscCall(DMStagGetProductCoordinateLocationSlot(sdm, DMSTAG_ELEMENT, &ielemc));
 
   PetscCall(MatSetOption(Gst, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
@@ -1444,9 +1697,15 @@ static PetscErrorCode ComputeStaggeredPressureGradientOperators_Private(DM sdm, 
         /* Left boundary */
         switch (bcs[0].type) {
         case NS_BC_VELOCITY:
+        case NS_BC_SYMMETRY:
+          /* Zero pressure gradient */
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Pressure is specified */
+          PetscCall(NSComputeFaceNormalFirstDerivForwardDiffDirichletCond_Cart(DIR_X, i, j, 0, arrcx[i][iprevc], arrcx[i][ielemc], arrcx[i + 1][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFaceDerivative_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
+          PetscCall(NSComputeFaceNormalFirstDerivCentralDiff_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
@@ -1455,13 +1714,19 @@ static PetscErrorCode ComputeStaggeredPressureGradientOperators_Private(DM sdm, 
         /* Right boundary */
         switch (bcs[1].type) {
         case NS_BC_VELOCITY:
+        case NS_BC_SYMMETRY:
+          /* Zero pressure gradient */
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Pressure is specified */
+          PetscCall(NSComputeFaceNormalFirstDerivBackwardDiffDirichletCond_Cart(DIR_X, i, j, 0, arrcx[i - 2][ielemc], arrcx[i - 1][ielemc], arrcx[i][iprevc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC: /* Cannot happen */
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
         }
       } else {
-        PetscCall(ComputeFaceDerivative_Private(DERIV_X, i, j, arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
+        PetscCall(NSComputeFaceNormalFirstDerivCentralDiff_Cart(DIR_X, i, j, 0, arrcx[i - 1][ielemc], arrcx[i][ielemc], &ncols, col, v));
       }
 
       if (ncols > 0) {
@@ -1483,9 +1748,15 @@ static PetscErrorCode ComputeStaggeredPressureGradientOperators_Private(DM sdm, 
         /* Down boundary */
         switch (bcs[2].type) {
         case NS_BC_VELOCITY:
+        case NS_BC_SYMMETRY:
+          /* Zero pressure gradient */
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Pressure is specified */
+          PetscCall(NSComputeFaceNormalFirstDerivForwardDiffDirichletCond_Cart(DIR_Y, i, j, 0, arrcy[j][iprevc], arrcy[j][ielemc], arrcy[j + 1][ielemc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC:
-          PetscCall(ComputeFaceDerivative_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
+          PetscCall(NSComputeFaceNormalFirstDerivCentralDiff_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
           break;
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
@@ -1494,13 +1765,19 @@ static PetscErrorCode ComputeStaggeredPressureGradientOperators_Private(DM sdm, 
         /* Up boundary */
         switch (bcs[3].type) {
         case NS_BC_VELOCITY:
+        case NS_BC_SYMMETRY:
+          /* Zero pressure gradient */
+          break;
+        case NS_BC_PRESSURE_OUTLET:
+          /* Pressure is specified */
+          PetscCall(NSComputeFaceNormalFirstDerivBackwardDiffDirichletCond_Cart(DIR_Y, i, j, 0, arrcy[j - 2][ielemc], arrcy[j - 1][ielemc], arrcy[j][iprevc], &ncols, col, v));
           break;
         case NS_BC_PERIODIC: /* Cannot happen */
         default:
           SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
         }
       } else {
-        PetscCall(ComputeFaceDerivative_Private(DERIV_Y, i, j, arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
+        PetscCall(NSComputeFaceNormalFirstDerivCentralDiff_Cart(DIR_Y, i, j, 0, arrcy[j - 1][ielemc], arrcy[j][ielemc], &ncols, col, v));
       }
 
       if (ncols > 0) {
@@ -1514,6 +1791,142 @@ static PetscErrorCode ComputeStaggeredPressureGradientOperators_Private(DM sdm, 
   PetscCall(MatAssemblyEnd(Gst, MAT_FINAL_ASSEMBLY));
 
   PetscCall(DMStagRestoreProductCoordinateArraysRead(sdm, &arrcx, &arrcy, NULL));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ComputeStaggeredPressureGradientBoundaryConditionVector_Private(DM Sdm, const NSBoundaryCondition *bcs, PetscReal t, Vec vbc)
+{
+  PetscInt            M, N, x, y, m, n;
+  PetscBool           isFirstRankx, isFirstRanky, isLastRankx, isLastRanky;
+  DMStagStencil       row;
+  PetscScalar         v;
+  PetscReal           xb[2];
+  PetscScalar         pb;
+  const PetscScalar **arrcx, **arrcy;
+  PetscInt            iprevc, ielemc;
+  PetscReal           h1, h2;
+  PetscInt            i, j;
+  const PetscInt      dim = 2;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetGlobalSizes(Sdm, &M, &N, NULL));
+  PetscCall(DMStagGetCorners(Sdm, &x, &y, NULL, &m, &n, NULL, NULL, NULL, NULL));
+  PetscCall(DMStagGetIsFirstRank(Sdm, &isFirstRankx, &isFirstRanky, NULL));
+  PetscCall(DMStagGetIsLastRank(Sdm, &isLastRankx, &isLastRanky, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(Sdm, &arrcx, &arrcy, NULL));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(Sdm, DMSTAG_LEFT, &iprevc));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(Sdm, DMSTAG_ELEMENT, &ielemc));
+
+  PetscCall(VecSet(vbc, 0.));
+
+  row.c = 0;
+
+  /* Left boundary */
+  row.loc = DMSTAG_LEFT;
+  if (isFirstRankx) switch (bcs[0].type) {
+    case NS_BC_PRESSURE_OUTLET:
+      for (j = y; j < y + n; ++j) {
+        row.i = 0;
+        row.j = j;
+        xb[0] = arrcx[0][iprevc];
+        xb[1] = arrcy[j][ielemc];
+        PetscCall(bcs[0].pressure(dim, t, xb, &pb, bcs[0].ctx_pressure));
+
+        h1 = arrcx[0][ielemc] - arrcx[0][iprevc];
+        h2 = arrcx[1][ielemc] - arrcx[0][iprevc];
+
+        v = -(h1 + h2) / (h1 * h2) * pb;
+        PetscCall(DMStagVecSetValuesStencil(Sdm, vbc, 1, &row, &v, INSERT_VALUES));
+      }
+      break;
+    case NS_BC_VELOCITY:
+    case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for left boundary");
+    }
+
+  /* Right boundary */
+  if (isLastRankx) switch (bcs[1].type) {
+    case NS_BC_PRESSURE_OUTLET:
+      for (j = y; j < y + n; ++j) {
+        row.i = M;
+        row.j = j;
+        xb[0] = arrcx[M][iprevc];
+        xb[1] = arrcy[j][ielemc];
+        PetscCall(bcs[1].pressure(dim, t, xb, &pb, bcs[1].ctx_pressure));
+
+        h1 = arrcx[M][iprevc] - arrcx[M - 1][ielemc];
+        h2 = arrcx[M][iprevc] - arrcx[M - 2][ielemc];
+
+        v = (h1 + h2) / (h1 * h2) * pb;
+        PetscCall(DMStagVecSetValuesStencil(Sdm, vbc, 1, &row, &v, INSERT_VALUES));
+      }
+      break;
+    case NS_BC_VELOCITY:
+    case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for right boundary");
+    }
+
+  /* Down boundary */
+  row.loc = DMSTAG_DOWN;
+  if (isFirstRanky) switch (bcs[2].type) {
+    case NS_BC_PRESSURE_OUTLET:
+      for (i = x; i < x + m; ++i) {
+        row.i = i;
+        row.j = 0;
+        xb[0] = arrcx[i][ielemc];
+        xb[1] = arrcy[0][iprevc];
+        PetscCall(bcs[2].pressure(dim, t, xb, &pb, bcs[2].ctx_pressure));
+
+        h1 = arrcy[0][ielemc] - arrcy[0][iprevc];
+        h2 = arrcy[1][ielemc] - arrcy[0][iprevc];
+
+        v = -(h1 + h2) / (h1 * h2) * pb;
+        PetscCall(DMStagVecSetValuesStencil(Sdm, vbc, 1, &row, &v, INSERT_VALUES));
+      }
+      break;
+    case NS_BC_VELOCITY:
+    case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for down boundary");
+    }
+
+  /* Up boundary */
+  if (isLastRanky) switch (bcs[3].type) {
+    case NS_BC_PRESSURE_OUTLET:
+      for (i = x; i < x + m; ++i) {
+        row.i = i;
+        row.j = N;
+        xb[0] = arrcx[i][ielemc];
+        xb[1] = arrcy[N][iprevc];
+        PetscCall(bcs[3].pressure(dim, t, xb, &pb, bcs[3].ctx_pressure));
+
+        h1 = arrcy[N][iprevc] - arrcy[N - 1][ielemc];
+        h2 = arrcy[N][iprevc] - arrcy[N - 2][ielemc];
+
+        v = (h1 + h2) / (h1 * h2) * pb;
+        PetscCall(DMStagVecSetValuesStencil(Sdm, vbc, 1, &row, &v, INSERT_VALUES));
+      }
+      break;
+    case NS_BC_VELOCITY:
+    case NS_BC_PERIODIC:
+    case NS_BC_SYMMETRY:
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type for up boundary");
+    }
+
+  PetscCall(VecAssemblyBegin(vbc));
+  PetscCall(VecAssemblyEnd(vbc));
+
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(Sdm, &arrcx, &arrcy, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -1616,7 +2029,7 @@ PetscErrorCode NSFormJacobian_CNLinear_Cart2d_Internal(NS ns, Vec x, Mat J, NSFo
     PetscCall(ComputeVelocityLaplacianOperator_Private(vdm, ns->bcs, L));
 
     PetscCall(MeshCreateMatrix(ns->mesh, MESH_DM_STAG_SCALAR, MESH_DM_SCALAR, &Gst));
-    PetscCall(ComputeStaggeredPressureGradientOperators_Private(sdm, Sdm, ns->bcs, Gst));
+    PetscCall(ComputeStaggeredPressureGradientOperator_Private(sdm, Sdm, ns->bcs, Gst));
     PetscCall(MatScale(Gst, ns->dt / ns->rho));
 
     PetscCall(MatMatMult(negT, G, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &negR));
@@ -1662,7 +2075,7 @@ PetscErrorCode NSFormFunction_CNLinear_Cart2d_Internal(NS ns, Vec x, Vec f)
   IS           vis, Vis, pis;
   Vec          v0, V0, p0, momrhs, interprhs, contrhs;
   Mat          G, L;
-  Vec          Gp, Lv, vbc;
+  Vec          Gq, Lv, vbc;
 
   PetscFunctionBegin;
   PetscCall(MeshGetDM(ns->mesh, MESH_DM_SCALAR, &sdm));
@@ -1679,15 +2092,21 @@ PetscErrorCode NSFormFunction_CNLinear_Cart2d_Internal(NS ns, Vec x, Vec f)
 
   PetscCall(MatCreateSubMatrix(ns->J, vis, pis, MAT_INITIAL_MATRIX, &G));
   PetscCall(PetscObjectQuery((PetscObject)ns->J, "Laplacian", (PetscObject *)&L));
-  PetscCall(DMGetGlobalVector(vdm, &Gp));
+  PetscCall(DMGetGlobalVector(vdm, &Gq));
   PetscCall(DMGetGlobalVector(vdm, &Lv));
   PetscCall(DMGetGlobalVector(vdm, &vbc));
   if (ns->step == 0) {
+    /* q = p0 */
     PetscCall(VecGetSubVector(ns->sol0, pis, &p0));
-    PetscCall(MatMult(G, p0, Gp));
+    PetscCall(MatMult(G, p0, Gq));
     PetscCall(VecRestoreSubVector(ns->sol0, pis, &p0));
+    PetscCall(ComputePressureGradientBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, vbc));
+    PetscCall(VecAXPY(Gq, ns->dt / ns->rho, vbc));
   } else {
-    PetscCall(MatMult(G, cnl->phalf, Gp));
+    /* q = phalf */
+    PetscCall(MatMult(G, cnl->phalf, Gq));
+    PetscCall(ComputePressureGradientBoundaryConditionVector_Private(vdm, ns->bcs, ns->t - 0.5 * ns->dt, vbc));
+    PetscCall(VecAXPY(Gq, ns->dt / ns->rho, vbc));
   }
   PetscCall(MatMult(L, v0, Lv));
   PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, vbc));
@@ -1695,11 +2114,11 @@ PetscErrorCode NSFormFunction_CNLinear_Cart2d_Internal(NS ns, Vec x, Vec f)
   PetscCall(VecAXPBYPCZ(momrhs, 1., 0.5 * ns->mu * ns->dt / ns->rho, 0., v0, Lv));
   PetscCall(ComputeConvectionBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(momrhs, -ns->dt, vbc));
-  PetscCall(VecAXPY(momrhs, -1., Gp));
+  PetscCall(VecAXPY(momrhs, -1., Gq));
   PetscCall(ComputeVelocityLaplacianBoundaryConditionVector_Private(vdm, ns->bcs, ns->t + ns->dt, vbc));
   PetscCall(VecAXPY(momrhs, 0.5 * ns->mu * ns->dt / ns->rho, vbc));
   PetscCall(MatDestroy(&G));
-  PetscCall(DMRestoreGlobalVector(vdm, &Gp));
+  PetscCall(DMRestoreGlobalVector(vdm, &Gq));
   PetscCall(DMRestoreGlobalVector(vdm, &Lv));
   PetscCall(DMRestoreGlobalVector(vdm, &vbc));
 
@@ -1708,6 +2127,38 @@ PetscErrorCode NSFormFunction_CNLinear_Cart2d_Internal(NS ns, Vec x, Vec f)
   PetscCall(ComputeFaceNormalVelocityInterpolationBoundaryConditionVector_Private(Sdm, ns->bcs, ns->t + ns->dt, vbc));
   PetscCall(VecCopy(vbc, interprhs));
   PetscCall(DMRestoreGlobalVector(Sdm, &vbc));
+  {
+    Mat negT;
+    Vec vbcGp, vbcGq, vbcGstp, vbcGstq;
+
+    /* Boundary condition for Rhie-Chow correction term */
+    PetscCall(MatCreateSubMatrix(ns->J, Vis, vis, MAT_INITIAL_MATRIX, &negT));
+    PetscCall(DMGetGlobalVector(vdm, &vbcGp));
+    PetscCall(DMGetGlobalVector(vdm, &vbcGq));
+    PetscCall(DMGetGlobalVector(Sdm, &vbcGstp));
+    PetscCall(DMGetGlobalVector(Sdm, &vbcGstq));
+
+    PetscCall(ComputePressureGradientBoundaryConditionVector_Private(vdm, ns->bcs, ns->t + 0.5 * ns->dt, vbcGp));
+    PetscCall(ComputeStaggeredPressureGradientBoundaryConditionVector_Private(Sdm, ns->bcs, ns->t + 0.5 * ns->dt, vbcGstp));
+    if (ns->step == 0) {
+      PetscCall(ComputePressureGradientBoundaryConditionVector_Private(vdm, ns->bcs, ns->t, vbcGq));
+      PetscCall(ComputeStaggeredPressureGradientBoundaryConditionVector_Private(Sdm, ns->bcs, ns->t, vbcGstq));
+    } else {
+      PetscCall(ComputePressureGradientBoundaryConditionVector_Private(vdm, ns->bcs, ns->t - 0.5 * ns->dt, vbcGq));
+      PetscCall(ComputeStaggeredPressureGradientBoundaryConditionVector_Private(Sdm, ns->bcs, ns->t - 0.5 * ns->dt, vbcGstq));
+    }
+    PetscCall(VecAXPY(vbcGq, -1., vbcGp));
+    PetscCall(VecScale(vbcGq, ns->dt / ns->rho));
+    PetscCall(MatMultAdd(negT, vbcGq, interprhs, interprhs));
+    PetscCall(VecAXPY(vbcGstq, -1., vbcGstp));
+    PetscCall(VecAXPY(interprhs, ns->dt / ns->rho, vbcGstq));
+
+    PetscCall(MatDestroy(&negT));
+    PetscCall(DMRestoreGlobalVector(vdm, &vbcGp));
+    PetscCall(DMRestoreGlobalVector(vdm, &vbcGq));
+    PetscCall(DMRestoreGlobalVector(Sdm, &vbcGstp));
+    PetscCall(DMRestoreGlobalVector(Sdm, &vbcGstq));
+  }
 
   PetscCall(VecSet(contrhs, 0.));
 

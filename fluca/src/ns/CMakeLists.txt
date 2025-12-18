@@ -11,6 +11,7 @@ add_library(fluca_ns SHARED
     interface/nspkg.c
     interface/nsreg.c
     interface/nssol.c
+    utils/cartdiscret.c
     utils/nspcreg.c
     utils/abfpc/abfpc.c
 )
