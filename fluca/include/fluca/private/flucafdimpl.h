@@ -94,3 +94,4 @@ typedef struct {
 } FlucaFD_Sum;
 
 FLUCA_INTERN PetscErrorCode FlucaFDStencilLocationToDMStagStencilLocation_Internal(FlucaFDStencilLocation, DMStagStencilLocation *);
+FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, DMStagStencil[], PetscScalar[]);

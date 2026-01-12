@@ -21,3 +21,26 @@ PetscErrorCode FlucaFDStencilLocationToDMStagStencilLocation_Internal(FlucaFDSte
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  PetscScalar       v_abssum;
+  PetscInt          ncols_new, c;
+  PetscBool         remove;
+  const PetscScalar atol = 1e-10, rtol = 1e-8;
+
+  PetscFunctionBegin;
+  v_abssum = 0.;
+  for (c = 0; c < *ncols; ++c) v_abssum += PetscAbs(v[c]);
+  ncols_new = 0;
+  for (c = 0; c < *ncols; ++c) {
+    remove = PetscAbs(v[c]) < atol || PetscAbs(v[c] / v_abssum) < rtol;
+    if (!remove) {
+      col[ncols_new] = col[c];
+      v[ncols_new]   = v[c];
+      ++ncols_new;
+    }
+  }
+  *ncols = ncols_new;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}

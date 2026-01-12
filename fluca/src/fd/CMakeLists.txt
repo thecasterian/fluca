@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 
 add_library(fluca_fd SHARED
+    impls/derivative/derivative.c
+    impls/composition/composition.c
+    impls/scale/scale.c
+    impls/sum/sum.c
     interface/fdbasic.c
     interface/fdpkg.c
     interface/fdreg.c
