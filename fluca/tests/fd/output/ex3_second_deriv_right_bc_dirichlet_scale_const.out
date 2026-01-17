@@ -1,0 +1,6 @@
+Scaled stencil at i=7:
+  ncols = 4
+  col[0]: i=5, loc=ELEMENT, c=0, v=-19.2
+  col[1]: i=6, loc=ELEMENT, c=0, v=192.
+  col[2]: i=7, loc=ELEMENT, c=0, v=-480.
+  col[3]: i=8, loc=LEFT, c=right_boundary, v=307.2

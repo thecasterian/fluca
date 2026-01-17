@@ -1,0 +1,9 @@
+Sum stencil at (i,j,k)=(0,4,4):
+  ncols = 7
+  col[0]: i=0, j=3, k=4, loc=DOWN, c=0, v=64.
+  col[1]: i=0, j=4, k=3, loc=DOWN, c=0, v=64.
+  col[2]: i=0, j=4, k=4, loc=DOWN, c=0, v=-512.
+  col[3]: i=0, j=4, k=5, loc=DOWN, c=0, v=64.
+  col[4]: i=0, j=5, k=4, loc=DOWN, c=0, v=64.
+  col[5]: i=1, j=4, k=4, loc=DOWN, c=0, v=85.3333
+  col[6]: i=0, j=4, k=4, loc=DOWN_LEFT, c=left_boundary, v=170.667

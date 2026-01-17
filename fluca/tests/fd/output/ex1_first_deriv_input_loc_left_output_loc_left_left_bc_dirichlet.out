@@ -1,0 +1,5 @@
+Stencil at i=0:
+  ncols = 3
+  col[0]: i=1, loc=LEFT, c=0, v=16.
+  col[1]: i=2, loc=LEFT, c=0, v=-4.
+  col[2]: i=0, loc=LEFT, c=left_boundary, v=-12.
