@@ -41,6 +41,7 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
   f->stencil_width   = PETSC_DETERMINE;
   f->slot_coord_prev = 0;
   f->slot_coord_elem = 0;
+  f->termlink        = NULL;
   f->data            = NULL;
   f->setupcalled     = PETSC_FALSE;
 
@@ -107,6 +108,9 @@ PetscErrorCode FlucaFDDestroy(FlucaFD *fd)
   }
   PetscCall(DMDestroy(&(*fd)->cdm));
 
+  /* Destroy term list */
+  PetscCall(FlucaFDTermLinkDestroy_Internal(&(*fd)->termlink));
+
   /* Call type-specific destroy */
   PetscTryTypeMethod((*fd), destroy);
 
@@ -135,6 +139,30 @@ PetscErrorCode FlucaFDView(FlucaFD fd, PetscViewer viewer)
   }
 
   PetscTryTypeMethod(fd, view, viewer);
+
+  if (isascii) {
+    FlucaFDTermLink term;
+    PetscInt        nterms, idx;
+    char            deriv_order_str[FLUCAFD_MAX_DIM][16];
+    char            accu_order_str[FLUCAFD_MAX_DIM][16];
+
+    nterms = 0;
+    for (term = fd->termlink; term; term = term->next) ++nterms;
+
+    PetscCall(PetscViewerASCIIPushTab(viewer));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Terms: %" PetscInt_FMT "\n", nterms));
+    for (term = fd->termlink, idx = 0; term; term = term->next, ++idx) {
+      for (PetscInt d = 0; d < FLUCAFD_MAX_DIM; ++d) {
+        if (term->deriv_order[d] != -1) PetscCall(PetscSNPrintf(deriv_order_str[d], sizeof(deriv_order_str[d]), "%" PetscInt_FMT, term->deriv_order[d]));
+        else PetscCall(PetscSNPrintf(deriv_order_str[d], sizeof(deriv_order_str[d]), "-"));
+        if (term->accu_order[d] != PETSC_INT_MAX) PetscCall(PetscSNPrintf(accu_order_str[d], sizeof(accu_order_str[d]), "%" PetscInt_FMT, term->accu_order[d]));
+        else PetscCall(PetscSNPrintf(accu_order_str[d], sizeof(accu_order_str[d]), "-"));
+      }
+      PetscCall(PetscViewerASCIIPrintf(viewer, "  Term %" PetscInt_FMT ": deriv_order=(%s, %s, %s), accu_order=(%s, %s, %s), input=(%s, %" PetscInt_FMT ")\n", //
+                                       idx, deriv_order_str[0], deriv_order_str[1], deriv_order_str[2], accu_order_str[0], accu_order_str[1], accu_order_str[2], FlucaFDStencilLocations[term->input_loc], term->input_c));
+    }
+    PetscCall(PetscViewerASCIIPopTab(viewer));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

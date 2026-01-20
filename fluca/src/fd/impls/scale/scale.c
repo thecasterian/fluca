@@ -82,6 +82,16 @@ static PetscErrorCode FlucaFDSetUp_Scale(FlucaFD fd)
     PetscCall(FlucaFDStencilLocationToDMStagStencilLocation_Internal(scale->vec_loc, &stag_loc));
     PetscCall(DMStagGetLocationSlot(scale->vec_dm, stag_loc, scale->vec_c, &scale->vec_slot));
   }
+
+  /* Copy term infos from operand */
+  {
+    FlucaFDTermLink src, dst;
+
+    for (src = scale->operand->termlink; src; src = src->next) {
+      PetscCall(FlucaFDTermLinkDuplicate_Internal(src, &dst));
+      PetscCall(FlucaFDTermLinkAppend_Internal(&fd->termlink, dst));
+    }
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

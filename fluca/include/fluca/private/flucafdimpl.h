@@ -10,6 +10,15 @@ FLUCA_EXTERN PetscClassId   FLUCAFD_CLASSID;
 FLUCA_EXTERN PetscBool      FlucaFDRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode FlucaFDRegisterAll(void);
 
+typedef struct _n_FlucaFDTermInfoLink *FlucaFDTermLink;
+struct _n_FlucaFDTermInfoLink {
+  PetscInt               deriv_order[FLUCAFD_MAX_DIM];
+  PetscInt               accu_order[FLUCAFD_MAX_DIM];
+  FlucaFDStencilLocation input_loc;
+  PetscInt               input_c;
+  FlucaFDTermLink        next;
+};
+
 typedef struct _FlucaFDOps *FlucaFDOps;
 
 struct _FlucaFDOps {
@@ -41,6 +50,7 @@ struct _p_FlucaFD {
   PetscInt            stencil_width;
   const PetscScalar **arr_coord[FLUCAFD_MAX_DIM];
   PetscInt            slot_coord_prev, slot_coord_elem;
+  FlucaFDTermLink     termlink;
   void               *data;
 
   /* State ---------------------------------------------------------------- */
@@ -95,3 +105,9 @@ typedef struct {
 
 FLUCA_INTERN PetscErrorCode FlucaFDStencilLocationToDMStagStencilLocation_Internal(FlucaFDStencilLocation, DMStagStencilLocation *);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, DMStagStencil[], PetscScalar[]);
+
+FLUCA_INTERN PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *);
+FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDuplicate_Internal(FlucaFDTermLink, FlucaFDTermLink *);
+FLUCA_INTERN PetscErrorCode FlucaFDTermLinkAppend_Internal(FlucaFDTermLink *, FlucaFDTermLink);
+FLUCA_INTERN PetscErrorCode FlucaFDTermLinkFind_Internal(FlucaFDTermLink, FlucaFDTermLink, PetscBool *);
+FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDestroy_Internal(FlucaFDTermLink *);

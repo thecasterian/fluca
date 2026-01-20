@@ -49,6 +49,20 @@ static PetscErrorCode FlucaFDSetUp_Sum(FlucaFD fd)
     PetscCheck(op->fd->output_c == fd->output_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "All operands must have the same output component");
     PetscCheck(op->fd->output_loc == fd->output_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "All operands must have the same output stencil location");
   }
+
+  /* Concatenate terms */
+  for (op = sum->oplink; op != NULL; op = op->next) {
+    FlucaFDTermLink src, dst;
+    PetscBool       found;
+
+    for (src = op->fd->termlink; src; src = src->next) {
+      PetscCall(FlucaFDTermLinkFind_Internal(fd->termlink, src, &found));
+      if (!found) {
+        PetscCall(FlucaFDTermLinkDuplicate_Internal(src, &dst));
+        PetscCall(FlucaFDTermLinkAppend_Internal(&fd->termlink, dst));
+      }
+    }
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

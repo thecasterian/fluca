@@ -177,6 +177,18 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
       PetscCall(SolveStencilMatrix_Private(stencil_size, A, b, v));
     }
   }
+
+  /* Create term info */
+  {
+    FlucaFDTermLink term;
+
+    PetscCall(FlucaFDTermLinkCreate_Internal(&term));
+    term->deriv_order[deriv->dir] = deriv->deriv_order;
+    term->accu_order[deriv->dir]  = deriv->accu_order;
+    term->input_loc               = fd->input_loc;
+    term->input_c                 = fd->input_c;
+    PetscCall(FlucaFDTermLinkAppend_Internal(&fd->termlink, term));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
