@@ -1,7 +1,5 @@
 #include <fluca/private/flucafdimpl.h>
 
-#define MAX_STENCIL_SIZE 16
-
 static PetscErrorCode FlucaFDSetFromOptions_Derivative(FlucaFD fd, PetscOptionItems PetscOptionsObject)
 {
   FlucaFD_Derivative *deriv = (FlucaFD_Derivative *)fd->data;
@@ -57,7 +55,7 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
     extrag = (fd->is_last_rank[deriv->dir] && input_use_face_coord && !periodic) ? 1 : 0;
 
     stencil_size = deriv->deriv_order + deriv->accu_order;
-    PetscCheck(stencil_size <= MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Required stencil size (%" PetscInt_FMT ") exceeds maximum (%" PetscInt_FMT ")", stencil_size, (PetscInt)MAX_STENCIL_SIZE);
+    PetscCheck(stencil_size <= FLUCAFD_MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Required stencil size (%" PetscInt_FMT ") exceeds maximum (%" PetscInt_FMT ")", stencil_size, FLUCAFD_MAX_STENCIL_SIZE);
 
     /* Use central differencing scheme */
     offset_start = -(stencil_size - 1) / 2;
@@ -87,8 +85,8 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
     for (i = deriv->v_start - 1; i < deriv->v_end + 1; ++i) {
       PetscScalar *v;
       PetscScalar  input_coord, output_coord, h, factorial;
-      PetscScalar  A[MAX_STENCIL_SIZE * MAX_STENCIL_SIZE];
-      PetscScalar  b[MAX_STENCIL_SIZE];
+      PetscScalar  A[FLUCAFD_MAX_STENCIL_SIZE * FLUCAFD_MAX_STENCIL_SIZE];
+      PetscScalar  b[FLUCAFD_MAX_STENCIL_SIZE];
 
       if (i < deriv->v_start) v = deriv->v_prev;
       else if (i >= deriv->v_end) v = deriv->v_next;

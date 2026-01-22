@@ -4,7 +4,8 @@
 #include <flucafd.h>
 #include <petscdmstag.h>
 
-#define FLUCAFD_MAX_DIM 3
+#define FLUCAFD_MAX_DIM          3
+#define FLUCAFD_MAX_STENCIL_SIZE 32
 
 FLUCA_EXTERN PetscClassId   FLUCAFD_CLASSID;
 FLUCA_EXTERN PetscBool      FlucaFDRegisterAllCalled;
@@ -63,13 +64,13 @@ typedef struct {
   PetscInt         accu_order;  /* 1, 2, 3, ... */
 
   PetscInt      ncols;
-  DMStagStencil col[16]; /* stencil with relative indices */
+  DMStagStencil col[FLUCAFD_MAX_STENCIL_SIZE]; /* stencil with relative indices */
 
   PetscInt    v_start;
   PetscInt    v_end;
-  PetscScalar v_prev[16];
-  PetscScalar v_next[16];
-  PetscScalar (*v)[16];
+  PetscScalar v_prev[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscScalar v_next[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscScalar (*v)[FLUCAFD_MAX_STENCIL_SIZE];
 } FlucaFD_Derivative;
 
 typedef struct {

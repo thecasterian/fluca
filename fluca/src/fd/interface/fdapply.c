@@ -30,11 +30,11 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Mat mat)
   PetscInt              x, y, z, m, n, p;
   PetscInt              i, j, k;
   DMStagStencil         row;
-  DMStagStencil         col[64]; /* should be large enough for stencil */
-  PetscScalar           v[64];
+  DMStagStencil         col[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscScalar           v[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt              ncols;
   PetscInt              ir;
-  PetscInt              ic[64];
+  PetscInt              ic[FLUCAFD_MAX_STENCIL_SIZE];
   DMStagStencilLocation stag_loc;
 
   PetscFunctionBegin;

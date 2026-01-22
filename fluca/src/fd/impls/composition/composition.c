@@ -71,6 +71,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, P
       }
 
       if (!found) {
+        PetscCheck(*ncols < FLUCAFD_MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Resulting stencil is too large");
         col[*ncols] = temp_col[m];
         v[*ncols]   = outer_v[n] * temp_v[m];
         (*ncols)++;

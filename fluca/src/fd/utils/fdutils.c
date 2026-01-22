@@ -55,8 +55,6 @@ PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt n, PetscScalar A[], Pe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-#define MAX_STENCIL_SIZE 16
-
 static PetscErrorCode IsOffGrid_Private(FlucaFD fd, const DMStagStencil *col, PetscInt *off_dir, PetscBool *is_low, PetscBool *is_off_grid)
 {
   PetscInt  idx, xg, ng, extrag, d;
@@ -164,6 +162,7 @@ static PetscErrorCode AddStencilPoint_Private(PetscInt *ncols, DMStagStencil col
     }
   }
   if (!found) {
+    PetscCheck(*ncols < FLUCAFD_MAX_STENCIL_SIZE, PETSC_COMM_SELF, PETSC_ERR_SUP, "Resulting stencil is too large");
     col[*ncols] = *new_col;
     v[*ncols]   = new_v;
     ++(*ncols);
@@ -223,10 +222,10 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt out_i, P
       PetscBool                    periodic, use_face_coord;
       PetscInt                     coord_slot, stencil_size, xg, ng, extrag, off_grid_idx, start_idx, bnd_idx;
       PetscScalar                  h_prev, h_next, off_coord, bnd_coord, a_off;
-      PetscScalar                  extrap_coords[MAX_STENCIL_SIZE];
-      PetscScalar                  extrap_coeffs[MAX_STENCIL_SIZE];
-      PetscScalar                  A[MAX_STENCIL_SIZE * MAX_STENCIL_SIZE];
-      PetscScalar                  b[MAX_STENCIL_SIZE];
+      PetscScalar                  extrap_coords[FLUCAFD_MAX_STENCIL_SIZE];
+      PetscScalar                  extrap_coeffs[FLUCAFD_MAX_STENCIL_SIZE];
+      PetscScalar                  A[FLUCAFD_MAX_STENCIL_SIZE * FLUCAFD_MAX_STENCIL_SIZE];
+      PetscScalar                  b[FLUCAFD_MAX_STENCIL_SIZE];
       DMStagStencil                new_col;
       PetscInt                     n, r;
 
@@ -241,7 +240,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt out_i, P
       coord_slot     = use_face_coord ? fd->slot_coord_prev : fd->slot_coord_elem;
 
       PetscCall(GetStencilSizeForOffGridPoint_Private(fd, &off_col, off_dir, bc_type, &stencil_size));
-      PetscCheck(stencil_size <= MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Stencil size %" PetscInt_FMT " exceeds maximum %d", stencil_size, MAX_STENCIL_SIZE);
+      PetscCheck(stencil_size <= FLUCAFD_MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Stencil size %" PetscInt_FMT " exceeds maximum %d", stencil_size, FLUCAFD_MAX_STENCIL_SIZE);
 
       /* Local grid info */
       xg     = fd->x[off_dir] - ((fd->is_first_rank[off_dir] && !periodic) ? 0 : fd->stencil_width);
