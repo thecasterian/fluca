@@ -1,6 +1,36 @@
 #include <fluca/private/flucafdimpl.h>
 
-static PetscErrorCode FlucaFDGetStencil_Sum(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode FlucaFDSetUp_Sum(FlucaFD fd)
+{
+  FlucaFD_Sum          *sum = (FlucaFD_Sum *)fd->data;
+  FlucaFDSumOperandLink op;
+
+  PetscFunctionBegin;
+  /* Validate that we have at least one operand */
+  PetscCheck(sum->oplink, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "No operands set");
+  /* Set up all operands and validate compatibility */
+  for (op = sum->oplink; op != NULL; op = op->next) {
+    PetscCheck(op->fd->output_c == fd->output_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "All operands must have the same output component");
+    PetscCheck(op->fd->output_loc == fd->output_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "All operands must have the same output stencil location");
+  }
+
+  /* Concatenate terms */
+  for (op = sum->oplink; op != NULL; op = op->next) {
+    FlucaFDTermLink src, dst;
+    PetscBool       found;
+
+    for (src = op->fd->termlink; src; src = src->next) {
+      PetscCall(FlucaFDTermLinkFind_Internal(fd->termlink, src, &found));
+      if (!found) {
+        PetscCall(FlucaFDTermLinkDuplicate_Internal(src, &dst));
+        PetscCall(FlucaFDTermLinkAppend_Internal(&fd->termlink, dst));
+      }
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode FlucaFDGetStencilRaw_Sum(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   FlucaFD_Sum          *sum = (FlucaFD_Sum *)fd->data;
   FlucaFDSumOperandLink op;
@@ -30,36 +60,6 @@ static PetscErrorCode FlucaFDGetStencil_Sum(FlucaFD fd, PetscInt i, PetscInt j, 
         col[*ncols] = temp_col[n];
         v[*ncols]   = temp_v[n];
         (*ncols)++;
-      }
-    }
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode FlucaFDSetUp_Sum(FlucaFD fd)
-{
-  FlucaFD_Sum          *sum = (FlucaFD_Sum *)fd->data;
-  FlucaFDSumOperandLink op;
-
-  PetscFunctionBegin;
-  /* Validate that we have at least one operand */
-  PetscCheck(sum->oplink, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "No operands set");
-  /* Set up all operands and validate compatibility */
-  for (op = sum->oplink; op != NULL; op = op->next) {
-    PetscCheck(op->fd->output_c == fd->output_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "All operands must have the same output component");
-    PetscCheck(op->fd->output_loc == fd->output_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "All operands must have the same output stencil location");
-  }
-
-  /* Concatenate terms */
-  for (op = sum->oplink; op != NULL; op = op->next) {
-    FlucaFDTermLink src, dst;
-    PetscBool       found;
-
-    for (src = op->fd->termlink; src; src = src->next) {
-      PetscCall(FlucaFDTermLinkFind_Internal(fd->termlink, src, &found));
-      if (!found) {
-        PetscCall(FlucaFDTermLinkDuplicate_Internal(src, &dst));
-        PetscCall(FlucaFDTermLinkAppend_Internal(&fd->termlink, dst));
       }
     }
   }
@@ -115,8 +115,8 @@ PetscErrorCode FlucaFDCreate_Sum(FlucaFD fd)
   sum->oplink = NULL;
 
   fd->data               = (void *)sum;
-  fd->ops->getstencilraw = FlucaFDGetStencil_Sum;
   fd->ops->setup         = FlucaFDSetUp_Sum;
+  fd->ops->getstencilraw = FlucaFDGetStencilRaw_Sum;
   fd->ops->destroy       = FlucaFDDestroy_Sum;
   fd->ops->view          = FlucaFDView_Sum;
   PetscFunctionReturn(PETSC_SUCCESS);

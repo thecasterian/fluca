@@ -1,36 +1,5 @@
 #include <fluca/private/flucafdimpl.h>
 
-static PetscErrorCode FlucaFDGetStencil_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  FlucaFD_Scale *scale = (FlucaFD_Scale *)fd->data;
-  PetscInt       n;
-  PetscScalar    scale_value;
-
-  PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, ncols, col, v));
-
-  if (scale->is_constant) {
-    scale_value = scale->constant;
-  } else {
-    switch (fd->dim) {
-    case 1:
-      scale_value = scale->arr_vec_1d[i][scale->vec_slot];
-      break;
-    case 2:
-      scale_value = scale->arr_vec_2d[j][i][scale->vec_slot];
-      break;
-    case 3:
-      scale_value = scale->arr_vec_3d[k][j][i][scale->vec_slot];
-      break;
-    default:
-      SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
-    }
-  }
-
-  for (n = 0; n < *ncols; n++) v[n] *= scale_value;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode FlucaFDSetFromOptions_Scale(FlucaFD fd, PetscOptionItems PetscOptionsObject)
 {
   FlucaFD_Scale *scale = (FlucaFD_Scale *)fd->data;
@@ -92,6 +61,37 @@ static PetscErrorCode FlucaFDSetUp_Scale(FlucaFD fd)
       PetscCall(FlucaFDTermLinkAppend_Internal(&fd->termlink, dst));
     }
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  FlucaFD_Scale *scale = (FlucaFD_Scale *)fd->data;
+  PetscInt       n;
+  PetscScalar    scale_value;
+
+  PetscFunctionBegin;
+  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, ncols, col, v));
+
+  if (scale->is_constant) {
+    scale_value = scale->constant;
+  } else {
+    switch (fd->dim) {
+    case 1:
+      scale_value = scale->arr_vec_1d[i][scale->vec_slot];
+      break;
+    case 2:
+      scale_value = scale->arr_vec_2d[j][i][scale->vec_slot];
+      break;
+    case 3:
+      scale_value = scale->arr_vec_3d[k][j][i][scale->vec_slot];
+      break;
+    default:
+      SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
+    }
+  }
+
+  for (n = 0; n < *ncols; n++) v[n] *= scale_value;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -165,9 +165,9 @@ PetscErrorCode FlucaFDCreate_Scale(FlucaFD fd)
   scale->arr_vec_3d  = NULL;
 
   fd->data                = (void *)scale;
-  fd->ops->getstencilraw  = FlucaFDGetStencil_Scale;
   fd->ops->setfromoptions = FlucaFDSetFromOptions_Scale;
   fd->ops->setup          = FlucaFDSetUp_Scale;
+  fd->ops->getstencilraw  = FlucaFDGetStencilRaw_Scale;
   fd->ops->destroy        = FlucaFDDestroy_Scale;
   fd->ops->view           = FlucaFDView_Scale;
   PetscFunctionReturn(PETSC_SUCCESS);

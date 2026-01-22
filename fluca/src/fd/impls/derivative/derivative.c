@@ -2,41 +2,6 @@
 
 #define MAX_STENCIL_SIZE 16
 
-static PetscErrorCode FlucaFDGetStencil_Derivative(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  FlucaFD_Derivative *deriv = (FlucaFD_Derivative *)fd->data;
-  PetscInt            c, idx;
-
-  PetscFunctionBegin;
-  switch (deriv->dir) {
-  case FLUCAFD_X:
-    idx = i;
-    break;
-  case FLUCAFD_Y:
-    idx = j;
-    break;
-  case FLUCAFD_Z:
-    idx = k;
-    break;
-  default:
-    SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported direction");
-  }
-
-  *ncols = deriv->ncols;
-  PetscCall(PetscArraycpy(col, deriv->col, *ncols));
-  if (idx < deriv->v_start) PetscCall(PetscArraycpy(v, deriv->v_prev, deriv->ncols));
-  else if (idx >= deriv->v_end) PetscCall(PetscArraycpy(v, deriv->v_next, deriv->ncols));
-  else PetscCall(PetscArraycpy(v, deriv->v[idx], deriv->ncols));
-
-  /* Add the actual position to relative indices */
-  for (c = 0; c < *ncols; ++c) {
-    col[c].i += i;
-    col[c].j += j;
-    col[c].k += k;
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode FlucaFDSetFromOptions_Derivative(FlucaFD fd, PetscOptionItems PetscOptionsObject)
 {
   FlucaFD_Derivative *deriv = (FlucaFD_Derivative *)fd->data;
@@ -159,6 +124,41 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode FlucaFDGetStencilRaw_Derivative(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  FlucaFD_Derivative *deriv = (FlucaFD_Derivative *)fd->data;
+  PetscInt            c, idx;
+
+  PetscFunctionBegin;
+  switch (deriv->dir) {
+  case FLUCAFD_X:
+    idx = i;
+    break;
+  case FLUCAFD_Y:
+    idx = j;
+    break;
+  case FLUCAFD_Z:
+    idx = k;
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported direction");
+  }
+
+  *ncols = deriv->ncols;
+  PetscCall(PetscArraycpy(col, deriv->col, *ncols));
+  if (idx < deriv->v_start) PetscCall(PetscArraycpy(v, deriv->v_prev, deriv->ncols));
+  else if (idx >= deriv->v_end) PetscCall(PetscArraycpy(v, deriv->v_next, deriv->ncols));
+  else PetscCall(PetscArraycpy(v, deriv->v[idx], deriv->ncols));
+
+  /* Add the actual position to relative indices */
+  for (c = 0; c < *ncols; ++c) {
+    col[c].i += i;
+    col[c].j += j;
+    col[c].k += k;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode FlucaFDDestroy_Derivative(FlucaFD fd)
 {
   FlucaFD_Derivative *deriv = (FlucaFD_Derivative *)fd->data;
@@ -200,9 +200,9 @@ PetscErrorCode FlucaFDCreate_Derivative(FlucaFD fd)
   deriv->v           = NULL;
 
   fd->data                = (void *)deriv;
-  fd->ops->getstencilraw  = FlucaFDGetStencil_Derivative;
   fd->ops->setfromoptions = FlucaFDSetFromOptions_Derivative;
   fd->ops->setup          = FlucaFDSetUp_Derivative;
+  fd->ops->getstencilraw  = FlucaFDGetStencilRaw_Derivative;
   fd->ops->destroy        = FlucaFDDestroy_Derivative;
   fd->ops->view           = FlucaFDView_Derivative;
   PetscFunctionReturn(PETSC_SUCCESS);

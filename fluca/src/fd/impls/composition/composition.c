@@ -1,42 +1,5 @@
 #include <fluca/private/flucafdimpl.h>
 
-static PetscErrorCode FlucaFDGetStencil_Composition(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  FlucaFD_Composition *comp = (FlucaFD_Composition *)fd->data;
-  DMStagStencil        outer_col[64], temp_col[64];
-  PetscScalar          outer_v[64], temp_v[64];
-  PetscInt             outer_ncols, temp_ncols;
-  PetscInt             n, m, idx;
-  PetscBool            found;
-
-  PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencilRaw(comp->outer, i, j, k, &outer_ncols, outer_col, outer_v));
-
-  *ncols = 0;
-
-  for (n = 0; n < outer_ncols; n++) {
-    PetscCall(FlucaFDGetStencilRaw(comp->inner, outer_col[n].i, outer_col[n].j, outer_col[n].k, &temp_ncols, temp_col, temp_v));
-
-    for (m = 0; m < temp_ncols; m++) {
-      found = PETSC_FALSE;
-      for (idx = 0; idx < *ncols; idx++) {
-        if (col[idx].i == temp_col[m].i && col[idx].j == temp_col[m].j && col[idx].k == temp_col[m].k && col[idx].c == temp_col[m].c && col[idx].loc == temp_col[m].loc) {
-          v[idx] += outer_v[n] * temp_v[m];
-          found = PETSC_TRUE;
-          break;
-        }
-      }
-
-      if (!found) {
-        col[*ncols] = temp_col[m];
-        v[*ncols]   = outer_v[n] * temp_v[m];
-        (*ncols)++;
-      }
-    }
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode FlucaFDSetUp_Composition(FlucaFD fd)
 {
   FlucaFD_Composition *comp = (FlucaFD_Composition *)fd->data;
@@ -74,6 +37,43 @@ static PetscErrorCode FlucaFDSetUp_Composition(FlucaFD fd)
         PetscCall(FlucaFDTermLinkFind_Internal(fd->termlink, new_term, &found));
         if (found) PetscCall(PetscFree(new_term));
         else PetscCall(FlucaFDTermLinkAppend_Internal(&fd->termlink, new_term));
+      }
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  FlucaFD_Composition *comp = (FlucaFD_Composition *)fd->data;
+  DMStagStencil        outer_col[64], temp_col[64];
+  PetscScalar          outer_v[64], temp_v[64];
+  PetscInt             outer_ncols, temp_ncols;
+  PetscInt             n, m, idx;
+  PetscBool            found;
+
+  PetscFunctionBegin;
+  PetscCall(FlucaFDGetStencilRaw(comp->outer, i, j, k, &outer_ncols, outer_col, outer_v));
+
+  *ncols = 0;
+
+  for (n = 0; n < outer_ncols; n++) {
+    PetscCall(FlucaFDGetStencilRaw(comp->inner, outer_col[n].i, outer_col[n].j, outer_col[n].k, &temp_ncols, temp_col, temp_v));
+
+    for (m = 0; m < temp_ncols; m++) {
+      found = PETSC_FALSE;
+      for (idx = 0; idx < *ncols; idx++) {
+        if (col[idx].i == temp_col[m].i && col[idx].j == temp_col[m].j && col[idx].k == temp_col[m].k && col[idx].c == temp_col[m].c && col[idx].loc == temp_col[m].loc) {
+          v[idx] += outer_v[n] * temp_v[m];
+          found = PETSC_TRUE;
+          break;
+        }
+      }
+
+      if (!found) {
+        col[*ncols] = temp_col[m];
+        v[*ncols]   = outer_v[n] * temp_v[m];
+        (*ncols)++;
       }
     }
   }
@@ -122,8 +122,8 @@ PetscErrorCode FlucaFDCreate_Composition(FlucaFD fd)
   comp->outer = NULL;
 
   fd->data               = (void *)comp;
-  fd->ops->getstencilraw = FlucaFDGetStencil_Composition;
   fd->ops->setup         = FlucaFDSetUp_Composition;
+  fd->ops->getstencilraw = FlucaFDGetStencilRaw_Composition;
   fd->ops->destroy       = FlucaFDDestroy_Composition;
   fd->ops->view          = FlucaFDView_Composition;
   PetscFunctionReturn(PETSC_SUCCESS);
