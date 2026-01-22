@@ -24,7 +24,7 @@ typedef struct _FlucaFDOps *FlucaFDOps;
 struct _FlucaFDOps {
   PetscErrorCode (*setfromoptions)(FlucaFD, PetscOptionItems);
   PetscErrorCode (*setup)(FlucaFD);
-  PetscErrorCode (*getstencil)(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, DMStagStencil[], PetscScalar[]);
+  PetscErrorCode (*getstencilraw)(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, DMStagStencil[], PetscScalar[]);
   PetscErrorCode (*destroy)(FlucaFD);
   PetscErrorCode (*view)(FlucaFD, PetscViewer);
 };
@@ -104,6 +104,9 @@ typedef struct {
 } FlucaFD_Sum;
 
 FLUCA_INTERN PetscErrorCode FlucaFDStencilLocationToDMStagStencilLocation_Internal(FlucaFDStencilLocation, DMStagStencilLocation *);
+FLUCA_INTERN PetscErrorCode FlucaFDGetCoordinate_Internal(const PetscScalar **, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar, PetscScalar, PetscScalar *);
+FLUCA_INTERN PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt, PetscScalar[], PetscScalar[], PetscScalar[]);
+FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, DMStagStencil[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, DMStagStencil[], PetscScalar[]);
 
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *);

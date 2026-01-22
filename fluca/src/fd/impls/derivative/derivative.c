@@ -2,39 +2,6 @@
 
 #define MAX_STENCIL_SIZE 16
 
-static PetscErrorCode GetCoordinate_Private(const PetscScalar **arr_coord, PetscInt idx, PetscInt slot, PetscInt x, PetscInt n, PetscScalar h_prev, PetscScalar h_next, PetscScalar *coord)
-{
-  PetscFunctionBegin;
-  if (x <= idx && idx < x + n) *coord = arr_coord[idx][slot];
-  /* Before the local grid start; extrapolate using uniform grid with h_prev */
-  else if (idx < x) *coord = arr_coord[x][slot] - (x - idx) * h_prev;
-  /* After the local grid end; extrapolate using uniform grid with h_next */
-  else *coord = arr_coord[x + n - 1][slot] + (idx - (x + n - 1)) * h_next;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode SolveStencilMatrix_Private(PetscInt n, PetscScalar A[], PetscScalar b[], PetscScalar x[])
-{
-  PetscInt    i, j, k;
-  PetscScalar factor, sum;
-
-  PetscFunctionBegin;
-  /* Forward elimination */
-  for (k = 0; k < n - 1; ++k)
-    for (i = k + 1; i < n; ++i) {
-      factor = A[i * n + k] / A[k * n + k];
-      for (j = k; j < n; ++j) A[i * n + j] -= factor * A[k * n + j];
-      b[i] -= factor * b[k];
-    }
-  /* Back substitution */
-  for (i = n - 1; i >= 0; --i) {
-    sum = 0.;
-    for (j = i + 1; j < n; ++j) sum += A[i * n + j] * x[j];
-    x[i] = (b[i] - sum) / A[i * n + i];
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode FlucaFDGetStencil_Derivative(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   FlucaFD_Derivative *deriv = (FlucaFD_Derivative *)fd->data;
@@ -163,18 +130,18 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
       else v = deriv->v[i];
 
       /* Build Vandermonde-like matrix using coordinates */
-      PetscCall(GetCoordinate_Private(arr_coord, i, output_slot_coord, xg, ng, h_prev, h_next, &output_coord));
+      PetscCall(FlucaFDGetCoordinate_Internal(arr_coord, i, output_slot_coord, xg, ng, h_prev, h_next, &output_coord));
       for (c = 0; c < stencil_size; ++c) {
-        PetscCall(GetCoordinate_Private(arr_coord, i + offset_start + c, input_slot_coord, xg, ng + extrag, h_prev, h_next, &input_coord));
+        PetscCall(FlucaFDGetCoordinate_Internal(arr_coord, i + offset_start + c, input_slot_coord, xg, ng + extrag, h_prev, h_next, &input_coord));
         h = input_coord - output_coord;
-        for (r = 0; r < stencil_size; ++r) A[r * stencil_size + c] = PetscPowRealInt(h, r);
+        for (r = 0; r < stencil_size; ++r) A[r * stencil_size + c] = PetscPowScalarInt(h, r);
       }
 
       factorial = 1.;
       for (o = 1; o <= deriv->deriv_order; ++o) factorial *= o;
       for (c = 0; c < stencil_size; ++c) b[c] = (c == deriv->deriv_order) ? factorial : 0.;
 
-      PetscCall(SolveStencilMatrix_Private(stencil_size, A, b, v));
+      PetscCall(FlucaFDSolveLinearSystem_Internal(stencil_size, A, b, v));
     }
   }
 
@@ -233,7 +200,7 @@ PetscErrorCode FlucaFDCreate_Derivative(FlucaFD fd)
   deriv->v           = NULL;
 
   fd->data                = (void *)deriv;
-  fd->ops->getstencil     = FlucaFDGetStencil_Derivative;
+  fd->ops->getstencilraw  = FlucaFDGetStencil_Derivative;
   fd->ops->setfromoptions = FlucaFDSetFromOptions_Derivative;
   fd->ops->setup          = FlucaFDSetUp_Derivative;
   fd->ops->destroy        = FlucaFDDestroy_Derivative;

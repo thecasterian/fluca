@@ -7,7 +7,7 @@ static PetscErrorCode FlucaFDGetStencil_Scale(FlucaFD fd, PetscInt i, PetscInt j
   PetscScalar    scale_value;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencil(scale->operand, i, j, k, ncols, col, v));
+  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, ncols, col, v));
 
   if (scale->is_constant) {
     scale_value = scale->constant;
@@ -165,7 +165,7 @@ PetscErrorCode FlucaFDCreate_Scale(FlucaFD fd)
   scale->arr_vec_3d  = NULL;
 
   fd->data                = (void *)scale;
-  fd->ops->getstencil     = FlucaFDGetStencil_Scale;
+  fd->ops->getstencilraw  = FlucaFDGetStencil_Scale;
   fd->ops->setfromoptions = FlucaFDSetFromOptions_Scale;
   fd->ops->setup          = FlucaFDSetUp_Scale;
   fd->ops->destroy        = FlucaFDDestroy_Scale;

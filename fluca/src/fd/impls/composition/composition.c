@@ -10,12 +10,12 @@ static PetscErrorCode FlucaFDGetStencil_Composition(FlucaFD fd, PetscInt i, Pets
   PetscBool            found;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencil(comp->outer, i, j, k, &outer_ncols, outer_col, outer_v));
+  PetscCall(FlucaFDGetStencilRaw(comp->outer, i, j, k, &outer_ncols, outer_col, outer_v));
 
   *ncols = 0;
 
   for (n = 0; n < outer_ncols; n++) {
-    PetscCall(FlucaFDGetStencil(comp->inner, outer_col[n].i, outer_col[n].j, outer_col[n].k, &temp_ncols, temp_col, temp_v));
+    PetscCall(FlucaFDGetStencilRaw(comp->inner, outer_col[n].i, outer_col[n].j, outer_col[n].k, &temp_ncols, temp_col, temp_v));
 
     for (m = 0; m < temp_ncols; m++) {
       found = PETSC_FALSE;
@@ -121,11 +121,11 @@ PetscErrorCode FlucaFDCreate_Composition(FlucaFD fd)
   comp->inner = NULL;
   comp->outer = NULL;
 
-  fd->data            = (void *)comp;
-  fd->ops->getstencil = FlucaFDGetStencil_Composition;
-  fd->ops->setup      = FlucaFDSetUp_Composition;
-  fd->ops->destroy    = FlucaFDDestroy_Composition;
-  fd->ops->view       = FlucaFDView_Composition;
+  fd->data               = (void *)comp;
+  fd->ops->getstencilraw = FlucaFDGetStencil_Composition;
+  fd->ops->setup         = FlucaFDSetUp_Composition;
+  fd->ops->destroy       = FlucaFDDestroy_Composition;
+  fd->ops->view          = FlucaFDView_Composition;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

@@ -14,7 +14,7 @@ static PetscErrorCode FlucaFDGetStencil_Sum(FlucaFD fd, PetscInt i, PetscInt j, 
   *ncols = 0;
 
   for (op = sum->oplink; op != NULL; op = op->next) {
-    PetscCall(FlucaFDGetStencil(op->fd, i, j, k, &temp_ncols, temp_col, temp_v));
+    PetscCall(FlucaFDGetStencilRaw(op->fd, i, j, k, &temp_ncols, temp_col, temp_v));
 
     for (n = 0; n < temp_ncols; n++) {
       found = PETSC_FALSE;
@@ -114,11 +114,11 @@ PetscErrorCode FlucaFDCreate_Sum(FlucaFD fd)
   PetscCall(PetscNew(&sum));
   sum->oplink = NULL;
 
-  fd->data            = (void *)sum;
-  fd->ops->getstencil = FlucaFDGetStencil_Sum;
-  fd->ops->setup      = FlucaFDSetUp_Sum;
-  fd->ops->destroy    = FlucaFDDestroy_Sum;
-  fd->ops->view       = FlucaFDView_Sum;
+  fd->data               = (void *)sum;
+  fd->ops->getstencilraw = FlucaFDGetStencil_Sum;
+  fd->ops->setup         = FlucaFDSetUp_Sum;
+  fd->ops->destroy       = FlucaFDDestroy_Sum;
+  fd->ops->view          = FlucaFDView_Sum;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

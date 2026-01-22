@@ -1,5 +1,17 @@
 #include <fluca/private/flucafdimpl.h>
 
+PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscAssertPointer(ncols, 5);
+  PetscAssertPointer(col, 6);
+  PetscAssertPointer(v, 7);
+  PetscUseTypeMethod(fd, getstencilraw, i, j, k, ncols, col, v);
+  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(ncols, col, v));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscFunctionBegin;
@@ -7,7 +19,9 @@ PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k,
   PetscAssertPointer(ncols, 5);
   PetscAssertPointer(col, 6);
   PetscAssertPointer(v, 7);
-  PetscUseTypeMethod(fd, getstencil, i, j, k, ncols, col, v);
+  PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, ncols, col, v));
+  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, i, j, k, ncols, col, v));
+  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(ncols, col, v));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
