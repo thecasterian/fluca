@@ -6,7 +6,6 @@ PetscClassId FLUCAFD_CLASSID = 0;
 PetscFunctionList FlucaFDList              = NULL;
 PetscBool         FlucaFDRegisterAllCalled = PETSC_FALSE;
 
-const char *FlucaFDStencilLocations[]       = {"ELEMENT", "LEFT", "DOWN", "BACK", "FlucaFDStencilLocation", "", NULL};
 const char *FlucaFDDirections[]             = {"X", "Y", "Z", "FlucaFDDirection", "", NULL};
 const char *FlucaFDBoundaryConditionTypes[] = {"NONE", "DIRICHLET", "NEUMANN", "PERIODIC", "FlucaFDBoundaryConditionType", "", NULL};
 
@@ -21,9 +20,9 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
   PetscCall(FlucaFDInitializePackage());
   PetscCall(FlucaHeaderCreate(f, FLUCAFD_CLASSID, "FlucaFD", "Finite Difference", "FlucaFD", comm, FlucaFDDestroy, FlucaFDView));
   f->input_c    = 0;
-  f->input_loc  = FLUCAFD_ELEMENT;
+  f->input_loc  = DMSTAG_ELEMENT;
   f->output_c   = 0;
-  f->output_loc = FLUCAFD_ELEMENT;
+  f->output_loc = DMSTAG_ELEMENT;
   f->cdm        = NULL;
   for (d = 0; d < 2 * FLUCAFD_MAX_DIM; ++d) {
     f->bcs[d].type  = FLUCAFD_BC_NONE;
@@ -133,8 +132,8 @@ PetscErrorCode FlucaFDView(FlucaFD fd, PetscViewer viewer)
     PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)fd, viewer));
     PetscCall(PetscViewerASCIIPushTab(viewer));
     PetscCall(PetscViewerASCIIPrintf(viewer, "Dimension: %" PetscInt_FMT "\n", fd->dim));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "Input component: %" PetscInt_FMT ", stencil location: %s\n", fd->input_c, FlucaFDStencilLocations[fd->input_loc]));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "Output component: %" PetscInt_FMT ", stencil location: %s\n", fd->output_c, FlucaFDStencilLocations[fd->output_loc]));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Input component: %" PetscInt_FMT ", stencil location: %s\n", fd->input_c, DMStagStencilLocations[fd->input_loc]));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Output component: %" PetscInt_FMT ", stencil location: %s\n", fd->output_c, DMStagStencilLocations[fd->output_loc]));
     PetscCall(PetscViewerASCIIPopTab(viewer));
   }
 
@@ -159,7 +158,7 @@ PetscErrorCode FlucaFDView(FlucaFD fd, PetscViewer viewer)
         else PetscCall(PetscSNPrintf(accu_order_str[d], sizeof(accu_order_str[d]), "-"));
       }
       PetscCall(PetscViewerASCIIPrintf(viewer, "  Term %" PetscInt_FMT ": deriv_order=(%s, %s, %s), accu_order=(%s, %s, %s), input=(%s, %" PetscInt_FMT ")\n", //
-                                       idx, deriv_order_str[0], deriv_order_str[1], deriv_order_str[2], accu_order_str[0], accu_order_str[1], accu_order_str[2], FlucaFDStencilLocations[term->input_loc], term->input_c));
+                                       idx, deriv_order_str[0], deriv_order_str[1], deriv_order_str[2], accu_order_str[0], accu_order_str[1], accu_order_str[2], DMStagStencilLocations[term->input_loc], term->input_c));
     }
     PetscCall(PetscViewerASCIIPopTab(viewer));
   }

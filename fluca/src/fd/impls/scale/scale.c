@@ -9,8 +9,9 @@ static PetscErrorCode FlucaFDSetFromOptions_Scale(FlucaFD fd, PetscOptionItems P
   if (scale->is_constant) {
     PetscCall(PetscOptionsReal("-flucafd_constant", "Scale constant", "FlucaFDScaleSetConstant", scale->constant, &scale->constant, NULL));
   } else {
-    PetscCall(PetscOptionsEnum("-flucafd_vec_loc", "Scale vector location", "FlucaFDScaleSetVector", FlucaFDStencilLocations, (PetscEnum)scale->vec_loc, (PetscEnum *)&scale->vec_loc, NULL));
+    PetscCall(PetscOptionsEnum("-flucafd_vec_loc", "Scale vector location", "FlucaFDScaleSetVector", DMStagStencilLocations, (PetscEnum)scale->vec_loc, (PetscEnum *)&scale->vec_loc, NULL));
     PetscCall(PetscOptionsInt("-flucafd_vec_c", "Scale vector component", "FlucaFDScaleSetVector", scale->vec_c, &scale->vec_c, NULL));
+    PetscCall(FlucaFDValidateStencilLocation_Internal(scale->vec_loc));
   }
   PetscOptionsHeadEnd();
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -26,8 +27,6 @@ static PetscErrorCode FlucaFDSetUp_Scale(FlucaFD fd)
   PetscCheck(scale->operand->output_loc == fd->input_loc && fd->input_loc == fd->output_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Cannot change location");
 
   if (!scale->is_constant) {
-    DMStagStencilLocation stag_loc;
-
     PetscCheck(scale->vec, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Neither constant nor vector scale specified");
     PetscCheck(scale->operand->output_loc == scale->vec_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Operand and vector must have the same location");
 
@@ -48,8 +47,7 @@ static PetscErrorCode FlucaFDSetUp_Scale(FlucaFD fd)
     default:
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
     }
-    PetscCall(FlucaFDStencilLocationToDMStagStencilLocation_Internal(scale->vec_loc, &stag_loc));
-    PetscCall(DMStagGetLocationSlot(scale->vec_dm, stag_loc, scale->vec_c, &scale->vec_slot));
+    PetscCall(DMStagGetLocationSlot(scale->vec_dm, scale->vec_loc, scale->vec_c, &scale->vec_slot));
   }
 
   /* Copy term infos from operand */
@@ -135,7 +133,7 @@ static PetscErrorCode FlucaFDView_Scale(FlucaFD fd, PetscViewer viewer)
       PetscCall(PetscViewerASCIIPrintf(viewer, "  Scale value: %g\n", scale->constant));
     } else {
       PetscCall(PetscViewerASCIIPrintf(viewer, "  Scale type: vector\n"));
-      PetscCall(PetscViewerASCIIPrintf(viewer, "  Vector stencil location: %s\n", FlucaFDStencilLocations[scale->vec_loc]));
+      PetscCall(PetscViewerASCIIPrintf(viewer, "  Vector stencil location: %s\n", DMStagStencilLocations[scale->vec_loc]));
       PetscCall(PetscViewerASCIIPrintf(viewer, "  Vector component: %" PetscInt_FMT "\n", scale->vec_c));
     }
     PetscCall(PetscViewerASCIIPrintf(viewer, "  Operand:\n"));
@@ -156,7 +154,7 @@ PetscErrorCode FlucaFDCreate_Scale(FlucaFD fd)
   scale->constant    = 1.;
   scale->vec         = NULL;
   scale->vec_c       = 0;
-  scale->vec_loc     = FLUCAFD_ELEMENT;
+  scale->vec_loc     = DMSTAG_ELEMENT;
   scale->is_constant = PETSC_TRUE;
   scale->vec_dm      = NULL;
   scale->vec_local   = NULL;
@@ -198,13 +196,14 @@ PetscErrorCode FlucaFDScaleSetConstant(FlucaFD fd, PetscScalar constant)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDScaleSetVector(FlucaFD fd, Vec vec, FlucaFDStencilLocation loc, PetscInt c)
+PetscErrorCode FlucaFDScaleSetVector(FlucaFD fd, Vec vec, DMStagStencilLocation loc, PetscInt c)
 {
   FlucaFD_Scale *scale = (FlucaFD_Scale *)fd->data;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(fd, FLUCAFD_CLASSID, 1, FLUCAFDSCALE);
   PetscValidHeaderSpecific(vec, VEC_CLASSID, 2);
+  PetscCall(FlucaFDValidateStencilLocation_Internal(loc));
   PetscCall(VecDestroy(&scale->vec));
   scale->vec         = vec;
   scale->vec_loc     = loc;

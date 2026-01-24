@@ -1,23 +1,43 @@
 #include <fluca/private/flucafdimpl.h>
 
-PetscErrorCode FlucaFDStencilLocationToDMStagStencilLocation_Internal(FlucaFDStencilLocation loc, DMStagStencilLocation *stag_loc)
+PetscErrorCode FlucaFDValidateStencilLocation_Internal(DMStagStencilLocation loc)
 {
   PetscFunctionBegin;
+  /* Only ELEMENT, LEFT, DOWN, BACK, and their combinations are allowed */
   switch (loc) {
-  case FLUCAFD_ELEMENT:
-    *stag_loc = DMSTAG_ELEMENT;
-    break;
-  case FLUCAFD_LEFT:
-    *stag_loc = DMSTAG_LEFT;
-    break;
-  case FLUCAFD_DOWN:
-    *stag_loc = DMSTAG_DOWN;
-    break;
-  case FLUCAFD_BACK:
-    *stag_loc = DMSTAG_BACK;
+  case DMSTAG_ELEMENT:
+  case DMSTAG_LEFT:
+  case DMSTAG_DOWN:
+  case DMSTAG_BACK:
+  case DMSTAG_DOWN_LEFT:
+  case DMSTAG_BACK_LEFT:
+  case DMSTAG_BACK_DOWN:
+  case DMSTAG_BACK_DOWN_LEFT:
     break;
   default:
-    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported FlucaFDStencilLocation");
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Invalid stencil location %s; only ELEMENT, LEFT, DOWN, BACK, and their combinations are allowed", DMStagStencilLocations[loc]);
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDUseFaceCoordinate_Internal(DMStagStencilLocation loc, PetscInt dir, PetscBool *use_face)
+{
+  PetscFunctionBegin;
+  switch (dir) {
+  case 0:
+    /* Check for LEFT */
+    *use_face = (loc == DMSTAG_LEFT || loc == DMSTAG_DOWN_LEFT || loc == DMSTAG_BACK_LEFT || loc == DMSTAG_BACK_DOWN_LEFT);
+    break;
+  case 1:
+    /* Check for DOWN */
+    *use_face = (loc == DMSTAG_DOWN || loc == DMSTAG_DOWN_LEFT || loc == DMSTAG_BACK_DOWN || loc == DMSTAG_BACK_DOWN_LEFT);
+    break;
+  case 2:
+    /* Check for BACK */
+    *use_face = (loc == DMSTAG_BACK || loc == DMSTAG_BACK_LEFT || loc == DMSTAG_BACK_DOWN || loc == DMSTAG_BACK_DOWN_LEFT);
+    break;
+  default:
+    *use_face = PETSC_FALSE;
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -66,20 +86,18 @@ static PetscErrorCode IsOffGrid_Private(FlucaFD fd, const DMStagStencil *col, Pe
   for (d = 0; d < fd->dim; ++d) {
     switch (d) {
     case 0:
-      idx            = col->i;
-      use_face_coord = col->loc == DMSTAG_LEFT;
+      idx = col->i;
       break;
     case 1:
-      idx            = col->j;
-      use_face_coord = col->loc == DMSTAG_DOWN;
+      idx = col->j;
       break;
     case 2:
-      idx            = col->k;
-      use_face_coord = col->loc == DMSTAG_BACK;
+      idx = col->k;
       break;
     default:
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
     }
+    PetscCall(FlucaFDUseFaceCoordinate_Internal(col->loc, d, &use_face_coord));
 
     periodic = fd->bcs[2 * d].type == FLUCAFD_BC_PERIODIC;
 
@@ -105,31 +123,13 @@ static PetscErrorCode IsOffGrid_Private(FlucaFD fd, const DMStagStencil *col, Pe
 
 static PetscErrorCode GetStencilSizeForOffGridPoint_Private(FlucaFD fd, const DMStagStencil *col, PetscInt dir, FlucaFDBoundaryConditionType bc_type, PetscInt *stencil_size)
 {
-  FlucaFDTermLink        term;
-  FlucaFDStencilLocation fd_loc;
-  PetscInt               order, min_order;
+  FlucaFDTermLink term;
+  PetscInt        order, min_order;
 
   PetscFunctionBegin;
-  switch (col->loc) {
-  case DMSTAG_ELEMENT:
-    fd_loc = FLUCAFD_ELEMENT;
-    break;
-  case DMSTAG_LEFT:
-    fd_loc = FLUCAFD_LEFT;
-    break;
-  case DMSTAG_DOWN:
-    fd_loc = FLUCAFD_DOWN;
-    break;
-  case DMSTAG_BACK:
-    fd_loc = FLUCAFD_BACK;
-    break;
-  default:
-    SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported DMStagStencilLocation");
-  }
-
   min_order = PETSC_INT_MAX;
   for (term = fd->termlink; term; term = term->next)
-    if (term->deriv_order[dir] != -1 && term->accu_order[dir] != PETSC_INT_MAX && term->input_loc == fd_loc && term->input_c == col->c) {
+    if (term->deriv_order[dir] != -1 && term->accu_order[dir] != PETSC_INT_MAX && term->input_loc == col->loc && term->input_c == col->c) {
       order     = term->deriv_order[dir] + term->accu_order[dir];
       min_order = PetscMin(order, min_order);
     }
@@ -173,22 +173,54 @@ static PetscErrorCode AddStencilPoint_Private(PetscInt *ncols, DMStagStencil col
 static PetscErrorCode GetBoundaryStencilLocation_Private(DMStagStencilLocation ref_loc, PetscInt dir, DMStagStencilLocation *bnd_loc)
 {
   PetscFunctionBegin;
-  switch (ref_loc) {
-  case DMSTAG_ELEMENT:
-    *bnd_loc = (dir == 0) ? DMSTAG_LEFT : ((dir == 1) ? DMSTAG_DOWN : DMSTAG_BACK);
+  // clang-format off
+  switch (dir) {
+  case 0:
+    /* Add LEFT */
+    switch (ref_loc) {
+    case DMSTAG_ELEMENT:        *bnd_loc = DMSTAG_LEFT;           break;
+    case DMSTAG_LEFT:           *bnd_loc = DMSTAG_LEFT;           break;
+    case DMSTAG_DOWN:           *bnd_loc = DMSTAG_DOWN_LEFT;      break;
+    case DMSTAG_BACK:           *bnd_loc = DMSTAG_BACK_LEFT;      break;
+    case DMSTAG_DOWN_LEFT:      *bnd_loc = DMSTAG_DOWN_LEFT;      break;
+    case DMSTAG_BACK_LEFT:      *bnd_loc = DMSTAG_BACK_LEFT;      break;
+    case DMSTAG_BACK_DOWN:      *bnd_loc = DMSTAG_BACK_DOWN_LEFT; break;
+    case DMSTAG_BACK_DOWN_LEFT: *bnd_loc = DMSTAG_BACK_DOWN_LEFT; break;
+    default: SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported DMStagStencilLocation");
+    }
     break;
-  case DMSTAG_LEFT:
-    *bnd_loc = (dir == 0) ? DMSTAG_LEFT : ((dir == 1) ? DMSTAG_DOWN_LEFT : DMSTAG_BACK_LEFT);
+  case 1:
+    /* Add DOWN */
+    switch (ref_loc) {
+    case DMSTAG_ELEMENT:        *bnd_loc = DMSTAG_DOWN;           break;
+    case DMSTAG_LEFT:           *bnd_loc = DMSTAG_DOWN_LEFT;      break;
+    case DMSTAG_DOWN:           *bnd_loc = DMSTAG_DOWN;           break;
+    case DMSTAG_BACK:           *bnd_loc = DMSTAG_BACK_DOWN;      break;
+    case DMSTAG_DOWN_LEFT:      *bnd_loc = DMSTAG_DOWN_LEFT;      break;
+    case DMSTAG_BACK_LEFT:      *bnd_loc = DMSTAG_BACK_DOWN_LEFT; break;
+    case DMSTAG_BACK_DOWN:      *bnd_loc = DMSTAG_BACK_DOWN;      break;
+    case DMSTAG_BACK_DOWN_LEFT: *bnd_loc = DMSTAG_BACK_DOWN_LEFT; break;
+    default: SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported DMStagStencilLocation");
+    }
     break;
-  case DMSTAG_DOWN:
-    *bnd_loc = (dir == 0) ? DMSTAG_DOWN_LEFT : ((dir == 1) ? DMSTAG_DOWN : DMSTAG_BACK_DOWN);
-    break;
-  case DMSTAG_BACK:
-    *bnd_loc = (dir == 0) ? DMSTAG_BACK_LEFT : ((dir == 1) ? DMSTAG_BACK_DOWN : DMSTAG_DOWN);
+  case 2:
+    /* Add BACK */
+    switch (ref_loc) {
+    case DMSTAG_ELEMENT:        *bnd_loc = DMSTAG_BACK;           break;
+    case DMSTAG_LEFT:           *bnd_loc = DMSTAG_BACK_LEFT;      break;
+    case DMSTAG_DOWN:           *bnd_loc = DMSTAG_BACK_DOWN;      break;
+    case DMSTAG_BACK:           *bnd_loc = DMSTAG_BACK;           break;
+    case DMSTAG_DOWN_LEFT:      *bnd_loc = DMSTAG_BACK_DOWN_LEFT; break;
+    case DMSTAG_BACK_LEFT:      *bnd_loc = DMSTAG_BACK_LEFT;      break;
+    case DMSTAG_BACK_DOWN:      *bnd_loc = DMSTAG_BACK_DOWN;      break;
+    case DMSTAG_BACK_DOWN_LEFT: *bnd_loc = DMSTAG_BACK_DOWN_LEFT; break;
+    default: SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported DMStagStencilLocation");
+    }
     break;
   default:
-    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported DMStagStencilLocation");
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported direction");
   }
+  // clang-format on
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -235,9 +267,9 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt out_i, P
       else if (!is_low && fd->is_last_rank[off_dir] && !periodic) bc_type = fd->bcs[2 * off_dir + 1].type;
       else bc_type = FLUCAFD_BC_NONE;
 
-      arr_coord      = fd->arr_coord[off_dir];
-      use_face_coord = (off_col.loc == DMSTAG_LEFT && off_dir == 0) || (off_col.loc == DMSTAG_DOWN && off_dir == 1) || (off_col.loc == DMSTAG_BACK && off_dir == 2);
-      coord_slot     = use_face_coord ? fd->slot_coord_prev : fd->slot_coord_elem;
+      arr_coord = fd->arr_coord[off_dir];
+      PetscCall(FlucaFDUseFaceCoordinate_Internal(off_col.loc, off_dir, &use_face_coord));
+      coord_slot = use_face_coord ? fd->slot_coord_prev : fd->slot_coord_elem;
 
       PetscCall(GetStencilSizeForOffGridPoint_Private(fd, &off_col, off_dir, bc_type, &stencil_size));
       PetscCheck(stencil_size <= FLUCAFD_MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Stencil size %" PetscInt_FMT " exceeds maximum %d", stencil_size, FLUCAFD_MAX_STENCIL_SIZE);
@@ -330,7 +362,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt out_i, P
         new_col.j = (off_dir == 1) ? bnd_idx : out_j;
         new_col.k = (off_dir == 2) ? bnd_idx : out_k;
         PetscCall(GetBoundaryStencilLocation_Private(off_col.loc, off_dir, &new_col.loc));
-        new_col.c = -1; /* Boundary value marker */
+        new_col.c = -(2 * off_dir + (is_low ? 1 : 2)); /* Boundary value marker: -1=left, -2=right, -3=down, -4=up, -5=back, -6=front */
         PetscCall(AddStencilPoint_Private(ncols, col, v, &new_col, off_v * extrap_coeffs[0]));
 
         /* Add on-grid points to stencil */
@@ -376,7 +408,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt out_i, P
         new_col.j = (off_dir == 1) ? bnd_idx : out_j;
         new_col.k = (off_dir == 2) ? bnd_idx : out_k;
         PetscCall(GetBoundaryStencilLocation_Private(off_col.loc, off_dir, &new_col.loc));
-        new_col.c = -1; /* Boundary value marker */
+        new_col.c = -(2 * off_dir + (is_low ? 1 : 2)); /* Boundary value marker: -1=left, -2=right, -3=down, -4=up, -5=back, -6=front */
         PetscCall(AddStencilPoint_Private(ncols, col, v, &new_col, off_v / a_off));
 
         /* Add on-grid points to stencil */
@@ -442,7 +474,7 @@ PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *term)
     t->deriv_order[d] = -1;
     t->accu_order[d]  = PETSC_INT_MAX;
   }
-  t->input_loc = FLUCAFD_ELEMENT;
+  t->input_loc = DMSTAG_ELEMENT;
   t->input_c   = 0;
   t->next      = NULL;
   *term        = t;

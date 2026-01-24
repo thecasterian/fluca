@@ -16,50 +16,50 @@ static PetscErrorCode FlucaFDSetFromOptions_Derivative(FlucaFD fd, PetscOptionIt
 static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
 {
   FlucaFD_Derivative *deriv = (FlucaFD_Derivative *)fd->data;
-  PetscBool           left_elem, down_elem, back_elem;
+  PetscBool           input_use_face, output_use_face, valid_transition;
 
   PetscFunctionBegin;
   PetscCheck((PetscInt)deriv->dir < fd->dim, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Cannot compute derivative in %s direction on %" PetscInt_FMT "D DM", FlucaFDDirections[deriv->dir], fd->dim);
-  /* Validate input and output locations */
-  left_elem = deriv->dir == FLUCAFD_X && ((fd->input_loc == FLUCAFD_ELEMENT && fd->output_loc == FLUCAFD_LEFT) || (fd->input_loc == FLUCAFD_LEFT && fd->output_loc == FLUCAFD_ELEMENT));
-  down_elem = deriv->dir == FLUCAFD_Y && ((fd->input_loc == FLUCAFD_ELEMENT && fd->output_loc == FLUCAFD_DOWN) || (fd->input_loc == FLUCAFD_DOWN && fd->output_loc == FLUCAFD_ELEMENT));
-  back_elem = deriv->dir == FLUCAFD_Z && ((fd->input_loc == FLUCAFD_ELEMENT && fd->output_loc == FLUCAFD_BACK) || (fd->input_loc == FLUCAFD_BACK && fd->output_loc == FLUCAFD_ELEMENT));
-  PetscCheck(fd->input_loc == fd->output_loc || left_elem || down_elem || back_elem, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Cannot compute derivative in %s direction from input location %s to output location %s", FlucaFDDirections[deriv->dir], FlucaFDStencilLocations[fd->input_loc], FlucaFDStencilLocations[fd->output_loc]);
+  /* Validate input and output locations: they must either be same, or differ only in the derivative direction's face component */
+  PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->input_loc, deriv->dir, &input_use_face));
+  PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, deriv->dir, &output_use_face));
+  valid_transition = (input_use_face != output_use_face);
+  for (PetscInt d = 0; d < fd->dim; ++d)
+    if (d != (PetscInt)deriv->dir) {
+      PetscBool input_face_d, output_face_d;
+
+      /* All other directions must have matching face components */
+      PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->input_loc, d, &input_face_d));
+      PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, d, &output_face_d));
+      if (input_face_d != output_face_d) valid_transition = PETSC_FALSE;
+    }
+  PetscCheck(fd->input_loc == fd->output_loc || valid_transition, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Cannot compute derivative in %s direction from input location %s to output location %s", FlucaFDDirections[deriv->dir], DMStagStencilLocations[fd->input_loc], DMStagStencilLocations[fd->output_loc]);
 
   /* Pre-compute stencils */
   {
-    const PetscScalar   **arr_coord;
-    DMStagStencilLocation stag_loc;
-    PetscBool             periodic, input_use_face_coord, output_use_face_coord;
-    PetscInt              xg, ng, extrag, stencil_size, offset_start;
-    PetscInt              input_slot_coord, output_slot_coord, first_face_idx, last_face_idx;
-    PetscScalar           h_prev, h_next;
-    PetscInt              i, r, c, o;
+    const PetscScalar **arr_coord;
+    PetscBool           periodic;
+    PetscInt            xg, ng, extrag, stencil_size, offset_start;
+    PetscInt            input_slot_coord, output_slot_coord, first_face_idx, last_face_idx;
+    PetscScalar         h_prev, h_next;
+    PetscInt            i, r, c, o;
 
     arr_coord = fd->arr_coord[deriv->dir];
-    PetscCall(FlucaFDStencilLocationToDMStagStencilLocation_Internal(fd->input_loc, &stag_loc));
-    periodic = fd->bcs[2 * deriv->dir].type == FLUCAFD_BC_PERIODIC;
-
-    input_use_face_coord = (fd->input_loc == FLUCAFD_LEFT && deriv->dir == FLUCAFD_X) //
-                        || (fd->input_loc == FLUCAFD_DOWN && deriv->dir == FLUCAFD_Y) //
-                        || (fd->input_loc == FLUCAFD_BACK && deriv->dir == FLUCAFD_Z);
-    output_use_face_coord = (fd->output_loc == FLUCAFD_LEFT && deriv->dir == FLUCAFD_X) //
-                         || (fd->output_loc == FLUCAFD_DOWN && deriv->dir == FLUCAFD_Y) //
-                         || (fd->output_loc == FLUCAFD_BACK && deriv->dir == FLUCAFD_Z);
+    periodic  = fd->bcs[2 * deriv->dir].type == FLUCAFD_BC_PERIODIC;
 
     /* Local grid info */
     xg = fd->x[deriv->dir] - ((fd->is_first_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width);
     ng = fd->n[deriv->dir]                                                      //
        + ((fd->is_first_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width) //
        + ((fd->is_last_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width);
-    extrag = (fd->is_last_rank[deriv->dir] && input_use_face_coord && !periodic) ? 1 : 0;
+    extrag = (fd->is_last_rank[deriv->dir] && input_use_face && !periodic) ? 1 : 0;
 
     stencil_size = deriv->deriv_order + deriv->accu_order;
     PetscCheck(stencil_size <= FLUCAFD_MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Required stencil size (%" PetscInt_FMT ") exceeds maximum (%" PetscInt_FMT ")", stencil_size, FLUCAFD_MAX_STENCIL_SIZE);
 
     /* Use central differencing scheme */
     offset_start = -(stencil_size - 1) / 2;
-    if (fd->input_loc == FLUCAFD_ELEMENT && fd->output_loc != FLUCAFD_ELEMENT) offset_start -= 1;
+    if (!input_use_face && output_use_face) offset_start -= 1;
 
     deriv->ncols = stencil_size;
     for (c = 0; c < stencil_size; ++c) {
@@ -67,7 +67,7 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
       deriv->col[c].j   = (deriv->dir == FLUCAFD_Y) ? (offset_start + c) : 0;
       deriv->col[c].k   = (deriv->dir == FLUCAFD_Z) ? (offset_start + c) : 0;
       deriv->col[c].c   = fd->input_c;
-      deriv->col[c].loc = stag_loc;
+      deriv->col[c].loc = fd->input_loc;
     }
 
     /* Allocate coefficient arrays */
@@ -77,8 +77,8 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
     deriv->v -= deriv->v_start;
 
     /* Compute coefficients */
-    input_slot_coord  = input_use_face_coord ? fd->slot_coord_prev : fd->slot_coord_elem;
-    output_slot_coord = output_use_face_coord ? fd->slot_coord_prev : fd->slot_coord_elem;
+    input_slot_coord  = input_use_face ? fd->slot_coord_prev : fd->slot_coord_elem;
+    output_slot_coord = output_use_face ? fd->slot_coord_prev : fd->slot_coord_elem;
     first_face_idx    = xg;
     last_face_idx     = xg + ng - ((fd->is_last_rank[deriv->dir] && !periodic) ? 0 : 1);
     h_prev            = arr_coord[first_face_idx + 1][fd->slot_coord_prev] - arr_coord[first_face_idx][fd->slot_coord_prev];

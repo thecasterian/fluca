@@ -12,19 +12,21 @@ PetscErrorCode FlucaFDSetCoordinateDM(FlucaFD fd, DM cdm)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDSetInputLocation(FlucaFD fd, FlucaFDStencilLocation loc, PetscInt c)
+PetscErrorCode FlucaFDSetInputLocation(FlucaFD fd, DMStagStencilLocation loc, PetscInt c)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscCall(FlucaFDValidateStencilLocation_Internal(loc));
   fd->input_loc = loc;
   fd->input_c   = c;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDSetOutputLocation(FlucaFD fd, FlucaFDStencilLocation loc, PetscInt c)
+PetscErrorCode FlucaFDSetOutputLocation(FlucaFD fd, DMStagStencilLocation loc, PetscInt c)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscCall(FlucaFDValidateStencilLocation_Internal(loc));
   fd->output_loc = loc;
   fd->output_c   = c;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -65,9 +67,9 @@ PetscErrorCode FlucaFDSetFromOptions(FlucaFD fd)
   PetscCall(PetscOptionsFList("-flucafd_type", "Finite difference discretization", "FlucaFDSetType", FlucaFDList, default_type, type, sizeof(type), &flg));
   if (flg) PetscCall(FlucaFDSetType(fd, type));
   else if (!((PetscObject)fd)->type_name) PetscCall(FlucaFDSetType(fd, default_type));
-  PetscCall(PetscOptionsEnum("-flucafd_input_loc", "Input stencil location", "FlucaFDSetInputLocation", FlucaFDStencilLocations, (PetscEnum)fd->input_loc, (PetscEnum *)&fd->input_loc, NULL));
+  PetscCall(PetscOptionsEnum("-flucafd_input_loc", "Input stencil location", "FlucaFDSetInputLocation", DMStagStencilLocations, (PetscEnum)fd->input_loc, (PetscEnum *)&fd->input_loc, NULL));
   PetscCall(PetscOptionsInt("-flucafd_input_c", "Input component", "FlucaFDSetInputLocation", fd->input_c, &fd->input_c, NULL));
-  PetscCall(PetscOptionsEnum("-flucafd_output_loc", "Output stencil location", "FlucaFDSetOutputLocation", FlucaFDStencilLocations, (PetscEnum)fd->output_loc, (PetscEnum *)&fd->output_loc, NULL));
+  PetscCall(PetscOptionsEnum("-flucafd_output_loc", "Output stencil location", "FlucaFDSetOutputLocation", DMStagStencilLocations, (PetscEnum)fd->output_loc, (PetscEnum *)&fd->output_loc, NULL));
   PetscCall(PetscOptionsInt("-flucafd_output_c", "Output component", "FlucaFDSetOutputLocation", fd->output_c, &fd->output_c, NULL));
   PetscCall(DMGetDimension(fd->cdm, &dim));
   for (d = 0; d < 2 * dim; ++d) {
@@ -79,6 +81,10 @@ PetscErrorCode FlucaFDSetFromOptions(FlucaFD fd)
   /* Process any options handlers added with PetscObjectAddOptionsHandler() */
   PetscCall(PetscObjectProcessOptionsHandlers((PetscObject)fd, PetscOptionsObject));
   PetscOptionsEnd();
+
+  /* Validate stencil locations after options parsing */
+  PetscCall(FlucaFDValidateStencilLocation_Internal(fd->input_loc));
+  PetscCall(FlucaFDValidateStencilLocation_Internal(fd->output_loc));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

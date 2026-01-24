@@ -27,22 +27,20 @@ PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k,
 
 PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Mat mat)
 {
-  PetscInt              x, y, z, m, n, p;
-  PetscInt              i, j, k;
-  DMStagStencil         row;
-  DMStagStencil         col[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscScalar           v[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscInt              ncols;
-  PetscInt              ir;
-  PetscInt              ic[FLUCAFD_MAX_STENCIL_SIZE];
-  DMStagStencilLocation stag_loc;
+  PetscInt      x, y, z, m, n, p;
+  PetscInt      i, j, k;
+  DMStagStencil row;
+  DMStagStencil col[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscScalar   v[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscInt      ncols;
+  PetscInt      ir;
+  PetscInt      ic[FLUCAFD_MAX_STENCIL_SIZE];
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   PetscValidHeaderSpecific(mat, MAT_CLASSID, 2);
   PetscCheck(fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "FlucaFD not setup");
 
-  PetscCall(FlucaFDStencilLocationToDMStagStencilLocation_Internal(fd->output_loc, &stag_loc));
   PetscCall(DMStagGetCorners(output_dm, &x, &y, &z, &m, &n, &p, NULL, NULL, NULL));
   PetscCall(MatZeroEntries(mat));
 
@@ -54,7 +52,7 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Mat mat)
         row.j   = j;
         row.k   = k;
         row.c   = fd->output_c;
-        row.loc = stag_loc;
+        row.loc = fd->output_loc;
         PetscCall(FlucaFDGetStencil(fd, i, j, k, &ncols, col, v));
 
         PetscCall(DMStagStencilToIndexLocal(output_dm, fd->dim, 1, &row, &ir));

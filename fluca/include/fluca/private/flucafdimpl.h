@@ -13,11 +13,11 @@ FLUCA_EXTERN PetscErrorCode FlucaFDRegisterAll(void);
 
 typedef struct _n_FlucaFDTermInfoLink *FlucaFDTermLink;
 struct _n_FlucaFDTermInfoLink {
-  PetscInt               deriv_order[FLUCAFD_MAX_DIM];
-  PetscInt               accu_order[FLUCAFD_MAX_DIM];
-  FlucaFDStencilLocation input_loc;
-  PetscInt               input_c;
-  FlucaFDTermLink        next;
+  PetscInt              deriv_order[FLUCAFD_MAX_DIM];
+  PetscInt              accu_order[FLUCAFD_MAX_DIM];
+  DMStagStencilLocation input_loc;
+  PetscInt              input_c;
+  FlucaFDTermLink       next;
 };
 
 typedef struct _FlucaFDOps *FlucaFDOps;
@@ -34,9 +34,9 @@ struct _p_FlucaFD {
   PETSCHEADER(struct _FlucaFDOps);
 
   /* Parameters ----------------------------------------------------------- */
-  FlucaFDStencilLocation   input_loc;
+  DMStagStencilLocation    input_loc;
   PetscInt                 input_c;
-  FlucaFDStencilLocation   output_loc;
+  DMStagStencilLocation    output_loc;
   PetscInt                 output_c;
   FlucaFDBoundaryCondition bcs[2 * FLUCAFD_MAX_DIM];
 
@@ -79,12 +79,12 @@ typedef struct {
 } FlucaFD_Composition;
 
 typedef struct {
-  FlucaFD                operand;
-  PetscReal              constant; /* scale constant (if constant scaling) */
-  Vec                    vec;      /* scale vector (if vector scaling) */
-  FlucaFDStencilLocation vec_loc;
-  PetscInt               vec_c;
-  PetscBool              is_constant; /* true if constant scaling, false if vector */
+  FlucaFD               operand;
+  PetscReal             constant; /* scale constant (if constant scaling) */
+  Vec                   vec;      /* scale vector (if vector scaling) */
+  DMStagStencilLocation vec_loc;
+  PetscInt              vec_c;
+  PetscBool             is_constant; /* true if constant scaling, false if vector */
 
   DM                    vec_dm;
   Vec                   vec_local;
@@ -104,7 +104,8 @@ typedef struct {
   FlucaFDSumOperandLink oplink;
 } FlucaFD_Sum;
 
-FLUCA_INTERN PetscErrorCode FlucaFDStencilLocationToDMStagStencilLocation_Internal(FlucaFDStencilLocation, DMStagStencilLocation *);
+FLUCA_INTERN PetscErrorCode FlucaFDValidateStencilLocation_Internal(DMStagStencilLocation);
+FLUCA_INTERN PetscErrorCode FlucaFDUseFaceCoordinate_Internal(DMStagStencilLocation, PetscInt, PetscBool *);
 FLUCA_INTERN PetscErrorCode FlucaFDGetCoordinate_Internal(const PetscScalar **, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar, PetscScalar, PetscScalar *);
 FLUCA_INTERN PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt, PetscScalar[], PetscScalar[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, DMStagStencil[], PetscScalar[]);
