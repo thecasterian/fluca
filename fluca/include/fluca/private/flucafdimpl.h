@@ -6,6 +6,9 @@
 
 #define FLUCAFD_MAX_DIM          3
 #define FLUCAFD_MAX_STENCIL_SIZE 32
+#define FLUCAFD_ZERO_PIVOT_TOL   1e-14
+#define FLUCAFD_COEFF_ATOL       1e-10
+#define FLUCAFD_COEFF_RTOL       1e-8
 
 FLUCA_EXTERN PetscClassId   FLUCAFD_CLASSID;
 FLUCA_EXTERN PetscBool      FlucaFDRegisterAllCalled;

@@ -5,7 +5,7 @@ static PetscErrorCode FlucaFDSetFromOptions_Scale(FlucaFD fd, PetscOptionItems P
   FlucaFD_Scale *scale = (FlucaFD_Scale *)fd->data;
 
   PetscFunctionBegin;
-  PetscOptionsHeadBegin(PetscOptionsObject, "FlucaFDDerivative Options");
+  PetscOptionsHeadBegin(PetscOptionsObject, "FlucaFDScale Options");
   if (scale->is_constant) {
     PetscCall(PetscOptionsReal("-flucafd_constant", "Scale constant", "FlucaFDScaleSetConstant", scale->constant, &scale->constant, NULL));
   } else {

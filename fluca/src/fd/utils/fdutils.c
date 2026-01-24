@@ -60,14 +60,17 @@ PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt n, PetscScalar A[], Pe
 
   PetscFunctionBegin;
   /* Forward elimination */
-  for (k = 0; k < n - 1; ++k)
+  for (k = 0; k < n - 1; ++k) {
+    PetscCheck(PetscAbs(A[k * n + k]) > FLUCAFD_ZERO_PIVOT_TOL, PETSC_COMM_SELF, PETSC_ERR_MAT_LU_ZRPVT, "Zero pivot encountered at row %" PetscInt_FMT " during forward elimination", k);
     for (i = k + 1; i < n; ++i) {
       factor = A[i * n + k] / A[k * n + k];
       for (j = k; j < n; ++j) A[i * n + j] -= factor * A[k * n + j];
       b[i] -= factor * b[k];
     }
+  }
   /* Back substitution */
   for (i = n - 1; i >= 0; --i) {
+    PetscCheck(PetscAbs(A[i * n + i]) > FLUCAFD_ZERO_PIVOT_TOL, PETSC_COMM_SELF, PETSC_ERR_MAT_LU_ZRPVT, "Zero pivot encountered at row %" PetscInt_FMT " during back substitution", i);
     sum = 0.;
     for (j = i + 1; j < n; ++j) sum += A[i * n + j] * x[j];
     x[i] = (b[i] - sum) / A[i * n + i];
@@ -159,6 +162,7 @@ static PetscErrorCode AddStencilPoint_Private(PetscInt *ncols, DMStagStencil col
     if (col[c].i == new_col->i && col[c].j == new_col->j && col[c].k == new_col->k && col[c].c == new_col->c && col[c].loc == new_col->loc) {
       v[c] += new_v;
       found = PETSC_TRUE;
+      break;
     }
   }
   if (!found) {
@@ -399,7 +403,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
         /* Solve for FD coefficients: v'[bnd] = a_off*v[off] + a[0]*v[0] + ... */
         PetscCall(FlucaFDSolveLinearSystem_Internal(stencil_size, A, b, extrap_coeffs));
         a_off = extrap_coeffs[0];
-        PetscCheck(PetscAbs(a_off) >= 1e-10, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "Neumann BC coefficient for off-grid point is too small");
+        PetscCheck(PetscAbs(a_off) >= FLUCAFD_COEFF_ATOL, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "Neumann BC coefficient for off-grid point is too small");
 
         /* v[off] = (v'[bnd] - a[0]*v[0] - ... ) / a_off */
 
@@ -445,7 +449,7 @@ PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *ncols, DMStagSt
   PetscScalar       v_abssum;
   PetscInt          ncols_new, c;
   PetscBool         remove;
-  const PetscScalar atol = 1e-10, rtol = 1e-8;
+  const PetscScalar atol = FLUCAFD_COEFF_ATOL, rtol = FLUCAFD_COEFF_RTOL;
 
   PetscFunctionBegin;
   v_abssum = 0.;

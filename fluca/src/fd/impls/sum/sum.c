@@ -35,8 +35,8 @@ static PetscErrorCode FlucaFDGetStencilRaw_Sum(FlucaFD fd, PetscInt i, PetscInt 
   FlucaFD_Sum          *sum = (FlucaFD_Sum *)fd->data;
   FlucaFDSumOperandLink op;
   PetscInt              temp_ncols;
-  DMStagStencil         temp_col[64];
-  PetscScalar           temp_v[64];
+  DMStagStencil         temp_col[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscScalar           temp_v[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt              n, idx;
   PetscBool             found;
 
@@ -76,6 +76,7 @@ static PetscErrorCode FlucaFDDestroy_Sum(FlucaFD fd)
   op = sum->oplink;
   while (op != NULL) {
     next = op->next;
+    PetscCall(FlucaFDDestroy(&op->fd));
     PetscCall(PetscFree(op));
     op = next;
   }
@@ -149,6 +150,7 @@ PetscErrorCode FlucaFDSumAddOperand(FlucaFD fd, FlucaFD operand)
   PetscCall(PetscNew(&newlink));
   newlink->fd   = operand;
   newlink->next = NULL;
+  PetscCall(PetscObjectReference((PetscObject)operand));
 
   if (!sum->oplink) {
     sum->oplink = newlink;

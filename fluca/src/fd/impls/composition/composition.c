@@ -46,8 +46,10 @@ static PetscErrorCode FlucaFDSetUp_Composition(FlucaFD fd)
 static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   FlucaFD_Composition *comp = (FlucaFD_Composition *)fd->data;
-  DMStagStencil        outer_col[64], temp_col[64];
-  PetscScalar          outer_v[64], temp_v[64];
+  DMStagStencil        outer_col[FLUCAFD_MAX_STENCIL_SIZE];
+  DMStagStencil        temp_col[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscScalar          outer_v[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscScalar          temp_v[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt             outer_ncols, temp_ncols;
   PetscInt             n, m, idx;
   PetscBool            found;
