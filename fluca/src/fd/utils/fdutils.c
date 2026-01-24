@@ -224,7 +224,7 @@ static PetscErrorCode GetBoundaryStencilLocation_Private(DMStagStencilLocation r
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt out_i, PetscInt out_j, PetscInt out_k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscInt       iter;
   const PetscInt max_iter = 100;
@@ -358,9 +358,9 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt out_i, P
         PetscCall(FlucaFDSolveLinearSystem_Internal(stencil_size, A, b, extrap_coeffs));
 
         /* Add the boundary point to stencil */
-        new_col.i = (off_dir == 0) ? bnd_idx : out_i;
-        new_col.j = (off_dir == 1) ? bnd_idx : out_j;
-        new_col.k = (off_dir == 2) ? bnd_idx : out_k;
+        new_col.i = (off_dir == 0) ? bnd_idx : off_col.i;
+        new_col.j = (off_dir == 1) ? bnd_idx : off_col.j;
+        new_col.k = (off_dir == 2) ? bnd_idx : off_col.k;
         PetscCall(GetBoundaryStencilLocation_Private(off_col.loc, off_dir, &new_col.loc));
         new_col.c = -(2 * off_dir + (is_low ? 1 : 2)); /* Boundary value marker: -1=left, -2=right, -3=down, -4=up, -5=back, -6=front */
         PetscCall(AddStencilPoint_Private(ncols, col, v, &new_col, off_v * extrap_coeffs[0]));
@@ -404,9 +404,9 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt out_i, P
         /* v[off] = (v'[bnd] - a[0]*v[0] - ... ) / a_off */
 
         /* Add the boundary point to stencil */
-        new_col.i = (off_dir == 0) ? bnd_idx : out_i;
-        new_col.j = (off_dir == 1) ? bnd_idx : out_j;
-        new_col.k = (off_dir == 2) ? bnd_idx : out_k;
+        new_col.i = (off_dir == 0) ? bnd_idx : off_col.i;
+        new_col.j = (off_dir == 1) ? bnd_idx : off_col.j;
+        new_col.k = (off_dir == 2) ? bnd_idx : off_col.k;
         PetscCall(GetBoundaryStencilLocation_Private(off_col.loc, off_dir, &new_col.loc));
         new_col.c = -(2 * off_dir + (is_low ? 1 : 2)); /* Boundary value marker: -1=left, -2=right, -3=down, -4=up, -5=back, -6=front */
         PetscCall(AddStencilPoint_Private(ncols, col, v, &new_col, off_v / a_off));

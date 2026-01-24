@@ -20,7 +20,7 @@ PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k,
   PetscAssertPointer(col, 6);
   PetscAssertPointer(v, 7);
   PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, ncols, col, v));
-  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, i, j, k, ncols, col, v));
+  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, ncols, col, v));
   PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(ncols, col, v));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
