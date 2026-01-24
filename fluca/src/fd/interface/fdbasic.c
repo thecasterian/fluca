@@ -209,7 +209,10 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   }
 
   /* Validate boundary conditions */
-  PetscCheck(fd->bcs, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Boundary conditions not set");
+  for (d = 0; d < fd->dim; ++d) {
+    /* Validate periodicity */
+    PetscCheck((fd->bcs[2 * d].type == FLUCAFD_BC_PERIODIC) == (fd->bcs[2 * d + 1].type == FLUCAFD_BC_PERIODIC), PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONG, "A boundary is periodic while its opposite is non-periodic");
+  }
 
   /* Call type-specific setup */
   PetscTryTypeMethod(fd, setup);

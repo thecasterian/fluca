@@ -220,7 +220,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt out_i, P
       FlucaFDBoundaryConditionType bc_type;
       const PetscScalar          **arr_coord;
       PetscBool                    periodic, use_face_coord;
-      PetscInt                     coord_slot, stencil_size, xg, ng, extrag, off_grid_idx, start_idx, bnd_idx;
+      PetscInt                     coord_slot, stencil_size, xg, ng, extrag, first_face_idx, last_face_idx, off_grid_idx, start_idx, bnd_idx;
       PetscScalar                  h_prev, h_next, off_coord, bnd_coord, a_off;
       PetscScalar                  extrap_coords[FLUCAFD_MAX_STENCIL_SIZE];
       PetscScalar                  extrap_coeffs[FLUCAFD_MAX_STENCIL_SIZE];
@@ -247,8 +247,10 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt out_i, P
       ng     = fd->n[off_dir] + ((fd->is_first_rank[off_dir] && !periodic) ? 0 : fd->stencil_width) + ((fd->is_last_rank[off_dir] && !periodic) ? 0 : fd->stencil_width);
       extrag = (fd->is_last_rank[off_dir] && use_face_coord && !periodic) ? 1 : 0;
 
-      h_prev = arr_coord[xg + 1][fd->slot_coord_prev] - arr_coord[xg][fd->slot_coord_prev];
-      h_next = arr_coord[xg + ng][fd->slot_coord_prev] - arr_coord[xg + ng - 1][fd->slot_coord_prev];
+      first_face_idx = xg;
+      last_face_idx  = xg + ng - ((fd->is_last_rank[off_dir] && !periodic) ? 0 : 1);
+      h_prev         = arr_coord[first_face_idx + 1][fd->slot_coord_prev] - arr_coord[first_face_idx][fd->slot_coord_prev];
+      h_next         = arr_coord[last_face_idx][fd->slot_coord_prev] - arr_coord[last_face_idx - 1][fd->slot_coord_prev];
       switch (off_dir) {
       case 0:
         off_grid_idx = off_col.i;

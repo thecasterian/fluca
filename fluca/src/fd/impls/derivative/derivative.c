@@ -32,7 +32,7 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
     DMStagStencilLocation stag_loc;
     PetscBool             periodic, input_use_face_coord, output_use_face_coord;
     PetscInt              xg, ng, extrag, stencil_size, offset_start;
-    PetscInt              input_slot_coord, output_slot_coord;
+    PetscInt              input_slot_coord, output_slot_coord, first_face_idx, last_face_idx;
     PetscScalar           h_prev, h_next;
     PetscInt              i, r, c, o;
 
@@ -79,8 +79,10 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
     /* Compute coefficients */
     input_slot_coord  = input_use_face_coord ? fd->slot_coord_prev : fd->slot_coord_elem;
     output_slot_coord = output_use_face_coord ? fd->slot_coord_prev : fd->slot_coord_elem;
-    h_prev            = arr_coord[xg + 1][fd->slot_coord_prev] - arr_coord[xg][fd->slot_coord_prev];
-    h_next            = arr_coord[xg + ng][fd->slot_coord_prev] - arr_coord[xg + ng - 1][fd->slot_coord_prev];
+    first_face_idx    = xg;
+    last_face_idx     = xg + ng - ((fd->is_last_rank[deriv->dir] && !periodic) ? 0 : 1);
+    h_prev            = arr_coord[first_face_idx + 1][fd->slot_coord_prev] - arr_coord[first_face_idx][fd->slot_coord_prev];
+    h_next            = arr_coord[last_face_idx][fd->slot_coord_prev] - arr_coord[last_face_idx - 1][fd->slot_coord_prev];
 
     for (i = deriv->v_start - 1; i < deriv->v_end + 1; ++i) {
       PetscScalar *v;
