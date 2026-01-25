@@ -40,10 +40,25 @@ PetscErrorCode FlucaFDSetBoundaryConditions(FlucaFD fd, const FlucaFDBoundaryCon
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   PetscAssertPointer(bcs, 2);
 
-  PetscCheck(fd->cdm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Coordinate DM must be set before boundary conditions");
+  PetscCheck(fd->cdm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Coordinate DM must be set before setting boundary conditions");
   PetscCall(DMGetDimension(fd->cdm, &dim));
   nb = 2 * dim;
   PetscCall(PetscArraycpy(fd->bcs, bcs, nb));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDGetBoundaryConditions(FlucaFD fd, FlucaFDBoundaryCondition bcs[])
+{
+  PetscInt dim, nb;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscAssertPointer(bcs, 2);
+
+  PetscCheck(fd->cdm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Coordinate DM must be set before getting boundary conditions");
+  PetscCall(DMGetDimension(fd->cdm, &dim));
+  nb = 2 * dim;
+  PetscCall(PetscArraycpy(bcs, fd->bcs, nb));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

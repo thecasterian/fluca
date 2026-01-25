@@ -15,7 +15,7 @@ PetscErrorCode FlucaFDValidateStencilLocation_Internal(DMStagStencilLocation loc
   case DMSTAG_BACK_DOWN_LEFT:
     break;
   default:
-    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Invalid stencil location %s; only ELEMENT, LEFT, DOWN, BACK, and their combinations are allowed", DMStagStencilLocations[loc]);
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Invalid stencil location %s; only ELEMENT, LEFT, DOWN, BACK, and their combinations are allowed", DMStagStencilLocations[loc]);
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -37,7 +37,7 @@ PetscErrorCode FlucaFDUseFaceCoordinate_Internal(DMStagStencilLocation loc, Pets
     *use_face = (loc == DMSTAG_BACK || loc == DMSTAG_BACK_LEFT || loc == DMSTAG_BACK_DOWN || loc == DMSTAG_BACK_DOWN_LEFT);
     break;
   default:
-    *use_face = PETSC_FALSE;
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Invalid dir %" PetscInt_FMT, dir);
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
