@@ -5,18 +5,19 @@
 # Get the directory where this module is located (for finding RunTest.cmake)
 set(FLUCA_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
-# fluca_add_test(name executable args output_file source_dir)
+# fluca_add_test(name base_name executable args output_file source_dir)
 #
 # Register a single test with CTest.
-# - name: Full test name (e.g., ex1_1)
+# - name: Full test name (e.g., tests_fd_ex1_first_deriv)
+# - base_name: Base name for default output file (e.g., ex1_first_deriv)
 # - executable: Target name of the test executable
 # - args: Command-line arguments for the test (can be empty)
 # - output_file: Path to golden output file relative to source_dir (can be empty)
 # - source_dir: Directory containing the test source and output files
-function(fluca_add_test name executable args output_file source_dir)
-    # Use default output file if not specified: output/<name>.out
+function(fluca_add_test name base_name executable args output_file source_dir)
+    # Use default output file if not specified: output/<base_name>.out
     if(NOT output_file)
-        set(output_file "output/${name}.out")
+        set(output_file "output/${base_name}.out")
     endif()
 
     set(expected_output "${source_dir}/${output_file}")
@@ -30,12 +31,14 @@ function(fluca_add_test name executable args output_file source_dir)
     )
 endfunction()
 
-# fluca_parse_test_file(source_file test_name)
+# fluca_parse_test_file(source_file test_name base_name)
 #
 # Parse a source file for /*TEST ... TEST*/ blocks and register tests.
 # - source_file: Full path to the source file
-# - test_name: Base name for tests (typically the executable name)
-function(fluca_parse_test_file source_file test_name)
+# - test_name: Full test name prefix (e.g., tests_fd_ex1)
+# - base_name: Base name for output files (e.g., ex1)
+function(fluca_parse_test_file source_file test_name base_name)
+
     # Tell CMake to re-configure when the source file changes
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source_file}")
 
@@ -75,6 +78,7 @@ function(fluca_parse_test_file source_file test_name)
             if(in_test_block AND current_suffix)
                 fluca_add_test(
                     "${test_name}_${current_suffix}"
+                    "${base_name}_${current_suffix}"
                     "${test_name}"
                     "${current_args}"
                     "${current_output_file}"
@@ -112,6 +116,7 @@ function(fluca_parse_test_file source_file test_name)
     if(in_test_block AND current_suffix)
         fluca_add_test(
             "${test_name}_${current_suffix}"
+            "${base_name}_${current_suffix}"
             "${test_name}"
             "${current_args}"
             "${current_output_file}"
