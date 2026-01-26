@@ -42,12 +42,7 @@ int main(int argc, char **argv)
     PetscCall(FlucaFDSetUp(fd_deriv[d]));
   }
 
-  PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_sum));
-  PetscCall(FlucaFDSetType(fd_sum, FLUCAFDSUM));
-  PetscCall(FlucaFDSetCoordinateDM(fd_sum, cdm));
-  PetscCall(FlucaFDSetInputLocation(fd_sum, DMSTAG_ELEMENT, 0));
-  PetscCall(FlucaFDSetOutputLocation(fd_sum, DMSTAG_ELEMENT, 0));
-  for (d = 0; d < 3; ++d) PetscCall(FlucaFDSumAddOperand(fd_sum, fd_deriv[d]));
+  PetscCall(FlucaFDSumCreate(3, fd_deriv, &fd_sum));
   PetscCall(FlucaFDSetOptionsPrefix(fd_sum, "sum_"));
   PetscCall(FlucaFDSetFromOptions(fd_sum));
   PetscCall(FlucaFDSetUp(fd_sum));

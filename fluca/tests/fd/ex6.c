@@ -10,41 +10,21 @@ static const char help[] = "Solve 2D steady heat equation (Laplacian u = 0)\n"
 static PetscErrorCode CreateLaplacianOperator(DM dm, FlucaFD *laplacian)
 {
   DM      cdm;
-  FlucaFD fd_d2x, fd_d2y;
+  FlucaFD fd_d2[2];
 
   PetscFunctionBegin;
   PetscCall(DMGetCoordinateDM(dm, &cdm));
 
   /* Create d²/dx² operator */
-  PetscCall(FlucaFDCreate(PetscObjectComm((PetscObject)dm), &fd_d2x));
-  PetscCall(FlucaFDSetType(fd_d2x, FLUCAFDDERIVATIVE));
-  PetscCall(FlucaFDSetCoordinateDM(fd_d2x, cdm));
-  PetscCall(FlucaFDSetInputLocation(fd_d2x, DMSTAG_ELEMENT, 0));
-  PetscCall(FlucaFDSetOutputLocation(fd_d2x, DMSTAG_ELEMENT, 0));
-  PetscCall(FlucaFDDerivativeSetDirection(fd_d2x, FLUCAFD_X));
-  PetscCall(FlucaFDDerivativeSetDerivativeOrder(fd_d2x, 2));
-  PetscCall(FlucaFDDerivativeSetAccuracyOrder(fd_d2x, 2));
-  PetscCall(FlucaFDSetUp(fd_d2x));
+  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_X, 2, 2, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_d2[0]));
+  PetscCall(FlucaFDSetUp(fd_d2[0]));
 
   /* Create d²/dy² operator */
-  PetscCall(FlucaFDCreate(PetscObjectComm((PetscObject)dm), &fd_d2y));
-  PetscCall(FlucaFDSetType(fd_d2y, FLUCAFDDERIVATIVE));
-  PetscCall(FlucaFDSetCoordinateDM(fd_d2y, cdm));
-  PetscCall(FlucaFDSetInputLocation(fd_d2y, DMSTAG_ELEMENT, 0));
-  PetscCall(FlucaFDSetOutputLocation(fd_d2y, DMSTAG_ELEMENT, 0));
-  PetscCall(FlucaFDDerivativeSetDirection(fd_d2y, FLUCAFD_Y));
-  PetscCall(FlucaFDDerivativeSetDerivativeOrder(fd_d2y, 2));
-  PetscCall(FlucaFDDerivativeSetAccuracyOrder(fd_d2y, 2));
-  PetscCall(FlucaFDSetUp(fd_d2y));
+  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_Y, 2, 2, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_d2[1]));
+  PetscCall(FlucaFDSetUp(fd_d2[1]));
 
   /* Create Laplacian = d²/dx² + d²/dy² */
-  PetscCall(FlucaFDCreate(PetscObjectComm((PetscObject)dm), laplacian));
-  PetscCall(FlucaFDSetType(*laplacian, FLUCAFDSUM));
-  PetscCall(FlucaFDSetCoordinateDM(*laplacian, cdm));
-  PetscCall(FlucaFDSetInputLocation(*laplacian, DMSTAG_ELEMENT, 0));
-  PetscCall(FlucaFDSetOutputLocation(*laplacian, DMSTAG_ELEMENT, 0));
-  PetscCall(FlucaFDSumAddOperand(*laplacian, fd_d2x));
-  PetscCall(FlucaFDSumAddOperand(*laplacian, fd_d2y));
+  PetscCall(FlucaFDSumCreate(2, fd_d2, laplacian));
 
   /* Set boundary conditions: all Dirichlet */
   {
@@ -66,8 +46,8 @@ static PetscErrorCode CreateLaplacianOperator(DM dm, FlucaFD *laplacian)
   }
   PetscCall(FlucaFDSetUp(*laplacian));
 
-  PetscCall(FlucaFDDestroy(&fd_d2y));
-  PetscCall(FlucaFDDestroy(&fd_d2x));
+  PetscCall(FlucaFDDestroy(&fd_d2[1]));
+  PetscCall(FlucaFDDestroy(&fd_d2[0]));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

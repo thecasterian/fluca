@@ -121,11 +121,7 @@ int main(int argc, char **argv)
   }
 
   PetscCall(DMGetCoordinateDM(input_dm, &cdm));
-  PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd));
-  PetscCall(FlucaFDSetType(fd, FLUCAFDDERIVATIVE));
-  PetscCall(FlucaFDSetCoordinateDM(fd, cdm));
-  PetscCall(FlucaFDSetInputLocation(fd, input_loc, 0));
-  PetscCall(FlucaFDSetOutputLocation(fd, output_loc, 0));
+  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_X, 1, 1, input_loc, 0, output_loc, 0, &fd));
   /* Call SetFromOptions first so user can set BC types via command line */
   PetscCall(FlucaFDSetFromOptions(fd));
 

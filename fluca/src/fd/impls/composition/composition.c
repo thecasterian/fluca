@@ -132,6 +132,28 @@ PetscErrorCode FlucaFDCreate_Composition(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode FlucaFDCompositionCreate(FlucaFD inner, FlucaFD outer, FlucaFD *fd)
+{
+  MPI_Comm comm;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(inner, FLUCAFD_CLASSID, 1);
+  PetscValidHeaderSpecific(outer, FLUCAFD_CLASSID, 2);
+  PetscCheckSameComm(inner, 1, outer, 2);
+  PetscCheck(inner->setupcalled, PetscObjectComm((PetscObject)inner), PETSC_ERR_ARG_WRONGSTATE, "Inner operand must be set up before calling FlucaFDCompositionCreate");
+  PetscCheck(outer->setupcalled, PetscObjectComm((PetscObject)outer), PETSC_ERR_ARG_WRONGSTATE, "Outer operand must be set up before calling FlucaFDCompositionCreate");
+  PetscAssertPointer(fd, 3);
+
+  PetscCall(PetscObjectGetComm((PetscObject)inner, &comm));
+  PetscCall(FlucaFDCreate(comm, fd));
+  PetscCall(FlucaFDSetType(*fd, FLUCAFDCOMPOSITION));
+  PetscCall(FlucaFDSetCoordinateDM(*fd, inner->cdm));
+  PetscCall(FlucaFDSetInputLocation(*fd, inner->input_loc, inner->input_c));
+  PetscCall(FlucaFDSetOutputLocation(*fd, outer->output_loc, outer->output_c));
+  PetscCall(FlucaFDCompositionSetOperands(*fd, inner, outer));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode FlucaFDCompositionSetOperands(FlucaFD fd, FlucaFD inner, FlucaFD outer)
 {
   FlucaFD_Composition *comp = (FlucaFD_Composition *)fd->data;

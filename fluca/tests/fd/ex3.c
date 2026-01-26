@@ -42,16 +42,12 @@ int main(int argc, char **argv)
   vec         = NULL;
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-const", &is_constant, NULL));
 
-  PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_scale));
-  PetscCall(FlucaFDSetType(fd_scale, FLUCAFDSCALE));
-  PetscCall(FlucaFDSetCoordinateDM(fd_scale, cdm));
-  PetscCall(FlucaFDSetInputLocation(fd_scale, DMSTAG_ELEMENT, 0));
-  PetscCall(FlucaFDSetOutputLocation(fd_scale, DMSTAG_ELEMENT, 0));
-  PetscCall(FlucaFDScaleSetOperand(fd_scale, fd_deriv));
-  if (!is_constant) {
+  if (is_constant) {
+    PetscCall(FlucaFDScaleCreateConstant(fd_deriv, 1., &fd_scale));
+  } else {
     PetscCall(DMCreateGlobalVector(dm, &vec));
     PetscCall(FillScaleVector(dm, vec));
-    PetscCall(FlucaFDScaleSetVector(fd_scale, vec, DMSTAG_ELEMENT, 0));
+    PetscCall(FlucaFDScaleCreateVector(fd_deriv, vec, 0, &fd_scale));
   }
   PetscCall(FlucaFDSetOptionsPrefix(fd_scale, "scale_"));
   PetscCall(FlucaFDSetFromOptions(fd_scale));

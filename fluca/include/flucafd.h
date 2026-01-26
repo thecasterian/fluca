@@ -67,19 +67,24 @@ FLUCA_EXTERN PetscErrorCode FlucaFDGetStencil(FlucaFD, PetscInt, PetscInt, Petsc
 FLUCA_EXTERN PetscErrorCode FlucaFDApply(FlucaFD, DM, DM, Mat, Vec);
 
 /* FLUCAFDDERIVATIVE specific */
+FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeCreate(DM, FlucaFDDirection, PetscInt, PetscInt, DMStagStencilLocation, PetscInt, DMStagStencilLocation, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeSetDerivativeOrder(FlucaFD, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeSetAccuracyOrder(FlucaFD, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeSetDirection(FlucaFD, FlucaFDDirection);
 
 /* FLUCAFDCOMPOSITION specific */
+FLUCA_EXTERN PetscErrorCode FlucaFDCompositionCreate(FlucaFD, FlucaFD, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDCompositionSetOperands(FlucaFD, FlucaFD, FlucaFD);
 
 /* FLUCAFDSCALE specific */
+FLUCA_EXTERN PetscErrorCode FlucaFDScaleCreateConstant(FlucaFD, PetscScalar, FlucaFD *);
+FLUCA_EXTERN PetscErrorCode FlucaFDScaleCreateVector(FlucaFD, Vec, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDScaleSetOperand(FlucaFD, FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDScaleSetConstant(FlucaFD, PetscScalar);
 FLUCA_EXTERN PetscErrorCode FlucaFDScaleSetVector(FlucaFD, Vec, DMStagStencilLocation, PetscInt);
 
 /* FLUCAFDSUM specific */
+FLUCA_EXTERN PetscErrorCode FlucaFDSumCreate(PetscInt, const FlucaFD[], FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSumGetNumOperands(FlucaFD, PetscInt *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSumAddOperand(FlucaFD, FlucaFD);
 

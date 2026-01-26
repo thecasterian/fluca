@@ -24,10 +24,7 @@ int main(int argc, char **argv)
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 0., 0., 0.));
   PetscCall(DMGetCoordinateDM(dm, &cdm));
 
-  PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd));
-  PetscCall(FlucaFDSetType(fd, FLUCAFDDERIVATIVE));
-  PetscCall(FlucaFDSetCoordinateDM(fd, cdm));
-  PetscCall(FlucaFDDerivativeSetDirection(fd, FLUCAFD_X));
+  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd));
   PetscCall(FlucaFDSetFromOptions(fd));
   PetscCall(FlucaFDSetUp(fd));
 

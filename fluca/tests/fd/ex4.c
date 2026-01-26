@@ -44,12 +44,7 @@ int main(int argc, char **argv)
   PetscCall(FlucaFDSetFromOptions(fd_outer));
   PetscCall(FlucaFDSetUp(fd_outer));
 
-  PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_comp));
-  PetscCall(FlucaFDSetType(fd_comp, FLUCAFDCOMPOSITION));
-  PetscCall(FlucaFDSetCoordinateDM(fd_comp, cdm));
-  PetscCall(FlucaFDSetInputLocation(fd_comp, DMSTAG_ELEMENT, 0));
-  PetscCall(FlucaFDSetOutputLocation(fd_comp, DMSTAG_ELEMENT, 0));
-  PetscCall(FlucaFDCompositionSetOperands(fd_comp, fd_inner, fd_outer));
+  PetscCall(FlucaFDCompositionCreate(fd_inner, fd_outer, &fd_comp));
   PetscCall(FlucaFDSetOptionsPrefix(fd_comp, "comp_"));
   PetscCall(FlucaFDSetFromOptions(fd_comp));
   PetscCall(FlucaFDSetUp(fd_comp));

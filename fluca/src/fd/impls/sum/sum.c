@@ -9,9 +9,11 @@ static PetscErrorCode FlucaFDSetUp_Sum(FlucaFD fd)
   /* Validate that we have at least one operand */
   PetscCheck(sum->oplink, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "No operands set");
   /* Set up all operands and validate compatibility */
+  PetscCheck(fd->input_loc == fd->output_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Cannot change location");
+  PetscCheck(fd->input_c == fd->output_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Cannot change component");
   for (op = sum->oplink; op != NULL; op = op->next) {
-    PetscCheck(op->fd->output_c == fd->output_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "All operands must have the same output component");
     PetscCheck(op->fd->output_loc == fd->output_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "All operands must have the same output stencil location");
+    PetscCheck(op->fd->output_c == fd->output_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "All operands must have the same output component");
   }
 
   /* Concatenate terms */
@@ -121,6 +123,30 @@ PetscErrorCode FlucaFDCreate_Sum(FlucaFD fd)
   fd->ops->getstencilraw = FlucaFDGetStencilRaw_Sum;
   fd->ops->destroy       = FlucaFDDestroy_Sum;
   fd->ops->view          = FlucaFDView_Sum;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDSumCreate(PetscInt n, const FlucaFD ops[], FlucaFD *fd)
+{
+  MPI_Comm comm;
+  PetscInt i;
+
+  PetscFunctionBegin;
+  PetscCheck(n > 0, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Number of operands must be positive, got %" PetscInt_FMT, n);
+  PetscAssertPointer(ops, 2);
+  for (i = 0; i < n; ++i) {
+    PetscValidHeaderSpecific(ops[i], FLUCAFD_CLASSID, 2);
+    PetscCheck(ops[i]->setupcalled, PetscObjectComm((PetscObject)ops[i]), PETSC_ERR_ARG_WRONGSTATE, "Operand %" PetscInt_FMT " must be set up before calling FlucaFDSumCreate", i);
+  }
+  PetscAssertPointer(fd, 3);
+
+  PetscCall(PetscObjectGetComm((PetscObject)ops[0], &comm));
+  PetscCall(FlucaFDCreate(comm, fd));
+  PetscCall(FlucaFDSetType(*fd, FLUCAFDSUM));
+  PetscCall(FlucaFDSetCoordinateDM(*fd, ops[0]->cdm));
+  PetscCall(FlucaFDSetInputLocation(*fd, ops[0]->output_loc, ops[0]->output_c));
+  PetscCall(FlucaFDSetOutputLocation(*fd, ops[0]->output_loc, ops[0]->output_c));
+  for (i = 0; i < n; ++i) PetscCall(FlucaFDSumAddOperand(*fd, ops[i]));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

@@ -171,6 +171,48 @@ PetscErrorCode FlucaFDCreate_Scale(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode FlucaFDScaleCreateConstant(FlucaFD operand, PetscScalar constant, FlucaFD *fd)
+{
+  MPI_Comm comm;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(operand, FLUCAFD_CLASSID, 1);
+  PetscCheck(operand->setupcalled, PetscObjectComm((PetscObject)operand), PETSC_ERR_ARG_WRONGSTATE, "Operand must be set up before calling FlucaFDScaleCreateConstant");
+  PetscAssertPointer(fd, 3);
+
+  PetscCall(PetscObjectGetComm((PetscObject)operand, &comm));
+  PetscCall(FlucaFDCreate(comm, fd));
+  PetscCall(FlucaFDSetType(*fd, FLUCAFDSCALE));
+  PetscCall(FlucaFDSetCoordinateDM(*fd, operand->cdm));
+  PetscCall(FlucaFDSetInputLocation(*fd, operand->output_loc, operand->output_c));
+  PetscCall(FlucaFDSetOutputLocation(*fd, operand->output_loc, operand->output_c));
+  PetscCall(FlucaFDScaleSetOperand(*fd, operand));
+  PetscCall(FlucaFDScaleSetConstant(*fd, constant));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDScaleCreateVector(FlucaFD operand, Vec vec, PetscInt vec_c, FlucaFD *fd)
+{
+  MPI_Comm comm;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(operand, FLUCAFD_CLASSID, 1);
+  PetscValidHeaderSpecific(vec, VEC_CLASSID, 2);
+  PetscCheckSameComm(operand, 1, vec, 2);
+  PetscCheck(operand->setupcalled, PetscObjectComm((PetscObject)operand), PETSC_ERR_ARG_WRONGSTATE, "Operand must be set up before calling FlucaFDScaleCreateVector");
+  PetscAssertPointer(fd, 4);
+
+  PetscCall(PetscObjectGetComm((PetscObject)operand, &comm));
+  PetscCall(FlucaFDCreate(comm, fd));
+  PetscCall(FlucaFDSetType(*fd, FLUCAFDSCALE));
+  PetscCall(FlucaFDSetCoordinateDM(*fd, operand->cdm));
+  PetscCall(FlucaFDSetInputLocation(*fd, operand->output_loc, operand->output_c));
+  PetscCall(FlucaFDSetOutputLocation(*fd, operand->output_loc, operand->output_c));
+  PetscCall(FlucaFDScaleSetOperand(*fd, operand));
+  PetscCall(FlucaFDScaleSetVector(*fd, vec, operand->output_loc, vec_c));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode FlucaFDScaleSetOperand(FlucaFD fd, FlucaFD operand)
 {
   FlucaFD_Scale *scale = (FlucaFD_Scale *)fd->data;
