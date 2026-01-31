@@ -100,7 +100,7 @@ int main(int argc, char **argv)
   test:
     suffix: all_second_deriv_back_bc_periodic
     nsize: 1
-    args: -stag_boundary_type_z periodic -x_flucafd_deriv_order 2 -y_flucafd_deriv_order 2 -z_flucafd_deriv_order 2 -sum_flucafd_back_bc_type periodic -sum_flucafd_front_bc_type periodic -k 0
+    args: -stag_boundary_type_z periodic -x_flucafd_deriv_order 2 -y_flucafd_deriv_order 2 -z_flucafd_deriv_order 2 -z_flucafd_back_bc_type periodic -z_flucafd_front_bc_type periodic -sum_flucafd_back_bc_type periodic -sum_flucafd_front_bc_type periodic -k 0
 
   test:
     suffix: all_second_deriv_all_loc_down

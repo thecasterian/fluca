@@ -221,3 +221,24 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   PetscCall(FlucaFDViewFromOptions(fd, NULL, "-flucafd_view"));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode FlucaFDValidatePeriodicityMatch_Internal(FlucaFD parent, FlucaFD operand)
+{
+  FlucaFDTermLink term;
+
+  PetscFunctionBegin;
+  /* Only validate directions where operand actually computes derivatives */
+  for (term = operand->termlink; term; term = term->next) {
+    for (PetscInt d = 0; d < parent->dim; ++d) {
+      PetscBool parent_periodic, operand_periodic;
+
+      /* Skip directions where operand doesn't compute derivatives (deriv_order == -1) */
+      if (term->deriv_order[d] == -1) continue;
+
+      parent_periodic  = parent->bcs[2 * d].type == FLUCAFD_BC_PERIODIC;
+      operand_periodic = operand->bcs[2 * d].type == FLUCAFD_BC_PERIODIC;
+      PetscCheck(parent_periodic == operand_periodic, PetscObjectComm((PetscObject)parent), PETSC_ERR_ARG_INCOMP, "Periodicity mismatch in %s direction: parent has %s BC but operand has %s BC", FlucaFDDirections[d], parent_periodic ? "periodic" : "non-periodic", operand_periodic ? "periodic" : "non-periodic");
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}

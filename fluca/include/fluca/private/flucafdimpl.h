@@ -119,3 +119,5 @@ FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDuplicate_Internal(FlucaFDTermLink, F
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkAppend_Internal(FlucaFDTermLink *, FlucaFDTermLink);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkFind_Internal(FlucaFDTermLink, FlucaFDTermLink, PetscBool *);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDestroy_Internal(FlucaFDTermLink *);
+
+FLUCA_INTERN PetscErrorCode FlucaFDValidatePeriodicityMatch_Internal(FlucaFD, FlucaFD);
