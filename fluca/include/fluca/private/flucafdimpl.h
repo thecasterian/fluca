@@ -50,6 +50,7 @@ struct _p_FlucaFD {
   PetscInt            n[FLUCAFD_MAX_DIM];
   PetscBool           is_first_rank[FLUCAFD_MAX_DIM];
   PetscBool           is_last_rank[FLUCAFD_MAX_DIM];
+  PetscBool           periodic[FLUCAFD_MAX_DIM];
   PetscInt            stencil_width;
   const PetscScalar **arr_coord[FLUCAFD_MAX_DIM];
   PetscInt            slot_coord_prev, slot_coord_elem;
@@ -141,6 +142,8 @@ typedef struct {
   FlucaFD fd_grad; /* gradient operator (element -> face) */
 } FlucaFD_SecondOrderTVD;
 
+FLUCA_INTERN PetscErrorCode FlucaFDValidateOperand_Internal(FlucaFD, FlucaFD);
+
 FLUCA_INTERN PetscErrorCode FlucaFDValidateStencilLocation_Internal(DMStagStencilLocation);
 FLUCA_INTERN PetscErrorCode FlucaFDUseFaceCoordinate_Internal(DMStagStencilLocation, PetscInt, PetscBool *);
 FLUCA_INTERN PetscErrorCode FlucaFDGetCoordinate_Internal(const PetscScalar **, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar, PetscScalar, PetscScalar *);
@@ -154,6 +157,3 @@ FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDuplicate_Internal(FlucaFDTermLink, F
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkAppend_Internal(FlucaFDTermLink *, FlucaFDTermLink);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkFind_Internal(FlucaFDTermLink, FlucaFDTermLink, PetscBool *);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDestroy_Internal(FlucaFDTermLink *);
-
-FLUCA_INTERN PetscErrorCode FlucaFDValidatePeriodicityMatch_Internal(FlucaFD, FlucaFD);
-FLUCA_INTERN PetscErrorCode FlucaFDValidateOperand_Internal(FlucaFD, FlucaFD);

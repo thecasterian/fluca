@@ -45,7 +45,7 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
     PetscInt            i, r, c, o;
 
     arr_coord = fd->arr_coord[deriv->dir];
-    periodic  = fd->bcs[2 * deriv->dir].type == FLUCAFD_BC_PERIODIC;
+    periodic  = fd->periodic[deriv->dir];
 
     /* Local grid info */
     xg = fd->x[deriv->dir] - ((fd->is_first_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width);

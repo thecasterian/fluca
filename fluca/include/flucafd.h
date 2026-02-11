@@ -24,7 +24,7 @@ FLUCA_EXTERN PetscErrorCode FlucaFDFinalizePackage(void);
 typedef enum {
   FLUCAFD_X,
   FLUCAFD_Y,
-  FLUCAFD_Z
+  FLUCAFD_Z,
 } FlucaFDDirection;
 FLUCA_EXTERN const char *FlucaFDDirections[];
 
@@ -32,7 +32,6 @@ typedef enum {
   FLUCAFD_BC_NONE,
   FLUCAFD_BC_DIRICHLET,
   FLUCAFD_BC_NEUMANN,
-  FLUCAFD_BC_PERIODIC
 } FlucaFDBoundaryConditionType;
 FLUCA_EXTERN const char *FlucaFDBoundaryConditionTypes[];
 

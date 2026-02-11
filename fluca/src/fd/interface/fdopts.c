@@ -70,6 +70,7 @@ PetscErrorCode FlucaFDSetFromOptions(FlucaFD fd)
   char              text[PETSC_MAX_PATH_LEN];
   PetscBool         flg;
   PetscInt          dim, d;
+  DMBoundaryType    bt[3];
   const char *const boundary_names[] = {"left", "right", "down", "up", "back", "front"};
 
   PetscFunctionBegin;
@@ -87,7 +88,9 @@ PetscErrorCode FlucaFDSetFromOptions(FlucaFD fd)
   PetscCall(PetscOptionsEnum("-flucafd_output_loc", "Output stencil location", "FlucaFDSetOutputLocation", DMStagStencilLocations, (PetscEnum)fd->output_loc, (PetscEnum *)&fd->output_loc, NULL));
   PetscCall(PetscOptionsInt("-flucafd_output_c", "Output component", "FlucaFDSetOutputLocation", fd->output_c, &fd->output_c, NULL));
   PetscCall(DMGetDimension(fd->dm, &dim));
+  PetscCall(DMStagGetBoundaryTypes(fd->dm, &bt[0], &bt[1], &bt[2]));
   for (d = 0; d < 2 * dim; ++d) {
+    if (bt[d / 2] == DM_BOUNDARY_PERIODIC) continue; /* Skip BC options for periodic directions */
     PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-flucafd_%s_bc_type", boundary_names[d]));
     PetscCall(PetscSNPrintf(text, PETSC_MAX_PATH_LEN, "Boundary condition type on the %s boundary", boundary_names[d]));
     PetscCall(PetscOptionsEnum(opt, text, "FlucaFDSetBoundaryConditions", FlucaFDBoundaryConditionTypes, (PetscEnum)fd->bcs[d].type, (PetscEnum *)&fd->bcs[d].type, NULL));

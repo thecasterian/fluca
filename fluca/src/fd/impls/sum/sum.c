@@ -15,7 +15,6 @@ static PetscErrorCode FlucaFDSetUp_Sum(FlucaFD fd)
     PetscCall(FlucaFDValidateOperand_Internal(fd, op->fd));
     PetscCheck(op->fd->output_loc == fd->output_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "All operands must have the same output stencil location");
     PetscCheck(op->fd->output_c == fd->output_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "All operands must have the same output component");
-    PetscCall(FlucaFDValidatePeriodicityMatch_Internal(fd, op->fd));
   }
 
   /* Concatenate terms */

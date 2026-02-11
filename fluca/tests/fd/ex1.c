@@ -86,17 +86,17 @@ int main(int argc, char **argv)
   test:
     suffix: third_deriv_left_bc_periodic
     nsize: 1
-    args: -stag_stencil_width 2 -stag_boundary_type_x periodic -flucafd_left_bc_type periodic -flucafd_right_bc_type periodic -flucafd_deriv_order 3 -flucafd_accu_order 2 -i 0
+    args: -stag_stencil_width 2 -stag_boundary_type_x periodic -flucafd_deriv_order 3 -flucafd_accu_order 2 -i 0
 
   test:
     suffix: third_deriv_right_bc_periodic
     nsize: 1
-    args: -stag_stencil_width 2 -stag_boundary_type_x periodic -flucafd_left_bc_type periodic -flucafd_right_bc_type periodic -flucafd_deriv_order 3 -flucafd_accu_order 2 -i 7
+    args: -stag_stencil_width 2 -stag_boundary_type_x periodic -flucafd_deriv_order 3 -flucafd_accu_order 2 -i 7
 
   test:
     suffix: third_deriv_right_bc_periodic_stencil_width_1
     nsize: 1
-    args: -stag_stencil_width 1 -stag_boundary_type_x periodic -flucafd_left_bc_type periodic -flucafd_right_bc_type periodic -flucafd_deriv_order 3 -flucafd_accu_order 2 -i 7
+    args: -stag_stencil_width 1 -stag_boundary_type_x periodic -flucafd_deriv_order 3 -flucafd_accu_order 2 -i 7
 
   test:
     suffix: first_deriv_input_loc_elem_output_loc_left
@@ -116,7 +116,7 @@ int main(int argc, char **argv)
   test:
     suffix: first_deriv_input_loc_elem_output_loc_left_left_bc_periodic
     nsize: 1
-    args: -stag_boundary_type_x periodic -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc element -flucafd_output_loc left -flucafd_left_bc_type periodic -flucafd_right_bc_type periodic -i 0
+    args: -stag_boundary_type_x periodic -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc element -flucafd_output_loc left -i 0
 
   test:
     suffix: first_deriv_input_loc_left_output_loc_left
@@ -141,7 +141,7 @@ int main(int argc, char **argv)
   test:
     suffix: first_deriv_input_loc_left_output_loc_left_left_bc_periodic
     nsize: 1
-    args: -stag_boundary_type_x periodic -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -flucafd_left_bc_type periodic -flucafd_right_bc_type periodic -i 0
+    args: -stag_boundary_type_x periodic -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -i 0
 
   test:
     suffix: first_deriv_input_loc_left_output_loc_left_right_bc_none
@@ -161,11 +161,11 @@ int main(int argc, char **argv)
   test:
     suffix: first_deriv_input_loc_left_output_loc_left_right_bc_periodic
     nsize: 1
-    args: -stag_boundary_type_x periodic -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -flucafd_left_bc_type periodic -flucafd_right_bc_type periodic -i 7
+    args: -stag_boundary_type_x periodic -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -i 7
 
   test:
     suffix: second_deriv_input_loc_left_output_loc_left_right_bc_periodic
     nsize: 1
-    args: -stag_boundary_type_x periodic -flucafd_deriv_order 2 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -flucafd_left_bc_type periodic -flucafd_right_bc_type periodic -i 7
+    args: -stag_boundary_type_x periodic -flucafd_deriv_order 2 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -i 7
 
 TEST*/

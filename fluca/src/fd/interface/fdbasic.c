@@ -7,7 +7,7 @@ PetscFunctionList FlucaFDList              = NULL;
 PetscBool         FlucaFDRegisterAllCalled = PETSC_FALSE;
 
 const char *FlucaFDDirections[]             = {"X", "Y", "Z", "FlucaFDDirection", "", NULL};
-const char *FlucaFDBoundaryConditionTypes[] = {"NONE", "DIRICHLET", "NEUMANN", "PERIODIC", "FlucaFDBoundaryConditionType", "", NULL};
+const char *FlucaFDBoundaryConditionTypes[] = {"NONE", "DIRICHLET", "NEUMANN", "FlucaFDBoundaryConditionType", "", NULL};
 
 PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
 {
@@ -35,6 +35,7 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
     f->n[d]             = PETSC_DETERMINE;
     f->is_first_rank[d] = PETSC_FALSE;
     f->is_last_rank[d]  = PETSC_FALSE;
+    f->periodic[d]      = PETSC_FALSE;
     f->arr_coord[d]     = NULL;
   }
   f->stencil_width   = PETSC_DETERMINE;
@@ -166,9 +167,9 @@ PetscErrorCode FlucaFDViewFromOptions(FlucaFD fd, PetscObject obj, const char na
 
 PetscErrorCode FlucaFDSetUp(FlucaFD fd)
 {
-  PetscBool isdmstag;
-  PetscInt  d;
-
+  PetscBool      isdmstag;
+  PetscInt       d;
+  DMBoundaryType bt[FLUCAFD_MAX_DIM];
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   if (fd->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
@@ -191,11 +192,9 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   PetscCall(DMStagGetProductCoordinateLocationSlot(fd->dm, DMSTAG_LEFT, &fd->slot_coord_prev));
   PetscCall(DMStagGetProductCoordinateLocationSlot(fd->dm, DMSTAG_ELEMENT, &fd->slot_coord_elem));
 
-  /* Validate boundary conditions */
-  for (d = 0; d < fd->dim; ++d) {
-    /* Validate periodicity */
-    PetscCheck((fd->bcs[2 * d].type == FLUCAFD_BC_PERIODIC) == (fd->bcs[2 * d + 1].type == FLUCAFD_BC_PERIODIC), PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONG, "A boundary is periodic while its opposite is non-periodic");
-  }
+  /* Query periodicity from DMStag */
+  PetscCall(DMStagGetBoundaryTypes(fd->dm, &bt[0], &bt[1], &bt[2]));
+  for (d = 0; d < fd->dim; ++d) fd->periodic[d] = (bt[d] == DM_BOUNDARY_PERIODIC);
 
   /* Call type-specific setup */
   PetscTryTypeMethod(fd, setup);
@@ -203,26 +202,5 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   fd->setupcalled = PETSC_TRUE;
 
   PetscCall(FlucaFDViewFromOptions(fd, NULL, "-flucafd_view"));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode FlucaFDValidatePeriodicityMatch_Internal(FlucaFD parent, FlucaFD operand)
-{
-  FlucaFDTermLink term;
-
-  PetscFunctionBegin;
-  /* Only validate directions where operand actually computes derivatives */
-  for (term = operand->termlink; term; term = term->next) {
-    for (PetscInt d = 0; d < parent->dim; ++d) {
-      PetscBool parent_periodic, operand_periodic;
-
-      /* Skip directions where operand doesn't compute derivatives (deriv_order == -1) */
-      if (term->deriv_order[d] == -1) continue;
-
-      parent_periodic  = parent->bcs[2 * d].type == FLUCAFD_BC_PERIODIC;
-      operand_periodic = operand->bcs[2 * d].type == FLUCAFD_BC_PERIODIC;
-      PetscCheck(parent_periodic == operand_periodic, PetscObjectComm((PetscObject)parent), PETSC_ERR_ARG_INCOMP, "Periodicity mismatch in %s direction: parent has %s BC but operand has %s BC", FlucaFDDirections[d], parent_periodic ? "periodic" : "non-periodic", operand_periodic ? "periodic" : "non-periodic");
-    }
-  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

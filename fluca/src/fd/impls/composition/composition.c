@@ -11,8 +11,6 @@ static PetscErrorCode FlucaFDSetUp_Composition(FlucaFD fd)
   PetscCall(FlucaFDValidateOperand_Internal(fd, comp->outer));
   PetscCheck(comp->inner->output_c == comp->outer->input_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "Inner output component (%" PetscInt_FMT ") must match outer input component (%" PetscInt_FMT ")", comp->inner->output_c, comp->outer->input_c);
   PetscCheck(comp->inner->output_loc == comp->outer->input_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "Inner output location must match outer input location");
-  PetscCall(FlucaFDValidatePeriodicityMatch_Internal(fd, comp->inner));
-  PetscCall(FlucaFDValidatePeriodicityMatch_Internal(fd, comp->outer));
 
   /*
     Multiply term by term:

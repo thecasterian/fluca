@@ -136,7 +136,7 @@ static PetscErrorCode IsOffGrid_Private(FlucaFD fd, const DMStagStencil *col, Pe
     }
     PetscCall(FlucaFDUseFaceCoordinate_Internal(col->loc, d, &use_face_coord));
 
-    periodic = fd->bcs[2 * d].type == FLUCAFD_BC_PERIODIC;
+    periodic = fd->periodic[d];
 
     /* Local grid info */
     xg     = fd->x[d] - ((fd->is_first_rank[d] && !periodic) ? 0 : fd->stencil_width);
@@ -276,7 +276,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
       DMStagStencil                new_col;
       PetscInt                     n, r;
 
-      periodic = fd->bcs[2 * off_dir].type == FLUCAFD_BC_PERIODIC;
+      periodic = fd->periodic[off_dir];
 
       if (is_low && fd->is_first_rank[off_dir] && !periodic) bc_type = fd->bcs[2 * off_dir].type;
       else if (!is_low && fd->is_last_rank[off_dir] && !periodic) bc_type = fd->bcs[2 * off_dir + 1].type;

@@ -90,7 +90,7 @@ static PetscErrorCode FlucaFDSetUp_SecondOrderTVD(FlucaFD fd)
     PetscInt            xg, ng, extrag, i;
 
     arr_coord = fd->arr_coord[tvd->dir];
-    periodic  = fd->bcs[2 * tvd->dir].type == FLUCAFD_BC_PERIODIC;
+    periodic  = fd->periodic[tvd->dir];
 
     /* Local grid info */
     xg = fd->x[tvd->dir] - ((fd->is_first_rank[tvd->dir] && !periodic) ? 0 : fd->stencil_width);
@@ -224,7 +224,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
     SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
   }
 
-  periodic         = fd->bcs[2 * tvd->dir].type == FLUCAFD_BC_PERIODIC;
+  periodic         = fd->periodic[tvd->dir];
   at_prev_boundary = (idx == 0 && !periodic);
   at_next_boundary = (idx == fd->N[tvd->dir] && !periodic);
 
