@@ -1,0 +1,3 @@
+Stencil at i=0:
+  ncols = 1
+  col[0]: i=0, loc=LEFT, c=left_boundary, v=1.

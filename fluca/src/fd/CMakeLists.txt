@@ -5,6 +5,8 @@ add_library(fluca_fd SHARED
     impls/composition/composition.c
     impls/scale/scale.c
     impls/sum/sum.c
+    impls/secondordertvd/secondordertvd.c
+    impls/secondordertvd/secondordertvdlimiter.c
     interface/fdbasic.c
     interface/fdpkg.c
     interface/fdreg.c

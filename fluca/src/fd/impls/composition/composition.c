@@ -49,38 +49,24 @@ static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, P
 {
   FlucaFD_Composition *comp = (FlucaFD_Composition *)fd->data;
   DMStagStencil        outer_col[FLUCAFD_MAX_STENCIL_SIZE];
-  DMStagStencil        temp_col[FLUCAFD_MAX_STENCIL_SIZE];
+  DMStagStencil        inner_col[FLUCAFD_MAX_STENCIL_SIZE];
   PetscScalar          outer_v[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscScalar          temp_v[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscInt             outer_ncols, temp_ncols;
-  PetscInt             n, m, idx;
-  PetscBool            found;
+  PetscScalar          inner_v[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscInt             outer_ncols, inner_ncols;
+  PetscInt             oc, ic;
 
   PetscFunctionBegin;
   PetscCall(FlucaFDGetStencilRaw(comp->outer, i, j, k, &outer_ncols, outer_col, outer_v));
 
   *ncols = 0;
-
-  for (n = 0; n < outer_ncols; n++) {
-    PetscCall(FlucaFDGetStencilRaw(comp->inner, outer_col[n].i, outer_col[n].j, outer_col[n].k, &temp_ncols, temp_col, temp_v));
-
-    for (m = 0; m < temp_ncols; m++) {
-      found = PETSC_FALSE;
-      for (idx = 0; idx < *ncols; idx++) {
-        if (col[idx].i == temp_col[m].i && col[idx].j == temp_col[m].j && col[idx].k == temp_col[m].k && col[idx].c == temp_col[m].c && col[idx].loc == temp_col[m].loc) {
-          v[idx] += outer_v[n] * temp_v[m];
-          found = PETSC_TRUE;
-          break;
-        }
-      }
-
-      if (!found) {
-        PetscCheck(*ncols < FLUCAFD_MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Resulting stencil is too large");
-        col[*ncols] = temp_col[m];
-        v[*ncols]   = outer_v[n] * temp_v[m];
-        (*ncols)++;
-      }
+  for (oc = 0; oc < outer_ncols; oc++) {
+    if (outer_col[oc].c < 0) {
+      /* Constant or boundary marker from outer; pass through directly */
+      PetscCall(FlucaFDAddStencilPoint_Internal(outer_col[oc], outer_v[oc], ncols, col, v));
+      continue;
     }
+    PetscCall(FlucaFDGetStencilRaw(comp->inner, outer_col[oc].i, outer_col[oc].j, outer_col[oc].k, &inner_ncols, inner_col, inner_v));
+    for (ic = 0; ic < inner_ncols; ic++) PetscCall(FlucaFDAddStencilPoint_Internal(inner_col[ic], outer_v[oc] * inner_v[ic], ncols, col, v));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

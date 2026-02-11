@@ -71,18 +71,23 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Mat op, Vec v
         row.loc = fd->output_loc;
         PetscCall(FlucaFDGetStencil(fd, i, j, k, &ncols, col, v));
 
-        /* Separate boundary points from matrix points */
+        /* Separate boundary points, constant terms, and matrix points */
         mat_ncols = 0;
         for (c = 0; c < ncols; ++c) {
           if (col[c].c < 0) {
-            /* Boundary point: coefficient * boundary value -> vbc vector */
-            PetscInt    bnd_idx;
-            PetscScalar bnd_contribution;
+            if (col[c].c == FLUCAFD_CONSTANT) {
+              /* Constant term: coefficient goes directly to vbc vector */
+              PetscCall(DMStagVecSetValuesStencil(output_dm, vbc, 1, &row, &v[c], ADD_VALUES));
+            } else {
+              /* Boundary point: coefficient * boundary value -> vbc vector */
+              PetscInt    bnd_idx;
+              PetscScalar bnd_contribution;
 
-            bnd_idx = -col[c].c - 1; /* Convert boundary marker to index: -1 -> 0, -2 -> 1, etc. */
-            PetscCheck(bnd_idx >= 0 && bnd_idx < 2 * FLUCAFD_MAX_DIM, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Invalid boundary marker %" PetscInt_FMT " in stencil", col[c].c);
-            bnd_contribution = v[c] * fd->bcs[bnd_idx].value;
-            PetscCall(DMStagVecSetValuesStencil(output_dm, vbc, 1, &row, &bnd_contribution, ADD_VALUES));
+              bnd_idx = -col[c].c - 1; /* Convert boundary marker to index: -1 -> 0, -2 -> 1, etc. */
+              PetscCheck(bnd_idx >= 0 && bnd_idx < 2 * FLUCAFD_MAX_DIM, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Invalid boundary marker %" PetscInt_FMT " in stencil", col[c].c);
+              bnd_contribution = v[c] * fd->bcs[bnd_idx].value;
+              PetscCall(DMStagVecSetValuesStencil(output_dm, vbc, 1, &row, &bnd_contribution, ADD_VALUES));
+            }
           } else {
             /* Matrix point: add to mat_col/mat_v arrays */
             mat_col[mat_ncols] = col[c];
@@ -100,10 +105,6 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Mat op, Vec v
       }
     }
   }
-
-  PetscCall(MatAssemblyBegin(op, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(op, MAT_FINAL_ASSEMBLY));
-  PetscCall(VecAssemblyBegin(vbc));
-  PetscCall(VecAssemblyEnd(vbc));
+  /* The user must call MatAssemblyBegin/End and VecAssemblyBegin/End */
   PetscFunctionReturn(PETSC_SUCCESS);
 }

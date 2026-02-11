@@ -136,6 +136,10 @@ int main(int argc, char **argv)
   PetscCall(MatZeroEntries(A));
   PetscCall(VecZeroEntries(vbc));
   PetscCall(FlucaFDApply(laplacian, dm, dm, A, vbc));
+  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
+  PetscCall(VecAssemblyBegin(vbc));
+  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
+  PetscCall(VecAssemblyEnd(vbc));
 
   /* RHS = -vbc (since we solve A*u + vbc = 0) */
   PetscCall(VecCopy(vbc, b));

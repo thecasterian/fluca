@@ -37,35 +37,17 @@ static PetscErrorCode FlucaFDGetStencilRaw_Sum(FlucaFD fd, PetscInt i, PetscInt 
 {
   FlucaFD_Sum          *sum = (FlucaFD_Sum *)fd->data;
   FlucaFDSumOperandLink op;
-  PetscInt              temp_ncols;
-  DMStagStencil         temp_col[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscScalar           temp_v[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscInt              n, idx;
-  PetscBool             found;
+  PetscInt              op_ncols;
+  DMStagStencil         op_col[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscScalar           op_v[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscInt              c;
 
   PetscFunctionBegin;
   *ncols = 0;
 
   for (op = sum->oplink; op != NULL; op = op->next) {
-    PetscCall(FlucaFDGetStencilRaw(op->fd, i, j, k, &temp_ncols, temp_col, temp_v));
-
-    for (n = 0; n < temp_ncols; n++) {
-      found = PETSC_FALSE;
-      for (idx = 0; idx < *ncols; idx++) {
-        if (col[idx].i == temp_col[n].i && col[idx].j == temp_col[n].j && col[idx].k == temp_col[n].k && col[idx].c == temp_col[n].c && col[idx].loc == temp_col[n].loc) {
-          v[idx] += temp_v[n];
-          found = PETSC_TRUE;
-          break;
-        }
-      }
-
-      if (!found) {
-        PetscCheck(*ncols < FLUCAFD_MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Resulting stencil is too large");
-        col[*ncols] = temp_col[n];
-        v[*ncols]   = temp_v[n];
-        (*ncols)++;
-      }
-    }
+    PetscCall(FlucaFDGetStencilRaw(op->fd, i, j, k, &op_ncols, op_col, op_v));
+    for (c = 0; c < op_ncols; c++) PetscCall(FlucaFDAddStencilPoint_Internal(op_col[c], op_v[c], ncols, col, v));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

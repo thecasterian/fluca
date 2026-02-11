@@ -166,6 +166,10 @@ int main(int argc, char **argv)
   PetscCall(VecZeroEntries(vbc));
 
   PetscCall(FlucaFDApply(fd, input_dm, output_dm, op, vbc));
+  PetscCall(MatAssemblyBegin(op, MAT_FINAL_ASSEMBLY));
+  PetscCall(VecAssemblyBegin(vbc));
+  PetscCall(MatAssemblyEnd(op, MAT_FINAL_ASSEMBLY));
+  PetscCall(VecAssemblyEnd(vbc));
   PetscCall(MatViewFromOptions(op, NULL, "-op_view"));
   PetscCall(VecViewFromOptions(vbc, NULL, "-vbc_view"));
 

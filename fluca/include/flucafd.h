@@ -9,11 +9,16 @@ typedef struct _p_FlucaFD *FlucaFD;
 
 /* FlucaFD types */
 typedef const char *FlucaFDType;
-#define FLUCAFDDERIVATIVE    "derivative"
-#define FLUCAFDINTERPOLATION "interpolation"
-#define FLUCAFDCOMPOSITION   "composition"
-#define FLUCAFDSCALE         "scale"
-#define FLUCAFDSUM           "sum"
+#define FLUCAFDDERIVATIVE     "derivative"
+#define FLUCAFDINTERPOLATION  "interpolation"
+#define FLUCAFDCOMPOSITION    "composition"
+#define FLUCAFDSCALE          "scale"
+#define FLUCAFDSUM            "sum"
+#define FLUCAFDSECONDORDERTVD "secondordertvd"
+
+FLUCA_EXTERN PetscClassId   FLUCAFD_CLASSID;
+FLUCA_EXTERN PetscErrorCode FlucaFDInitializePackage(void);
+FLUCA_EXTERN PetscErrorCode FlucaFDFinalizePackage(void);
 
 /* Enums */
 typedef enum {
@@ -43,6 +48,8 @@ typedef struct {
 #define FLUCAFD_BOUNDARY_UP    (-4)
 #define FLUCAFD_BOUNDARY_BACK  (-5)
 #define FLUCAFD_BOUNDARY_FRONT (-6)
+/* Constant term marker for stencil points */
+#define FLUCAFD_CONSTANT (-7)
 
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate(MPI_Comm, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetType(FlucaFD, FlucaFDType);
@@ -88,8 +95,15 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSumCreate(PetscInt, const FlucaFD[], FlucaFD 
 FLUCA_EXTERN PetscErrorCode FlucaFDSumGetNumOperands(FlucaFD, PetscInt *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSumAddOperand(FlucaFD, FlucaFD);
 
-FLUCA_EXTERN PetscErrorCode FlucaFDInitializePackage(void);
-FLUCA_EXTERN PetscErrorCode FlucaFDFinalizePackage(void);
+/* FLUCAFDSECONDORDERTVD specific */
+typedef PetscScalar            FlucaFDLimiterFn(PetscScalar);
+FLUCA_EXTERN PetscFunctionList FlucaFDLimiterList;
+
+FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDCreate(DM, FlucaFDDirection, PetscInt, PetscInt, FlucaFD *);
+FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetDirection(FlucaFD, FlucaFDDirection);
+FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetLimiter(FlucaFD, const char *);
+FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetVelocity(FlucaFD, Vec, PetscInt);
+FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD, Vec);
 
 FLUCA_EXTERN PetscFunctionList FlucaFDList;
 FLUCA_EXTERN PetscErrorCode    FlucaFDRegister(const char[], PetscErrorCode (*)(FlucaFD));

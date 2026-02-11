@@ -10,7 +10,6 @@
 #define FLUCAFD_COEFF_ATOL       1e-10
 #define FLUCAFD_COEFF_RTOL       1e-8
 
-FLUCA_EXTERN PetscClassId   FLUCAFD_CLASSID;
 FLUCA_EXTERN PetscBool      FlucaFDRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode FlucaFDRegisterAll(void);
 
@@ -107,10 +106,46 @@ typedef struct {
   FlucaFDSumOperandLink oplink;
 } FlucaFD_Sum;
 
+FLUCA_EXTERN PetscBool      FlucaFDLimiterRegisterAllCalled;
+FLUCA_EXTERN PetscErrorCode FlucaFDLimiterRegisterAll(void);
+
+typedef struct {
+  FlucaFDDirection  dir;
+  FlucaFDLimiterFn *limiter;
+
+  /* Pre-computed geometry for non-uniform grids */
+  PetscInt     alpha_start;
+  PetscInt     alpha_end;
+  PetscScalar *alpha_plus;
+  PetscScalar *alpha_minus;
+  PetscScalar *alpha_plus_base;
+  PetscScalar *alpha_minus_base;
+
+  /* Velocity field (face-centered) */
+  PetscInt              vel_c;
+  DM                    vel_dm;
+  Vec                   vel_local;
+  const PetscScalar   **arr_vel_1d;
+  const PetscScalar  ***arr_vel_2d;
+  const PetscScalar ****arr_vel_3d;
+  PetscInt              vel_slot;
+
+  /* Current solution field (element-centered) */
+  DM                    phi_dm;
+  Vec                   phi_local;
+  const PetscScalar   **arr_phi_1d;
+  const PetscScalar  ***arr_phi_2d;
+  const PetscScalar ****arr_phi_3d;
+  PetscInt              phi_slot;
+
+  FlucaFD fd_grad; /* gradient operator (element -> face) */
+} FlucaFD_SecondOrderTVD;
+
 FLUCA_INTERN PetscErrorCode FlucaFDValidateStencilLocation_Internal(DMStagStencilLocation);
 FLUCA_INTERN PetscErrorCode FlucaFDUseFaceCoordinate_Internal(DMStagStencilLocation, PetscInt, PetscBool *);
 FLUCA_INTERN PetscErrorCode FlucaFDGetCoordinate_Internal(const PetscScalar **, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar, PetscScalar, PetscScalar *);
 FLUCA_INTERN PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt, PetscScalar[], PetscScalar[], PetscScalar[]);
+FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(DMStagStencil, PetscScalar, PetscInt *, DMStagStencil[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt *, DMStagStencil[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, DMStagStencil[], PetscScalar[]);
 

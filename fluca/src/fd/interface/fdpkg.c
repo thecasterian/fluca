@@ -6,15 +6,18 @@ PetscErrorCode FlucaFDFinalizePackage(void)
 {
   PetscFunctionBegin;
   PetscCall(PetscFunctionListDestroy(&FlucaFDList));
-  FlucaFDPackageInitialized = PETSC_FALSE;
-  FlucaFDRegisterAllCalled  = PETSC_FALSE;
+  PetscCall(PetscFunctionListDestroy(&FlucaFDLimiterList));
+  FlucaFDPackageInitialized       = PETSC_FALSE;
+  FlucaFDRegisterAllCalled        = PETSC_FALSE;
+  FlucaFDLimiterRegisterAllCalled = PETSC_FALSE;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode FlucaFDInitializePackage(void)
 {
-  char      logList[256];
-  PetscBool opt, pkg;
+  char         logList[256];
+  PetscBool    opt, pkg;
+  PetscClassId classids[1];
 
   PetscFunctionBegin;
   if (FlucaFDPackageInitialized) PetscFunctionReturn(PETSC_SUCCESS);
@@ -22,17 +25,13 @@ PetscErrorCode FlucaFDInitializePackage(void)
 
   /* Register class */
   PetscCall(PetscClassIdRegister("Finite Difference", &FLUCAFD_CLASSID));
-
   /* Register constructors */
   PetscCall(FlucaFDRegisterAll());
+  PetscCall(FlucaFDLimiterRegisterAll());
 
-  /* Process info exclusions */
-  PetscCall(PetscOptionsGetString(NULL, NULL, "-info_exclude", logList, sizeof(logList), &opt));
-  if (opt) {
-    PetscCall(PetscStrInList("flucafd", logList, ',', &pkg));
-    if (pkg) PetscCall(PetscInfoDeactivateClass(FLUCAFD_CLASSID));
-  }
-
+  /* Process info */
+  classids[0] = FLUCAFD_CLASSID;
+  PetscCall(PetscInfoProcessClass("flucafd", 1, classids));
   /* Process summary exclusions */
   PetscCall(PetscOptionsGetString(NULL, NULL, "-log_exclude", logList, sizeof(logList), &opt));
   if (opt) {

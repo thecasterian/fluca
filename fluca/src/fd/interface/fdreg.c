@@ -4,6 +4,7 @@ FLUCA_EXTERN PetscErrorCode FlucaFDCreate_Derivative(FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate_Composition(FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate_Scale(FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate_Sum(FlucaFD);
+FLUCA_EXTERN PetscErrorCode FlucaFDCreate_SecondOrderTVD(FlucaFD);
 
 PetscErrorCode FlucaFDRegister(const char sname[], PetscErrorCode (*function)(FlucaFD))
 {
@@ -23,5 +24,6 @@ PetscErrorCode FlucaFDRegisterAll(void)
   PetscCall(FlucaFDRegister(FLUCAFDCOMPOSITION, FlucaFDCreate_Composition));
   PetscCall(FlucaFDRegister(FLUCAFDSCALE, FlucaFDCreate_Scale));
   PetscCall(FlucaFDRegister(FLUCAFDSUM, FlucaFDCreate_Sum));
+  PetscCall(FlucaFDRegister(FLUCAFDSECONDORDERTVD, FlucaFDCreate_SecondOrderTVD));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
