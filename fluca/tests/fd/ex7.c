@@ -11,7 +11,7 @@ static const char help[] = "Test FlucaFDSecondOrderTVD operator\n"
 
 int main(int argc, char **argv)
 {
-  DM                  input_dm, output_dm, cdm;
+  DM                  input_dm, output_dm;
   FlucaFD             fd_tvd;
   Vec                 phi, vel;
   PetscInt            M, x, m, nExtrax, i, c, ncols, idx, slot_elem, slot_face;
@@ -32,8 +32,6 @@ int main(int argc, char **argv)
   PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, 8, 1, 0, DMSTAG_STENCIL_BOX, 1, NULL, &output_dm));
   PetscCall(DMSetUp(output_dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(output_dm, 0., 1., 0., 0., 0., 0.));
-
-  PetscCall(DMGetCoordinateDM(input_dm, &cdm));
 
   PetscCall(DMStagGetCorners(input_dm, &x, NULL, NULL, &m, NULL, NULL, &nExtrax, NULL, NULL));
   PetscCall(DMStagGetLocationSlot(input_dm, DMSTAG_ELEMENT, 0, &slot_elem));
@@ -64,7 +62,7 @@ int main(int argc, char **argv)
   PetscCall(DMStagRestoreProductCoordinateArraysRead(input_dm, &arr_coord, NULL, NULL));
 
   /* Create TVD operator: element phi -> face phi */
-  PetscCall(FlucaFDSecondOrderTVDCreate(cdm, FLUCAFD_X, 0, 0, &fd_tvd));
+  PetscCall(FlucaFDSecondOrderTVDCreate(input_dm, FLUCAFD_X, 0, 0, &fd_tvd));
 
   /* Set boundary conditions */
   {

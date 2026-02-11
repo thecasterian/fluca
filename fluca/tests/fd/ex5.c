@@ -99,7 +99,7 @@ static PetscErrorCode ValidateOutput(Vec output)
 
 int main(int argc, char **argv)
 {
-  DM                    input_dm, output_dm, cdm;
+  DM                    input_dm, output_dm;
   FlucaFD               fd;
   Mat                   op;
   Vec                   vbc, input, output;
@@ -120,8 +120,7 @@ int main(int argc, char **argv)
     PetscCall(CreateDMForLocation(PETSC_COMM_WORLD, M, output_loc, &output_dm));
   }
 
-  PetscCall(DMGetCoordinateDM(input_dm, &cdm));
-  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_X, 1, 1, input_loc, 0, output_loc, 0, &fd));
+  PetscCall(FlucaFDDerivativeCreate(input_dm, FLUCAFD_X, 1, 1, input_loc, 0, output_loc, 0, &fd));
   /* Call SetFromOptions first so user can set BC types via command line */
   PetscCall(FlucaFDSetFromOptions(fd));
 

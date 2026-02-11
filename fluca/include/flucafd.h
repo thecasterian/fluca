@@ -59,7 +59,7 @@ FLUCA_EXTERN PetscErrorCode FlucaFDDestroy(FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDView(FlucaFD, PetscViewer);
 FLUCA_EXTERN PetscErrorCode FlucaFDViewFromOptions(FlucaFD, PetscObject, const char[]);
 
-FLUCA_EXTERN PetscErrorCode FlucaFDSetCoordinateDM(FlucaFD, DM);
+FLUCA_EXTERN PetscErrorCode FlucaFDSetDM(FlucaFD, DM);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetInputLocation(FlucaFD, DMStagStencilLocation, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetOutputLocation(FlucaFD, DMStagStencilLocation, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetBoundaryConditions(FlucaFD, const FlucaFDBoundaryCondition[]);

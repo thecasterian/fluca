@@ -12,7 +12,7 @@ static const char help[] = "Test FlucaFD sum operator\n"
 
 int main(int argc, char **argv)
 {
-  DM            dm, cdm;
+  DM            dm;
   FlucaFD       fd_deriv[3], fd_sum;
   PetscInt      c, d, ncols;
   PetscInt      N[3], idx[3];
@@ -25,14 +25,13 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 1.));
-  PetscCall(DMGetCoordinateDM(dm, &cdm));
 
   for (d = 0; d < 3; ++d) {
     char prefix[PETSC_MAX_OPTION_NAME];
 
     PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_deriv[d]));
     PetscCall(FlucaFDSetType(fd_deriv[d], FLUCAFDDERIVATIVE));
-    PetscCall(FlucaFDSetCoordinateDM(fd_deriv[d], cdm));
+    PetscCall(FlucaFDSetDM(fd_deriv[d], dm));
     PetscCall(FlucaFDSetInputLocation(fd_deriv[d], DMSTAG_ELEMENT, 0));
     PetscCall(FlucaFDSetOutputLocation(fd_deriv[d], DMSTAG_ELEMENT, 0));
     PetscCall(FlucaFDDerivativeSetDirection(fd_deriv[d], (FlucaFDDirection)d));

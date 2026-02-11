@@ -43,12 +43,10 @@ static PetscErrorCode CreateVelocityVector(DM dm, DM *dm_vel, Vec *vel)
 
 static PetscErrorCode CreateConvectionOperator(AppCtx *ctx, FlucaFD *fd_conv)
 {
-  DM                       cdm;
   FlucaFD                  fd_conv_deriv;
   FlucaFDBoundaryCondition bcs[2];
 
   PetscFunctionBegin;
-  PetscCall(DMGetCoordinateDM(ctx->dm, &cdm));
 
   /* Periodic boundary conditions */
   bcs[0].type  = FLUCAFD_BC_PERIODIC;
@@ -57,13 +55,13 @@ static PetscErrorCode CreateConvectionOperator(AppCtx *ctx, FlucaFD *fd_conv)
   bcs[1].value = 0.;
 
   /* TVD interpolation operator (rho = 1, so no scaling needed) */
-  PetscCall(FlucaFDSecondOrderTVDCreate(cdm, FLUCAFD_X, 0, 0, &ctx->fd_tvd));
+  PetscCall(FlucaFDSecondOrderTVDCreate(ctx->dm, FLUCAFD_X, 0, 0, &ctx->fd_tvd));
   PetscCall(FlucaFDSetBoundaryConditions(ctx->fd_tvd, bcs));
   PetscCall(FlucaFDSetFromOptions(ctx->fd_tvd));
   PetscCall(FlucaFDSetUp(ctx->fd_tvd));
 
   /* Derivative operator: d/dx */
-  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_conv_deriv));
+  PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_conv_deriv));
   PetscCall(FlucaFDSetBoundaryConditions(fd_conv_deriv, bcs));
   PetscCall(FlucaFDSetUp(fd_conv_deriv));
 

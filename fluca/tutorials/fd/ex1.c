@@ -46,14 +46,12 @@ static PetscErrorCode CreateVelocityVector(DM dm, DM *dm_vel, Vec *vel)
 
 static PetscErrorCode CreateConvectionDiffusionOperator(AppCtx *ctx, FlucaFD *fd_convdiff)
 {
-  DM                       cdm;
   FlucaFD                  fd_scaled_tvd, fd_conv_deriv, fd_conv;
   FlucaFD                  fd_diff_inner, fd_diff_scaled, fd_diff_outer, fd_diff, fd_neg_diff;
   FlucaFD                  operands[2];
   FlucaFDBoundaryCondition bcs[2];
 
   PetscFunctionBegin;
-  PetscCall(DMGetCoordinateDM(ctx->dm, &cdm));
 
   bcs[0].type  = FLUCAFD_BC_DIRICHLET;
   bcs[0].value = ctx->phi_left;
@@ -61,7 +59,7 @@ static PetscErrorCode CreateConvectionDiffusionOperator(AppCtx *ctx, FlucaFD *fd
   bcs[1].value = ctx->phi_right;
 
   /* Convection operator: d/dx(rho * u * phi) */
-  PetscCall(FlucaFDSecondOrderTVDCreate(cdm, FLUCAFD_X, 0, 0, &ctx->fd_tvd));
+  PetscCall(FlucaFDSecondOrderTVDCreate(ctx->dm, FLUCAFD_X, 0, 0, &ctx->fd_tvd));
   PetscCall(FlucaFDSetBoundaryConditions(ctx->fd_tvd, bcs));
   PetscCall(FlucaFDSetFromOptions(ctx->fd_tvd));
   PetscCall(FlucaFDSetUp(ctx->fd_tvd));
@@ -69,7 +67,7 @@ static PetscErrorCode CreateConvectionDiffusionOperator(AppCtx *ctx, FlucaFD *fd
   PetscCall(FlucaFDScaleCreateConstant(ctx->fd_tvd, ctx->rho, &fd_scaled_tvd));
   PetscCall(FlucaFDSetUp(fd_scaled_tvd));
 
-  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_conv_deriv));
+  PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_conv_deriv));
   PetscCall(FlucaFDSetUp(fd_conv_deriv));
 
   PetscCall(FlucaFDCompositionCreate(fd_scaled_tvd, fd_conv_deriv, &fd_conv));
@@ -77,13 +75,13 @@ static PetscErrorCode CreateConvectionDiffusionOperator(AppCtx *ctx, FlucaFD *fd
   PetscCall(FlucaFDSetUp(fd_conv));
 
   /* Negative diffusion operator: - d/dx(gamma * d/dx phi) */
-  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_X, 1, 2, DMSTAG_ELEMENT, 0, DMSTAG_LEFT, 0, &fd_diff_inner));
+  PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_X, 1, 2, DMSTAG_ELEMENT, 0, DMSTAG_LEFT, 0, &fd_diff_inner));
   PetscCall(FlucaFDSetUp(fd_diff_inner));
 
   PetscCall(FlucaFDScaleCreateConstant(fd_diff_inner, ctx->gamma, &fd_diff_scaled));
   PetscCall(FlucaFDSetUp(fd_diff_scaled));
 
-  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_diff_outer));
+  PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_diff_outer));
   PetscCall(FlucaFDSetUp(fd_diff_outer));
 
   PetscCall(FlucaFDCompositionCreate(fd_diff_scaled, fd_diff_outer, &fd_diff));

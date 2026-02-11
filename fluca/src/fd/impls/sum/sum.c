@@ -126,7 +126,7 @@ PetscErrorCode FlucaFDSumCreate(PetscInt n, const FlucaFD ops[], FlucaFD *fd)
   PetscCall(PetscObjectGetComm((PetscObject)ops[0], &comm));
   PetscCall(FlucaFDCreate(comm, fd));
   PetscCall(FlucaFDSetType(*fd, FLUCAFDSUM));
-  PetscCall(FlucaFDSetCoordinateDM(*fd, ops[0]->cdm));
+  PetscCall(FlucaFDSetDM(*fd, ops[0]->dm));
   PetscCall(FlucaFDSetInputLocation(*fd, ops[0]->output_loc, ops[0]->output_c));
   PetscCall(FlucaFDSetOutputLocation(*fd, ops[0]->output_loc, ops[0]->output_c));
   for (i = 0; i < n; ++i) PetscCall(FlucaFDSumAddOperand(*fd, ops[i]));

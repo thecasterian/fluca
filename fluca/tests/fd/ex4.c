@@ -11,7 +11,7 @@ static const char help[] = "Test FlucaFD composition operator\n"
 
 int main(int argc, char **argv)
 {
-  DM            dm, cdm;
+  DM            dm;
   FlucaFD       fd_inner, fd_outer, fd_comp;
   PetscInt      c, d, ncols;
   PetscInt      N[2], idx[2];
@@ -24,11 +24,10 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
-  PetscCall(DMGetCoordinateDM(dm, &cdm));
 
   PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_inner));
   PetscCall(FlucaFDSetType(fd_inner, FLUCAFDDERIVATIVE));
-  PetscCall(FlucaFDSetCoordinateDM(fd_inner, cdm));
+  PetscCall(FlucaFDSetDM(fd_inner, dm));
   PetscCall(FlucaFDSetInputLocation(fd_inner, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOutputLocation(fd_inner, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOptionsPrefix(fd_inner, "inner_"));
@@ -37,7 +36,7 @@ int main(int argc, char **argv)
 
   PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_outer));
   PetscCall(FlucaFDSetType(fd_outer, FLUCAFDDERIVATIVE));
-  PetscCall(FlucaFDSetCoordinateDM(fd_outer, cdm));
+  PetscCall(FlucaFDSetDM(fd_outer, dm));
   PetscCall(FlucaFDSetInputLocation(fd_outer, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOutputLocation(fd_outer, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOptionsPrefix(fd_outer, "outer_"));

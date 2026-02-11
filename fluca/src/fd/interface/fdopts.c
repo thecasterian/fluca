@@ -1,14 +1,14 @@
 #include <fluca/private/flucafdimpl.h>
 
-PetscErrorCode FlucaFDSetCoordinateDM(FlucaFD fd, DM cdm)
+PetscErrorCode FlucaFDSetDM(FlucaFD fd, DM dm)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscValidHeaderSpecific(cdm, DM_CLASSID, 2);
-  PetscCheckSameComm(fd, 1, cdm, 2);
-  PetscCall(DMDestroy(&fd->cdm));
-  fd->cdm = cdm;
-  PetscCall(PetscObjectReference((PetscObject)cdm));
+  PetscValidHeaderSpecificType(dm, DM_CLASSID, 2, DMSTAG);
+  PetscCheckSameComm(fd, 1, dm, 2);
+  PetscCall(DMDestroy(&fd->dm));
+  fd->dm = dm;
+  PetscCall(PetscObjectReference((PetscObject)dm));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -40,8 +40,8 @@ PetscErrorCode FlucaFDSetBoundaryConditions(FlucaFD fd, const FlucaFDBoundaryCon
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   PetscAssertPointer(bcs, 2);
 
-  PetscCheck(fd->cdm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Coordinate DM must be set before setting boundary conditions");
-  PetscCall(DMGetDimension(fd->cdm, &dim));
+  PetscCheck(fd->dm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Reference DM must be set before setting boundary conditions");
+  PetscCall(DMGetDimension(fd->dm, &dim));
   nb = 2 * dim;
   PetscCall(PetscArraycpy(fd->bcs, bcs, nb));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -55,8 +55,8 @@ PetscErrorCode FlucaFDGetBoundaryConditions(FlucaFD fd, FlucaFDBoundaryCondition
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   PetscAssertPointer(bcs, 2);
 
-  PetscCheck(fd->cdm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Coordinate DM must be set before getting boundary conditions");
-  PetscCall(DMGetDimension(fd->cdm, &dim));
+  PetscCheck(fd->dm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Reference DM must be set before getting boundary conditions");
+  PetscCall(DMGetDimension(fd->dm, &dim));
   nb = 2 * dim;
   PetscCall(PetscArraycpy(bcs, fd->bcs, nb));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -86,7 +86,7 @@ PetscErrorCode FlucaFDSetFromOptions(FlucaFD fd)
   PetscCall(PetscOptionsInt("-flucafd_input_c", "Input component", "FlucaFDSetInputLocation", fd->input_c, &fd->input_c, NULL));
   PetscCall(PetscOptionsEnum("-flucafd_output_loc", "Output stencil location", "FlucaFDSetOutputLocation", DMStagStencilLocations, (PetscEnum)fd->output_loc, (PetscEnum *)&fd->output_loc, NULL));
   PetscCall(PetscOptionsInt("-flucafd_output_c", "Output component", "FlucaFDSetOutputLocation", fd->output_c, &fd->output_c, NULL));
-  PetscCall(DMGetDimension(fd->cdm, &dim));
+  PetscCall(DMGetDimension(fd->dm, &dim));
   for (d = 0; d < 2 * dim; ++d) {
     PetscCall(PetscSNPrintf(opt, PETSC_MAX_OPTION_NAME, "-flucafd_%s_bc_type", boundary_names[d]));
     PetscCall(PetscSNPrintf(text, PETSC_MAX_PATH_LEN, "Boundary condition type on the %s boundary", boundary_names[d]));

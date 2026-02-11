@@ -10,7 +10,7 @@ static const char help[] = "Test FlucaFD derivative operator\n"
 
 int main(int argc, char **argv)
 {
-  DM            dm, cdm;
+  DM            dm;
   FlucaFD       fd;
   PetscInt      M, idx, c, ncols;
   DMStagStencil col[64];
@@ -22,9 +22,8 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 0., 0., 0.));
-  PetscCall(DMGetCoordinateDM(dm, &cdm));
 
-  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd));
+  PetscCall(FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd));
   PetscCall(FlucaFDSetFromOptions(fd));
   PetscCall(FlucaFDSetUp(fd));
 

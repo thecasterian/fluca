@@ -13,7 +13,7 @@ static PetscErrorCode FillScaleVector(DM, Vec);
 
 int main(int argc, char **argv)
 {
-  DM            dm, cdm;
+  DM            dm;
   FlucaFD       fd_deriv, fd_scale;
   PetscBool     is_constant;
   Vec           vec;
@@ -27,11 +27,10 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 0., 0., 0.));
-  PetscCall(DMGetCoordinateDM(dm, &cdm));
 
   PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_deriv));
   PetscCall(FlucaFDSetType(fd_deriv, FLUCAFDDERIVATIVE));
-  PetscCall(FlucaFDSetCoordinateDM(fd_deriv, cdm));
+  PetscCall(FlucaFDSetDM(fd_deriv, dm));
   PetscCall(FlucaFDSetInputLocation(fd_deriv, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOutputLocation(fd_deriv, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOptionsPrefix(fd_deriv, "deriv_"));

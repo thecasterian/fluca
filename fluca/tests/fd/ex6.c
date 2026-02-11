@@ -9,18 +9,16 @@ static const char help[] = "Solve 2D steady heat equation (Laplacian u = 0)\n"
 
 static PetscErrorCode CreateLaplacianOperator(DM dm, FlucaFD *laplacian)
 {
-  DM      cdm;
   FlucaFD fd_d2[2];
 
   PetscFunctionBegin;
-  PetscCall(DMGetCoordinateDM(dm, &cdm));
 
   /* Create d²/dx² operator */
-  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_X, 2, 2, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_d2[0]));
+  PetscCall(FlucaFDDerivativeCreate(dm, FLUCAFD_X, 2, 2, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_d2[0]));
   PetscCall(FlucaFDSetUp(fd_d2[0]));
 
   /* Create d²/dy² operator */
-  PetscCall(FlucaFDDerivativeCreate(cdm, FLUCAFD_Y, 2, 2, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_d2[1]));
+  PetscCall(FlucaFDDerivativeCreate(dm, FLUCAFD_Y, 2, 2, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_d2[1]));
   PetscCall(FlucaFDSetUp(fd_d2[1]));
 
   /* Create Laplacian = d²/dx² + d²/dy² */

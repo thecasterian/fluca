@@ -208,18 +208,18 @@ PetscErrorCode FlucaFDCreate_Derivative(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDDerivativeCreate(DM cdm, FlucaFDDirection dir, PetscInt deriv_order, PetscInt accu_order, DMStagStencilLocation input_loc, PetscInt input_c, DMStagStencilLocation output_loc, PetscInt output_c, FlucaFD *fd)
+PetscErrorCode FlucaFDDerivativeCreate(DM dm, FlucaFDDirection dir, PetscInt deriv_order, PetscInt accu_order, DMStagStencilLocation input_loc, PetscInt input_c, DMStagStencilLocation output_loc, PetscInt output_c, FlucaFD *fd)
 {
   MPI_Comm comm;
 
   PetscFunctionBegin;
-  PetscValidHeaderSpecific(cdm, DM_CLASSID, 1);
+  PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSTAG);
   PetscAssertPointer(fd, 9);
 
-  PetscCall(PetscObjectGetComm((PetscObject)cdm, &comm));
+  PetscCall(PetscObjectGetComm((PetscObject)dm, &comm));
   PetscCall(FlucaFDCreate(comm, fd));
   PetscCall(FlucaFDSetType(*fd, FLUCAFDDERIVATIVE));
-  PetscCall(FlucaFDSetCoordinateDM(*fd, cdm));
+  PetscCall(FlucaFDSetDM(*fd, dm));
   PetscCall(FlucaFDDerivativeSetDirection(*fd, dir));
   PetscCall(FlucaFDDerivativeSetDerivativeOrder(*fd, deriv_order));
   PetscCall(FlucaFDDerivativeSetAccuracyOrder(*fd, accu_order));

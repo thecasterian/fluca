@@ -43,7 +43,7 @@ struct _p_FlucaFD {
   FlucaFDBoundaryCondition bcs[2 * FLUCAFD_MAX_DIM];
 
   /* Data ----------------------------------------------------------------- */
-  DM                  cdm;
+  DM                  dm;
   PetscInt            dim;
   PetscInt            N[FLUCAFD_MAX_DIM];
   PetscInt            x[FLUCAFD_MAX_DIM];

@@ -23,7 +23,7 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
   f->input_loc  = DMSTAG_ELEMENT;
   f->output_c   = 0;
   f->output_loc = DMSTAG_ELEMENT;
-  f->cdm        = NULL;
+  f->dm         = NULL;
   for (d = 0; d < 2 * FLUCAFD_MAX_DIM; ++d) {
     f->bcs[d].type  = FLUCAFD_BC_NONE;
     f->bcs[d].value = 0.;
@@ -85,8 +85,6 @@ PetscErrorCode FlucaFDGetType(FlucaFD fd, FlucaFDType *type)
 
 PetscErrorCode FlucaFDDestroy(FlucaFD *fd)
 {
-  PetscInt d;
-
   PetscFunctionBegin;
   if (!*fd) PetscFunctionReturn(PETSC_SUCCESS);
   PetscValidHeaderSpecific((*fd), FLUCAFD_CLASSID, 1);
@@ -96,16 +94,9 @@ PetscErrorCode FlucaFDDestroy(FlucaFD *fd)
     PetscFunctionReturn(PETSC_SUCCESS);
   }
 
-  /* Restore coordinate arrays */
-  for (d = 0; d < (*fd)->dim; ++d) {
-    DM  subdm;
-    Vec coordlocal;
-
-    PetscCall(DMProductGetDM((*fd)->cdm, d, &subdm));
-    PetscCall(DMGetCoordinatesLocal(subdm, &coordlocal));
-    PetscCall(DMStagVecRestoreArrayRead(subdm, coordlocal, &(*fd)->arr_coord[d]));
-  }
-  PetscCall(DMDestroy(&(*fd)->cdm));
+  /* Restore coordinate arrays (only if setup was called) */
+  if ((*fd)->setupcalled) PetscCall(DMStagRestoreProductCoordinateArraysRead((*fd)->dm, &(*fd)->arr_coord[0], &(*fd)->arr_coord[1], &(*fd)->arr_coord[2]));
+  PetscCall(DMDestroy(&(*fd)->dm));
 
   /* Destroy term list */
   PetscCall(FlucaFDTermLinkDestroy_Internal(&(*fd)->termlink));
@@ -175,37 +166,30 @@ PetscErrorCode FlucaFDViewFromOptions(FlucaFD fd, PetscObject obj, const char na
 
 PetscErrorCode FlucaFDSetUp(FlucaFD fd)
 {
-  PetscBool isdmproduct;
+  PetscBool isdmstag;
   PetscInt  d;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   if (fd->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
 
-  /* Validate coordinate DM */
-  PetscCheck(fd->cdm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Coordinate DM not set");
-  PetscCall(PetscObjectTypeCompare((PetscObject)fd->cdm, DMPRODUCT, &isdmproduct));
-  PetscCheck(isdmproduct, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONG, "Coordinate DM must be DMProduct (from DMStag)");
+  /* Validate reference DM */
+  PetscCheck(fd->dm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Reference DM not set. Call FlucaFDSetDM() first");
+  PetscCall(PetscObjectTypeCompare((PetscObject)fd->dm, DMSTAG, &isdmstag));
+  PetscCheck(isdmstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONG, "Reference DM must be DMStag");
 
-  /* Get dimension, sizes, and coordinate arrays/slots */
-  PetscCall(DMGetDimension(fd->cdm, &fd->dim));
-  for (d = 0; d < fd->dim; ++d) {
-    DM  subdm;
-    Vec coordlocal;
+  /* Get grid info directly from DMStag */
+  PetscCall(DMGetDimension(fd->dm, &fd->dim));
+  PetscCall(DMStagGetGlobalSizes(fd->dm, &fd->N[0], &fd->N[1], &fd->N[2]));
+  PetscCall(DMStagGetCorners(fd->dm, &fd->x[0], &fd->x[1], &fd->x[2], &fd->n[0], &fd->n[1], &fd->n[2], NULL, NULL, NULL));
+  PetscCall(DMStagGetIsFirstRank(fd->dm, &fd->is_first_rank[0], &fd->is_first_rank[1], &fd->is_first_rank[2]));
+  PetscCall(DMStagGetIsLastRank(fd->dm, &fd->is_last_rank[0], &fd->is_last_rank[1], &fd->is_last_rank[2]));
+  PetscCall(DMStagGetStencilWidth(fd->dm, &fd->stencil_width));
 
-    PetscCall(DMProductGetDM(fd->cdm, d, &subdm));
-    PetscCall(DMGetCoordinatesLocal(subdm, &coordlocal));
-    PetscCall(DMStagGetGlobalSizes(subdm, &fd->N[d], NULL, NULL));
-    PetscCall(DMStagGetCorners(subdm, &fd->x[d], NULL, NULL, &fd->n[d], NULL, NULL, NULL, NULL, NULL));
-    PetscCall(DMStagGetIsFirstRank(subdm, &fd->is_first_rank[d], NULL, NULL));
-    PetscCall(DMStagGetIsLastRank(subdm, &fd->is_last_rank[d], NULL, NULL));
-    PetscCall(DMStagVecGetArrayRead(subdm, coordlocal, &fd->arr_coord[d]));
-    if (d == 0) {
-      PetscCall(DMStagGetStencilWidth(subdm, &fd->stencil_width));
-      PetscCall(DMStagGetLocationSlot(subdm, DMSTAG_LEFT, 0, &fd->slot_coord_prev));
-      PetscCall(DMStagGetLocationSlot(subdm, DMSTAG_ELEMENT, 0, &fd->slot_coord_elem));
-    }
-  }
+  /* Get coordinate arrays and slots directly from DMStag */
+  PetscCall(DMStagGetProductCoordinateArraysRead(fd->dm, &fd->arr_coord[0], &fd->arr_coord[1], &fd->arr_coord[2]));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(fd->dm, DMSTAG_LEFT, &fd->slot_coord_prev));
+  PetscCall(DMStagGetProductCoordinateLocationSlot(fd->dm, DMSTAG_ELEMENT, &fd->slot_coord_elem));
 
   /* Validate boundary conditions */
   for (d = 0; d < fd->dim; ++d) {
