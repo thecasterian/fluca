@@ -23,6 +23,7 @@ static PetscErrorCode FlucaFDSetUp_Scale(FlucaFD fd)
 
   PetscFunctionBegin;
   PetscCheck(scale->operand, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Operand not set");
+  PetscCall(FlucaFDValidateOperand_Internal(fd, scale->operand));
   PetscCheck(scale->operand->output_c == fd->input_c && fd->input_c == fd->output_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Cannot change component");
   PetscCheck(scale->operand->output_loc == fd->input_loc && fd->input_loc == fd->output_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Cannot change location");
   PetscCall(FlucaFDValidatePeriodicityMatch_Internal(fd, scale->operand));

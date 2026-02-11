@@ -7,6 +7,8 @@ static PetscErrorCode FlucaFDSetUp_Composition(FlucaFD fd)
   PetscFunctionBegin;
   PetscCheck(comp->inner, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Inner operator not set");
   PetscCheck(comp->outer, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Outer operator not set");
+  PetscCall(FlucaFDValidateOperand_Internal(fd, comp->inner));
+  PetscCall(FlucaFDValidateOperand_Internal(fd, comp->outer));
   PetscCheck(comp->inner->output_c == comp->outer->input_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "Inner output component (%" PetscInt_FMT ") must match outer input component (%" PetscInt_FMT ")", comp->inner->output_c, comp->outer->input_c);
   PetscCheck(comp->inner->output_loc == comp->outer->input_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "Inner output location must match outer input location");
   PetscCall(FlucaFDValidatePeriodicityMatch_Internal(fd, comp->inner));

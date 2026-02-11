@@ -1,5 +1,16 @@
 #include <fluca/private/flucafdimpl.h>
 
+PetscErrorCode FlucaFDValidateOperand_Internal(FlucaFD parent, FlucaFD operand)
+{
+  PetscBool compatible, set;
+
+  PetscFunctionBegin;
+  PetscCheck(operand->setupcalled, PetscObjectComm((PetscObject)parent), PETSC_ERR_ARG_WRONGSTATE, "Operand FlucaFD is not set up. Call FlucaFDSetUp() on the operand first");
+  PetscCall(DMGetCompatibility(parent->dm, operand->dm, &compatible, &set));
+  PetscCheck(!set || compatible, PetscObjectComm((PetscObject)parent), PETSC_ERR_ARG_INCOMP, "Operand DM is not compatible with parent DM");
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode FlucaFDValidateStencilLocation_Internal(DMStagStencilLocation loc)
 {
   PetscFunctionBegin;
