@@ -1,0 +1,4 @@
+Scaled stencil at i=3:
+  ncols = 2
+  col[0]: i=2, loc=ELEMENT, c=0, v=-28.
+  col[1]: i=4, loc=ELEMENT, c=0, v=28.

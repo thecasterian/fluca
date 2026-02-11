@@ -1,0 +1,6 @@
+Stencil at i=7:
+  ncols = 4
+  col[0]: i=5, loc=ELEMENT, c=0, v=-2.78261
+  col[1]: i=6, loc=ELEMENT, c=0, v=72.3478
+  col[2]: i=7, loc=ELEMENT, c=0, v=-69.5652
+  col[3]: i=8, loc=LEFT, c=right_boundary, v=8.34783

@@ -1,0 +1,4 @@
+Stencil at i=0:
+  ncols = 2
+  col[0]: i=-1, loc=ELEMENT, c=0, v=-8.
+  col[1]: i=0, loc=ELEMENT, c=0, v=8.

@@ -1,0 +1,6 @@
+Sum stencil at (i,j,k)=(4,4,4):
+  ncols = 4
+  col[0]: i=4, j=4, k=4, loc=ELEMENT, c=0, v=-24.
+  col[1]: i=4, j=4, k=5, loc=ELEMENT, c=0, v=8.
+  col[2]: i=4, j=5, k=4, loc=ELEMENT, c=0, v=8.
+  col[3]: i=5, j=4, k=4, loc=ELEMENT, c=0, v=8.
