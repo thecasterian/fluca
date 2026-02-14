@@ -1,4 +1,5 @@
 #include <fluca/private/flucafdimpl.h>
+#include <petscdmda.h>
 
 FLUCA_INTERN PetscScalar FlucaFDSecondOrderTVDLimiterSuperbee_Internal(PetscScalar);
 FLUCA_INTERN PetscScalar FlucaFDSecondOrderTVDLimiterMinmod_Internal(PetscScalar);
@@ -166,13 +167,13 @@ static PetscErrorCode ComputeFaceCenteredGradient(FlucaFD fd, PetscInt i, PetscI
       /* Interior point */
       switch (fd->dim) {
       case 1:
-        *grad += v[c] * tvd->arr_phi_1d[col[c].i][tvd->phi_slot];
+        *grad += v[c] * tvd->arr_phi_1d[col[c].i];
         break;
       case 2:
-        *grad += v[c] * tvd->arr_phi_2d[col[c].j][col[c].i][tvd->phi_slot];
+        *grad += v[c] * tvd->arr_phi_2d[col[c].j][col[c].i];
         break;
       case 3:
-        *grad += v[c] * tvd->arr_phi_3d[col[c].k][col[c].j][col[c].i][tvd->phi_slot];
+        *grad += v[c] * tvd->arr_phi_3d[col[c].k][col[c].j][col[c].i];
         break;
       default:
         SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
@@ -212,13 +213,13 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
 
   switch (fd->dim) {
   case 1:
-    vel = tvd->arr_vel_1d[i][tvd->vel_slot];
+    vel = tvd->arr_vel_1d[i];
     break;
   case 2:
-    vel = tvd->arr_vel_2d[j][i][tvd->vel_slot];
+    vel = tvd->arr_vel_2d[j][i];
     break;
   case 3:
-    vel = tvd->arr_vel_3d[k][j][i][tvd->vel_slot];
+    vel = tvd->arr_vel_3d[k][j][i];
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
@@ -263,16 +264,16 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       psi = tvd->limiter(r);
       switch (fd->dim) {
       case 1:
-        phi_u = tvd->arr_phi_1d[i_u][tvd->phi_slot];
-        phi_d = tvd->arr_phi_1d[i_d][tvd->phi_slot];
+        phi_u = tvd->arr_phi_1d[i_u];
+        phi_d = tvd->arr_phi_1d[i_d];
         break;
       case 2:
-        phi_u = tvd->arr_phi_2d[j_u][i_u][tvd->phi_slot];
-        phi_d = tvd->arr_phi_2d[j_d][i_d][tvd->phi_slot];
+        phi_u = tvd->arr_phi_2d[j_u][i_u];
+        phi_d = tvd->arr_phi_2d[j_d][i_d];
         break;
       case 3:
-        phi_u = tvd->arr_phi_3d[k_u][j_u][i_u][tvd->phi_slot];
-        phi_d = tvd->arr_phi_3d[k_d][j_d][i_d][tvd->phi_slot];
+        phi_u = tvd->arr_phi_3d[k_u][j_u][i_u];
+        phi_d = tvd->arr_phi_3d[k_d][j_d][i_d];
         break;
       default:
         SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
@@ -326,16 +327,16 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       psi = tvd->limiter(r);
       switch (fd->dim) {
       case 1:
-        phi_u = tvd->arr_phi_1d[i_u][tvd->phi_slot];
-        phi_d = tvd->arr_phi_1d[i_d][tvd->phi_slot];
+        phi_u = tvd->arr_phi_1d[i_u];
+        phi_d = tvd->arr_phi_1d[i_d];
         break;
       case 2:
-        phi_u = tvd->arr_phi_2d[j_u][i_u][tvd->phi_slot];
-        phi_d = tvd->arr_phi_2d[j_d][i_d][tvd->phi_slot];
+        phi_u = tvd->arr_phi_2d[j_u][i_u];
+        phi_d = tvd->arr_phi_2d[j_d][i_d];
         break;
       case 3:
-        phi_u = tvd->arr_phi_3d[k_u][j_u][i_u][tvd->phi_slot];
-        phi_d = tvd->arr_phi_3d[k_d][j_d][i_d][tvd->phi_slot];
+        phi_u = tvd->arr_phi_3d[k_u][j_u][i_u];
+        phi_d = tvd->arr_phi_3d[k_d][j_d][i_d];
         break;
       default:
         SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
@@ -371,36 +372,40 @@ static PetscErrorCode FlucaFDDestroy_SecondOrderTVD(FlucaFD fd)
   if (tvd->vel_dm) {
     switch (fd->dim) {
     case 1:
-      PetscCall(DMStagVecRestoreArrayRead(tvd->vel_dm, tvd->vel_local, &tvd->arr_vel_1d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_1d));
       break;
     case 2:
-      PetscCall(DMStagVecRestoreArrayRead(tvd->vel_dm, tvd->vel_local, &tvd->arr_vel_2d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_2d));
       break;
     case 3:
-      PetscCall(DMStagVecRestoreArrayRead(tvd->vel_dm, tvd->vel_local, &tvd->arr_vel_3d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_3d));
       break;
     default:
       break;
     }
+    PetscCall(VecScatterDestroy(&tvd->vel_scatter));
     PetscCall(VecDestroy(&tvd->vel_local));
+    PetscCall(DMDestroy(&tvd->vel_da));
     PetscCall(DMDestroy(&tvd->vel_dm));
   }
 
   if (tvd->phi_dm) {
     switch (fd->dim) {
     case 1:
-      PetscCall(DMStagVecRestoreArrayRead(tvd->phi_dm, tvd->phi_local, &tvd->arr_phi_1d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_1d));
       break;
     case 2:
-      PetscCall(DMStagVecRestoreArrayRead(tvd->phi_dm, tvd->phi_local, &tvd->arr_phi_2d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_2d));
       break;
     case 3:
-      PetscCall(DMStagVecRestoreArrayRead(tvd->phi_dm, tvd->phi_local, &tvd->arr_phi_3d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_3d));
       break;
     default:
       break;
     }
+    PetscCall(VecScatterDestroy(&tvd->phi_scatter));
     PetscCall(VecDestroy(&tvd->phi_local));
+    PetscCall(DMDestroy(&tvd->phi_da));
     PetscCall(DMDestroy(&tvd->phi_dm));
   }
 
@@ -438,17 +443,19 @@ PetscErrorCode FlucaFDCreate_SecondOrderTVD(FlucaFD fd)
   tvd->alpha_minus_base = NULL;
   tvd->vel_c            = 0;
   tvd->vel_dm           = NULL;
+  tvd->vel_da           = NULL;
   tvd->vel_local        = NULL;
+  tvd->vel_scatter      = NULL;
   tvd->arr_vel_1d       = NULL;
   tvd->arr_vel_2d       = NULL;
   tvd->arr_vel_3d       = NULL;
-  tvd->vel_slot         = 0;
   tvd->phi_dm           = NULL;
+  tvd->phi_da           = NULL;
   tvd->phi_local        = NULL;
+  tvd->phi_scatter      = NULL;
   tvd->arr_phi_1d       = NULL;
   tvd->arr_phi_2d       = NULL;
   tvd->arr_phi_3d       = NULL;
-  tvd->phi_slot         = 0;
   tvd->fd_grad          = NULL;
 
   fd->data                = (void *)tvd;
@@ -514,63 +521,214 @@ PetscErrorCode FlucaFDSecondOrderTVDSetLimiter(FlucaFD fd, const char *name)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode CreateDMStagToDAScatter_Private(DM stag, PetscInt dim, DMStagStencilLocation loc, PetscInt c, Vec vec, DM *da, Vec *vec_local, VecScatter *scatter)
+{
+  MPI_Comm               comm;
+  ISLocalToGlobalMapping ltog;
+  IS                     is_from;
+  DMBoundaryType         bt[3];
+  PetscInt               N[3], num_ranks[3], sw, epe, slot;
+  PetscInt               gx[3], gn[3];
+  PetscInt               extra[3], da_N[3], da_gx[3], da_gn[3];
+  PetscInt               n_local, d, i, j, k, cnt;
+  PetscInt              *stag_local, *stag_global;
+  const PetscInt        *l[3];
+  PetscInt              *l_da[3] = {NULL, NULL, NULL};
+
+  PetscFunctionBegin;
+  PetscCall(PetscObjectGetComm((PetscObject)stag, &comm));
+
+  /* Query DMStag properties */
+  PetscCall(DMStagGetGlobalSizes(stag, &N[0], &N[1], &N[2]));
+  PetscCall(DMStagGetNumRanks(stag, &num_ranks[0], &num_ranks[1], &num_ranks[2]));
+  PetscCall(DMStagGetOwnershipRanges(stag, &l[0], &l[1], &l[2]));
+  PetscCall(DMStagGetBoundaryTypes(stag, &bt[0], &bt[1], &bt[2]));
+  PetscCall(DMStagGetGhostCorners(stag, &gx[0], &gx[1], &gx[2], &gn[0], &gn[1], &gn[2]));
+  PetscCall(DMStagGetStencilWidth(stag, &sw));
+  PetscCall(DMStagGetEntriesPerElement(stag, &epe));
+  PetscCall(DMStagGetLocationSlot(stag, loc, c, &slot));
+  PetscCall(DMGetLocalToGlobalMapping(stag, &ltog));
+
+  /* Create DMDA with matching topology, 1 DOF per point */
+  for (d = 0; d < dim; d++) {
+    extra[d] = (loc != DMSTAG_ELEMENT && bt[d] != DM_BOUNDARY_PERIODIC) ? 1 : 0;
+    da_N[d]  = N[d] + extra[d];
+    PetscCall(PetscMalloc1(num_ranks[d], &l_da[d]));
+    PetscCall(PetscArraycpy(l_da[d], l[d], num_ranks[d]));
+    l_da[d][num_ranks[d] - 1] += extra[d];
+  }
+
+  switch (dim) {
+  case 1:
+    PetscCall(DMDACreate1d(comm, bt[0], da_N[0], 1, sw, l_da[0], da));
+    break;
+  case 2:
+    PetscCall(DMDACreate2d(comm, bt[0], bt[1], DMDA_STENCIL_BOX, da_N[0], da_N[1], num_ranks[0], num_ranks[1], 1, sw, l_da[0], l_da[1], da));
+    break;
+  case 3:
+    PetscCall(DMDACreate3d(comm, bt[0], bt[1], bt[2], DMDA_STENCIL_BOX, da_N[0], da_N[1], da_N[2], num_ranks[0], num_ranks[1], num_ranks[2], 1, sw, l_da[0], l_da[1], l_da[2], da));
+    break;
+  default:
+    SETERRQ(comm, PETSC_ERR_SUP, "Unsupported dim %" PetscInt_FMT, dim);
+  }
+  PetscCall(DMSetUp(*da));
+  for (d = 0; d < dim; d++) PetscCall(PetscFree(l_da[d]));
+
+  /* Create local vector on DMDA */
+  PetscCall(DMCreateLocalVector(*da, vec_local));
+
+  /* Get DMDA ghost corners */
+  PetscCall(DMDAGetGhostCorners(*da, &da_gx[0], &da_gx[1], &da_gx[2], &da_gn[0], &da_gn[1], &da_gn[2]));
+
+  /* Build IS: for each DMDA ghost point, map DMStag local index of the target DOF to global index via l2g mapping */
+  n_local = 1;
+  for (d = 0; d < dim; d++) n_local *= da_gn[d];
+  PetscCall(PetscMalloc1(n_local, &stag_local));
+  PetscCall(PetscMalloc1(n_local, &stag_global));
+  cnt = 0;
+  switch (dim) {
+  case 1:
+    for (i = da_gx[0]; i < da_gx[0] + da_gn[0]; i++) stag_local[cnt++] = (i - gx[0]) * epe + slot;
+    break;
+  case 2:
+    for (j = da_gx[1]; j < da_gx[1] + da_gn[1]; j++)
+      for (i = da_gx[0]; i < da_gx[0] + da_gn[0]; i++) stag_local[cnt++] = ((j - gx[1]) * gn[0] + (i - gx[0])) * epe + slot;
+    break;
+  case 3:
+    for (k = da_gx[2]; k < da_gx[2] + da_gn[2]; k++)
+      for (j = da_gx[1]; j < da_gx[1] + da_gn[1]; j++)
+        for (i = da_gx[0]; i < da_gx[0] + da_gn[0]; i++) stag_local[cnt++] = ((k - gx[2]) * gn[1] * gn[0] + (j - gx[1]) * gn[0] + (i - gx[0])) * epe + slot;
+    break;
+  default:
+    break;
+  }
+  PetscCall(ISLocalToGlobalMappingApply(ltog, n_local, stag_local, stag_global));
+  PetscCall(PetscFree(stag_local));
+  PetscCall(ISCreateGeneral(comm, n_local, stag_global, PETSC_OWN_POINTER, &is_from));
+
+  /* Create VecScatter */
+  PetscCall(VecScatterCreate(vec, is_from, *vec_local, NULL, scatter));
+  PetscCall(ISDestroy(&is_from));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode FlucaFDSecondOrderTVDSetVelocity(FlucaFD fd, Vec vel, PetscInt vel_c)
 {
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
+  DM                      vel_dm;
+  PetscBool               isstag;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(fd, FLUCAFD_CLASSID, 1, FLUCAFDSECONDORDERTVD);
   PetscValidHeaderSpecific(vel, VEC_CLASSID, 2);
-  tvd->vel_c = vel_c;
-  if (!tvd->vel_dm) {
-    PetscCall(VecGetDM(vel, &tvd->vel_dm));
-    PetscCall(PetscObjectReference((PetscObject)tvd->vel_dm));
-    PetscCall(DMCreateLocalVector(tvd->vel_dm, &tvd->vel_local));
+  PetscCall(VecGetDM(vel, &vel_dm));
+  PetscCall(PetscObjectTypeCompare((PetscObject)vel_dm, DMSTAG, &isstag));
+  PetscCheck(isstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Vector is not on DMStag");
+
+  /* Recreate scatter if DM or component changed */
+  if (vel_dm != tvd->vel_dm || vel_c != tvd->vel_c) {
     switch (fd->dim) {
     case 1:
-      PetscCall(DMStagVecGetArrayRead(tvd->vel_dm, tvd->vel_local, &tvd->arr_vel_1d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_1d));
       break;
     case 2:
-      PetscCall(DMStagVecGetArrayRead(tvd->vel_dm, tvd->vel_local, &tvd->arr_vel_2d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_2d));
       break;
     case 3:
-      PetscCall(DMStagVecGetArrayRead(tvd->vel_dm, tvd->vel_local, &tvd->arr_vel_3d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_3d));
+      break;
+    default:
+      break;
+    }
+    PetscCall(VecScatterDestroy(&tvd->vel_scatter));
+    PetscCall(VecDestroy(&tvd->vel_local));
+    PetscCall(DMDestroy(&tvd->vel_da));
+    PetscCall(DMDestroy(&tvd->vel_dm));
+  }
+
+  tvd->vel_c = vel_c;
+  if (!tvd->vel_dm) {
+    tvd->vel_dm = vel_dm;
+    PetscCall(PetscObjectReference((PetscObject)tvd->vel_dm));
+    PetscCall(CreateDMStagToDAScatter_Private(tvd->vel_dm, fd->dim, fd->output_loc, vel_c, vel, &tvd->vel_da, &tvd->vel_local, &tvd->vel_scatter));
+
+    /* Get array views on local DMDA vector (kept until destroy) */
+    switch (fd->dim) {
+    case 1:
+      PetscCall(DMDAVecGetArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_1d));
+      break;
+    case 2:
+      PetscCall(DMDAVecGetArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_2d));
+      break;
+    case 3:
+      PetscCall(DMDAVecGetArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_3d));
       break;
     default:
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
     }
   }
-  PetscCall(DMGlobalToLocal(tvd->vel_dm, vel, INSERT_VALUES, tvd->vel_local));
-  PetscCall(DMStagGetLocationSlot(tvd->vel_dm, fd->output_loc, tvd->vel_c, &tvd->vel_slot));
+  /* Scatter only the needed face velocity component from global to local */
+  PetscCall(VecScatterBegin(tvd->vel_scatter, vel, tvd->vel_local, INSERT_VALUES, SCATTER_FORWARD));
+  PetscCall(VecScatterEnd(tvd->vel_scatter, vel, tvd->vel_local, INSERT_VALUES, SCATTER_FORWARD));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD fd, Vec phi)
 {
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
+  DM                      phi_dm;
+  PetscBool               isstag;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(fd, FLUCAFD_CLASSID, 1, FLUCAFDSECONDORDERTVD);
   PetscValidHeaderSpecific(phi, VEC_CLASSID, 2);
-  if (!tvd->phi_dm) {
-    PetscCall(VecGetDM(phi, &tvd->phi_dm));
-    PetscCall(PetscObjectReference((PetscObject)tvd->phi_dm));
-    PetscCall(DMCreateLocalVector(tvd->phi_dm, &tvd->phi_local));
+  PetscCall(VecGetDM(phi, &phi_dm));
+  PetscCall(PetscObjectTypeCompare((PetscObject)phi_dm, DMSTAG, &isstag));
+  PetscCheck(isstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Vector is not on DMStag");
+
+  /* Recreate scatter if DM changed */
+  if (phi_dm != tvd->phi_dm) {
     switch (fd->dim) {
     case 1:
-      PetscCall(DMStagVecGetArrayRead(tvd->phi_dm, tvd->phi_local, &tvd->arr_phi_1d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_1d));
       break;
     case 2:
-      PetscCall(DMStagVecGetArrayRead(tvd->phi_dm, tvd->phi_local, &tvd->arr_phi_2d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_2d));
       break;
     case 3:
-      PetscCall(DMStagVecGetArrayRead(tvd->phi_dm, tvd->phi_local, &tvd->arr_phi_3d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_3d));
+      break;
+    default:
+      break;
+    }
+    PetscCall(VecScatterDestroy(&tvd->phi_scatter));
+    PetscCall(VecDestroy(&tvd->phi_local));
+    PetscCall(DMDestroy(&tvd->phi_da));
+    PetscCall(DMDestroy(&tvd->phi_dm));
+  }
+
+  if (!tvd->phi_dm) {
+    tvd->phi_dm = phi_dm;
+    PetscCall(PetscObjectReference((PetscObject)tvd->phi_dm));
+    PetscCall(CreateDMStagToDAScatter_Private(tvd->phi_dm, fd->dim, fd->input_loc, fd->input_c, phi, &tvd->phi_da, &tvd->phi_local, &tvd->phi_scatter));
+
+    /* Get array views on local DMDA vector (kept until destroy) */
+    switch (fd->dim) {
+    case 1:
+      PetscCall(DMDAVecGetArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_1d));
+      break;
+    case 2:
+      PetscCall(DMDAVecGetArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_2d));
+      break;
+    case 3:
+      PetscCall(DMDAVecGetArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_3d));
       break;
     default:
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
     }
   }
-  PetscCall(DMGlobalToLocal(tvd->phi_dm, phi, INSERT_VALUES, tvd->phi_local));
-  PetscCall(DMStagGetLocationSlot(tvd->phi_dm, fd->input_loc, fd->input_c, &tvd->phi_slot));
+  /* Scatter only the needed element component from global to local */
+  PetscCall(VecScatterBegin(tvd->phi_scatter, phi, tvd->phi_local, INSERT_VALUES, SCATTER_FORWARD));
+  PetscCall(VecScatterEnd(tvd->phi_scatter, phi, tvd->phi_local, INSERT_VALUES, SCATTER_FORWARD));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -122,22 +122,24 @@ typedef struct {
   PetscScalar *alpha_plus_base;
   PetscScalar *alpha_minus_base;
 
-  /* Velocity field (face-centered) */
-  PetscInt              vel_c;
-  DM                    vel_dm;
-  Vec                   vel_local;
-  const PetscScalar   **arr_vel_1d;
-  const PetscScalar  ***arr_vel_2d;
-  const PetscScalar ****arr_vel_3d;
-  PetscInt              vel_slot;
+  /* Velocity field (face-centered, single component on left/down/back face) */
+  PetscInt             vel_c;
+  DM                   vel_dm;      /* original DMStag (from Vec) */
+  DM                   vel_da;      /* DMDA for local storage (1 DOF) */
+  Vec                  vel_local;   /* local vector on vel_da */
+  VecScatter           vel_scatter; /* global DMStag vel -> local DMDA vel */
+  const PetscScalar   *arr_vel_1d;
+  const PetscScalar  **arr_vel_2d;
+  const PetscScalar ***arr_vel_3d;
 
-  /* Current solution field (element-centered) */
-  DM                    phi_dm;
-  Vec                   phi_local;
-  const PetscScalar   **arr_phi_1d;
-  const PetscScalar  ***arr_phi_2d;
-  const PetscScalar ****arr_phi_3d;
-  PetscInt              phi_slot;
+  /* Current solution field (element-centered, single component) */
+  DM                   phi_dm;      /* original DMStag (from Vec) */
+  DM                   phi_da;      /* DMDA for local storage (1 DOF) */
+  Vec                  phi_local;   /* local vector on phi_da */
+  VecScatter           phi_scatter; /* global DMStag phi -> local DMDA phi */
+  const PetscScalar   *arr_phi_1d;
+  const PetscScalar  **arr_phi_2d;
+  const PetscScalar ***arr_phi_3d;
 
   FlucaFD fd_grad; /* gradient operator (element -> face) */
 } FlucaFD_SecondOrderTVD;
