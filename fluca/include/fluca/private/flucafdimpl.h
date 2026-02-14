@@ -132,13 +132,14 @@ typedef struct {
   const PetscScalar  **arr_vel_2d;
   const PetscScalar ***arr_vel_3d;
 
-  /* Current solution field (element-centered) */
-  DM                    phi_dm;
-  Vec                   phi_local;
-  const PetscScalar   **arr_phi_1d;
-  const PetscScalar  ***arr_phi_2d;
-  const PetscScalar ****arr_phi_3d;
-  PetscInt              phi_slot;
+  /* Current solution field (element-centered, single component) */
+  DM                   phi_dm;      /* original DMStag (from Vec) */
+  DM                   phi_da;      /* DMDA for local storage (1 DOF) */
+  Vec                  phi_local;   /* local vector on phi_da */
+  VecScatter           phi_scatter; /* global DMStag phi -> local DMDA phi */
+  const PetscScalar   *arr_phi_1d;
+  const PetscScalar  **arr_phi_2d;
+  const PetscScalar ***arr_phi_3d;
 
   FlucaFD fd_grad; /* gradient operator (element -> face) */
 } FlucaFD_SecondOrderTVD;
