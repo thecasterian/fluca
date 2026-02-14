@@ -120,6 +120,9 @@ static PetscErrorCode IsOffGrid_Private(FlucaFD fd, const DMStagStencil *col, Pe
   PetscFunctionBegin;
   *is_off_grid = PETSC_FALSE;
 
+  /* Constant and boundary marker columns (c < 0) are not real grid points */
+  if (col->c < 0) PetscFunctionReturn(PETSC_SUCCESS);
+
   for (d = 0; d < fd->dim; ++d) {
     switch (d) {
     case 0:
