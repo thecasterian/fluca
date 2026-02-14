@@ -615,13 +615,40 @@ static PetscErrorCode CreateDMStagToDAScatter_Private(DM stag, PetscInt dim, DMS
 PetscErrorCode FlucaFDSecondOrderTVDSetVelocity(FlucaFD fd, Vec vel, PetscInt vel_c)
 {
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
+  DM                      vel_dm;
+  PetscBool               isstag;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(fd, FLUCAFD_CLASSID, 1, FLUCAFDSECONDORDERTVD);
   PetscValidHeaderSpecific(vel, VEC_CLASSID, 2);
+  PetscCall(VecGetDM(vel, &vel_dm));
+  PetscCall(PetscObjectTypeCompare((PetscObject)vel_dm, DMSTAG, &isstag));
+  PetscCheck(isstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Vector is not on DMStag");
+
+  /* Recreate scatter if DM or component changed */
+  if (vel_dm != tvd->vel_dm || vel_c != tvd->vel_c) {
+    switch (fd->dim) {
+    case 1:
+      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_1d));
+      break;
+    case 2:
+      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_2d));
+      break;
+    case 3:
+      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_3d));
+      break;
+    default:
+      break;
+    }
+    PetscCall(VecScatterDestroy(&tvd->vel_scatter));
+    PetscCall(VecDestroy(&tvd->vel_local));
+    PetscCall(DMDestroy(&tvd->vel_da));
+    PetscCall(DMDestroy(&tvd->vel_dm));
+  }
+
   tvd->vel_c = vel_c;
   if (!tvd->vel_dm) {
-    PetscCall(VecGetDM(vel, &tvd->vel_dm));
+    tvd->vel_dm = vel_dm;
     PetscCall(PetscObjectReference((PetscObject)tvd->vel_dm));
     PetscCall(CreateDMStagToDAScatter_Private(tvd->vel_dm, fd->dim, fd->output_loc, vel_c, vel, &tvd->vel_da, &tvd->vel_local, &tvd->vel_scatter));
 
@@ -649,12 +676,39 @@ PetscErrorCode FlucaFDSecondOrderTVDSetVelocity(FlucaFD fd, Vec vel, PetscInt ve
 PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD fd, Vec phi)
 {
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
+  DM                      phi_dm;
+  PetscBool               isstag;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(fd, FLUCAFD_CLASSID, 1, FLUCAFDSECONDORDERTVD);
   PetscValidHeaderSpecific(phi, VEC_CLASSID, 2);
+  PetscCall(VecGetDM(phi, &phi_dm));
+  PetscCall(PetscObjectTypeCompare((PetscObject)phi_dm, DMSTAG, &isstag));
+  PetscCheck(isstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Vector is not on DMStag");
+
+  /* Recreate scatter if DM changed */
+  if (phi_dm != tvd->phi_dm) {
+    switch (fd->dim) {
+    case 1:
+      PetscCall(DMDAVecRestoreArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_1d));
+      break;
+    case 2:
+      PetscCall(DMDAVecRestoreArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_2d));
+      break;
+    case 3:
+      PetscCall(DMDAVecRestoreArrayRead(tvd->phi_da, tvd->phi_local, &tvd->arr_phi_3d));
+      break;
+    default:
+      break;
+    }
+    PetscCall(VecScatterDestroy(&tvd->phi_scatter));
+    PetscCall(VecDestroy(&tvd->phi_local));
+    PetscCall(DMDestroy(&tvd->phi_da));
+    PetscCall(DMDestroy(&tvd->phi_dm));
+  }
+
   if (!tvd->phi_dm) {
-    PetscCall(VecGetDM(phi, &tvd->phi_dm));
+    tvd->phi_dm = phi_dm;
     PetscCall(PetscObjectReference((PetscObject)tvd->phi_dm));
     PetscCall(CreateDMStagToDAScatter_Private(tvd->phi_dm, fd->dim, fd->input_loc, fd->input_c, phi, &tvd->phi_da, &tvd->phi_local, &tvd->phi_scatter));
 
