@@ -26,6 +26,9 @@
 *.a
 *.lib
 
+# Cache
+.cache/
+
 # Executables
 build/
 *.exe
