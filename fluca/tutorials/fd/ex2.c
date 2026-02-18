@@ -142,7 +142,7 @@ int main(int argc, char **argv)
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
   /* Create DM with periodic boundary */
-  PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, 64, 0, 1, DMSTAG_STENCIL_STAR, 2, NULL, &ctx.dm));
+  PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, 64, 0, 1, DMSTAG_STENCIL_STAR, 1, NULL, &ctx.dm));
   PetscCall(DMSetFromOptions(ctx.dm));
   PetscCall(DMSetUp(ctx.dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(ctx.dm, 0., 1., 0., 0., 0., 0.));
@@ -172,7 +172,6 @@ int main(int argc, char **argv)
 
   /* Solve */
   PetscCall(TSSolve(ts, u));
-  PetscCall(VecViewFromOptions(u, NULL, "-phi_view"));
 
   /* Cleanup */
   PetscCall(TSDestroy(&ts));

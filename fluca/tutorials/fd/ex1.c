@@ -182,7 +182,6 @@ int main(int argc, char **argv)
 
   /* Solve */
   PetscCall(SNESSolve(snes, NULL, x));
-  PetscCall(VecViewFromOptions(x, NULL, "-phi_view"));
 
   /* Cleanup */
   PetscCall(SNESDestroy(&snes));
