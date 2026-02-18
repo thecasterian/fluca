@@ -4,9 +4,11 @@
 
 ```bash
 cmake --build build              # Build
-ctest --test-dir build           # Run all tests
+ctest --test-dir build -R tests_ # Run unit tests (fast)
 cmake build                      # Re-configure (after adding new test blocks)
 ```
+
+**Note:** Bare `ctest --test-dir build` runs both unit tests and tutorial tests. Tutorial tests are very slow (minutes each). Prefer `ctest -R tests_` for routine verification. Only run `ctest -R tutorials_` when verifying tutorial-related changes.
 
 ## Library Targets
 
@@ -57,14 +59,19 @@ add_library(fluca_<module> SHARED
 
 ## Tests and Tutorials
 
-Tests and tutorials have their own `CMakeLists.txt` under `fluca/tests/` and `fluca/tutorials/`. Both use the same pattern:
+Tests and tutorials have their own `CMakeLists.txt` under `fluca/tests/` and `fluca/tutorials/`. Both include `FlucaTestUtils` and use `/*TEST*/` blocks parsed at configure time:
+
+- **Tests** use `fluca_parse_test_file()` → `RunTest.cmake` (golden output comparison)
+- **Tutorials** use `fluca_parse_tutorial_file()` → `RunTutorial.cmake` (exit code 0 only, no golden output)
 
 ```cmake
+include(FlucaTestUtils)
+
 set(<TYPE>_SRCS ex1.c ex2.c)
 foreach(src ${<TYPE>_SRCS})
     ...
     target_link_libraries(... PRIVATE fluca::<module> m)
+    fluca_parse_test_file(...)      # for tests
+    fluca_parse_tutorial_file(...)  # for tutorials
 endforeach()
 ```
-
-Tests additionally call `fluca_parse_test_file()` from `FlucaTestUtils.cmake`.

@@ -182,7 +182,6 @@ int main(int argc, char **argv)
 
   /* Solve */
   PetscCall(SNESSolve(snes, NULL, x));
-  PetscCall(VecViewFromOptions(x, NULL, "-phi_view"));
 
   /* Cleanup */
   PetscCall(SNESDestroy(&snes));
@@ -196,3 +195,22 @@ int main(int argc, char **argv)
 
   PetscCall(FlucaFinalize());
 }
+
+/*TEST
+
+  test:
+    suffix: superbee
+    nsize: 1
+    args: -gamma 0.01 -flucafd_limiter superbee
+
+  test:
+    suffix: upwind
+    nsize: 1
+    args: -gamma 0.01 -flucafd_limiter upwind
+
+  test:
+    suffix: quick
+    nsize: 1
+    args: -gamma 0.01 -flucafd_limiter quick
+
+TEST*/
