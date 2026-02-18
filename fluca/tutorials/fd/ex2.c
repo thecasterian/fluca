@@ -185,3 +185,22 @@ int main(int argc, char **argv)
 
   PetscCall(FlucaFinalize());
 }
+
+/*TEST
+
+  test:
+    suffix: superbee
+    nsize: 1
+    args: -flucafd_limiter superbee -stag_grid_x 512 -ts_type ssp -ts_dt 0.002
+
+  test:
+    suffix: upwind
+    nsize: 1
+    args: -flucafd_limiter upwind -stag_grid_x 512 -ts_type ssp -ts_dt 0.002
+
+  test:
+    suffix: quick
+    nsize: 1
+    args: -flucafd_limiter quick -stag_grid_x 512 -ts_type ssp -ts_dt 0.002
+
+TEST*/

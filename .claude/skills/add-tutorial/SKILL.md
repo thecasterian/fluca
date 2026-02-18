@@ -50,12 +50,34 @@ int main(int argc, char **argv)
 ```
 
 Tutorials differ from tests:
-- No `/*TEST*/` block — tutorials are not registered with ctest
+- Use `/*TEST*/` blocks with **run-only** semantics (exit code 0 = pass, no golden output files)
+- Parsed by `fluca_parse_tutorial_file()` in `FlucaTestUtils.cmake`, which calls `RunTutorial.cmake`
 - Typically longer, with comments explaining each step
 - Use `SetFromOptions` / `ViewFromOptions` for runtime configurability
 - May use PETSc solvers (SNES, KSP) as part of the example
 
-### 3. Register in CMakeLists.txt
+### 3. Add `/*TEST*/` block
+
+Append a `/*TEST ... TEST*/` block at the end of the source file to register tutorial cases with ctest:
+
+```c
+/*TEST
+
+  test:
+    suffix: default
+    nsize: 1
+
+  test:
+    suffix: high_peclet
+    nsize: 1
+    args: -gamma 0.01 -flucafd_limiter superbee
+
+TEST*/
+```
+
+Each `test:` entry supports `suffix` (required), `nsize` (ignored), and `args` (optional). No `output_file` field — tutorials only check exit code.
+
+### 4. Register in CMakeLists.txt
 
 Add to `TUTORIAL_SRCS` in `fluca/tutorials/<module>/CMakeLists.txt`:
 
@@ -67,20 +89,24 @@ set(TUTORIAL_SRCS
 )
 ```
 
+The `fluca_parse_tutorial_file()` call in the foreach loop automatically picks up the new file.
+
 For a new module, also:
-- Create `fluca/tutorials/<module>/CMakeLists.txt` following the pattern
+- Create `fluca/tutorials/<module>/CMakeLists.txt` following the pattern (include `FlucaTestUtils` and call `fluca_parse_tutorial_file`)
 - Add `add_subdirectory(<module>)` to `fluca/tutorials/CMakeLists.txt`
 
-### 4. Build and verify
+### 5. Build and verify
 
 ```bash
-cmake --build build
-./build/fluca/tutorials/<module>/ex<N> <args>
+cmake build                                    # Re-configure to pick up new TEST blocks
+cmake --build build                            # Build
+ctest --test-dir build -R "tutorials_<module>" # Run tutorial test cases
 ```
 
 ## Checklist
 
 - [ ] Help string documents all custom options
 - [ ] Key steps have explanatory comments
+- [ ] `/*TEST*/` block with at least one test case
 - [ ] Source added to `TUTORIAL_SRCS` in CMakeLists.txt
-- [ ] Builds and runs without errors
+- [ ] Builds and all tutorial test cases pass (exit code 0)

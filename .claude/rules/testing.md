@@ -122,17 +122,28 @@ endforeach()
 
 To add a new test module, also add `add_subdirectory(<module>)` to `fluca/tests/CMakeLists.txt`.
 
+## Tutorial Tests
+
+Tutorials also use `/*TEST*/` blocks but with **run-only** semantics — they check exit code 0 only, no golden output comparison. Parsed by `fluca_parse_tutorial_file()` in `FlucaTestUtils.cmake`, which invokes `RunTutorial.cmake`.
+
+Tutorial test names are prefixed `tutorials_<module>_` (e.g., `tutorials_fd_ex1_superbee`).
+
+**Warning:** Tutorial tests are expensive (minutes each). Do not run them routinely — only run specific tutorial tests when verifying tutorial-related changes.
+
 ## Running Tests
 
 ```bash
-# Build then run all tests
-cmake --build build && ctest --test-dir build
+# Build then run all unit tests (excludes tutorials)
+cmake --build build && ctest --test-dir build -R "tests_"
 
 # Run specific tests by name pattern
 ctest --test-dir build -R "ex1_first_deriv"
 
 # Verbose output on failure
 ctest --test-dir build --output-on-failure
+
+# Run tutorial tests (slow — only when needed)
+ctest --test-dir build -R "tutorials_"
 ```
 
 ## Adding a New Test Case

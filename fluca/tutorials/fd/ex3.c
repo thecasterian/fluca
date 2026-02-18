@@ -287,3 +287,37 @@ int main(int argc, char **argv)
 
   PetscCall(FlucaFinalize());
 }
+
+/*TEST
+
+  test:
+    suffix: pure_convection_superbee
+    nsize: 1
+    args: -mu 0 -flucafd_limiter superbee -ts_type ssp -ts_dt 0.01
+
+  test:
+    suffix: pure_convection_upwind
+    nsize: 1
+    args: -mu 0 -flucafd_limiter upwind -ts_type ssp -ts_dt 0.01
+
+  test:
+    suffix: pure_convection_quick
+    nsize: 1
+    args: -mu 0 -flucafd_limiter quick -ts_type ssp -ts_dt 0.01
+
+  test:
+    suffix: superbee
+    nsize: 1
+    args: -mu 0.01 -flucafd_limiter superbee -ts_type ssp -ts_dt 0.01
+
+  test:
+    suffix: upwind
+    nsize: 1
+    args: -mu 0.01 -flucafd_limiter upwind -ts_type ssp -ts_dt 0.01
+
+  test:
+    suffix: quick
+    nsize: 1
+    args: -mu 0.01 -flucafd_limiter quick -ts_type ssp -ts_dt 0.01
+
+TEST*/
