@@ -64,6 +64,18 @@ PetscErrorCode FlucaFDGetCoordinate_Internal(const PetscScalar **arr_coord, Pets
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode FlucaFDGetGhostCorners_Internal(FlucaFD fd, PetscInt dir, PetscBool use_face, PetscInt *gxs, PetscInt *gxm, PetscInt *gxe)
+{
+  PetscBool periodic;
+
+  PetscFunctionBegin;
+  periodic = fd->periodic[dir];
+  *gxs     = fd->xs[dir] - ((fd->is_first_rank[dir] && !periodic) ? 0 : fd->stencil_width);
+  *gxm     = fd->xm[dir] + ((fd->is_first_rank[dir] && !periodic) ? 0 : fd->stencil_width) + ((fd->is_last_rank[dir] && !periodic) ? 0 : fd->stencil_width);
+  *gxe     = (fd->is_last_rank[dir] && use_face && !periodic) ? 1 : 0;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt n, PetscScalar A[], PetscScalar b[], PetscScalar x[])
 {
   PetscInt    i, j, k;
@@ -115,7 +127,7 @@ PetscErrorCode FlucaFDAddStencilPoint_Internal(DMStagStencil new_col, PetscScala
 static PetscErrorCode IsOffGrid_Private(FlucaFD fd, const DMStagStencil *col, PetscInt *off_dir, PetscBool *is_low, PetscBool *is_off_grid)
 {
   PetscInt  idx, gxs, gxm, gxe, d;
-  PetscBool use_face_coord, periodic;
+  PetscBool use_face_coord;
 
   PetscFunctionBegin;
   *is_off_grid = PETSC_FALSE;
@@ -138,13 +150,7 @@ static PetscErrorCode IsOffGrid_Private(FlucaFD fd, const DMStagStencil *col, Pe
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
     }
     PetscCall(FlucaFDUseFaceCoordinate_Internal(col->loc, d, &use_face_coord));
-
-    periodic = fd->periodic[d];
-
-    /* Local grid info */
-    gxs = fd->xs[d] - ((fd->is_first_rank[d] && !periodic) ? 0 : fd->stencil_width);
-    gxm = fd->xm[d] + ((fd->is_first_rank[d] && !periodic) ? 0 : fd->stencil_width) + ((fd->is_last_rank[d] && !periodic) ? 0 : fd->stencil_width);
-    gxe = (fd->is_last_rank[d] && use_face_coord && !periodic) ? 1 : 0;
+    PetscCall(FlucaFDGetGhostCorners_Internal(fd, d, use_face_coord, &gxs, &gxm, &gxe));
 
     if (idx < gxs) {
       *is_off_grid = PETSC_TRUE;
@@ -293,9 +299,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
       PetscCheck(stencil_size <= FLUCAFD_MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Stencil size %" PetscInt_FMT " exceeds maximum %d", stencil_size, FLUCAFD_MAX_STENCIL_SIZE);
 
       /* Local grid info */
-      gxs = fd->xs[off_dir] - ((fd->is_first_rank[off_dir] && !periodic) ? 0 : fd->stencil_width);
-      gxm = fd->xm[off_dir] + ((fd->is_first_rank[off_dir] && !periodic) ? 0 : fd->stencil_width) + ((fd->is_last_rank[off_dir] && !periodic) ? 0 : fd->stencil_width);
-      gxe = (fd->is_last_rank[off_dir] && use_face_coord && !periodic) ? 1 : 0;
+      PetscCall(FlucaFDGetGhostCorners_Internal(fd, off_dir, use_face_coord, &gxs, &gxm, &gxe));
 
       first_face_idx = gxs;
       last_face_idx  = gxs + gxm - ((fd->is_last_rank[off_dir] && !periodic) ? 0 : 1);
@@ -411,8 +415,8 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
 
         /* Build Vandermonde matrix for first derivative on the boundary */
         for (r = 0; r < stencil_size; ++r) {
-          for (n = 0; n < stencil_size; ++n) { A[r * stencil_size + n] = PetscPowScalarInt(extrap_coords[n] - bnd_coord, r); }
-          b[r] = (r == 1) ? 1.0 : 0.0; /* First derivative */
+          for (n = 0; n < stencil_size; ++n) A[r * stencil_size + n] = PetscPowScalarInt(extrap_coords[n] - bnd_coord, r);
+          b[r] = (r == 1) ? 1. : 0.; /* First derivative */
         }
         /* Solve for FD coefficients: v'[bnd] = a_off*v[off] + a[0]*v[0] + ... */
         PetscCall(FlucaFDSolveLinearSystem_Internal(stencil_size, A, b, extrap_coeffs));

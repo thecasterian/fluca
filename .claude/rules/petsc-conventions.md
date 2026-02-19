@@ -119,6 +119,7 @@ Key points for writing new code:
 - **Braces**: Required only for multi-statement blocks.
 - **Preprocessor**: `#if defined(X)` over `#ifdef X`. Better: `PetscDefined(X)` at runtime.
 - **Header guards**: `#pragma once` as first non-comment line.
+- **Floating-point literals**: No trailing zeros after decimal point.
 
 ## Comments
 

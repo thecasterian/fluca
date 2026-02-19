@@ -94,11 +94,7 @@ static PetscErrorCode FlucaFDSetUp_SecondOrderTVD(FlucaFD fd)
     periodic  = fd->periodic[tvd->dir];
 
     /* Local grid info */
-    gxs = fd->xs[tvd->dir] - ((fd->is_first_rank[tvd->dir] && !periodic) ? 0 : fd->stencil_width);
-    gxm = fd->xm[tvd->dir]                                                     //
-        + ((fd->is_first_rank[tvd->dir] && !periodic) ? 0 : fd->stencil_width) //
-        + ((fd->is_last_rank[tvd->dir] && !periodic) ? 0 : fd->stencil_width);
-    gxe = (fd->is_last_rank[tvd->dir] && !periodic) ? 1 : 0;
+    PetscCall(FlucaFDGetGhostCorners_Internal(fd, tvd->dir, PETSC_TRUE, &gxs, &gxm, &gxe));
 
     tvd->alpha_start = gxs;
     tvd->alpha_end   = gxs + gxm + gxe;
@@ -161,7 +157,7 @@ static PetscErrorCode ComputeFaceCenteredGradient(FlucaFD fd, PetscInt i, PetscI
   PetscFunctionBegin;
   PetscCall(FlucaFDGetStencil(tvd->fd_grad, i, j, k, &ncols, col, v));
 
-  *grad = 0.0;
+  *grad = 0.;
   for (c = 0; c < ncols; ++c)
     if (col[c].c >= 0) {
       /* Interior point */
@@ -473,7 +469,7 @@ PetscErrorCode FlucaFDSecondOrderTVDCreate(DM dm, FlucaFDDirection dir, PetscInt
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSTAG);
-  PetscAssertPointer(fd, 8);
+  PetscAssertPointer(fd, 5);
 
   switch (dir) {
   case FLUCAFD_X:

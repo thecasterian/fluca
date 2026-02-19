@@ -170,6 +170,7 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   PetscBool      isdmstag;
   PetscInt       d;
   DMBoundaryType bt[FLUCAFD_MAX_DIM];
+
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   if (fd->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);

@@ -149,6 +149,7 @@ FLUCA_INTERN PetscErrorCode FlucaFDValidateOperand_Internal(FlucaFD, FlucaFD);
 FLUCA_INTERN PetscErrorCode FlucaFDValidateStencilLocation_Internal(DMStagStencilLocation);
 FLUCA_INTERN PetscErrorCode FlucaFDUseFaceCoordinate_Internal(DMStagStencilLocation, PetscInt, PetscBool *);
 FLUCA_INTERN PetscErrorCode FlucaFDGetCoordinate_Internal(const PetscScalar **, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar, PetscScalar, PetscScalar *);
+FLUCA_INTERN PetscErrorCode FlucaFDGetGhostCorners_Internal(FlucaFD, PetscInt, PetscBool, PetscInt *, PetscInt *, PetscInt *);
 FLUCA_INTERN PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt, PetscScalar[], PetscScalar[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(DMStagStencil, PetscScalar, PetscInt *, DMStagStencil[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt *, DMStagStencil[], PetscScalar[]);

@@ -48,11 +48,7 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
     periodic  = fd->periodic[deriv->dir];
 
     /* Local grid info */
-    gxs = fd->xs[deriv->dir] - ((fd->is_first_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width);
-    gxm = fd->xm[deriv->dir]                                                     //
-        + ((fd->is_first_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width) //
-        + ((fd->is_last_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width);
-    gxe = (fd->is_last_rank[deriv->dir] && input_use_face && !periodic) ? 1 : 0;
+    PetscCall(FlucaFDGetGhostCorners_Internal(fd, deriv->dir, input_use_face, &gxs, &gxm, &gxe));
 
     stencil_size = deriv->deriv_order + deriv->accu_order;
     PetscCheck(stencil_size <= FLUCAFD_MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Required stencil size (%" PetscInt_FMT ") exceeds maximum (%" PetscInt_FMT ")", stencil_size, FLUCAFD_MAX_STENCIL_SIZE);

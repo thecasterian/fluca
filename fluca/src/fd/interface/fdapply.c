@@ -1,5 +1,24 @@
 #include <fluca/private/flucafdimpl.h>
 
+static PetscErrorCode GetOutputLoopRange_Private(FlucaFD fd, DM output_dm, PetscInt *i_start, PetscInt *j_start, PetscInt *k_start, PetscInt *i_end, PetscInt *j_end, PetscInt *k_end)
+{
+  PetscInt  xs, ys, zs, xm, ym, zm, nExtrax, nExtray, nExtraz;
+  PetscBool use_face_x, use_face_y, use_face_z;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetCorners(output_dm, &xs, &ys, &zs, &xm, &ym, &zm, &nExtrax, &nExtray, &nExtraz));
+  PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, 0, &use_face_x));
+  PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, 1, &use_face_y));
+  PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, 2, &use_face_z));
+  *i_start = xs;
+  *j_start = (fd->dim >= 2) ? ys : 0;
+  *k_start = (fd->dim >= 3) ? zs : 0;
+  *i_end   = xs + xm + (use_face_x ? nExtrax : 0);
+  *j_end   = (fd->dim >= 2) ? (ys + ym + (use_face_y ? nExtray : 0)) : 1;
+  *k_end   = (fd->dim >= 3) ? (zs + zm + (use_face_z ? nExtraz : 0)) : 1;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   PetscFunctionBegin;
@@ -30,8 +49,6 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
   Vec                x_local, y_local;
   const PetscScalar *x_arr;
   PetscScalar       *y_arr;
-  PetscInt           xs, ys, zs, xm, ym, zm, nExtrax, nExtray, nExtraz;
-  PetscBool          use_face_x, use_face_y, use_face_z;
   PetscInt           i_start, j_start, k_start, i_end, j_end, k_end;
   PetscInt           i, j, k, c;
   DMStagStencil      row;
@@ -59,18 +76,7 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
   PetscCall(VecZeroEntries(y_local));
   PetscCall(VecGetArray(y_local, &y_arr));
 
-  PetscCall(DMStagGetCorners(output_dm, &xs, &ys, &zs, &xm, &ym, &zm, &nExtrax, &nExtray, &nExtraz));
-
-  /* Compute loop ranges based on output stencil location */
-  PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, 0, &use_face_x));
-  PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, 1, &use_face_y));
-  PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, 2, &use_face_z));
-  i_start = xs;
-  j_start = (fd->dim >= 2) ? ys : 0;
-  k_start = (fd->dim >= 3) ? zs : 0;
-  i_end   = xs + xm + (use_face_x ? nExtrax : 0);
-  j_end   = (fd->dim >= 2) ? (ys + ym + (use_face_y ? nExtray : 0)) : 1;
-  k_end   = (fd->dim >= 3) ? (zs + zm + (use_face_z ? nExtraz : 0)) : 1;
+  PetscCall(GetOutputLoopRange_Private(fd, output_dm, &i_start, &j_start, &k_start, &i_end, &j_end, &k_end));
 
   for (k = k_start; k < k_end; k++) {
     for (j = j_start; j < j_end; j++) {
@@ -120,8 +126,6 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
    Use FlucaFDApply() for full operator application including boundary terms. */
 PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
 {
-  PetscInt      xs, ys, zs, xm, ym, zm, nExtrax, nExtray, nExtraz;
-  PetscBool     use_face_x, use_face_y, use_face_z;
   PetscInt      i_start, j_start, k_start, i_end, j_end, k_end;
   PetscInt      i, j, k, c;
   DMStagStencil row;
@@ -140,18 +144,7 @@ PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
   PetscValidHeaderSpecific(op, MAT_CLASSID, 4);
   PetscCheck(fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "FlucaFD not setup");
 
-  PetscCall(DMStagGetCorners(output_dm, &xs, &ys, &zs, &xm, &ym, &zm, &nExtrax, &nExtray, &nExtraz));
-
-  /* Compute loop ranges based on output stencil location */
-  PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, 0, &use_face_x));
-  PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, 1, &use_face_y));
-  PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, 2, &use_face_z));
-  i_start = xs;
-  j_start = (fd->dim >= 2) ? ys : 0;
-  k_start = (fd->dim >= 3) ? zs : 0;
-  i_end   = xs + xm + (use_face_x ? nExtrax : 0);
-  j_end   = (fd->dim >= 2) ? (ys + ym + (use_face_y ? nExtray : 0)) : 1;
-  k_end   = (fd->dim >= 3) ? (zs + zm + (use_face_z ? nExtraz : 0)) : 1;
+  PetscCall(GetOutputLoopRange_Private(fd, output_dm, &i_start, &j_start, &k_start, &i_end, &j_end, &k_end));
 
   for (k = k_start; k < k_end; k++) {
     for (j = j_start; j < j_end; j++) {
