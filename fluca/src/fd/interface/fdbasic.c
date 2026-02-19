@@ -79,6 +79,7 @@ PetscErrorCode FlucaFDGetType(FlucaFD fd, FlucaFDType *type)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscAssertPointer(type, 2);
   PetscCall(FlucaFDRegisterAll());
   *type = ((PetscObject)fd)->type_name;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -133,7 +134,7 @@ PetscErrorCode FlucaFDView(FlucaFD fd, PetscViewer viewer)
 
   if (isascii) {
     FlucaFDTermLink term;
-    PetscInt        nterms, idx;
+    PetscInt        nterms, idx, d;
     char            deriv_order_str[FLUCAFD_MAX_DIM][16];
     char            accu_order_str[FLUCAFD_MAX_DIM][16];
 
@@ -143,7 +144,7 @@ PetscErrorCode FlucaFDView(FlucaFD fd, PetscViewer viewer)
     PetscCall(PetscViewerASCIIPushTab(viewer));
     PetscCall(PetscViewerASCIIPrintf(viewer, "Terms: %" PetscInt_FMT "\n", nterms));
     for (term = fd->termlink, idx = 0; term; term = term->next, ++idx) {
-      for (PetscInt d = 0; d < FLUCAFD_MAX_DIM; ++d) {
+      for (d = 0; d < FLUCAFD_MAX_DIM; ++d) {
         if (term->deriv_order[d] != -1) PetscCall(PetscSNPrintf(deriv_order_str[d], sizeof(deriv_order_str[d]), "%" PetscInt_FMT, term->deriv_order[d]));
         else PetscCall(PetscSNPrintf(deriv_order_str[d], sizeof(deriv_order_str[d]), "-"));
         if (term->accu_order[d] != PETSC_INT_MAX) PetscCall(PetscSNPrintf(accu_order_str[d], sizeof(accu_order_str[d]), "%" PetscInt_FMT, term->accu_order[d]));

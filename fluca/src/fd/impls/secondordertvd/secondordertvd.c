@@ -147,7 +147,7 @@ static PetscErrorCode FlucaFDSetUp_SecondOrderTVD(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFaceCenteredGradient(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscScalar *grad)
+static PetscErrorCode ComputeFaceCenteredGradient_Private(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscScalar *grad)
 {
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
   PetscInt                ncols, bnd_idx, c;
@@ -254,8 +254,8 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       i_fc  = i;
       j_fc  = j;
       k_fc  = k;
-      PetscCall(ComputeFaceCenteredGradient(fd, i_fu, j_fu, k_fu, &grad_fu));
-      PetscCall(ComputeFaceCenteredGradient(fd, i_fc, j_fc, k_fc, &grad_fc));
+      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fu, j_fu, k_fu, &grad_fu));
+      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fc, j_fc, k_fc, &grad_fc));
       r   = (PetscAbsScalar(grad_fc) > 1e-30) ? grad_fu / grad_fc : 1.;
       psi = tvd->limiter(r);
       switch (fd->dim) {
@@ -317,8 +317,8 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       i_fc  = i;
       j_fc  = j;
       k_fc  = k;
-      PetscCall(ComputeFaceCenteredGradient(fd, i_fu, j_fu, k_fu, &grad_fu));
-      PetscCall(ComputeFaceCenteredGradient(fd, i_fc, j_fc, k_fc, &grad_fc));
+      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fu, j_fu, k_fu, &grad_fu));
+      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fc, j_fc, k_fc, &grad_fc));
       r   = (PetscAbsScalar(grad_fc) > 1e-30) ? grad_fu / grad_fc : 1.;
       psi = tvd->limiter(r);
       switch (fd->dim) {

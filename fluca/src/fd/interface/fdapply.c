@@ -120,10 +120,6 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* FlucaFDGetOperator - Assembles only the interior stencil coefficients into op.
-   Boundary and constant terms are omitted because they do not depend on the
-   solution vector (they contribute to the residual, not the Jacobian).
-   Use FlucaFDApply() for full operator application including boundary terms. */
 PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
 {
   PetscInt      i_start, j_start, k_start, i_end, j_end, k_end;

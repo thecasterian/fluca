@@ -18,7 +18,7 @@ This project follows PETSc style. All C code must conform to these rules.
 | Ops struct members | Lowercase, no prefix | `setup`, `destroy`, `setfromoptions` |
 | Options database keys | Lowercase with underscores | `-flucafd_deriv_order` |
 | Subtype functions | `Base_Subtype` | `FlucaFDSetUp_Derivative()` |
-| Private/internal | Append `_Internal` or `_Private` | `FlucaFDTermLinkDestroy_Internal()` |
+| Private/internal | Append `_Internal`, `_Private`, or class/type name | `FlucaFDTermLinkDestroy_Internal()` |
 | Function pointer typedefs | End in `Fn` | `SNESFunctionFn` |
 
 Function prototypes in headers **exclude parameter names** — types only.
@@ -28,10 +28,10 @@ Function prototypes in headers **exclude parameter names** — types only.
 | Scope | Macro |
 |-------|-------|
 | Public API (in public headers) | `FLUCA_EXTERN` |
-| Internal across translation units | `FLUCA_INTERN` |
+| Internal across translation units (in headers) | `FLUCA_INTERN` |
 | File-local | `static` |
 
-Never use bare `extern`. Always use the project macros.
+Visibility macros (`FLUCA_EXTERN`, `FLUCA_INTERN`) are only used in **header** declarations. Source file definitions do not need them — the declaration in the header is sufficient. Never use bare `extern`.
 
 ## Function Structure
 
@@ -120,6 +120,7 @@ Key points for writing new code:
 - **Preprocessor**: `#if defined(X)` over `#ifdef X`. Better: `PetscDefined(X)` at runtime.
 - **Header guards**: `#pragma once` as first non-comment line.
 - **Floating-point literals**: No trailing zeros after decimal point.
+- **Enums**: Always add a trailing comma after the last enumerator.
 
 ## Comments
 
@@ -130,8 +131,9 @@ Key points for writing new code:
    No asterisks at line beginnings.
    Ends with space before closing. */
 
-// Single-line C++ style comment is only used for TODOs
+// Single-line C++ style comment is only used for TODOs and clang-format directives
 // TODO: something to do
+// clang-format off
 ```
 
 - **Never** `/*No space*/`.
@@ -168,10 +170,11 @@ PetscCall(FlucaFDDestroy(&fd));   /* Destroy takes pointer-to-pointer */
 
 ## Quick Checklist
 
+- [ ] `PascalCase` functions with module prefix, `UPPER_SNAKE_CASE` enums/macros, suffixes for internal/private symbols
 - [ ] `PetscFunctionBegin` / `PetscFunctionReturn(PETSC_SUCCESS)` in every function
 - [ ] All PETSc calls wrapped in `PetscCall()`
 - [ ] Public functions validate args with `PetscValidHeaderSpecific` etc.
-- [ ] `FLUCA_EXTERN` / `FLUCA_INTERN` / `static` visibility on every symbol
+- [ ] `FLUCA_EXTERN` / `FLUCA_INTERN` in header declarations, `static` for file-local symbols in source files
 - [ ] Memory via `PetscNew` / `PetscMalloc*` / `PetscFree` only
 - [ ] `PetscInt` for indices/sizes, `PetscScalar` for floating point
 - [ ] Format specifiers: `PetscInt_FMT`, cast `PetscReal` to `double`

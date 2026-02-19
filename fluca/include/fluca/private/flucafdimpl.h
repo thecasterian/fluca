@@ -83,7 +83,7 @@ typedef struct {
 
 typedef struct {
   FlucaFD               operand;
-  PetscReal             constant; /* scale constant (if constant scaling) */
+  PetscScalar           constant; /* scale constant (if constant scaling) */
   Vec                   vec;      /* scale vector (if vector scaling) */
   DMStagStencilLocation vec_loc;
   PetscInt              vec_c;

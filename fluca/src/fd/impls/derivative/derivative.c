@@ -17,6 +17,7 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
 {
   FlucaFD_Derivative *deriv = (FlucaFD_Derivative *)fd->data;
   PetscBool           input_use_face, output_use_face, valid_transition;
+  PetscInt            d;
 
   PetscFunctionBegin;
   PetscCheck((PetscInt)deriv->dir < fd->dim, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Cannot compute derivative in %s direction on %" PetscInt_FMT "D DM", FlucaFDDirections[deriv->dir], fd->dim);
@@ -24,7 +25,7 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
   PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->input_loc, deriv->dir, &input_use_face));
   PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, deriv->dir, &output_use_face));
   valid_transition = (input_use_face != output_use_face);
-  for (PetscInt d = 0; d < fd->dim; ++d)
+  for (d = 0; d < fd->dim; ++d)
     if (d != (PetscInt)deriv->dir) {
       PetscBool input_face_d, output_face_d;
 
