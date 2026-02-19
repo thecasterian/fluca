@@ -46,8 +46,8 @@ struct _p_FlucaFD {
   DM                  dm;
   PetscInt            dim;
   PetscInt            N[FLUCAFD_MAX_DIM];
-  PetscInt            x[FLUCAFD_MAX_DIM];
-  PetscInt            n[FLUCAFD_MAX_DIM];
+  PetscInt            xs[FLUCAFD_MAX_DIM];
+  PetscInt            xm[FLUCAFD_MAX_DIM];
   PetscBool           is_first_rank[FLUCAFD_MAX_DIM];
   PetscBool           is_last_rank[FLUCAFD_MAX_DIM];
   PetscBool           periodic[FLUCAFD_MAX_DIM];

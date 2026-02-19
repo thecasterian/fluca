@@ -39,7 +39,7 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
   {
     const PetscScalar **arr_coord;
     PetscBool           periodic;
-    PetscInt            xg, ng, extrag, stencil_size, offset_start;
+    PetscInt            gxs, gxm, gxe, stencil_size, offset_start;
     PetscInt            input_slot_coord, output_slot_coord, first_face_idx, last_face_idx;
     PetscScalar         h_prev, h_next;
     PetscInt            i, r, c, o;
@@ -48,11 +48,11 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
     periodic  = fd->periodic[deriv->dir];
 
     /* Local grid info */
-    xg = fd->x[deriv->dir] - ((fd->is_first_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width);
-    ng = fd->n[deriv->dir]                                                      //
-       + ((fd->is_first_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width) //
-       + ((fd->is_last_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width);
-    extrag = (fd->is_last_rank[deriv->dir] && input_use_face && !periodic) ? 1 : 0;
+    gxs = fd->xs[deriv->dir] - ((fd->is_first_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width);
+    gxm = fd->xm[deriv->dir]                                                     //
+        + ((fd->is_first_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width) //
+        + ((fd->is_last_rank[deriv->dir] && !periodic) ? 0 : fd->stencil_width);
+    gxe = (fd->is_last_rank[deriv->dir] && input_use_face && !periodic) ? 1 : 0;
 
     stencil_size = deriv->deriv_order + deriv->accu_order;
     PetscCheck(stencil_size <= FLUCAFD_MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Required stencil size (%" PetscInt_FMT ") exceeds maximum (%" PetscInt_FMT ")", stencil_size, FLUCAFD_MAX_STENCIL_SIZE);
@@ -71,16 +71,16 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
     }
 
     /* Allocate coefficient arrays */
-    deriv->v_start = xg - (offset_start + stencil_size - 1);
-    deriv->v_end   = xg + ng + extrag - offset_start;
+    deriv->v_start = gxs - (offset_start + stencil_size - 1);
+    deriv->v_end   = gxs + gxm + gxe - offset_start;
     PetscCall(PetscMalloc1(deriv->v_end - deriv->v_start, &deriv->v));
     deriv->v -= deriv->v_start;
 
     /* Compute coefficients */
     input_slot_coord  = input_use_face ? fd->slot_coord_prev : fd->slot_coord_elem;
     output_slot_coord = output_use_face ? fd->slot_coord_prev : fd->slot_coord_elem;
-    first_face_idx    = xg;
-    last_face_idx     = xg + ng - ((fd->is_last_rank[deriv->dir] && !periodic) ? 0 : 1);
+    first_face_idx    = gxs;
+    last_face_idx     = gxs + gxm - ((fd->is_last_rank[deriv->dir] && !periodic) ? 0 : 1);
     h_prev            = arr_coord[first_face_idx + 1][fd->slot_coord_prev] - arr_coord[first_face_idx][fd->slot_coord_prev];
     h_next            = arr_coord[last_face_idx][fd->slot_coord_prev] - arr_coord[last_face_idx - 1][fd->slot_coord_prev];
 
@@ -95,9 +95,9 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
       else v = deriv->v[i];
 
       /* Build Vandermonde-like matrix using coordinates */
-      PetscCall(FlucaFDGetCoordinate_Internal(arr_coord, i, output_slot_coord, xg, ng, h_prev, h_next, &output_coord));
+      PetscCall(FlucaFDGetCoordinate_Internal(arr_coord, i, output_slot_coord, gxs, gxm, h_prev, h_next, &output_coord));
       for (c = 0; c < stencil_size; ++c) {
-        PetscCall(FlucaFDGetCoordinate_Internal(arr_coord, i + offset_start + c, input_slot_coord, xg, ng + extrag, h_prev, h_next, &input_coord));
+        PetscCall(FlucaFDGetCoordinate_Internal(arr_coord, i + offset_start + c, input_slot_coord, gxs, gxm + gxe, h_prev, h_next, &input_coord));
         h = input_coord - output_coord;
         for (r = 0; r < stencil_size; ++r) A[r * stencil_size + c] = PetscPowScalarInt(h, r);
       }

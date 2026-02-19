@@ -31,8 +31,8 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
   f->dim = PETSC_DETERMINE;
   for (d = 0; d < FLUCAFD_MAX_DIM; ++d) {
     f->N[d]             = PETSC_DETERMINE;
-    f->x[d]             = PETSC_DETERMINE;
-    f->n[d]             = PETSC_DETERMINE;
+    f->xs[d]            = PETSC_DETERMINE;
+    f->xm[d]            = PETSC_DETERMINE;
     f->is_first_rank[d] = PETSC_FALSE;
     f->is_last_rank[d]  = PETSC_FALSE;
     f->periodic[d]      = PETSC_FALSE;
@@ -182,7 +182,7 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   /* Get grid info directly from DMStag */
   PetscCall(DMGetDimension(fd->dm, &fd->dim));
   PetscCall(DMStagGetGlobalSizes(fd->dm, &fd->N[0], &fd->N[1], &fd->N[2]));
-  PetscCall(DMStagGetCorners(fd->dm, &fd->x[0], &fd->x[1], &fd->x[2], &fd->n[0], &fd->n[1], &fd->n[2], NULL, NULL, NULL));
+  PetscCall(DMStagGetCorners(fd->dm, &fd->xs[0], &fd->xs[1], &fd->xs[2], &fd->xm[0], &fd->xm[1], &fd->xm[2], NULL, NULL, NULL));
   PetscCall(DMStagGetIsFirstRank(fd->dm, &fd->is_first_rank[0], &fd->is_first_rank[1], &fd->is_first_rank[2]));
   PetscCall(DMStagGetIsLastRank(fd->dm, &fd->is_last_rank[0], &fd->is_last_rank[1], &fd->is_last_rank[2]));
   PetscCall(DMStagGetStencilWidth(fd->dm, &fd->stencil_width));

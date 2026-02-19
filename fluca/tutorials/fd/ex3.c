@@ -142,35 +142,33 @@ static PetscErrorCode CreateOperator(AppCtx *ctx, FlucaFD *fd_rhs)
 static PetscErrorCode ComputeRHSFunction(TS ts, PetscReal t, Vec u, Vec F, void *ptr)
 {
   AppCtx *ctx = (AppCtx *)ptr;
-  Mat     A;
 
   PetscFunctionBegin;
-  PetscCall(TSGetRHSJacobian(ts, &A, NULL, NULL, NULL));
-
   /* Update TVD operators with current solution and velocity */
   PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd_x, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd_x, u));
   PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd_y, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd_y, u));
 
-  /* Build the operator matrix and constant vector */
-  PetscCall(MatZeroEntries(A));
-  PetscCall(VecZeroEntries(F));
-  PetscCall(FlucaFDApply(ctx->fd, ctx->dm, ctx->dm, A, F));
-  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
-  PetscCall(VecAssemblyBegin(F));
-  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
-  PetscCall(VecAssemblyEnd(F));
-
-  /* RHS = A*u + F (operator already has correct signs) */
-  PetscCall(MatMultAdd(A, u, F, F));
+  /* RHS = operator(u) (operator already has correct signs) */
+  PetscCall(FlucaFDApply(ctx->fd, ctx->dm, ctx->dm, u, F));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode ComputeRHSJacobian(TS ts, PetscReal t, Vec u, Mat A, Mat P, void *ptr)
 {
+  AppCtx *ctx = (AppCtx *)ptr;
+
   PetscFunctionBegin;
-  /* Jacobian is computed in ComputeRHSFunction */
+  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd_x, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd_x, u));
+  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd_y, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd_y, u));
+
+  PetscCall(MatZeroEntries(A));
+  PetscCall(FlucaFDGetOperator(ctx->fd, ctx->dm, ctx->dm, A));
+  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
