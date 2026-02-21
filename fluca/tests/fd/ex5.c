@@ -30,27 +30,6 @@ static PetscErrorCode CreateDMForLocation(MPI_Comm comm, PetscInt M, DMStagStenc
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode CreateMatrixFromDMs(DM input_dm, DM output_dm, Mat *mat)
-{
-  PetscInt               input_entries, output_entries;
-  ISLocalToGlobalMapping input_ltog, output_ltog;
-  MatType                mat_type;
-
-  PetscFunctionBegin;
-  PetscCall(DMStagGetEntries(input_dm, &input_entries));
-  PetscCall(DMStagGetEntries(output_dm, &output_entries));
-  PetscCall(DMGetLocalToGlobalMapping(input_dm, &input_ltog));
-  PetscCall(DMGetLocalToGlobalMapping(output_dm, &output_ltog));
-  PetscCall(DMGetMatType(output_dm, &mat_type));
-
-  PetscCall(MatCreate(PetscObjectComm((PetscObject)input_dm), mat));
-  PetscCall(MatSetSizes(*mat, output_entries, input_entries, PETSC_DECIDE, PETSC_DECIDE));
-  PetscCall(MatSetType(*mat, mat_type));
-  PetscCall(MatSetLocalToGlobalMapping(*mat, output_ltog, input_ltog));
-  PetscCall(MatSetUp(*mat));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode FillInputVector(DM dm, DMStagStencilLocation loc, Vec v)
 {
   Vec                 v_local;
@@ -101,8 +80,7 @@ int main(int argc, char **argv)
 {
   DM                    input_dm, output_dm;
   FlucaFD               fd;
-  Mat                   op;
-  Vec                   vbc, input, output;
+  Vec                   input, output;
   DMStagStencilLocation input_loc  = DMSTAG_ELEMENT;
   DMStagStencilLocation output_loc = DMSTAG_ELEMENT;
   const PetscInt        M          = 8;
@@ -158,33 +136,17 @@ int main(int argc, char **argv)
   }
   PetscCall(FlucaFDSetUp(fd));
 
-  PetscCall(CreateMatrixFromDMs(input_dm, output_dm, &op));
-  PetscCall(MatZeroEntries(op));
-
-  PetscCall(DMCreateGlobalVector(output_dm, &vbc));
-  PetscCall(VecZeroEntries(vbc));
-
-  PetscCall(FlucaFDApply(fd, input_dm, output_dm, op, vbc));
-  PetscCall(MatAssemblyBegin(op, MAT_FINAL_ASSEMBLY));
-  PetscCall(VecAssemblyBegin(vbc));
-  PetscCall(MatAssemblyEnd(op, MAT_FINAL_ASSEMBLY));
-  PetscCall(VecAssemblyEnd(vbc));
-  PetscCall(MatViewFromOptions(op, NULL, "-op_view"));
-  PetscCall(VecViewFromOptions(vbc, NULL, "-vbc_view"));
-
   PetscCall(DMCreateGlobalVector(input_dm, &input));
   PetscCall(FillInputVector(input_dm, input_loc, input));
   PetscCall(DMCreateGlobalVector(output_dm, &output));
 
-  PetscCall(MatMultAdd(op, input, vbc, output));
+  PetscCall(FlucaFDApply(fd, input_dm, output_dm, input, output));
   PetscCall(VecViewFromOptions(output, NULL, "-output_view"));
 
   PetscCall(ValidateOutput(output));
 
   PetscCall(VecDestroy(&input));
   PetscCall(VecDestroy(&output));
-  PetscCall(VecDestroy(&vbc));
-  PetscCall(MatDestroy(&op));
   PetscCall(FlucaFDDestroy(&fd));
   PetscCall(DMDestroy(&output_dm));
   PetscCall(DMDestroy(&input_dm));

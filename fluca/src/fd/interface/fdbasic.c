@@ -31,8 +31,8 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
   f->dim = PETSC_DETERMINE;
   for (d = 0; d < FLUCAFD_MAX_DIM; ++d) {
     f->N[d]             = PETSC_DETERMINE;
-    f->x[d]             = PETSC_DETERMINE;
-    f->n[d]             = PETSC_DETERMINE;
+    f->xs[d]            = PETSC_DETERMINE;
+    f->xm[d]            = PETSC_DETERMINE;
     f->is_first_rank[d] = PETSC_FALSE;
     f->is_last_rank[d]  = PETSC_FALSE;
     f->periodic[d]      = PETSC_FALSE;
@@ -79,6 +79,7 @@ PetscErrorCode FlucaFDGetType(FlucaFD fd, FlucaFDType *type)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscAssertPointer(type, 2);
   PetscCall(FlucaFDRegisterAll());
   *type = ((PetscObject)fd)->type_name;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -133,7 +134,7 @@ PetscErrorCode FlucaFDView(FlucaFD fd, PetscViewer viewer)
 
   if (isascii) {
     FlucaFDTermLink term;
-    PetscInt        nterms, idx;
+    PetscInt        nterms, idx, d;
     char            deriv_order_str[FLUCAFD_MAX_DIM][16];
     char            accu_order_str[FLUCAFD_MAX_DIM][16];
 
@@ -143,7 +144,7 @@ PetscErrorCode FlucaFDView(FlucaFD fd, PetscViewer viewer)
     PetscCall(PetscViewerASCIIPushTab(viewer));
     PetscCall(PetscViewerASCIIPrintf(viewer, "Terms: %" PetscInt_FMT "\n", nterms));
     for (term = fd->termlink, idx = 0; term; term = term->next, ++idx) {
-      for (PetscInt d = 0; d < FLUCAFD_MAX_DIM; ++d) {
+      for (d = 0; d < FLUCAFD_MAX_DIM; ++d) {
         if (term->deriv_order[d] != -1) PetscCall(PetscSNPrintf(deriv_order_str[d], sizeof(deriv_order_str[d]), "%" PetscInt_FMT, term->deriv_order[d]));
         else PetscCall(PetscSNPrintf(deriv_order_str[d], sizeof(deriv_order_str[d]), "-"));
         if (term->accu_order[d] != PETSC_INT_MAX) PetscCall(PetscSNPrintf(accu_order_str[d], sizeof(accu_order_str[d]), "%" PetscInt_FMT, term->accu_order[d]));
@@ -170,6 +171,7 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   PetscBool      isdmstag;
   PetscInt       d;
   DMBoundaryType bt[FLUCAFD_MAX_DIM];
+
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   if (fd->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
@@ -182,7 +184,7 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   /* Get grid info directly from DMStag */
   PetscCall(DMGetDimension(fd->dm, &fd->dim));
   PetscCall(DMStagGetGlobalSizes(fd->dm, &fd->N[0], &fd->N[1], &fd->N[2]));
-  PetscCall(DMStagGetCorners(fd->dm, &fd->x[0], &fd->x[1], &fd->x[2], &fd->n[0], &fd->n[1], &fd->n[2], NULL, NULL, NULL));
+  PetscCall(DMStagGetCorners(fd->dm, &fd->xs[0], &fd->xs[1], &fd->xs[2], &fd->xm[0], &fd->xm[1], &fd->xm[2], NULL, NULL, NULL));
   PetscCall(DMStagGetIsFirstRank(fd->dm, &fd->is_first_rank[0], &fd->is_first_rank[1], &fd->is_first_rank[2]));
   PetscCall(DMStagGetIsLastRank(fd->dm, &fd->is_last_rank[0], &fd->is_last_rank[1], &fd->is_last_rank[2]));
   PetscCall(DMStagGetStencilWidth(fd->dm, &fd->stencil_width));

@@ -68,36 +68,31 @@ static PetscErrorCode CreateConvectionOperator(AppCtx *ctx, FlucaFD *fd_conv)
 static PetscErrorCode ComputeRHSFunction(TS ts, PetscReal t, Vec u, Vec F, void *ptr)
 {
   AppCtx *ctx = (AppCtx *)ptr;
-  Mat     A;
 
   PetscFunctionBegin;
-  PetscCall(TSGetRHSJacobian(ts, &A, NULL, NULL, NULL));
-
   /* Update TVD operator with current solution and velocity */
   PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, u));
 
-  /* Build the operator matrix */
-  PetscCall(MatZeroEntries(A));
-  PetscCall(VecZeroEntries(F));
-  PetscCall(FlucaFDApply(ctx->fd, ctx->dm, ctx->dm, A, F));
-  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
-  PetscCall(VecAssemblyBegin(F));
-  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
-  PetscCall(VecAssemblyEnd(F));
-
-  PetscCall(MatMultAdd(A, u, F, F));
-
+  PetscCall(FlucaFDApply(ctx->fd, ctx->dm, ctx->dm, u, F));
   /* RHS is negative of convection term */
-  PetscCall(MatScale(A, -1.));
   PetscCall(VecScale(F, -1.));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode ComputeRHSJacobian(TS ts, PetscReal t, Vec u, Mat A, Mat P, void *ptr)
 {
+  AppCtx *ctx = (AppCtx *)ptr;
+
   PetscFunctionBegin;
-  /* Jacobian is computed in ComputeRHSFunction */
+  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, u));
+
+  PetscCall(MatZeroEntries(A));
+  PetscCall(FlucaFDGetOperator(ctx->fd, ctx->dm, ctx->dm, A));
+  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatScale(A, -1.));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

@@ -88,28 +88,24 @@ static PetscErrorCode FlucaFDSetUp_SecondOrderTVD(FlucaFD fd)
   {
     const PetscScalar **arr_coord;
     PetscBool           periodic;
-    PetscInt            xg, ng, extrag, i;
+    PetscInt            gxs, gxm, gxe, i;
 
     arr_coord = fd->arr_coord[tvd->dir];
     periodic  = fd->periodic[tvd->dir];
 
     /* Local grid info */
-    xg = fd->x[tvd->dir] - ((fd->is_first_rank[tvd->dir] && !periodic) ? 0 : fd->stencil_width);
-    ng = fd->n[tvd->dir]                                                      //
-       + ((fd->is_first_rank[tvd->dir] && !periodic) ? 0 : fd->stencil_width) //
-       + ((fd->is_last_rank[tvd->dir] && !periodic) ? 0 : fd->stencil_width);
-    extrag = (fd->is_last_rank[tvd->dir] && !periodic) ? 1 : 0;
+    PetscCall(FlucaFDGetGhostCorners_Internal(fd, tvd->dir, PETSC_TRUE, &gxs, &gxm, &gxe));
 
-    tvd->alpha_start = xg;
-    tvd->alpha_end   = xg + ng + extrag;
-    PetscCall(PetscCalloc1(ng + extrag, &tvd->alpha_plus));
-    PetscCall(PetscCalloc1(ng + extrag, &tvd->alpha_minus));
+    tvd->alpha_start = gxs;
+    tvd->alpha_end   = gxs + gxm + gxe;
+    PetscCall(PetscCalloc1(gxm + gxe, &tvd->alpha_plus));
+    PetscCall(PetscCalloc1(gxm + gxe, &tvd->alpha_minus));
     tvd->alpha_plus_base  = tvd->alpha_plus;
     tvd->alpha_minus_base = tvd->alpha_minus;
-    tvd->alpha_plus -= xg;
-    tvd->alpha_minus -= xg;
+    tvd->alpha_plus -= gxs;
+    tvd->alpha_minus -= gxs;
 
-    for (i = xg; i < xg + ng + extrag; i++) {
+    for (i = gxs; i < gxs + gxm + gxe; i++) {
       if ((i == 0 || i == fd->N[tvd->dir]) && !periodic) {
         tvd->alpha_plus[i]  = 0.5;
         tvd->alpha_minus[i] = 0.5;
@@ -151,7 +147,7 @@ static PetscErrorCode FlucaFDSetUp_SecondOrderTVD(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFaceCenteredGradient(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscScalar *grad)
+static PetscErrorCode ComputeFaceCenteredGradient_Private(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscScalar *grad)
 {
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
   PetscInt                ncols, bnd_idx, c;
@@ -161,7 +157,7 @@ static PetscErrorCode ComputeFaceCenteredGradient(FlucaFD fd, PetscInt i, PetscI
   PetscFunctionBegin;
   PetscCall(FlucaFDGetStencil(tvd->fd_grad, i, j, k, &ncols, col, v));
 
-  *grad = 0.0;
+  *grad = 0.;
   for (c = 0; c < ncols; ++c)
     if (col[c].c >= 0) {
       /* Interior point */
@@ -258,8 +254,8 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       i_fc  = i;
       j_fc  = j;
       k_fc  = k;
-      PetscCall(ComputeFaceCenteredGradient(fd, i_fu, j_fu, k_fu, &grad_fu));
-      PetscCall(ComputeFaceCenteredGradient(fd, i_fc, j_fc, k_fc, &grad_fc));
+      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fu, j_fu, k_fu, &grad_fu));
+      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fc, j_fc, k_fc, &grad_fc));
       r   = (PetscAbsScalar(grad_fc) > 1e-30) ? grad_fu / grad_fc : 1.;
       psi = tvd->limiter(r);
       switch (fd->dim) {
@@ -321,8 +317,8 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       i_fc  = i;
       j_fc  = j;
       k_fc  = k;
-      PetscCall(ComputeFaceCenteredGradient(fd, i_fu, j_fu, k_fu, &grad_fu));
-      PetscCall(ComputeFaceCenteredGradient(fd, i_fc, j_fc, k_fc, &grad_fc));
+      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fu, j_fu, k_fu, &grad_fu));
+      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fc, j_fc, k_fc, &grad_fc));
       r   = (PetscAbsScalar(grad_fc) > 1e-30) ? grad_fu / grad_fc : 1.;
       psi = tvd->limiter(r);
       switch (fd->dim) {
@@ -473,7 +469,7 @@ PetscErrorCode FlucaFDSecondOrderTVDCreate(DM dm, FlucaFDDirection dir, PetscInt
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSTAG);
-  PetscAssertPointer(fd, 8);
+  PetscAssertPointer(fd, 5);
 
   switch (dir) {
   case FLUCAFD_X:

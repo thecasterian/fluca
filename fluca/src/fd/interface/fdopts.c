@@ -87,6 +87,7 @@ PetscErrorCode FlucaFDSetFromOptions(FlucaFD fd)
   PetscCall(PetscOptionsInt("-flucafd_input_c", "Input component", "FlucaFDSetInputLocation", fd->input_c, &fd->input_c, NULL));
   PetscCall(PetscOptionsEnum("-flucafd_output_loc", "Output stencil location", "FlucaFDSetOutputLocation", DMStagStencilLocations, (PetscEnum)fd->output_loc, (PetscEnum *)&fd->output_loc, NULL));
   PetscCall(PetscOptionsInt("-flucafd_output_c", "Output component", "FlucaFDSetOutputLocation", fd->output_c, &fd->output_c, NULL));
+  PetscCheck(fd->dm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Reference DM not set. Call FlucaFDSetDM() first");
   PetscCall(DMGetDimension(fd->dm, &dim));
   PetscCall(DMStagGetBoundaryTypes(fd->dm, &bt[0], &bt[1], &bt[2]));
   for (d = 0; d < 2 * dim; ++d) {

@@ -7,7 +7,7 @@ static PetscErrorCode FlucaFDSetFromOptions_Scale(FlucaFD fd, PetscOptionItems P
   PetscFunctionBegin;
   PetscOptionsHeadBegin(PetscOptionsObject, "FlucaFDScale Options");
   if (scale->is_constant) {
-    PetscCall(PetscOptionsReal("-flucafd_constant", "Scale constant", "FlucaFDScaleSetConstant", scale->constant, &scale->constant, NULL));
+    PetscCall(PetscOptionsScalar("-flucafd_constant", "Scale constant", "FlucaFDScaleSetConstant", scale->constant, &scale->constant, NULL));
   } else {
     PetscCall(PetscOptionsEnum("-flucafd_vec_loc", "Scale vector location", "FlucaFDScaleSetVector", DMStagStencilLocations, (PetscEnum)scale->vec_loc, (PetscEnum *)&scale->vec_loc, NULL));
     PetscCall(PetscOptionsInt("-flucafd_vec_c", "Scale vector component", "FlucaFDScaleSetVector", scale->vec_c, &scale->vec_c, NULL));
@@ -131,7 +131,7 @@ static PetscErrorCode FlucaFDView_Scale(FlucaFD fd, PetscViewer viewer)
   if (isascii) {
     if (scale->is_constant) {
       PetscCall(PetscViewerASCIIPrintf(viewer, "  Scale type: constant\n"));
-      PetscCall(PetscViewerASCIIPrintf(viewer, "  Scale value: %g\n", scale->constant));
+      PetscCall(PetscViewerASCIIPrintf(viewer, "  Scale value: %g\n", (double)PetscRealPart(scale->constant)));
     } else {
       PetscCall(PetscViewerASCIIPrintf(viewer, "  Scale type: vector\n"));
       PetscCall(PetscViewerASCIIPrintf(viewer, "  Vector stencil location: %s\n", DMStagStencilLocations[scale->vec_loc]));

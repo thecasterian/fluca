@@ -46,8 +46,8 @@ struct _p_FlucaFD {
   DM                  dm;
   PetscInt            dim;
   PetscInt            N[FLUCAFD_MAX_DIM];
-  PetscInt            x[FLUCAFD_MAX_DIM];
-  PetscInt            n[FLUCAFD_MAX_DIM];
+  PetscInt            xs[FLUCAFD_MAX_DIM];
+  PetscInt            xm[FLUCAFD_MAX_DIM];
   PetscBool           is_first_rank[FLUCAFD_MAX_DIM];
   PetscBool           is_last_rank[FLUCAFD_MAX_DIM];
   PetscBool           periodic[FLUCAFD_MAX_DIM];
@@ -83,7 +83,7 @@ typedef struct {
 
 typedef struct {
   FlucaFD               operand;
-  PetscReal             constant; /* scale constant (if constant scaling) */
+  PetscScalar           constant; /* scale constant (if constant scaling) */
   Vec                   vec;      /* scale vector (if vector scaling) */
   DMStagStencilLocation vec_loc;
   PetscInt              vec_c;
@@ -149,6 +149,7 @@ FLUCA_INTERN PetscErrorCode FlucaFDValidateOperand_Internal(FlucaFD, FlucaFD);
 FLUCA_INTERN PetscErrorCode FlucaFDValidateStencilLocation_Internal(DMStagStencilLocation);
 FLUCA_INTERN PetscErrorCode FlucaFDUseFaceCoordinate_Internal(DMStagStencilLocation, PetscInt, PetscBool *);
 FLUCA_INTERN PetscErrorCode FlucaFDGetCoordinate_Internal(const PetscScalar **, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar, PetscScalar, PetscScalar *);
+FLUCA_INTERN PetscErrorCode FlucaFDGetGhostCorners_Internal(FlucaFD, PetscInt, PetscBool, PetscInt *, PetscInt *, PetscInt *);
 FLUCA_INTERN PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt, PetscScalar[], PetscScalar[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(DMStagStencil, PetscScalar, PetscInt *, DMStagStencil[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt *, DMStagStencil[], PetscScalar[]);

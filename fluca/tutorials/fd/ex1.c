@@ -113,27 +113,25 @@ static PetscErrorCode CreateConvectionDiffusionOperator(AppCtx *ctx, FlucaFD *fd
 static PetscErrorCode ComputeFunction(SNES snes, Vec x, Vec b, void *ptr)
 {
   AppCtx *ctx = (AppCtx *)ptr;
-  Mat     A;
 
   PetscFunctionBegin;
   PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, x));
-  PetscCall(SNESGetJacobian(snes, &A, NULL, NULL, NULL));
-  PetscCall(MatZeroEntries(A));
-  PetscCall(VecZeroEntries(b));
-  PetscCall(FlucaFDApply(ctx->fd, ctx->dm, ctx->dm, A, b));
-  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
-  PetscCall(VecAssemblyBegin(b));
-  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
-  PetscCall(VecAssemblyEnd(b));
-  PetscCall(MatMultAdd(A, x, b, b));
+  PetscCall(FlucaFDApply(ctx->fd, ctx->dm, ctx->dm, x, b));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode ComputeJacobian(SNES snes, Vec x, Mat A, Mat P, void *ptr)
 {
+  AppCtx *ctx = (AppCtx *)ptr;
+
   PetscFunctionBegin;
-  /* Jacobian is computed in ComputeFunction */
+  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, x));
+  PetscCall(MatZeroEntries(A));
+  PetscCall(FlucaFDGetOperator(ctx->fd, ctx->dm, ctx->dm, A));
+  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

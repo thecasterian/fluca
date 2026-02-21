@@ -1,7 +1,7 @@
 #include <flucafd.h>
 #include <flucasys.h>
 #include <petscdmstag.h>
-#include <petscksp.h>
+#include <petscsnes.h>
 
 static const char help[] = "Solve 2D steady heat equation (Laplacian u = 0)\n"
                            "Domain: [0,1] x [0,1]\n"
@@ -108,13 +108,38 @@ static PetscErrorCode ValidateSolution(DM dm, Vec u)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode ComputeFunction(SNES snes, Vec u, Vec F, void *ptr)
+{
+  FlucaFD *laplacian = (FlucaFD *)ptr;
+  DM       dm;
+
+  PetscFunctionBegin;
+  PetscCall(SNESGetDM(snes, &dm));
+  PetscCall(FlucaFDApply(*laplacian, dm, dm, u, F));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ComputeJacobian(SNES snes, Vec u, Mat A, Mat P, void *ptr)
+{
+  FlucaFD *laplacian = (FlucaFD *)ptr;
+  DM       dm;
+
+  PetscFunctionBegin;
+  PetscCall(SNESGetDM(snes, &dm));
+  PetscCall(MatZeroEntries(A));
+  PetscCall(FlucaFDGetOperator(*laplacian, dm, dm, A));
+  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char **argv)
 {
   DM      dm;
   FlucaFD laplacian;
   Mat     A;
-  Vec     b, u, vbc;
-  KSP     ksp;
+  Vec     u;
+  SNES    snes;
 
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
@@ -127,34 +152,22 @@ int main(int argc, char **argv)
 
   PetscCall(DMCreateMatrix(dm, &A));
   PetscCall(MatSetOption(A, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
-  PetscCall(DMCreateGlobalVector(dm, &b));
   PetscCall(DMCreateGlobalVector(dm, &u));
-  PetscCall(DMCreateGlobalVector(dm, &vbc));
 
-  PetscCall(MatZeroEntries(A));
-  PetscCall(VecZeroEntries(vbc));
-  PetscCall(FlucaFDApply(laplacian, dm, dm, A, vbc));
-  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
-  PetscCall(VecAssemblyBegin(vbc));
-  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
-  PetscCall(VecAssemblyEnd(vbc));
+  PetscCall(SNESCreate(PETSC_COMM_WORLD, &snes));
+  PetscCall(SNESSetDM(snes, dm));
+  PetscCall(SNESSetFunction(snes, NULL, ComputeFunction, &laplacian));
+  PetscCall(SNESSetJacobian(snes, A, A, ComputeJacobian, &laplacian));
+  PetscCall(SNESSetFromOptions(snes));
 
-  /* RHS = -vbc (since we solve A*u + vbc = 0) */
-  PetscCall(VecCopy(vbc, b));
-  PetscCall(VecScale(b, -1.));
-
-  PetscCall(KSPCreate(PETSC_COMM_WORLD, &ksp));
-  PetscCall(KSPSetOperators(ksp, A, A));
-  PetscCall(KSPSetFromOptions(ksp));
-  PetscCall(KSPSolve(ksp, b, u));
+  PetscCall(VecZeroEntries(u));
+  PetscCall(SNESSolve(snes, NULL, u));
   PetscCall(VecViewFromOptions(u, NULL, "-u_view"));
 
   PetscCall(ValidateSolution(dm, u));
 
-  PetscCall(KSPDestroy(&ksp));
-  PetscCall(VecDestroy(&vbc));
+  PetscCall(SNESDestroy(&snes));
   PetscCall(VecDestroy(&u));
-  PetscCall(VecDestroy(&b));
   PetscCall(MatDestroy(&A));
   PetscCall(FlucaFDDestroy(&laplacian));
   PetscCall(DMDestroy(&dm));
