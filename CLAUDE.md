@@ -32,6 +32,12 @@ fluca/
 └── cmake/             FlucaTestUtils, RunTest helpers
 ```
 
+## Git Workflow
+
+- Trunk-based development
+- Never commit directly to `main` — always create a new branch from the latest `main` and open a PR
+- Branch names must use a prefix: `feature/`, `refactor/`, `test/`, `doc/`, etc
+
 ## Key Modules
 
 - **FlucaFD**: Polymorphic finite difference operator on PETSc DMStag. Subtypes compute stencils for derivatives, compositions, scaling, sums, and TVD schemes.
