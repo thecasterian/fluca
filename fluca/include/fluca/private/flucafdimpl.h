@@ -89,12 +89,13 @@ typedef struct {
   PetscInt              vec_c;
   PetscBool             is_constant; /* true if constant scaling, false if vector */
 
-  DM                    vec_dm;
-  Vec                   vec_local;
-  const PetscScalar   **arr_vec_1d;
-  const PetscScalar  ***arr_vec_2d;
-  const PetscScalar ****arr_vec_3d;
-  PetscInt              vec_slot;
+  DM                   vec_dm;      /* original DMStag (from Vec) — ref-counted */
+  DM                   vec_da;      /* DMDA for local storage (1 DOF) */
+  Vec                  vec_local;   /* local vector on vec_da */
+  VecScatter           vec_scatter; /* global DMStag vec → local DMDA vec */
+  const PetscScalar   *arr_vec_1d;
+  const PetscScalar  **arr_vec_2d;
+  const PetscScalar ***arr_vec_3d;
 } FlucaFD_Scale;
 
 typedef struct _n_FlucaFDSumOperandLink *FlucaFDSumOperandLink;
@@ -143,6 +144,8 @@ typedef struct {
 
   FlucaFD fd_grad; /* gradient operator (element -> face) */
 } FlucaFD_SecondOrderTVD;
+
+FLUCA_INTERN PetscErrorCode FlucaFDCreateDMStagToDAScatter_Internal(DM, PetscInt, DMStagStencilLocation, PetscInt, Vec, DM *, Vec *, VecScatter *);
 
 FLUCA_INTERN PetscErrorCode FlucaFDValidateOperand_Internal(FlucaFD, FlucaFD);
 

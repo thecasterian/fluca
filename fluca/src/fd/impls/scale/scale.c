@@ -1,4 +1,5 @@
 #include <fluca/private/flucafdimpl.h>
+#include <petscdmda.h>
 
 static PetscErrorCode FlucaFDSetFromOptions_Scale(FlucaFD fd, PetscOptionItems PetscOptionsObject)
 {
@@ -28,27 +29,35 @@ static PetscErrorCode FlucaFDSetUp_Scale(FlucaFD fd)
   PetscCheck(scale->operand->output_loc == fd->input_loc && fd->input_loc == fd->output_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Cannot change location");
 
   if (!scale->is_constant) {
+    DM vec_dm;
+
     PetscCheck(scale->vec, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Neither constant nor vector scale specified");
     PetscCheck(scale->operand->output_loc == scale->vec_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Operand and vector must have the same location");
 
-    PetscCall(VecGetDM(scale->vec, &scale->vec_dm));
-    PetscCheckTypeName(scale->vec_dm, DMSTAG);
-    PetscCall(DMCreateLocalVector(scale->vec_dm, &scale->vec_local));
-    PetscCall(DMGlobalToLocal(scale->vec_dm, scale->vec, INSERT_VALUES, scale->vec_local));
+    PetscCall(VecGetDM(scale->vec, &vec_dm));
+    PetscCheckTypeName(vec_dm, DMSTAG);
+    scale->vec_dm = vec_dm;
+    PetscCall(PetscObjectReference((PetscObject)scale->vec_dm));
+    PetscCall(FlucaFDCreateDMStagToDAScatter_Internal(scale->vec_dm, fd->dim, scale->vec_loc, scale->vec_c, scale->vec, &scale->vec_da, &scale->vec_local, &scale->vec_scatter));
+
+    /* Get array views on local DMDA vector (kept until destroy) */
     switch (fd->dim) {
     case 1:
-      PetscCall(DMStagVecGetArrayRead(scale->vec_dm, scale->vec_local, &scale->arr_vec_1d));
+      PetscCall(DMDAVecGetArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_1d));
       break;
     case 2:
-      PetscCall(DMStagVecGetArrayRead(scale->vec_dm, scale->vec_local, &scale->arr_vec_2d));
+      PetscCall(DMDAVecGetArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_2d));
       break;
     case 3:
-      PetscCall(DMStagVecGetArrayRead(scale->vec_dm, scale->vec_local, &scale->arr_vec_3d));
+      PetscCall(DMDAVecGetArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_3d));
       break;
     default:
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
     }
-    PetscCall(DMStagGetLocationSlot(scale->vec_dm, scale->vec_loc, scale->vec_c, &scale->vec_slot));
+
+    /* Scatter data */
+    PetscCall(VecScatterBegin(scale->vec_scatter, scale->vec, scale->vec_local, INSERT_VALUES, SCATTER_FORWARD));
+    PetscCall(VecScatterEnd(scale->vec_scatter, scale->vec, scale->vec_local, INSERT_VALUES, SCATTER_FORWARD));
   }
 
   /* Copy term infos from operand */
@@ -77,13 +86,13 @@ static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscIn
   } else {
     switch (fd->dim) {
     case 1:
-      scale_value = scale->arr_vec_1d[i][scale->vec_slot];
+      scale_value = scale->arr_vec_1d[i];
       break;
     case 2:
-      scale_value = scale->arr_vec_2d[j][i][scale->vec_slot];
+      scale_value = scale->arr_vec_2d[j][i];
       break;
     case 3:
-      scale_value = scale->arr_vec_3d[k][j][i][scale->vec_slot];
+      scale_value = scale->arr_vec_3d[k][j][i];
       break;
     default:
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
@@ -100,23 +109,26 @@ static PetscErrorCode FlucaFDDestroy_Scale(FlucaFD fd)
 
   PetscFunctionBegin;
   PetscCall(FlucaFDDestroy(&scale->operand));
-  if (!scale->is_constant) {
+  if (scale->vec_dm) {
     switch (fd->dim) {
     case 1:
-      PetscCall(DMStagVecRestoreArrayRead(scale->vec_dm, scale->vec_local, &scale->arr_vec_1d));
+      PetscCall(DMDAVecRestoreArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_1d));
       break;
     case 2:
-      PetscCall(DMStagVecRestoreArrayRead(scale->vec_dm, scale->vec_local, &scale->arr_vec_2d));
+      PetscCall(DMDAVecRestoreArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_2d));
       break;
     case 3:
-      PetscCall(DMStagVecRestoreArrayRead(scale->vec_dm, scale->vec_local, &scale->arr_vec_3d));
+      PetscCall(DMDAVecRestoreArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_3d));
       break;
     default:
-      SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
+      break;
     }
-    PetscCall(VecDestroy(&scale->vec));
+    PetscCall(VecScatterDestroy(&scale->vec_scatter));
     PetscCall(VecDestroy(&scale->vec_local));
+    PetscCall(DMDestroy(&scale->vec_da));
+    PetscCall(DMDestroy(&scale->vec_dm));
   }
+  PetscCall(VecDestroy(&scale->vec));
   PetscCall(PetscFree(fd->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -158,7 +170,9 @@ PetscErrorCode FlucaFDCreate_Scale(FlucaFD fd)
   scale->vec_loc     = DMSTAG_ELEMENT;
   scale->is_constant = PETSC_TRUE;
   scale->vec_dm      = NULL;
+  scale->vec_da      = NULL;
   scale->vec_local   = NULL;
+  scale->vec_scatter = NULL;
   scale->arr_vec_1d  = NULL;
   scale->arr_vec_2d  = NULL;
   scale->arr_vec_3d  = NULL;
@@ -242,16 +256,74 @@ PetscErrorCode FlucaFDScaleSetConstant(FlucaFD fd, PetscScalar constant)
 PetscErrorCode FlucaFDScaleSetVector(FlucaFD fd, Vec vec, DMStagStencilLocation loc, PetscInt c)
 {
   FlucaFD_Scale *scale = (FlucaFD_Scale *)fd->data;
+  DM             vec_dm;
+  PetscBool      isstag;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(fd, FLUCAFD_CLASSID, 1, FLUCAFDSCALE);
   PetscValidHeaderSpecific(vec, VEC_CLASSID, 2);
   PetscCall(FlucaFDValidateStencilLocation_Internal(loc));
+  PetscCall(VecGetDM(vec, &vec_dm));
+  PetscCall(PetscObjectTypeCompare((PetscObject)vec_dm, DMSTAG, &isstag));
+  PetscCheck(isstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Vector is not on DMStag");
+
+  /* Recreate scatter if DM, location, or component changed */
+  if (fd->setupcalled && (vec_dm != scale->vec_dm || loc != scale->vec_loc || c != scale->vec_c)) {
+    if (scale->vec_dm) {
+      switch (fd->dim) {
+      case 1:
+        PetscCall(DMDAVecRestoreArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_1d));
+        break;
+      case 2:
+        PetscCall(DMDAVecRestoreArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_2d));
+        break;
+      case 3:
+        PetscCall(DMDAVecRestoreArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_3d));
+        break;
+      default:
+        break;
+      }
+    }
+    PetscCall(VecScatterDestroy(&scale->vec_scatter));
+    PetscCall(VecDestroy(&scale->vec_local));
+    PetscCall(DMDestroy(&scale->vec_da));
+    PetscCall(DMDestroy(&scale->vec_dm));
+  }
+
   PetscCall(VecDestroy(&scale->vec));
   scale->vec         = vec;
   scale->vec_loc     = loc;
   scale->vec_c       = c;
   scale->is_constant = PETSC_FALSE;
   PetscCall(PetscObjectReference((PetscObject)vec));
+
+  /* If not yet set up, defer infrastructure creation to SetUp */
+  if (!fd->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
+
+  /* Create DMDA infrastructure if needed */
+  if (!scale->vec_dm) {
+    scale->vec_dm = vec_dm;
+    PetscCall(PetscObjectReference((PetscObject)scale->vec_dm));
+    PetscCall(FlucaFDCreateDMStagToDAScatter_Internal(scale->vec_dm, fd->dim, scale->vec_loc, scale->vec_c, vec, &scale->vec_da, &scale->vec_local, &scale->vec_scatter));
+
+    /* Get array views on local DMDA vector (kept until destroy) */
+    switch (fd->dim) {
+    case 1:
+      PetscCall(DMDAVecGetArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_1d));
+      break;
+    case 2:
+      PetscCall(DMDAVecGetArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_2d));
+      break;
+    case 3:
+      PetscCall(DMDAVecGetArrayRead(scale->vec_da, scale->vec_local, &scale->arr_vec_3d));
+      break;
+    default:
+      SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
+    }
+  }
+
+  /* Scatter data */
+  PetscCall(VecScatterBegin(scale->vec_scatter, vec, scale->vec_local, INSERT_VALUES, SCATTER_FORWARD));
+  PetscCall(VecScatterEnd(scale->vec_scatter, vec, scale->vec_local, INSERT_VALUES, SCATTER_FORWARD));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
