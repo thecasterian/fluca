@@ -1,4 +1,5 @@
 #include <fluca/private/flucafdimpl.h>
+#include <petscdmda.h>
 
 PetscErrorCode FlucaFDValidateOperand_Internal(FlucaFD parent, FlucaFD operand)
 {
@@ -575,5 +576,115 @@ PetscErrorCode FlucaFDTermLinkDestroy_Internal(FlucaFDTermLink *link)
     curr = next;
   }
   *link = NULL;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDCreateDMStagToDAScatter_Internal(DM stag, PetscInt dim, DMStagStencilLocation loc, PetscInt c, Vec vec, DM *da, Vec *vec_local, VecScatter *scatter)
+{
+  MPI_Comm               comm;
+  ISLocalToGlobalMapping ltog;
+  IS                     is_from, is_to;
+  DMBoundaryType         bt[3];
+  PetscInt               N[3], num_ranks[3], sw, epe, slot;
+  PetscInt               gx[3], gn[3];
+  PetscInt               da_N[3], da_gx[3], da_gn[3];
+  PetscInt               n_local, n_valid, d, i, j, k, cnt;
+  PetscInt              *stag_local, *stag_global, *da_local;
+  const PetscInt        *l[3];
+  PetscInt              *l_da[3] = {NULL, NULL, NULL};
+
+  PetscFunctionBegin;
+  PetscCall(PetscObjectGetComm((PetscObject)stag, &comm));
+
+  /* Query DMStag properties */
+  PetscCall(DMStagGetGlobalSizes(stag, &N[0], &N[1], &N[2]));
+  PetscCall(DMStagGetNumRanks(stag, &num_ranks[0], &num_ranks[1], &num_ranks[2]));
+  PetscCall(DMStagGetOwnershipRanges(stag, &l[0], &l[1], &l[2]));
+  PetscCall(DMStagGetBoundaryTypes(stag, &bt[0], &bt[1], &bt[2]));
+  PetscCall(DMStagGetGhostCorners(stag, &gx[0], &gx[1], &gx[2], &gn[0], &gn[1], &gn[2]));
+  PetscCall(DMStagGetStencilWidth(stag, &sw));
+  PetscCall(DMStagGetEntriesPerElement(stag, &epe));
+  PetscCall(DMStagGetLocationSlot(stag, loc, c, &slot));
+  PetscCall(DMGetLocalToGlobalMapping(stag, &ltog));
+
+  /* Create DMDA with matching topology, 1 DOF per point */
+  for (d = 0; d < dim; d++) {
+    PetscBool face;
+    PetscInt  extra;
+
+    PetscCall(FlucaFDUseFaceCoordinate_Internal(loc, d, &face));
+    extra   = (face && bt[d] != DM_BOUNDARY_PERIODIC) ? 1 : 0;
+    da_N[d] = N[d] + extra;
+    PetscCall(PetscMalloc1(num_ranks[d], &l_da[d]));
+    PetscCall(PetscArraycpy(l_da[d], l[d], num_ranks[d]));
+    l_da[d][num_ranks[d] - 1] += extra;
+  }
+
+  switch (dim) {
+  case 1:
+    PetscCall(DMDACreate1d(comm, bt[0], da_N[0], 1, sw, l_da[0], da));
+    break;
+  case 2:
+    PetscCall(DMDACreate2d(comm, bt[0], bt[1], DMDA_STENCIL_BOX, da_N[0], da_N[1], num_ranks[0], num_ranks[1], 1, sw, l_da[0], l_da[1], da));
+    break;
+  case 3:
+    PetscCall(DMDACreate3d(comm, bt[0], bt[1], bt[2], DMDA_STENCIL_BOX, da_N[0], da_N[1], da_N[2], num_ranks[0], num_ranks[1], num_ranks[2], 1, sw, l_da[0], l_da[1], l_da[2], da));
+    break;
+  default:
+    SETERRQ(comm, PETSC_ERR_SUP, "Unsupported dim %" PetscInt_FMT, dim);
+  }
+  PetscCall(DMSetUp(*da));
+  for (d = 0; d < dim; d++) PetscCall(PetscFree(l_da[d]));
+
+  /* Create local vector on DMDA */
+  PetscCall(DMCreateLocalVector(*da, vec_local));
+
+  /* Get DMDA ghost corners */
+  PetscCall(DMDAGetGhostCorners(*da, &da_gx[0], &da_gx[1], &da_gx[2], &da_gn[0], &da_gn[1], &da_gn[2]));
+
+  /* Build IS: for each DMDA ghost point, map DMStag local index of the target DOF to global index via l2g mapping */
+  n_local = 1;
+  for (d = 0; d < dim; d++) n_local *= da_gn[d];
+  PetscCall(PetscMalloc1(n_local, &stag_local));
+  PetscCall(PetscMalloc1(n_local, &stag_global));
+  cnt = 0;
+  switch (dim) {
+  case 1:
+    for (i = da_gx[0]; i < da_gx[0] + da_gn[0]; i++) stag_local[cnt++] = (i - gx[0]) * epe + slot;
+    break;
+  case 2:
+    for (j = da_gx[1]; j < da_gx[1] + da_gn[1]; j++)
+      for (i = da_gx[0]; i < da_gx[0] + da_gn[0]; i++) stag_local[cnt++] = ((j - gx[1]) * gn[0] + (i - gx[0])) * epe + slot;
+    break;
+  case 3:
+    for (k = da_gx[2]; k < da_gx[2] + da_gn[2]; k++)
+      for (j = da_gx[1]; j < da_gx[1] + da_gn[1]; j++)
+        for (i = da_gx[0]; i < da_gx[0] + da_gn[0]; i++) stag_local[cnt++] = ((k - gx[2]) * gn[1] * gn[0] + (j - gx[1]) * gn[0] + (i - gx[0])) * epe + slot;
+    break;
+  default:
+    break;
+  }
+  PetscCall(ISLocalToGlobalMappingApply(ltog, n_local, stag_local, stag_global));
+  PetscCall(PetscFree(stag_local));
+
+  /* Remove unmapped entries (-1) that arise when DMStag uses STAR stencil
+     (whose L2G mapping excludes corner ghost points in 2D/3D). Build a
+     matching DMDA local index array so the scatter targets correct positions
+     in the full rectangular DMDA local vector. */
+  PetscCall(PetscMalloc1(n_local, &da_local));
+  n_valid = 0;
+  for (i = 0; i < n_local; i++)
+    if (stag_global[i] >= 0) {
+      stag_global[n_valid] = stag_global[i];
+      da_local[n_valid]    = i;
+      n_valid++;
+    }
+  PetscCall(ISCreateGeneral(comm, n_valid, stag_global, PETSC_OWN_POINTER, &is_from));
+  PetscCall(ISCreateGeneral(comm, n_valid, da_local, PETSC_OWN_POINTER, &is_to));
+
+  /* Create VecScatter */
+  PetscCall(VecScatterCreate(vec, is_from, *vec_local, is_to, scatter));
+  PetscCall(ISDestroy(&is_from));
+  PetscCall(ISDestroy(&is_to));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
