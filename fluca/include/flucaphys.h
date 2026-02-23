@@ -40,5 +40,11 @@ FLUCA_EXTERN PetscErrorCode PhysSetOptionsPrefix(Phys, const char[]);
 FLUCA_EXTERN PetscErrorCode PhysAppendOptionsPrefix(Phys, const char[]);
 FLUCA_EXTERN PetscErrorCode PhysGetOptionsPrefix(Phys, const char *[]);
 
+/* PHYSINS specific */
+FLUCA_EXTERN PetscErrorCode PhysINSSetDensity(Phys, PetscReal);
+FLUCA_EXTERN PetscErrorCode PhysINSGetDensity(Phys, PetscReal *);
+FLUCA_EXTERN PetscErrorCode PhysINSSetViscosity(Phys, PetscReal);
+FLUCA_EXTERN PetscErrorCode PhysINSGetViscosity(Phys, PetscReal *);
+
 FLUCA_EXTERN PetscFunctionList PhysList;
 FLUCA_EXTERN PetscErrorCode    PhysRegister(const char[], PetscErrorCode (*)(Phys));

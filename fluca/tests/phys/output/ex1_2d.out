@@ -1,0 +1,6 @@
+Phys Object: 1 MPI process
+  type: ins
+  Dimension: 2
+  Density: 1.
+  Viscosity: 1.
+Solution DM DOFs: 0 0 3 0
