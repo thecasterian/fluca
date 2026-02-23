@@ -15,6 +15,21 @@ typedef const char *PhysType;
 /* Body force callback */
 typedef PetscErrorCode PhysBodyForceFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar f[], void *ctx);
 
+/* INS boundary condition types */
+typedef enum {
+  PHYS_INS_BC_NONE,
+  PHYS_INS_BC_VELOCITY,
+} PhysINSBCType;
+
+/* INS boundary condition callback: returns value of field component at boundary coordinates */
+typedef PetscErrorCode PhysINSBCFn(PetscInt dim, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx);
+
+typedef struct {
+  PhysINSBCType type;
+  PhysINSBCFn  *fn;
+  void         *ctx;
+} PhysINSBC;
+
 FLUCA_EXTERN PetscClassId   PHYS_CLASSID;
 FLUCA_EXTERN PetscErrorCode PhysInitializePackage(void);
 FLUCA_EXTERN PetscErrorCode PhysFinalizePackage(void);
@@ -45,6 +60,8 @@ FLUCA_EXTERN PetscErrorCode PhysINSSetDensity(Phys, PetscReal);
 FLUCA_EXTERN PetscErrorCode PhysINSGetDensity(Phys, PetscReal *);
 FLUCA_EXTERN PetscErrorCode PhysINSSetViscosity(Phys, PetscReal);
 FLUCA_EXTERN PetscErrorCode PhysINSGetViscosity(Phys, PetscReal *);
+FLUCA_EXTERN PetscErrorCode PhysINSSetBoundaryCondition(Phys, PetscInt, PhysINSBC);
+FLUCA_EXTERN PetscErrorCode PhysINSGetBoundaryCondition(Phys, PetscInt, PhysINSBC *);
 
 FLUCA_EXTERN PetscFunctionList PhysList;
 FLUCA_EXTERN PetscErrorCode    PhysRegister(const char[], PetscErrorCode (*)(Phys));

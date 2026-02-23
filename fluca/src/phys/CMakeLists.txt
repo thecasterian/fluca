@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 add_library(fluca_phys SHARED
     impls/ins/ins.c
+    impls/ins/insops.c
     interface/physbasic.c
     interface/physopts.c
     interface/physpkg.c
