@@ -10,7 +10,6 @@ typedef struct _p_FlucaFD *FlucaFD;
 /* FlucaFD types */
 typedef const char *FlucaFDType;
 #define FLUCAFDDERIVATIVE     "derivative"
-#define FLUCAFDINTERPOLATION  "interpolation"
 #define FLUCAFDCOMPOSITION    "composition"
 #define FLUCAFDSCALE          "scale"
 #define FLUCAFDSUM            "sum"
