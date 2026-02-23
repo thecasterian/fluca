@@ -168,6 +168,23 @@ PetscCall(FlucaFDDestroy(&fd));   /* Destroy takes pointer-to-pointer */
 - Call `PetscLogFlops()` directly with the flop count. Never accumulate in a local counter.
 - Register events with `PetscLogEventRegister()` and bracket with `PetscLogEventBegin/End`.
 
+## Callback Function Typedefs
+
+When a function accepts a callback (function pointer) parameter, always define a separate `typedef` for the **function type** (not a pointer type). The typedef name must end in `Fn`. Unlike regular function prototypes, callback typedefs **include parameter names** for documentation.
+
+```c
+/* Define the function type (NOT a pointer — no (*)) */
+typedef PetscErrorCode PhysComputeRHSFn(DM dm, Vec u, Vec F, void *ctx);
+
+/* Use as a pointer in the API */
+FLUCA_EXTERN PetscErrorCode PhysSetComputeRHS(Phys, PhysComputeRHSFn *, void *);
+
+/* Use as a pointer in structs */
+PhysComputeRHSFn *computerhs;
+```
+
+Never use raw function pointer syntax directly in a function signature.
+
 ## Quick Checklist
 
 - [ ] `PascalCase` functions with module prefix, `UPPER_SNAKE_CASE` enums/macros, suffixes for internal/private symbols
@@ -180,3 +197,4 @@ PetscCall(FlucaFDDestroy(&fd));   /* Destroy takes pointer-to-pointer */
 - [ ] Format specifiers: `PetscInt_FMT`, cast `PetscReal` to `double`
 - [ ] No bare `return`, no `malloc`/`free`, no `assert()`, no VLAs
 - [ ] Locals at block top, blank line before `PetscFunctionBegin`, no blank line before `PetscFunctionReturn`
+- [ ] Callback parameters use a named `typedef` ending in `Fn` — no raw function pointer syntax in signatures
