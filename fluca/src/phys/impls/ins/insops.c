@@ -1,5 +1,4 @@
-#include "insimpl.h"
-#include <petscsnes.h>
+#include <fluca/private/physinsimpl.h>
 #include <petscts.h>
 
 /* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
@@ -313,46 +312,6 @@ static PetscErrorCode ComputeSteadyResidual_Stokes(Phys phys, PetscReal t, Vec x
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* --- SNES callbacks ------------------------------------------------------- */
-
-static PetscErrorCode FormFunction_Stokes(SNES snes, Vec x, Vec F, void *ctx)
-{
-  Phys phys = (Phys)ctx;
-
-  PetscFunctionBegin;
-  PetscCall(ComputeSteadyResidual_Stokes(phys, 0.0, x, F));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode FormJacobian_Stokes(SNES snes, Vec x, Mat J, Mat Jpre, void *ctx)
-{
-  Phys      phys   = (Phys)ctx;
-  Phys_INS *ins    = (Phys_INS *)phys->data;
-  DM        sol_dm = phys->sol_dm;
-  PetscInt  dim    = phys->dim, d;
-
-  PetscFunctionBegin;
-  PetscCall(MatZeroEntries(Jpre));
-
-  /* Momentum rows */
-  for (d = 0; d < dim; d++) {
-    PetscCall(FlucaFDGetOperator(ins->fd_laplacian[d], sol_dm, sol_dm, Jpre));
-    PetscCall(FlucaFDGetOperator(ins->fd_grad_p[d], sol_dm, sol_dm, Jpre));
-  }
-
-  /* Continuity rows */
-  for (d = 0; d < dim; d++) PetscCall(FlucaFDGetOperator(ins->fd_div[d], sol_dm, sol_dm, Jpre));
-  PetscCall(FlucaFDGetOperator(ins->fd_pstab, sol_dm, sol_dm, Jpre));
-
-  PetscCall(MatAssemblyBegin(Jpre, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(Jpre, MAT_FINAL_ASSEMBLY));
-  if (J != Jpre) {
-    PetscCall(MatAssemblyBegin(J, MAT_FINAL_ASSEMBLY));
-    PetscCall(MatAssemblyEnd(J, MAT_FINAL_ASSEMBLY));
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 /* --- TS callbacks --------------------------------------------------------- */
 
 static PetscErrorCode IFunction_Stokes(TS ts, PetscReal t, Vec U, Vec U_t, Vec F, void *ctx)
@@ -497,33 +456,6 @@ static PetscErrorCode PhysINSCreateSolverData_Internal(Phys phys)
     PetscCall(VecDestroy(&nullvec));
     PetscCall(MatSetNullSpace(ins->J, ins->nullspace));
   }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode PhysSetUpSNES_INS(Phys phys, SNES snes)
-{
-  Phys_INS *ins    = (Phys_INS *)phys->data;
-  DM        sol_dm = phys->sol_dm;
-  KSP       ksp;
-  PC        pc;
-
-  PetscFunctionBegin;
-  PetscCall(PhysINSCreateSolverData_Internal(phys));
-
-  /* Wire DM */
-  PetscCall(SNESSetDM(snes, sol_dm));
-
-  /* Pre-assemble Jacobian (Stokes is linear) */
-  PetscCall(FormJacobian_Stokes(snes, NULL, ins->J, ins->J, phys));
-
-  /* Wire SNES callbacks */
-  PetscCall(SNESSetFunction(snes, NULL, FormFunction_Stokes, phys));
-  PetscCall(SNESSetJacobian(snes, ins->J, ins->J, FormJacobian_Stokes, phys));
-
-  /* Default PC: ILU (user can override via options) */
-  PetscCall(SNESGetKSP(snes, &ksp));
-  PetscCall(KSPGetPC(ksp, &pc));
-  PetscCall(PCSetType(pc, PCILU));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

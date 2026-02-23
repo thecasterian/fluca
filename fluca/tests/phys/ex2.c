@@ -1,7 +1,7 @@
 #include <flucaphys.h>
 #include <flucasys.h>
 #include <petscdmstag.h>
-#include <petscsnes.h>
+#include <petscts.h>
 
 static const char help[] = "Manufactured solution test for steady Stokes solver\n"
                            "Exact solution: Taylor-Green-like\n"
@@ -53,7 +53,7 @@ int main(int argc, char **argv)
 {
   DM                  dm, sol_dm;
   Phys                phys;
-  SNES                snes;
+  TS                  ts;
   Vec                 x;
   PetscInt            N = 16, d, f;
   PhysINSBC           bc;
@@ -91,18 +91,16 @@ int main(int argc, char **argv)
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));
 
-  /* Create SNES and set up solver */
-  PetscCall(SNESCreate(PETSC_COMM_WORLD, &snes));
-  PetscCall(PhysSetUpSNES(phys, snes));
-  PetscCall(SNESSetFromOptions(snes));
-
   /* Create solution vector, zero initial guess */
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(DMCreateGlobalVector(sol_dm, &x));
   PetscCall(VecZeroEntries(x));
 
-  /* Solve */
-  PetscCall(SNESSolve(snes, NULL, x));
+  /* Solve via TSPSEUDO (steady state through pseudo-timestepping) */
+  PetscCall(TSCreate(PETSC_COMM_WORLD, &ts));
+  PetscCall(PhysSetUpTS(phys, ts));
+  PetscCall(TSSetFromOptions(ts));
+  PetscCall(TSSolve(ts, x));
 
   /* Compute L2 errors using a local vector for array access */
   {
@@ -176,7 +174,7 @@ int main(int argc, char **argv)
 
   /* Cleanup */
   PetscCall(VecDestroy(&x));
-  PetscCall(SNESDestroy(&snes));
+  PetscCall(TSDestroy(&ts));
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));
 
@@ -189,11 +187,11 @@ int main(int argc, char **argv)
   test:
     suffix: stokes_default
     nsize: 1
-    args: -N 16 -snes_type ksponly -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero
+    args: -N 16 -ts_type pseudo -ts_pseudo_fatol 1e-12 -ts_dt 1e-3 -ts_max_steps 10 -snes_type ksponly -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero
 
   test:
     suffix: stokes_refined
     nsize: 1
-    args: -N 32 -snes_type ksponly -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero
+    args: -N 32 -ts_type pseudo -ts_pseudo_fatol 1e-12 -ts_dt 1e-3 -ts_max_steps 10 -snes_type ksponly -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero
 
 TEST*/

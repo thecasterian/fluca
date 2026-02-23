@@ -18,7 +18,6 @@ struct _PhysOps {
   PetscErrorCode (*view)(Phys, PetscViewer);
   PetscErrorCode (*createsolutiondm)(Phys);
   PetscErrorCode (*setupts)(Phys, TS);
-  PetscErrorCode (*setupsnes)(Phys, SNES);
 };
 
 struct _p_Phys {

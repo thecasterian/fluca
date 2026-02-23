@@ -156,13 +156,3 @@ PetscErrorCode PhysSetUpTS(Phys phys, TS ts)
   PetscUseTypeMethod(phys, setupts, ts);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
-
-PetscErrorCode PhysSetUpSNES(Phys phys, SNES snes)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscValidHeaderSpecific(snes, SNES_CLASSID, 2);
-  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysSetUpSNES()");
-  PetscUseTypeMethod(phys, setupsnes, snes);
-  PetscFunctionReturn(PETSC_SUCCESS);
-}

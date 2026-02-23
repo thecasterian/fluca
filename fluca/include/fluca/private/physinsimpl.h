@@ -39,5 +39,4 @@ typedef struct {
 
 FLUCA_INTERN PetscErrorCode PhysINSBuildOperators_Internal(Phys);
 FLUCA_INTERN PetscErrorCode PhysINSDestroyOperators_Internal(Phys);
-FLUCA_INTERN PetscErrorCode PhysSetUpSNES_INS(Phys, SNES);
 FLUCA_INTERN PetscErrorCode PhysSetUpTS_INS(Phys, TS);

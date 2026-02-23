@@ -1,4 +1,4 @@
-#include "insimpl.h"
+#include <fluca/private/physinsimpl.h>
 
 static PetscErrorCode PhysCreateSolutionDM_INS(Phys phys)
 {
@@ -110,7 +110,6 @@ PetscErrorCode PhysCreate_INS(Phys phys)
   phys->ops->setup            = PhysSetUp_INS;
   phys->ops->destroy          = PhysDestroy_INS;
   phys->ops->view             = PhysView_INS;
-  phys->ops->setupsnes        = PhysSetUpSNES_INS;
   phys->ops->setupts          = PhysSetUpTS_INS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
