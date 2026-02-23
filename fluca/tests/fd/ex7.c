@@ -66,7 +66,7 @@ int main(int argc, char **argv)
 
   /* Set boundary conditions */
   {
-    FlucaFDBoundaryCondition bcs[2];
+    FlucaFDBoundaryCondition bcs[2] = {{0}};
 
     bcs[0].type  = FLUCAFD_BC_DIRICHLET;
     bcs[0].value = 0.;

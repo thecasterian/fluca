@@ -152,7 +152,7 @@ static PetscErrorCode ComputeFaceCenteredGradient_Private(FlucaFD fd, PetscInt i
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
   PetscInt                ncols, bnd_idx, c;
   DMStagStencil           col[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscScalar             v[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscScalar             v[FLUCAFD_MAX_STENCIL_SIZE], bnd_val;
 
   PetscFunctionBegin;
   PetscCall(FlucaFDGetStencil(tvd->fd_grad, i, j, k, &ncols, col, v));
@@ -177,7 +177,8 @@ static PetscErrorCode ComputeFaceCenteredGradient_Private(FlucaFD fd, PetscInt i
     } else if (FLUCAFD_BOUNDARY_FRONT <= col[c].c && col[c].c <= FLUCAFD_BOUNDARY_LEFT) {
       /* Boundary value */
       bnd_idx = -col[c].c - 1;
-      *grad += v[c] * fd->bcs[bnd_idx].value;
+      PetscCall(FlucaFDGetBoundaryValue_Internal(fd, bnd_idx, i, j, k, fd->output_loc, &bnd_val));
+      *grad += v[c] * bnd_val;
     } else {
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported stencil point");
     }

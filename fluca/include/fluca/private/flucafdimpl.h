@@ -54,6 +54,8 @@ struct _p_FlucaFD {
   PetscInt            stencil_width;
   const PetscScalar **arr_coord[FLUCAFD_MAX_DIM];
   PetscInt            slot_coord_prev, slot_coord_elem;
+  PetscReal           gmin[FLUCAFD_MAX_DIM]; /* domain bounding box lower */
+  PetscReal           gmax[FLUCAFD_MAX_DIM]; /* domain bounding box upper */
   FlucaFDTermLink     termlink;
   void               *data;
 
@@ -157,6 +159,8 @@ FLUCA_INTERN PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt, PetscSca
 FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(DMStagStencil, PetscScalar, PetscInt *, DMStagStencil[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt *, DMStagStencil[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, DMStagStencil[], PetscScalar[]);
+
+FLUCA_INTERN PetscErrorCode FlucaFDGetBoundaryValue_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt, DMStagStencilLocation, PetscScalar *);
 
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDuplicate_Internal(FlucaFDTermLink, FlucaFDTermLink *);

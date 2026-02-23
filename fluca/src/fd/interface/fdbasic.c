@@ -27,6 +27,8 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
   for (d = 0; d < 2 * FLUCAFD_MAX_DIM; ++d) {
     f->bcs[d].type  = FLUCAFD_BC_NONE;
     f->bcs[d].value = 0.;
+    f->bcs[d].fn    = NULL;
+    f->bcs[d].ctx   = NULL;
   }
   f->dim = PETSC_DETERMINE;
   for (d = 0; d < FLUCAFD_MAX_DIM; ++d) {
@@ -37,6 +39,8 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
     f->is_last_rank[d]  = PETSC_FALSE;
     f->periodic[d]      = PETSC_FALSE;
     f->arr_coord[d]     = NULL;
+    f->gmin[d]          = 0.;
+    f->gmax[d]          = 0.;
   }
   f->stencil_width   = PETSC_DETERMINE;
   f->slot_coord_prev = 0;
@@ -193,6 +197,14 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   PetscCall(DMStagGetProductCoordinateArraysRead(fd->dm, &fd->arr_coord[0], &fd->arr_coord[1], &fd->arr_coord[2]));
   PetscCall(DMStagGetProductCoordinateLocationSlot(fd->dm, DMSTAG_LEFT, &fd->slot_coord_prev));
   PetscCall(DMStagGetProductCoordinateLocationSlot(fd->dm, DMSTAG_ELEMENT, &fd->slot_coord_elem));
+  /* Extract domain bounding box from coordinate arrays.
+     gmin[d] is only valid on the first rank in direction d;
+     gmax[d] is only valid on the last rank (using the extra face entry).
+     This is sufficient since boundary markers only appear on boundary ranks. */
+  for (d = 0; d < fd->dim; d++) {
+    if (fd->is_first_rank[d]) fd->gmin[d] = PetscRealPart(fd->arr_coord[d][0][fd->slot_coord_prev]);
+    if (fd->is_last_rank[d]) fd->gmax[d] = PetscRealPart(fd->arr_coord[d][fd->xs[d] + fd->xm[d]][fd->slot_coord_prev]);
+  }
 
   /* Query periodicity from DMStag */
   PetscCall(DMStagGetBoundaryTypes(fd->dm, &bt[0], &bt[1], &bt[2]));

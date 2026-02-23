@@ -34,9 +34,14 @@ typedef enum {
 } FlucaFDBoundaryConditionType;
 FLUCA_EXTERN const char *FlucaFDBoundaryConditionTypes[];
 
+/* Callback for spatially varying boundary conditions */
+typedef PetscErrorCode FlucaFDBoundaryConditionFn(PetscInt dim, const PetscReal x[], PetscScalar *val, void *ctx);
+
 typedef struct {
   FlucaFDBoundaryConditionType type;
-  PetscScalar                  value; /* for Dirichlet/Neumann boundary conditions */
+  PetscScalar                  value; /* uniform value (used when fn == NULL) */
+  FlucaFDBoundaryConditionFn  *fn;    /* spatially varying callback (takes priority over value) */
+  void                        *ctx;   /* callback context */
 } FlucaFDBoundaryCondition;
 
 /* Boundary value component markers for stencil points */

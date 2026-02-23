@@ -77,6 +77,35 @@ PetscErrorCode FlucaFDGetGhostCorners_Internal(FlucaFD fd, PetscInt dir, PetscBo
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode FlucaFDGetBoundaryValue_Internal(FlucaFD fd, PetscInt bnd_idx, PetscInt i, PetscInt j, PetscInt k, DMStagStencilLocation loc, PetscScalar *val)
+{
+  PetscFunctionBegin;
+  PetscCheck(bnd_idx >= 0 && bnd_idx < 2 * FLUCAFD_MAX_DIM, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Invalid boundary index %" PetscInt_FMT, bnd_idx);
+  if (fd->bcs[bnd_idx].fn) {
+    PetscReal bnd_coords[FLUCAFD_MAX_DIM];
+    PetscInt  bnd_dir, d, idx_d;
+    PetscBool use_face;
+    PetscInt  slot;
+
+    bnd_dir = bnd_idx / 2;
+    PetscAssert((bnd_idx % 2 == 0 && fd->is_first_rank[bnd_dir]) || (bnd_idx % 2 == 1 && fd->is_last_rank[bnd_dir]), PetscObjectComm((PetscObject)fd), PETSC_ERR_PLIB, "Boundary callback invoked on non-boundary rank for direction %" PetscInt_FMT, bnd_dir);
+    for (d = 0; d < fd->dim; d++) {
+      if (d == bnd_dir) {
+        bnd_coords[d] = (bnd_idx % 2 == 0) ? fd->gmin[d] : fd->gmax[d];
+      } else {
+        PetscCall(FlucaFDUseFaceCoordinate_Internal(loc, d, &use_face));
+        slot          = use_face ? fd->slot_coord_prev : fd->slot_coord_elem;
+        idx_d         = (d == 0) ? i : (d == 1) ? j : k;
+        bnd_coords[d] = PetscRealPart(fd->arr_coord[d][idx_d][slot]);
+      }
+    }
+    PetscCall(fd->bcs[bnd_idx].fn(fd->dim, bnd_coords, val, fd->bcs[bnd_idx].ctx));
+  } else {
+    *val = fd->bcs[bnd_idx].value;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt n, PetscScalar A[], PetscScalar b[], PetscScalar x[])
 {
   PetscInt    i, j, k;

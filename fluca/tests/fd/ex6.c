@@ -26,7 +26,7 @@ static PetscErrorCode CreateLaplacianOperator(DM dm, FlucaFD *laplacian)
 
   /* Set boundary conditions: all Dirichlet */
   {
-    FlucaFDBoundaryCondition bcs[4];
+    FlucaFDBoundaryCondition bcs[4] = {{0}};
 
     /* Left (x=0): u = 0 */
     bcs[0].type  = FLUCAFD_BC_DIRICHLET;

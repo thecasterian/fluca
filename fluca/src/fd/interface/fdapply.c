@@ -56,7 +56,7 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
   PetscScalar        v[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt           ncols;
   PetscInt           ir, idx, bnd_idx;
-  PetscScalar        result;
+  PetscScalar        result, bnd_val;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
@@ -102,7 +102,8 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
             /* Boundary point: coefficient * boundary value */
             bnd_idx = -col[c].c - 1;
             PetscCheck(bnd_idx >= 0 && bnd_idx < 2 * FLUCAFD_MAX_DIM, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Invalid boundary marker %" PetscInt_FMT " in stencil", col[c].c);
-            result += v[c] * fd->bcs[bnd_idx].value;
+            PetscCall(FlucaFDGetBoundaryValue_Internal(fd, bnd_idx, i, j, k, fd->output_loc, &bnd_val));
+            result += v[c] * bnd_val;
           }
         }
 
