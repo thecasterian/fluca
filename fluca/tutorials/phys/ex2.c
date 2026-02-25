@@ -3,7 +3,7 @@
 #include <petscdmstag.h>
 #include <petscts.h>
 
-static const char help[] = "Manufactured solution test for unsteady Stokes solver\n"
+static const char help[] = "Manufactured solution test for unsteady INS solver\n"
                            "Decaying Taylor-Green vortex:\n"
                            "  u = -cos(pi*x)*sin(pi*y)*exp(-t)\n"
                            "  v =  sin(pi*x)*cos(pi*y)*exp(-t)\n"
@@ -41,20 +41,20 @@ static PetscErrorCode BCVelocity(PetscInt dim, const PetscReal x[], PetscInt com
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Body force for decaying Taylor-Green (rho=mu=1):
-   f = rho * du/dt - mu * nabla^2(u) + (1/rho) * grad(p)
-   f_x = e^{-t} * [(1 - 2*pi^2)*cos(pi*x)*sin(pi*y) + pi*sin(pi*x)*cos(pi*x)]
-   f_y = e^{-t} * [(-1 + 2*pi^2)*sin(pi*x)*cos(pi*y) + pi*sin(pi*y)*cos(pi*y)] */
+/* Body force for decaying Taylor-Green with full INS (rho=mu=1):
+   f = rho * du/dt + rho * (u·grad)u - mu * nabla^2(u) + (1/rho) * grad(p)
+   Convection adds rho * e^{-2t} * (-pi*sx*cx) to f_x and rho * e^{-2t} * (-pi*sy*cy) to f_y */
 static PetscErrorCode BodyForce(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar f[], void *ctx)
 {
   PetscReal pi = PETSC_PI;
   PetscReal cx = PetscCosReal(pi * x[0]), sx = PetscSinReal(pi * x[0]);
   PetscReal cy = PetscCosReal(pi * x[1]), sy = PetscSinReal(pi * x[1]);
-  PetscReal et = PetscExpReal(-t);
+  PetscReal et  = PetscExpReal(-t);
+  PetscReal e2t = PetscExpReal(-2.0 * t);
 
   PetscFunctionBeginUser;
-  f[0] = et * ((1.0 - 2.0 * pi * pi) * cx * sy + pi * sx * cx);
-  f[1] = et * ((-1.0 + 2.0 * pi * pi) * sx * cy + pi * sy * cy);
+  f[0] = et * ((1.0 - 2.0 * pi * pi) * cx * sy + pi * sx * cx) + e2t * (-pi * sx * cx);
+  f[1] = et * ((-1.0 + 2.0 * pi * pi) * sx * cy + pi * sy * cy) + e2t * (-pi * sy * cy);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -257,11 +257,11 @@ int main(int argc, char **argv)
   test:
     suffix: beuler_default
     nsize: 1
-    args: -N 16 -T 0.1 -ts_type beuler -ts_dt 0.01 -snes_type ksponly -pc_type lu -pc_factor_shift_type nonzero
+    args: -N 16 -T 0.1 -ts_type beuler -ts_dt 0.01 -snes_type newtonls -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
 
   test:
     suffix: beuler_refined
     nsize: 1
-    args: -N 32 -T 0.1 -ts_type beuler -ts_dt 0.005 -snes_type ksponly -pc_type lu -pc_factor_shift_type nonzero
+    args: -N 32 -T 0.1 -ts_type beuler -ts_dt 0.005 -snes_type newtonls -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
 
 TEST*/
