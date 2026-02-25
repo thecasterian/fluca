@@ -48,6 +48,9 @@ FLUCA_EXTERN PetscErrorCode PhysSetBodyForce(Phys, PhysBodyForceFn *, void *);
 
 FLUCA_EXTERN PetscErrorCode PhysSetUpTS(Phys, TS);
 
+FLUCA_EXTERN PetscErrorCode PhysComputeIFunction(Phys, PetscReal, Vec, Vec, Vec);
+FLUCA_EXTERN PetscErrorCode PhysComputeIJacobian(Phys, PetscReal, Vec, Vec, PetscReal, Mat, Mat);
+
 FLUCA_EXTERN PetscErrorCode PhysSetFromOptions(Phys);
 FLUCA_EXTERN PetscErrorCode PhysSetOptionsPrefix(Phys, const char[]);
 FLUCA_EXTERN PetscErrorCode PhysAppendOptionsPrefix(Phys, const char[]);

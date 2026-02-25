@@ -40,3 +40,5 @@ typedef struct {
 FLUCA_INTERN PetscErrorCode PhysINSBuildOperators_Internal(Phys);
 FLUCA_INTERN PetscErrorCode PhysINSDestroyOperators_Internal(Phys);
 FLUCA_INTERN PetscErrorCode PhysSetUpTS_INS(Phys, TS);
+FLUCA_INTERN PetscErrorCode PhysComputeIFunction_INS(Phys, PetscReal, Vec, Vec, Vec);
+FLUCA_INTERN PetscErrorCode PhysComputeIJacobian_INS(Phys, PetscReal, Vec, Vec, PetscReal, Mat, Mat);

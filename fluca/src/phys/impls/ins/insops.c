@@ -312,11 +312,10 @@ static PetscErrorCode ComputeSteadyResidual_Stokes(Phys phys, PetscReal t, Vec x
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* --- TS callbacks --------------------------------------------------------- */
+/* --- Ops implementations -------------------------------------------------- */
 
-static PetscErrorCode IFunction_Stokes(TS ts, PetscReal t, Vec U, Vec U_t, Vec F, void *ctx)
+PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, Vec F)
 {
-  Phys          phys   = (Phys)ctx;
   Phys_INS     *ins    = (Phys_INS *)phys->data;
   DM            sol_dm = phys->sol_dm;
   PetscInt      dim    = phys->dim, d;
@@ -351,9 +350,8 @@ static PetscErrorCode IFunction_Stokes(TS ts, PetscReal t, Vec U, Vec U_t, Vec F
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode IJacobian_Stokes(TS ts, PetscReal t, Vec U, Vec U_t, PetscReal shift, Mat Amat, Mat Pmat, void *ctx)
+PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, PetscReal shift, Mat Amat, Mat Pmat)
 {
-  Phys          phys   = (Phys)ctx;
   Phys_INS     *ins    = (Phys_INS *)phys->data;
   DM            sol_dm = phys->sol_dm;
   PetscInt      dim    = phys->dim, d;
@@ -362,6 +360,9 @@ static PetscErrorCode IJacobian_Stokes(TS ts, PetscReal t, Vec U, Vec U_t, Petsc
   DMStagStencil row;
   PetscScalar   val;
 
+  (void)t;
+  (void)U;
+  (void)U_t;
   PetscFunctionBegin;
   /* Assemble steady Stokes Jacobian */
   PetscCall(MatZeroEntries(Pmat));
@@ -396,6 +397,24 @@ static PetscErrorCode IJacobian_Stokes(TS ts, PetscReal t, Vec U, Vec U_t, Petsc
     PetscCall(MatAssemblyBegin(Amat, MAT_FINAL_ASSEMBLY));
     PetscCall(MatAssemblyEnd(Amat, MAT_FINAL_ASSEMBLY));
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* --- TS callbacks --------------------------------------------------------- */
+
+static PetscErrorCode IFunction_Stokes(TS ts, PetscReal t, Vec U, Vec U_t, Vec F, void *ctx)
+{
+  (void)ts;
+  PetscFunctionBegin;
+  PetscCall(PhysComputeIFunction_INS((Phys)ctx, t, U, U_t, F));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode IJacobian_Stokes(TS ts, PetscReal t, Vec U, Vec U_t, PetscReal shift, Mat Amat, Mat Pmat, void *ctx)
+{
+  (void)ts;
+  PetscFunctionBegin;
+  PetscCall(PhysComputeIJacobian_INS((Phys)ctx, t, U, U_t, shift, Amat, Pmat));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
