@@ -8,9 +8,9 @@ static const char help[] = "Manufactured solution test for steady INS solver\n"
                            "  u = -cos(pi*x)*sin(pi*y)\n"
                            "  v = sin(pi*x)*cos(pi*y)\n"
                            "  p = -(cos(2*pi*x) + cos(2*pi*y))/4\n"
-                           "Body force (convection cancels grad(p), so f = -nabla^2(u)):\n"
-                           "  f_x = -2*pi^2*cos(pi*x)*sin(pi*y)\n"
-                           "  f_y =  2*pi^2*sin(pi*x)*cos(pi*y)\n"
+                           "Stokes body force: f = -mu*nabla^2(u) + (1/rho)*grad(p) with mu=rho=1\n"
+                           "  f_x = -2*pi^2*cos(pi*x)*sin(pi*y) + pi*sin(pi*x)*cos(pi*x)\n"
+                           "  f_y =  2*pi^2*sin(pi*x)*cos(pi*y) + pi*sin(pi*y)*cos(pi*y)\n"
                            "Options:\n"
                            "  -stag_grid_x <int> : Grid size in x (default: 16)\n"
                            "  -stag_grid_y <int> : Grid size in y (default: 16)\n";
@@ -38,8 +38,7 @@ static PetscErrorCode BCVelocity(PetscInt dim, const PetscReal x[], PetscInt com
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Body force for full INS: f = rho*(u·grad)u - mu*nabla^2(u) + (1/rho)*grad(p) with mu=rho=1.
-   Convection exactly cancels pressure gradient for this solution, so f = -mu*nabla^2(u). */
+/* Stokes body force: f = -mu*nabla^2(u) + (1/rho)*grad(p) with mu=rho=1. */
 static PetscErrorCode BodyForce(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar f[], void *ctx)
 {
   PetscReal pi = PETSC_PI;
@@ -47,8 +46,8 @@ static PetscErrorCode BodyForce(PetscInt dim, PetscReal t, const PetscReal x[], 
   PetscReal cy = PetscCosReal(pi * x[1]), sy = PetscSinReal(pi * x[1]);
 
   PetscFunctionBeginUser;
-  f[0] = -2.0 * pi * pi * cx * sy;
-  f[1] = 2.0 * pi * pi * sx * cy;
+  f[0] = -2.0 * pi * pi * cx * sy + pi * sx * cx;
+  f[1] = 2.0 * pi * pi * sx * cy + pi * sy * cy;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

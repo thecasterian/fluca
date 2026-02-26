@@ -95,13 +95,11 @@ PetscErrorCode PhysCreate_INS(Phys phys)
     ins->fd_grad_p[f]    = NULL;
     ins->fd_div[f]       = NULL;
   }
-  ins->fd_pstab            = NULL;
   ins->J                   = NULL;
   ins->is_vel              = NULL;
   ins->is_p                = NULL;
   ins->nullspace           = NULL;
   ins->temp                = NULL;
-  ins->alpha               = 0.0;
   ins->has_pressure_outlet = PETSC_FALSE;
 
   phys->data                  = ins;
@@ -111,7 +109,7 @@ PetscErrorCode PhysCreate_INS(Phys phys)
   phys->ops->destroy          = PhysDestroy_INS;
   phys->ops->view             = PhysView_INS;
   phys->ops->setupts          = PhysSetUpTS_INS;
-  phys->ops->computeifuncion  = PhysComputeIFunction_INS;
+  phys->ops->computeifunction = PhysComputeIFunction_INS;
   phys->ops->computeijacobian = PhysComputeIJacobian_INS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

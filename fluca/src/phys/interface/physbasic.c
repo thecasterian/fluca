@@ -165,7 +165,7 @@ PetscErrorCode PhysComputeIFunction(Phys phys, PetscReal t, Vec U, Vec U_t, Vec 
   PetscAssertPointer(U_t, 4);
   PetscAssertPointer(F, 5);
   PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysComputeIFunction()");
-  PetscUseTypeMethod(phys, computeifuncion, t, U, U_t, F);
+  PetscUseTypeMethod(phys, computeifunction, t, U, U_t, F);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

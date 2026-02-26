@@ -25,7 +25,6 @@ typedef struct {
   FlucaFD fd_laplacian[PHYS_INS_MAX_DIM]; /* viscous Laplacian per velocity direction */
   FlucaFD fd_grad_p[PHYS_INS_MAX_DIM];    /* pressure gradient per velocity direction */
   FlucaFD fd_div[PHYS_INS_MAX_DIM];       /* divergence per direction */
-  FlucaFD fd_pstab;                       /* pressure stabilization */
 
   /* Solver data */
   Mat          J;
@@ -33,7 +32,6 @@ typedef struct {
   IS           is_p;
   MatNullSpace nullspace;
   Vec          temp;
-  PetscReal    alpha; /* pressure stabilization coefficient */
   PetscBool    has_pressure_outlet;
 } Phys_INS;
 
