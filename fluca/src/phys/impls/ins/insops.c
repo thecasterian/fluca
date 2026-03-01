@@ -139,6 +139,64 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     PetscCall(FlucaFDDestroy(&interp));
   }
 
+  /* --- Face DMs and interpolation operators for convection --- */
+  for (e = 0; e < dim; e++) {
+    DM cdm;
+
+    /* Face DM: 1 DOF at edge (2D) or face (3D) location */
+    switch (dim) {
+    case 2:
+      PetscCall(DMStagCreateCompatibleDMStag(sol_dm, 0, 1, 0, 0, &ins->dm_face[e]));
+      break;
+    case 3:
+      PetscCall(DMStagCreateCompatibleDMStag(sol_dm, 0, 0, 1, 0, &ins->dm_face[e]));
+      break;
+    default:
+      SETERRQ(PetscObjectComm((PetscObject)phys), PETSC_ERR_SUP, "Unsupported dimension %" PetscInt_FMT, dim);
+    }
+    PetscCall(DMStagSetCoordinateDMType(ins->dm_face[e], DMPRODUCT));
+    PetscCall(DMGetCoordinateDM(sol_dm, &cdm));
+    PetscCall(DMSetCoordinateDM(ins->dm_face[e], cdm));
+    PetscCall(DMCreateGlobalVector(ins->dm_face[e], &ins->vel_face[e]));
+
+    /* Interpolation: u_e from ELEMENT,e to face_loc[e],0 */
+    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, e, face_loc[e], 0, &ins->fd_interp[e]));
+    PetscCall(SetVelocityDirichletBCs(phys, e, ins->fd_interp[e]));
+    PetscCall(FlucaFDSetUp(ins->fd_interp[e]));
+  }
+
+  /* --- Convection operators: C_d = sum_e d/dx_e(u_e * u_d_TVD) --- */
+  for (d = 0; d < dim; d++) {
+    for (e = 0; e < dim; e++) {
+      FlucaFD face_deriv;
+
+      /* TVD interpolation: u_d (ELEMENT,d) -> u_d_TVD (face_loc[e],0) */
+      PetscCall(FlucaFDSecondOrderTVDCreate(sol_dm, (FlucaFDDirection)e, d, 0, &ins->fd_tvd[d][e]));
+      PetscCall(FlucaFDAppendOptionsPrefix(ins->fd_tvd[d][e], "phys_ins_"));
+      PetscCall(FlucaFDSetFromOptions(ins->fd_tvd[d][e]));
+      PetscCall(FlucaFDSetUp(ins->fd_tvd[d][e]));
+
+      /* Scale by face velocity: u_d_TVD * u_e_face */
+      PetscCall(FlucaFDScaleCreateVector(ins->fd_tvd[d][e], ins->vel_face[e], 0, &ins->fd_scale_vel[d][e]));
+      PetscCall(FlucaFDSetUp(ins->fd_scale_vel[d][e]));
+
+      /* Face derivative: d/dx_e (face_loc[e],0 -> ELEMENT,d) */
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, face_loc[e], 0, DMSTAG_ELEMENT, d, &face_deriv));
+      PetscCall(FlucaFDSetUp(face_deriv));
+
+      /* Compose: d/dx_e(u_e * u_d_TVD) */
+      PetscCall(FlucaFDCompositionCreate(ins->fd_scale_vel[d][e], face_deriv, &ins->fd_conv_comp[d][e]));
+      PetscCall(FlucaFDSetUp(ins->fd_conv_comp[d][e]));
+
+      PetscCall(FlucaFDDestroy(&face_deriv));
+    }
+
+    /* Sum over e: C_d = sum_e d/dx_e(u_e * u_d_TVD) */
+    PetscCall(FlucaFDSumCreate(dim, ins->fd_conv_comp[d], &ins->fd_conv[d]));
+    PetscCall(SetVelocityDirichletBCs(phys, d, ins->fd_conv[d]));
+    PetscCall(FlucaFDSetUp(ins->fd_conv[d]));
+  }
+
   /* Create temp vector for residual assembly */
   PetscCall(DMCreateGlobalVector(sol_dm, &ins->temp));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -147,21 +205,53 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
 PetscErrorCode PhysINSDestroyOperators_Internal(Phys phys)
 {
   Phys_INS *ins = (Phys_INS *)phys->data;
-  PetscInt  d;
+  PetscInt  d, e;
 
   PetscFunctionBegin;
   for (d = 0; d < PHYS_INS_MAX_DIM; d++) {
     PetscCall(FlucaFDDestroy(&ins->fd_laplacian[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_grad_p[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_div[d]));
+    PetscCall(FlucaFDDestroy(&ins->fd_conv[d]));
+    PetscCall(FlucaFDDestroy(&ins->fd_interp[d]));
+    PetscCall(VecDestroy(&ins->vel_face[d]));
+    PetscCall(DMDestroy(&ins->dm_face[d]));
+    for (e = 0; e < PHYS_INS_MAX_DIM; e++) {
+      PetscCall(FlucaFDDestroy(&ins->fd_tvd[d][e]));
+      PetscCall(FlucaFDDestroy(&ins->fd_scale_vel[d][e]));
+      PetscCall(FlucaFDDestroy(&ins->fd_conv_comp[d][e]));
+    }
   }
   PetscCall(VecDestroy(&ins->temp));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* --- Update convection operators with current velocity ------------------- */
+
+static PetscErrorCode UpdateConvectionVelocity_Internal(Phys phys, Vec U)
+{
+  Phys_INS *ins    = (Phys_INS *)phys->data;
+  DM        sol_dm = phys->sol_dm;
+  PetscInt  dim    = phys->dim, d, e;
+
+  PetscFunctionBegin;
+  /* Interpolate each velocity component to faces */
+  for (e = 0; e < dim; e++) PetscCall(FlucaFDApply(ins->fd_interp[e], sol_dm, ins->dm_face[e], U, ins->vel_face[e]));
+
+  /* Update TVD and scale operators with current velocity and solution */
+  for (d = 0; d < dim; d++) {
+    for (e = 0; e < dim; e++) {
+      PetscCall(FlucaFDSecondOrderTVDSetVelocity(ins->fd_tvd[d][e], ins->vel_face[e], 0));
+      PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ins->fd_tvd[d][e], U));
+      PetscCall(FlucaFDScaleSetVector(ins->fd_scale_vel[d][e], ins->vel_face[e], face_loc[e], 0));
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* --- Steady residual (shared by SNES and TS paths) ----------------------- */
 
-static PetscErrorCode ComputeSteadyResidual_Stokes(Phys phys, PetscReal t, Vec x, Vec F)
+static PetscErrorCode ComputeSteadyResidual(Phys phys, PetscReal t, Vec x, Vec F)
 {
   Phys_INS *ins    = (Phys_INS *)phys->data;
   DM        sol_dm = phys->sol_dm;
@@ -171,8 +261,13 @@ static PetscErrorCode ComputeSteadyResidual_Stokes(Phys phys, PetscReal t, Vec x
   PetscFunctionBegin;
   PetscCall(VecZeroEntries(F));
 
-  /* Momentum: -mu * nabla^2 u_d + (1/rho) * dp/dx_d */
+  /* Update convection operators with current solution */
+  PetscCall(UpdateConvectionVelocity_Internal(phys, x));
+
+  /* Momentum: C_d - mu * nabla^2 u_d + (1/rho) * dp/dx_d */
   for (d = 0; d < dim; d++) {
+    PetscCall(FlucaFDApply(ins->fd_conv[d], sol_dm, sol_dm, x, temp));
+    PetscCall(VecAXPY(F, 1.0, temp));
     PetscCall(FlucaFDApply(ins->fd_laplacian[d], sol_dm, sol_dm, x, temp));
     PetscCall(VecAXPY(F, 1.0, temp));
     PetscCall(FlucaFDApply(ins->fd_grad_p[d], sol_dm, sol_dm, x, temp));
@@ -264,7 +359,7 @@ PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
   PetscScalar   u_t_val, mass_val;
 
   PetscFunctionBegin;
-  PetscCall(ComputeSteadyResidual_Stokes(phys, t, U, F));
+  PetscCall(ComputeSteadyResidual(phys, t, U, F));
 
   /* Add mass term: rho * U_dot for velocity DOFs only (no mass on pressure) */
   PetscCall(DMStagGetCorners(sol_dm, &xs, &ys, &zs, &xm, &ym, &zm, NULL, NULL, NULL));
@@ -300,9 +395,13 @@ PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
   PetscScalar   val;
 
   PetscFunctionBegin;
-  /* Assemble steady Stokes Jacobian */
+  /* Update convection operators with current velocity (Picard linearization) */
+  PetscCall(UpdateConvectionVelocity_Internal(phys, U));
+
+  /* Assemble steady Jacobian: convection (Picard) + viscous + pressure gradient + divergence */
   PetscCall(MatZeroEntries(Pmat));
   for (d = 0; d < dim; d++) {
+    PetscCall(FlucaFDGetOperator(ins->fd_conv[d], sol_dm, sol_dm, Pmat));
     PetscCall(FlucaFDGetOperator(ins->fd_laplacian[d], sol_dm, sol_dm, Pmat));
     PetscCall(FlucaFDGetOperator(ins->fd_grad_p[d], sol_dm, sol_dm, Pmat));
   }
@@ -337,14 +436,14 @@ PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
 
 /* --- TS callbacks --------------------------------------------------------- */
 
-static PetscErrorCode IFunction_Stokes(TS ts, PetscReal t, Vec U, Vec U_t, Vec F, void *ctx)
+static PetscErrorCode IFunction_INS(TS ts, PetscReal t, Vec U, Vec U_t, Vec F, void *ctx)
 {
   PetscFunctionBegin;
   PetscCall(PhysComputeIFunction_INS((Phys)ctx, t, U, U_t, F));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode IJacobian_Stokes(TS ts, PetscReal t, Vec U, Vec U_t, PetscReal shift, Mat Amat, Mat Pmat, void *ctx)
+static PetscErrorCode IJacobian_INS(TS ts, PetscReal t, Vec U, Vec U_t, PetscReal shift, Mat Amat, Mat Pmat, void *ctx)
 {
   PetscFunctionBegin;
   PetscCall(PhysComputeIJacobian_INS((Phys)ctx, t, U, U_t, shift, Amat, Pmat));
@@ -426,8 +525,8 @@ PetscErrorCode PhysSetUpTS_INS(Phys phys, TS ts)
   PetscCall(TSSetDM(ts, sol_dm));
 
   /* Wire TS callbacks */
-  PetscCall(TSSetIFunction(ts, NULL, IFunction_Stokes, phys));
-  PetscCall(TSSetIJacobian(ts, ins->J, ins->J, IJacobian_Stokes, phys));
+  PetscCall(TSSetIFunction(ts, NULL, IFunction_INS, phys));
+  PetscCall(TSSetIJacobian(ts, ins->J, ins->J, IJacobian_INS, phys));
 
   /* Default PC: ILU (user can override via options) */
   PetscCall(TSGetSNES(ts, &snes));

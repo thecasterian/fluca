@@ -3,14 +3,14 @@
 #include <petscdmstag.h>
 #include <petscts.h>
 
-static const char help[] = "Manufactured solution test for unsteady INS solver\n"
-                           "Decaying Taylor-Green vortex:\n"
-                           "  u = -cos(pi*x)*sin(pi*y)*exp(-t)\n"
-                           "  v =  sin(pi*x)*cos(pi*y)*exp(-t)\n"
-                           "  p = -(cos(2*pi*x) + cos(2*pi*y))/4 * exp(-t)\n"
+static const char help[] = "Taylor-Green vortex decay on [0, 2*pi]^2 (rho=mu=1)\n"
+                           "  u =  sin(x)*cos(y)*exp(-2t)\n"
+                           "  v = -cos(x)*sin(y)*exp(-2t)\n"
+                           "  p = (cos(2x) + cos(2y))/4 * exp(-4t)\n"
                            "Options:\n"
-                           "  -N <int>  : Grid size in each direction (default: 16)\n"
-                           "  -T <real> : Final time (default: 0.1)\n";
+                           "  -stag_grid_x <int>  : Grid size in x (default: 16)\n"
+                           "  -stag_grid_y <int>  : Grid size in y (default: 16)\n"
+                           "  -ts_max_time <real> : Final time (default: 0.1)\n";
 
 typedef struct {
   PetscReal t;
@@ -19,13 +19,12 @@ typedef struct {
 /* Exact solution at time t */
 static PetscErrorCode ExactSolution(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar u[])
 {
-  PetscReal pi = PETSC_PI;
-  PetscReal et = PetscExpReal(-t);
+  PetscReal e2t = PetscExpReal(-2.0 * t);
 
   PetscFunctionBeginUser;
-  u[0] = -PetscCosReal(pi * x[0]) * PetscSinReal(pi * x[1]) * et;
-  u[1] = PetscSinReal(pi * x[0]) * PetscCosReal(pi * x[1]) * et;
-  u[2] = -(PetscCosReal(2.0 * pi * x[0]) + PetscCosReal(2.0 * pi * x[1])) / 4.0 * et;
+  u[0] = PetscSinReal(x[0]) * PetscCosReal(x[1]) * e2t;
+  u[1] = -PetscCosReal(x[0]) * PetscSinReal(x[1]) * e2t;
+  u[2] = (PetscCosReal(2.0 * x[0]) + PetscCosReal(2.0 * x[1])) / 4.0 * e2t * e2t;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -38,23 +37,6 @@ static PetscErrorCode BCVelocity(PetscInt dim, const PetscReal x[], PetscInt com
   PetscFunctionBeginUser;
   PetscCall(ExactSolution(dim, bc_ctx->t, x, u));
   *val = u[comp];
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* Body force for decaying Taylor-Green with full INS (rho=mu=1):
-   f = rho * du/dt + rho * (u·grad)u - mu * nabla^2(u) + (1/rho) * grad(p)
-   Convection adds rho * e^{-2t} * (-pi*sx*cx) to f_x and rho * e^{-2t} * (-pi*sy*cy) to f_y */
-static PetscErrorCode BodyForce(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar f[], void *ctx)
-{
-  PetscReal pi = PETSC_PI;
-  PetscReal cx = PetscCosReal(pi * x[0]), sx = PetscSinReal(pi * x[0]);
-  PetscReal cy = PetscCosReal(pi * x[1]), sy = PetscSinReal(pi * x[1]);
-  PetscReal et  = PetscExpReal(-t);
-  PetscReal e2t = PetscExpReal(-2.0 * t);
-
-  PetscFunctionBeginUser;
-  f[0] = et * ((1.0 - 2.0 * pi * pi) * cx * sy + pi * sx * cx) + e2t * (-pi * sx * cx);
-  f[1] = et * ((-1.0 + 2.0 * pi * pi) * sx * cy + pi * sy * cy) + e2t * (-pi * sy * cy);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -110,39 +92,30 @@ static PetscErrorCode SetInitialCondition(DM sol_dm, Vec x)
 
 int main(int argc, char **argv)
 {
-  DM                  dm, sol_dm;
-  Phys                phys;
-  TS                  ts;
-  Vec                 x;
-  PetscInt            N = 16, f;
-  PetscReal           T = 0.1;
-  PhysINSBC           bc;
-  UnsteadyBCCtx       bc_ctx;
-  const PetscScalar **arrc[3] = {NULL, NULL, NULL};
-  PetscInt            xs, ys, xm, ym, slot_elem, slot[3];
-  PetscInt            i, j, d;
-  PetscReal           l2_vel_err2 = 0.0, l2_p_err2 = 0.0;
-  PetscReal           p_mean_h = 0.0, p_mean_exact = 0.0;
-  PetscReal           l2_vel_err, l2_p_err;
-  PetscInt            N_cells;
+  DM            dm, sol_dm;
+  Phys          phys;
+  TS            ts;
+  Vec           x;
+  PetscInt      Nx, Ny, f;
+  PetscReal     T;
+  PhysINSBC     bc;
+  UnsteadyBCCtx bc_ctx;
+  PetscReal     l2_vel_err, l2_p_err;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
-  PetscCall(PetscOptionsGetInt(NULL, NULL, "-N", &N, NULL));
-  PetscCall(PetscOptionsGetReal(NULL, NULL, "-T", &T, NULL));
-
   /* Create 2D base DMStag */
-  PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, N, N, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 1, NULL, NULL, &dm));
+  PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 16, 16, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 1, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
-  PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0));
+  PetscCall(DMStagGetGlobalSizes(dm, &Nx, &Ny, NULL));
+  PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0.0, 2.0 * PETSC_PI, 0.0, 2.0 * PETSC_PI, 0.0, 0.0));
 
   /* Create and configure Phys */
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
   PetscCall(PhysSetType(phys, PHYSINS));
   PetscCall(PhysSetBaseDM(phys, dm));
-  PetscCall(PhysSetBodyForce(phys, BodyForce, NULL));
 
   /* Set velocity Dirichlet BCs on all 4 faces with time-dependent context */
   bc_ctx.t = 0.0;
@@ -162,7 +135,7 @@ int main(int argc, char **argv)
   /* Create TS and set up solver */
   PetscCall(TSCreate(PETSC_COMM_WORLD, &ts));
   PetscCall(PhysSetUpTS(phys, ts));
-  PetscCall(TSSetMaxTime(ts, T));
+  PetscCall(TSSetMaxTime(ts, 0.1));
   PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_MATCHSTEP));
   PetscCall(TSSetApplicationContext(ts, &bc_ctx));
   PetscCall(TSSetPreStage(ts, PreStage));
@@ -170,74 +143,99 @@ int main(int argc, char **argv)
 
   /* Solve */
   PetscCall(TSSolve(ts, x));
+  PetscCall(TSGetTime(ts, &T));
 
   /* Compute L2 errors at final time */
   {
-    Vec                  x_local;
-    const PetscScalar ***x_arr;
+    Vec                 x_exact, err, sub;
+    IS                  is_vel, is_p;
+    DMStagStencil       vel_stencils[2], p_stencil;
+    const PetscScalar **arrc[3] = {NULL, NULL, NULL};
+    PetscInt            xs, ys, xm, ym, slot_elem;
+    PetscInt            i, j, d;
+    PetscScalar         sum_h, sum_exact;
+    PetscInt            N_cells;
 
+    N_cells = Nx * Ny;
+
+    /* Build exact solution vector at final time */
+    PetscCall(DMCreateGlobalVector(sol_dm, &x_exact));
     PetscCall(DMStagGetProductCoordinateLocationSlot(sol_dm, DMSTAG_ELEMENT, &slot_elem));
-    PetscCall(DMStagGetProductCoordinateArraysRead(sol_dm, &arrc[0], &arrc[1], &arrc[2]));
+    PetscCall(DMStagGetProductCoordinateArraysRead(sol_dm, &arrc[0], &arrc[1], NULL));
     PetscCall(DMStagGetCorners(sol_dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
-    for (d = 0; d < 3; d++) PetscCall(DMStagGetLocationSlot(sol_dm, DMSTAG_ELEMENT, d, &slot[d]));
-
-    PetscCall(DMGetLocalVector(sol_dm, &x_local));
-    PetscCall(DMGlobalToLocal(sol_dm, x, INSERT_VALUES, x_local));
-    PetscCall(DMStagVecGetArrayRead(sol_dm, x_local, (void *)&x_arr));
-
-    /* First pass: compute pressure means */
     for (j = ys; j < ys + ym; j++) {
       for (i = xs; i < xs + xm; i++) {
-        PetscReal   coords[2];
-        PetscScalar exact[3];
+        PetscReal     coords[2];
+        PetscScalar   exact[3];
+        DMStagStencil st;
 
         coords[0] = PetscRealPart(arrc[0][i][slot_elem]);
         coords[1] = PetscRealPart(arrc[1][j][slot_elem]);
         PetscCall(ExactSolution(2, T, coords, exact));
 
-        p_mean_h += PetscRealPart(x_arr[j][i][slot[2]]);
-        p_mean_exact += PetscRealPart(exact[2]);
-      }
-    }
-
-    N_cells = N * N;
-    PetscCallMPI(MPI_Allreduce(MPI_IN_PLACE, &p_mean_h, 1, MPIU_REAL, MPIU_SUM, PETSC_COMM_WORLD));
-    PetscCallMPI(MPI_Allreduce(MPI_IN_PLACE, &p_mean_exact, 1, MPIU_REAL, MPIU_SUM, PETSC_COMM_WORLD));
-    p_mean_h /= N_cells;
-    p_mean_exact /= N_cells;
-
-    /* Second pass: compute L2 errors */
-    for (j = ys; j < ys + ym; j++) {
-      for (i = xs; i < xs + xm; i++) {
-        PetscReal   coords[2];
-        PetscScalar exact[3];
-        PetscReal   diff;
-
-        coords[0] = PetscRealPart(arrc[0][i][slot_elem]);
-        coords[1] = PetscRealPart(arrc[1][j][slot_elem]);
-        PetscCall(ExactSolution(2, T, coords, exact));
-
-        for (d = 0; d < 2; d++) {
-          diff = PetscRealPart(x_arr[j][i][slot[d]]) - PetscRealPart(exact[d]);
-          l2_vel_err2 += diff * diff;
+        st.i   = i;
+        st.j   = j;
+        st.k   = 0;
+        st.loc = DMSTAG_ELEMENT;
+        for (d = 0; d < 3; d++) {
+          st.c = d;
+          PetscCall(DMStagVecSetValuesStencil(sol_dm, x_exact, 1, &st, &exact[d], INSERT_VALUES));
         }
-        diff = (PetscRealPart(x_arr[j][i][slot[2]]) - p_mean_h) - (PetscRealPart(exact[2]) - p_mean_exact);
-        l2_p_err2 += diff * diff;
       }
     }
+    PetscCall(VecAssemblyBegin(x_exact));
+    PetscCall(VecAssemblyEnd(x_exact));
+    PetscCall(DMStagRestoreProductCoordinateArraysRead(sol_dm, &arrc[0], &arrc[1], NULL));
 
-    PetscCall(DMStagVecRestoreArrayRead(sol_dm, x_local, (void *)&x_arr));
-    PetscCall(DMRestoreLocalVector(sol_dm, &x_local));
-    PetscCall(DMStagRestoreProductCoordinateArraysRead(sol_dm, &arrc[0], &arrc[1], &arrc[2]));
+    /* Create IS for velocity (components 0,1) and pressure (component 2) */
+    for (d = 0; d < 2; d++) {
+      vel_stencils[d].i   = 0;
+      vel_stencils[d].j   = 0;
+      vel_stencils[d].k   = 0;
+      vel_stencils[d].loc = DMSTAG_ELEMENT;
+      vel_stencils[d].c   = d;
+    }
+    p_stencil.i   = 0;
+    p_stencil.j   = 0;
+    p_stencil.k   = 0;
+    p_stencil.loc = DMSTAG_ELEMENT;
+    p_stencil.c   = 2;
+    PetscCall(DMStagCreateISFromStencils(sol_dm, 2, vel_stencils, &is_vel));
+    PetscCall(DMStagCreateISFromStencils(sol_dm, 1, &p_stencil, &is_p));
+
+    /* Shift exact pressure to match computed mean (pressure defined up to a constant) */
+    PetscCall(VecGetSubVector(x, is_p, &sub));
+    PetscCall(VecSum(sub, &sum_h));
+    PetscCall(VecRestoreSubVector(x, is_p, &sub));
+    PetscCall(VecGetSubVector(x_exact, is_p, &sub));
+    PetscCall(VecSum(sub, &sum_exact));
+    PetscCall(VecShift(sub, PetscRealPart(sum_h - sum_exact) / N_cells));
+    PetscCall(VecRestoreSubVector(x_exact, is_p, &sub));
+
+    /* err = x - x_exact */
+    PetscCall(VecDuplicate(x, &err));
+    PetscCall(VecCopy(x, err));
+    PetscCall(VecAXPY(err, -1.0, x_exact));
+
+    /* Velocity RMS error */
+    PetscCall(VecGetSubVector(err, is_vel, &sub));
+    PetscCall(VecNorm(sub, NORM_2, &l2_vel_err));
+    l2_vel_err /= PetscSqrtReal((PetscReal)N_cells);
+    PetscCall(VecRestoreSubVector(err, is_vel, &sub));
+
+    /* Pressure RMS error */
+    PetscCall(VecGetSubVector(err, is_p, &sub));
+    PetscCall(VecNorm(sub, NORM_2, &l2_p_err));
+    l2_p_err /= PetscSqrtReal((PetscReal)N_cells);
+    PetscCall(VecRestoreSubVector(err, is_p, &sub));
+
+    PetscCall(VecDestroy(&err));
+    PetscCall(VecDestroy(&x_exact));
+    PetscCall(ISDestroy(&is_vel));
+    PetscCall(ISDestroy(&is_p));
   }
 
-  PetscCallMPI(MPI_Allreduce(MPI_IN_PLACE, &l2_vel_err2, 1, MPIU_REAL, MPIU_SUM, PETSC_COMM_WORLD));
-  PetscCallMPI(MPI_Allreduce(MPI_IN_PLACE, &l2_p_err2, 1, MPIU_REAL, MPIU_SUM, PETSC_COMM_WORLD));
-
-  l2_vel_err = PetscSqrtReal(l2_vel_err2 / N_cells);
-  l2_p_err   = PetscSqrtReal(l2_p_err2 / N_cells);
-
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Grid: %" PetscInt_FMT " x %" PetscInt_FMT "\n", N, N));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Grid: %" PetscInt_FMT " x %" PetscInt_FMT "\n", Nx, Ny));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Final time: %g\n", (double)T));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Velocity L2 error: %.4e\n", (double)l2_vel_err));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Pressure L2 error: %.4e\n", (double)l2_p_err));
@@ -257,11 +255,11 @@ int main(int argc, char **argv)
   test:
     suffix: beuler_default
     nsize: 1
-    args: -N 16 -T 0.1 -ts_type beuler -ts_dt 0.01 -snes_type newtonls -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
+    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_type beuler -ts_dt 0.01 -snes_type newtonls -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
 
   test:
     suffix: beuler_refined
     nsize: 1
-    args: -N 32 -T 0.1 -ts_type beuler -ts_dt 0.005 -snes_type newtonls -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
+    args: -stag_grid_x 32 -stag_grid_y 32 -ts_max_time 0.1 -ts_type beuler -ts_dt 0.005 -snes_type newtonls -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
 
 TEST*/

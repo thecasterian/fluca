@@ -75,7 +75,7 @@ static PetscErrorCode PhysView_INS(Phys phys, PetscViewer viewer)
 PetscErrorCode PhysCreate_INS(Phys phys)
 {
   Phys_INS *ins;
-  PetscInt  f;
+  PetscInt  f, g;
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&ins));
@@ -94,6 +94,15 @@ PetscErrorCode PhysCreate_INS(Phys phys)
     ins->fd_laplacian[f] = NULL;
     ins->fd_grad_p[f]    = NULL;
     ins->fd_div[f]       = NULL;
+    ins->fd_conv[f]      = NULL;
+    ins->fd_interp[f]    = NULL;
+    ins->dm_face[f]      = NULL;
+    ins->vel_face[f]     = NULL;
+    for (g = 0; g < PHYS_INS_MAX_DIM; g++) {
+      ins->fd_tvd[f][g]       = NULL;
+      ins->fd_scale_vel[f][g] = NULL;
+      ins->fd_conv_comp[f][g] = NULL;
+    }
   }
   ins->J                   = NULL;
   ins->is_vel              = NULL;

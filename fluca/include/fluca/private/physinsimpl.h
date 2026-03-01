@@ -26,6 +26,15 @@ typedef struct {
   FlucaFD fd_grad_p[PHYS_INS_MAX_DIM];    /* pressure gradient per velocity direction */
   FlucaFD fd_div[PHYS_INS_MAX_DIM];       /* divergence per direction */
 
+  /* Convection operators: C_d = sum_e d/dx_e(u_e * u_d) */
+  FlucaFD fd_conv[PHYS_INS_MAX_DIM];                        /* summed convection per velocity dir */
+  FlucaFD fd_tvd[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM];       /* TVD interp: [d][e] = u_d along e */
+  FlucaFD fd_scale_vel[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM]; /* velocity scaling: [d][e] */
+  FlucaFD fd_conv_comp[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM]; /* composed conv: [d][e] */
+  FlucaFD fd_interp[PHYS_INS_MAX_DIM];                      /* cell-to-face interpolation per dir */
+  DM      dm_face[PHYS_INS_MAX_DIM];                        /* face DMs for velocity scaling */
+  Vec     vel_face[PHYS_INS_MAX_DIM];                       /* face velocity vectors */
+
   /* Solver data */
   Mat          J;
   IS           is_vel;
