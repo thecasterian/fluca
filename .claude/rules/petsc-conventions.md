@@ -6,6 +6,7 @@ This project follows PETSc style. All C code must conform to these rules.
 
 - Pure **C** (not C++). Intersection of C99, C++11, MSVC v1900+.
 - No variable-length arrays. No `assert.h` (use `PetscAssert()`). No `register`. No `rand()`.
+- **Never** use `(void)param;` casts to suppress unused-parameter warnings. Leave unused parameters as-is; the compiler warnings are suppressed project-wide via build flags.
 
 ## Naming
 
@@ -91,6 +92,7 @@ The number is the 1-based argument position.
 - Group variables of the same type on the same or adjacent lines.
 - Pointers of different arity are different types (separate lines).
 - Arrays of different size are different types.
+- Don't declare pointers and non-pointers in a single line. Same for arrays and non-arrays.
 
 ## Memory Management
 
@@ -197,4 +199,6 @@ Never use raw function pointer syntax directly in a function signature.
 - [ ] Format specifiers: `PetscInt_FMT`, cast `PetscReal` to `double`
 - [ ] No bare `return`, no `malloc`/`free`, no `assert()`, no VLAs
 - [ ] Locals at block top, blank line before `PetscFunctionBegin`, no blank line before `PetscFunctionReturn`
+- [ ] No braces for single-statement `if`/`else`/`for`
+- [ ] No trailing zeros after decimal point
 - [ ] Callback parameters use a named `typedef` ending in `Fn` — no raw function pointer syntax in signatures
