@@ -79,6 +79,11 @@ static PetscErrorCode FlucaFDSetUp_SecondOrderTVD(FlucaFD fd)
   PetscCall(FlucaFDSetBoundaryConditions(tvd->fd_grad, fd->bcs));
   PetscCall(FlucaFDSetUp(tvd->fd_grad));
 
+  /* Create identity operator for boundary-safe phi evaluation (element -> element, 2nd-order extrapolation) */
+  PetscCall(FlucaFDDerivativeCreate(fd->dm, tvd->dir, 0, 2, fd->input_loc, fd->input_c, fd->input_loc, fd->input_c, &tvd->fd_phi));
+  PetscCall(FlucaFDSetBoundaryConditions(tvd->fd_phi, fd->bcs));
+  PetscCall(FlucaFDSetUp(tvd->fd_phi));
+
   /*
     Pre-compute alpha coefficients for non-uniform grids
       alpha_plus[i]  = (x_{i-1/2} - x_{i-1}) / (x_i - x_{i-1})
@@ -185,6 +190,43 @@ static PetscErrorCode ComputeFaceCenteredGradient_Private(FlucaFD fd, PetscInt i
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Evaluate phi at a cell center, handling off-grid cells via the identity operator's boundary extrapolation */
+static PetscErrorCode ComputeCellCenteredPhi_Private(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscScalar *phi)
+{
+  FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
+  PetscInt                ncols, bnd_idx, c;
+  DMStagStencil           col[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscScalar             v[FLUCAFD_MAX_STENCIL_SIZE], bnd_val;
+
+  PetscFunctionBegin;
+  PetscCall(FlucaFDGetStencil(tvd->fd_phi, i, j, k, &ncols, col, v));
+
+  *phi = 0.;
+  for (c = 0; c < ncols; ++c)
+    if (col[c].c >= 0) {
+      switch (fd->dim) {
+      case 1:
+        *phi += v[c] * tvd->arr_phi_1d[col[c].i];
+        break;
+      case 2:
+        *phi += v[c] * tvd->arr_phi_2d[col[c].j][col[c].i];
+        break;
+      case 3:
+        *phi += v[c] * tvd->arr_phi_3d[col[c].k][col[c].j][col[c].i];
+        break;
+      default:
+        SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
+      }
+    } else if (FLUCAFD_BOUNDARY_FRONT <= col[c].c && col[c].c <= FLUCAFD_BOUNDARY_LEFT) {
+      bnd_idx = -col[c].c - 1;
+      PetscCall(FlucaFDGetBoundaryValue_Internal(fd, bnd_idx, i, j, k, fd->input_loc, &bnd_val));
+      *phi += v[c] * bnd_val;
+    } else {
+      SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported stencil point");
+    }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
 {
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
@@ -259,22 +301,8 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fc, j_fc, k_fc, &grad_fc));
       r   = (PetscAbsScalar(grad_fc) > 1e-30) ? grad_fu / grad_fc : 1.;
       psi = tvd->limiter(r);
-      switch (fd->dim) {
-      case 1:
-        phi_u = tvd->arr_phi_1d[i_u];
-        phi_d = tvd->arr_phi_1d[i_d];
-        break;
-      case 2:
-        phi_u = tvd->arr_phi_2d[j_u][i_u];
-        phi_d = tvd->arr_phi_2d[j_d][i_d];
-        break;
-      case 3:
-        phi_u = tvd->arr_phi_3d[k_u][j_u][i_u];
-        phi_d = tvd->arr_phi_3d[k_d][j_d][i_d];
-        break;
-      default:
-        SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
-      }
+      PetscCall(ComputeCellCenteredPhi_Private(fd, i_u, j_u, k_u, &phi_u));
+      PetscCall(ComputeCellCenteredPhi_Private(fd, i_d, j_d, k_d, &phi_d));
       *ncols     = 2;
       col[0].i   = i_u;
       col[0].j   = j_u;
@@ -322,22 +350,8 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fc, j_fc, k_fc, &grad_fc));
       r   = (PetscAbsScalar(grad_fc) > 1e-30) ? grad_fu / grad_fc : 1.;
       psi = tvd->limiter(r);
-      switch (fd->dim) {
-      case 1:
-        phi_u = tvd->arr_phi_1d[i_u];
-        phi_d = tvd->arr_phi_1d[i_d];
-        break;
-      case 2:
-        phi_u = tvd->arr_phi_2d[j_u][i_u];
-        phi_d = tvd->arr_phi_2d[j_d][i_d];
-        break;
-      case 3:
-        phi_u = tvd->arr_phi_3d[k_u][j_u][i_u];
-        phi_d = tvd->arr_phi_3d[k_d][j_d][i_d];
-        break;
-      default:
-        SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
-      }
+      PetscCall(ComputeCellCenteredPhi_Private(fd, i_u, j_u, k_u, &phi_u));
+      PetscCall(ComputeCellCenteredPhi_Private(fd, i_d, j_d, k_d, &phi_d));
       *ncols     = 2;
       col[0].i   = i;
       col[0].j   = j;
@@ -362,6 +376,7 @@ static PetscErrorCode FlucaFDDestroy_SecondOrderTVD(FlucaFD fd)
 
   PetscFunctionBegin;
   PetscCall(FlucaFDDestroy(&tvd->fd_grad));
+  PetscCall(FlucaFDDestroy(&tvd->fd_phi));
 
   PetscCall(PetscFree(tvd->alpha_plus_base));
   PetscCall(PetscFree(tvd->alpha_minus_base));
@@ -454,6 +469,7 @@ PetscErrorCode FlucaFDCreate_SecondOrderTVD(FlucaFD fd)
   tvd->arr_phi_2d       = NULL;
   tvd->arr_phi_3d       = NULL;
   tvd->fd_grad          = NULL;
+  tvd->fd_phi           = NULL;
 
   fd->data                = (void *)tvd;
   fd->ops->setfromoptions = FlucaFDSetFromOptions_SecondOrderTVD;

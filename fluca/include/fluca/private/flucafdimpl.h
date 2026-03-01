@@ -145,6 +145,7 @@ typedef struct {
   const PetscScalar ***arr_phi_3d;
 
   FlucaFD fd_grad; /* gradient operator (element -> face) */
+  FlucaFD fd_phi;  /* identity operator (element -> element) for boundary extrapolation */
 } FlucaFD_SecondOrderTVD;
 
 FLUCA_INTERN PetscErrorCode FlucaFDCreateDMStagToDAScatter_Internal(DM, PetscInt, DMStagStencilLocation, PetscInt, Vec, DM *, Vec *, VecScatter *);
