@@ -1,5 +1,4 @@
 Stencil at i=8:
-  ncols = 3
-  col[0]: i=6, loc=ELEMENT, c=0, v=0.166667
-  col[1]: i=7, loc=ELEMENT, c=0, v=-0.5
-  col[2]: constant, v=1.33333
+  ncols = 2
+  col[0]: i=7, loc=ELEMENT, c=0, v=1.
+  col[1]: constant, v=0.00963055
