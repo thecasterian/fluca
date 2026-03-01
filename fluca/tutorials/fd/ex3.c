@@ -12,40 +12,40 @@ static const char help[] = "Solve 2D unsteady convection-diffusion equation usin
                            "  -ts_monitor_dmda <viewer> : View solution on DMDA at each time step\n";
 
 typedef struct {
-  DM          dm, dm_vel;
-  Vec         vel;
+  DM          dm, dm_mass_flux;
+  Vec         mass_flux;
   PetscScalar mu;
   FlucaFD     fd_tvd_x, fd_tvd_y, fd;
 } AppCtx;
 
-static PetscErrorCode CreateVelocityVector(DM dm, DM *dm_vel, Vec *vel)
+static PetscErrorCode CreateMassFluxVector(DM dm, DM *dm_mass_flux, Vec *mass_flux)
 {
-  Vec            vel_local;
+  Vec            mass_flux_local;
   PetscInt       xs, ys, m, n, nExtrax, nExtray, slot_left, slot_down, i, j;
   PetscScalar ***arr;
 
   PetscFunctionBegin;
-  PetscCall(DMStagCreateCompatibleDMStag(dm, 0, 1, 0, 0, dm_vel));
-  PetscCall(DMStagSetUniformCoordinatesProduct(*dm_vel, 0., 1., 0., 1., 0., 0.));
+  PetscCall(DMStagCreateCompatibleDMStag(dm, 0, 1, 0, 0, dm_mass_flux));
+  PetscCall(DMStagSetUniformCoordinatesProduct(*dm_mass_flux, 0., 1., 0., 1., 0., 0.));
 
-  PetscCall(DMCreateGlobalVector(*dm_vel, vel));
-  PetscCall(DMGetLocalVector(*dm_vel, &vel_local));
+  PetscCall(DMCreateGlobalVector(*dm_mass_flux, mass_flux));
+  PetscCall(DMGetLocalVector(*dm_mass_flux, &mass_flux_local));
 
-  PetscCall(DMStagGetCorners(*dm_vel, &xs, &ys, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
-  PetscCall(DMStagGetLocationSlot(*dm_vel, DMSTAG_LEFT, 0, &slot_left));
-  PetscCall(DMStagGetLocationSlot(*dm_vel, DMSTAG_DOWN, 0, &slot_down));
-  PetscCall(DMStagVecGetArray(*dm_vel, vel_local, &arr));
+  PetscCall(DMStagGetCorners(*dm_mass_flux, &xs, &ys, NULL, &m, &n, NULL, &nExtrax, &nExtray, NULL));
+  PetscCall(DMStagGetLocationSlot(*dm_mass_flux, DMSTAG_LEFT, 0, &slot_left));
+  PetscCall(DMStagGetLocationSlot(*dm_mass_flux, DMSTAG_DOWN, 0, &slot_down));
+  PetscCall(DMStagVecGetArray(*dm_mass_flux, mass_flux_local, &arr));
 
-  /* Set u = 1 on LEFT faces, v = 1 on DOWN faces */
+  /* Set F = rho*u = 1 on LEFT faces, F = rho*v = 1 on DOWN faces (rho=1) */
   for (j = ys; j < ys + n + nExtray; ++j)
     for (i = xs; i < xs + m + nExtrax; ++i) {
       arr[j][i][slot_left] = 1.;
       arr[j][i][slot_down] = 1.;
     }
 
-  PetscCall(DMStagVecRestoreArray(*dm_vel, vel_local, &arr));
-  PetscCall(DMLocalToGlobal(*dm_vel, vel_local, INSERT_VALUES, *vel));
-  PetscCall(DMRestoreLocalVector(*dm_vel, &vel_local));
+  PetscCall(DMStagVecRestoreArray(*dm_mass_flux, mass_flux_local, &arr));
+  PetscCall(DMLocalToGlobal(*dm_mass_flux, mass_flux_local, INSERT_VALUES, *mass_flux));
+  PetscCall(DMRestoreLocalVector(*dm_mass_flux, &mass_flux_local));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -145,9 +145,9 @@ static PetscErrorCode ComputeRHSFunction(TS ts, PetscReal t, Vec u, Vec F, void 
 
   PetscFunctionBegin;
   /* Update TVD operators with current solution and velocity */
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd_x, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd_x, ctx->mass_flux, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd_x, u));
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd_y, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd_y, ctx->mass_flux, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd_y, u));
 
   /* RHS = operator(u) (operator already has correct signs) */
@@ -160,9 +160,9 @@ static PetscErrorCode ComputeRHSJacobian(TS ts, PetscReal t, Vec u, Mat A, Mat P
   AppCtx *ctx = (AppCtx *)ptr;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd_x, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd_x, ctx->mass_flux, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd_x, u));
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd_y, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd_y, ctx->mass_flux, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd_y, u));
 
   PetscCall(MatZeroEntries(A));
@@ -251,7 +251,7 @@ int main(int argc, char **argv)
   PetscCall(MatSetOption(A, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
 
   /* Create velocity and operators */
-  PetscCall(CreateVelocityVector(ctx.dm, &ctx.dm_vel, &ctx.vel));
+  PetscCall(CreateMassFluxVector(ctx.dm, &ctx.dm_mass_flux, &ctx.mass_flux));
   PetscCall(CreateOperator(&ctx, &ctx.fd));
 
   /* Set initial condition */
@@ -279,8 +279,8 @@ int main(int argc, char **argv)
   PetscCall(FlucaFDDestroy(&ctx.fd));
   PetscCall(FlucaFDDestroy(&ctx.fd_tvd_y));
   PetscCall(FlucaFDDestroy(&ctx.fd_tvd_x));
-  PetscCall(VecDestroy(&ctx.vel));
-  PetscCall(DMDestroy(&ctx.dm_vel));
+  PetscCall(VecDestroy(&ctx.mass_flux));
+  PetscCall(DMDestroy(&ctx.dm_mass_flux));
   PetscCall(DMDestroy(&ctx.dm));
 
   PetscCall(FlucaFinalize());

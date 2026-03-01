@@ -13,10 +13,10 @@ int main(int argc, char **argv)
 {
   DM                  input_dm, output_dm;
   FlucaFD             fd_tvd;
-  Vec                 phi, vel;
+  Vec                 phi, mass_flux;
   PetscInt            M, x, m, nExtrax, i, c, ncols, idx, slot_elem, slot_face;
-  PetscScalar       **arr_phi, **arr_vel;
-  Vec                 phi_local, vel_local;
+  PetscScalar       **arr_phi, **arr_mass_flux;
+  Vec                 phi_local, mass_flux_local;
   const PetscScalar **arr_coord;
   PetscInt            slot_coord_elem;
   DMStagStencil       col[64];
@@ -49,15 +49,15 @@ int main(int argc, char **argv)
   PetscCall(DMLocalToGlobal(input_dm, phi_local, INSERT_VALUES, phi));
   PetscCall(DMRestoreLocalVector(input_dm, &phi_local));
 
-  /* Create and fill velocity vector (face-centered) with constant velocity */
-  PetscCall(DMCreateGlobalVector(output_dm, &vel));
-  PetscCall(DMGetLocalVector(output_dm, &vel_local));
-  PetscCall(VecZeroEntries(vel_local));
-  PetscCall(DMStagVecGetArray(output_dm, vel_local, &arr_vel));
-  for (i = x; i < x + m + nExtrax; ++i) arr_vel[i][slot_face] = 1.0;
-  PetscCall(DMStagVecRestoreArray(output_dm, vel_local, &arr_vel));
-  PetscCall(DMLocalToGlobal(output_dm, vel_local, INSERT_VALUES, vel));
-  PetscCall(DMRestoreLocalVector(output_dm, &vel_local));
+  /* Create and fill mass flux vector (face-centered) with constant value */
+  PetscCall(DMCreateGlobalVector(output_dm, &mass_flux));
+  PetscCall(DMGetLocalVector(output_dm, &mass_flux_local));
+  PetscCall(VecZeroEntries(mass_flux_local));
+  PetscCall(DMStagVecGetArray(output_dm, mass_flux_local, &arr_mass_flux));
+  for (i = x; i < x + m + nExtrax; ++i) arr_mass_flux[i][slot_face] = 1.0;
+  PetscCall(DMStagVecRestoreArray(output_dm, mass_flux_local, &arr_mass_flux));
+  PetscCall(DMLocalToGlobal(output_dm, mass_flux_local, INSERT_VALUES, mass_flux));
+  PetscCall(DMRestoreLocalVector(output_dm, &mass_flux_local));
 
   PetscCall(DMStagRestoreProductCoordinateArraysRead(input_dm, &arr_coord, NULL, NULL));
 
@@ -105,7 +105,7 @@ int main(int argc, char **argv)
     PetscCall(FlucaFDSetBoundaryConditions(fd_tvd, bcs));
   }
 
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(fd_tvd, vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(fd_tvd, mass_flux, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(fd_tvd, phi));
 
   PetscCall(DMStagGetGlobalSizes(output_dm, &M, NULL, NULL));
@@ -123,7 +123,7 @@ int main(int argc, char **argv)
   }
 
   PetscCall(FlucaFDDestroy(&fd_tvd));
-  PetscCall(VecDestroy(&vel));
+  PetscCall(VecDestroy(&mass_flux));
   PetscCall(VecDestroy(&phi));
   PetscCall(DMDestroy(&output_dm));
   PetscCall(DMDestroy(&input_dm));

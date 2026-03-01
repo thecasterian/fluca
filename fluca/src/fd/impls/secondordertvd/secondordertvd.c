@@ -231,7 +231,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
 {
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
   PetscInt                idx, i_u, j_u, k_u, i_d, j_d, k_d, i_fu, j_fu, k_fu, i_fc, j_fc, k_fc;
-  PetscScalar             vel, alpha, grad_fu, grad_fc, r, psi, phi_u, phi_d;
+  PetscScalar             mf, alpha, grad_fu, grad_fc, r, psi, phi_u, phi_d;
   PetscBool               periodic, at_prev_boundary, at_next_boundary;
 
   PetscFunctionBegin;
@@ -252,13 +252,13 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
 
   switch (fd->dim) {
   case 1:
-    vel = tvd->arr_vel_1d[i];
+    mf = tvd->arr_mf_1d[i];
     break;
   case 2:
-    vel = tvd->arr_vel_2d[j][i];
+    mf = tvd->arr_mf_2d[j][i];
     break;
   case 3:
-    vel = tvd->arr_vel_3d[k][j][i];
+    mf = tvd->arr_mf_3d[k][j][i];
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
@@ -268,7 +268,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
   at_prev_boundary = (idx == 0 && !periodic);
   at_next_boundary = (idx == fd->N[tvd->dir] && !periodic);
 
-  if (vel > 0) {
+  if (mf > 0) {
     i_u = (tvd->dir == FLUCAFD_X) ? i - 1 : i;
     j_u = (tvd->dir == FLUCAFD_Y) ? j - 1 : j;
     k_u = (tvd->dir == FLUCAFD_Z) ? k - 1 : k;
@@ -381,24 +381,24 @@ static PetscErrorCode FlucaFDDestroy_SecondOrderTVD(FlucaFD fd)
   PetscCall(PetscFree(tvd->alpha_plus_base));
   PetscCall(PetscFree(tvd->alpha_minus_base));
 
-  if (tvd->vel_dm) {
+  if (tvd->mf_dm) {
     switch (fd->dim) {
     case 1:
-      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_1d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->mf_da, tvd->mf_local, &tvd->arr_mf_1d));
       break;
     case 2:
-      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_2d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->mf_da, tvd->mf_local, &tvd->arr_mf_2d));
       break;
     case 3:
-      PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_3d));
+      PetscCall(DMDAVecRestoreArrayRead(tvd->mf_da, tvd->mf_local, &tvd->arr_mf_3d));
       break;
     default:
       break;
     }
-    PetscCall(VecScatterDestroy(&tvd->vel_scatter));
-    PetscCall(VecDestroy(&tvd->vel_local));
-    PetscCall(DMDestroy(&tvd->vel_da));
-    PetscCall(DMDestroy(&tvd->vel_dm));
+    PetscCall(VecScatterDestroy(&tvd->mf_scatter));
+    PetscCall(VecDestroy(&tvd->mf_local));
+    PetscCall(DMDestroy(&tvd->mf_da));
+    PetscCall(DMDestroy(&tvd->mf_dm));
   }
 
   if (tvd->phi_dm) {
@@ -434,7 +434,7 @@ static PetscErrorCode FlucaFDView_SecondOrderTVD(FlucaFD fd, PetscViewer viewer)
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &isascii));
   if (isascii) {
     PetscCall(PetscViewerASCIIPrintf(viewer, "  Direction: %s\n", FlucaFDDirections[tvd->dir]));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "  Velocity component: %" PetscInt_FMT "\n", tvd->vel_c));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "  Mass flux component: %" PetscInt_FMT "\n", tvd->mf_c));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -453,14 +453,14 @@ PetscErrorCode FlucaFDCreate_SecondOrderTVD(FlucaFD fd)
   tvd->alpha_minus      = NULL;
   tvd->alpha_plus_base  = NULL;
   tvd->alpha_minus_base = NULL;
-  tvd->vel_c            = 0;
-  tvd->vel_dm           = NULL;
-  tvd->vel_da           = NULL;
-  tvd->vel_local        = NULL;
-  tvd->vel_scatter      = NULL;
-  tvd->arr_vel_1d       = NULL;
-  tvd->arr_vel_2d       = NULL;
-  tvd->arr_vel_3d       = NULL;
+  tvd->mf_c             = 0;
+  tvd->mf_dm            = NULL;
+  tvd->mf_da            = NULL;
+  tvd->mf_local         = NULL;
+  tvd->mf_scatter       = NULL;
+  tvd->arr_mf_1d        = NULL;
+  tvd->arr_mf_2d        = NULL;
+  tvd->arr_mf_3d        = NULL;
   tvd->phi_dm           = NULL;
   tvd->phi_da           = NULL;
   tvd->phi_local        = NULL;
@@ -534,66 +534,66 @@ PetscErrorCode FlucaFDSecondOrderTVDSetLimiter(FlucaFD fd, const char *name)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDSecondOrderTVDSetVelocity(FlucaFD fd, Vec vel, PetscInt vel_c)
+PetscErrorCode FlucaFDSecondOrderTVDSetMassFlux(FlucaFD fd, Vec mass_flux, PetscInt mf_c)
 {
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
-  DM                      vel_dm;
+  DM                      mf_dm;
   PetscBool               isstag;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(fd, FLUCAFD_CLASSID, 1, FLUCAFDSECONDORDERTVD);
-  PetscValidHeaderSpecific(vel, VEC_CLASSID, 2);
-  PetscCall(VecGetDM(vel, &vel_dm));
-  PetscCall(PetscObjectTypeCompare((PetscObject)vel_dm, DMSTAG, &isstag));
+  PetscValidHeaderSpecific(mass_flux, VEC_CLASSID, 2);
+  PetscCall(VecGetDM(mass_flux, &mf_dm));
+  PetscCall(PetscObjectTypeCompare((PetscObject)mf_dm, DMSTAG, &isstag));
   PetscCheck(isstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Vector is not on DMStag");
 
   /* Recreate scatter if DM or component changed */
-  if (vel_dm != tvd->vel_dm || vel_c != tvd->vel_c) {
-    if (tvd->vel_dm) {
+  if (mf_dm != tvd->mf_dm || mf_c != tvd->mf_c) {
+    if (tvd->mf_dm) {
       switch (fd->dim) {
       case 1:
-        PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_1d));
+        PetscCall(DMDAVecRestoreArrayRead(tvd->mf_da, tvd->mf_local, &tvd->arr_mf_1d));
         break;
       case 2:
-        PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_2d));
+        PetscCall(DMDAVecRestoreArrayRead(tvd->mf_da, tvd->mf_local, &tvd->arr_mf_2d));
         break;
       case 3:
-        PetscCall(DMDAVecRestoreArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_3d));
+        PetscCall(DMDAVecRestoreArrayRead(tvd->mf_da, tvd->mf_local, &tvd->arr_mf_3d));
         break;
       default:
         break;
       }
     }
-    PetscCall(VecScatterDestroy(&tvd->vel_scatter));
-    PetscCall(VecDestroy(&tvd->vel_local));
-    PetscCall(DMDestroy(&tvd->vel_da));
-    PetscCall(DMDestroy(&tvd->vel_dm));
+    PetscCall(VecScatterDestroy(&tvd->mf_scatter));
+    PetscCall(VecDestroy(&tvd->mf_local));
+    PetscCall(DMDestroy(&tvd->mf_da));
+    PetscCall(DMDestroy(&tvd->mf_dm));
   }
 
-  tvd->vel_c = vel_c;
-  if (!tvd->vel_dm) {
-    tvd->vel_dm = vel_dm;
-    PetscCall(PetscObjectReference((PetscObject)tvd->vel_dm));
-    PetscCall(FlucaFDCreateDMStagToDAScatter_Internal(tvd->vel_dm, fd->dim, fd->output_loc, vel_c, vel, &tvd->vel_da, &tvd->vel_local, &tvd->vel_scatter));
+  tvd->mf_c = mf_c;
+  if (!tvd->mf_dm) {
+    tvd->mf_dm = mf_dm;
+    PetscCall(PetscObjectReference((PetscObject)tvd->mf_dm));
+    PetscCall(FlucaFDCreateDMStagToDAScatter_Internal(tvd->mf_dm, fd->dim, fd->output_loc, mf_c, mass_flux, &tvd->mf_da, &tvd->mf_local, &tvd->mf_scatter));
 
     /* Get array views on local DMDA vector (kept until destroy) */
     switch (fd->dim) {
     case 1:
-      PetscCall(DMDAVecGetArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_1d));
+      PetscCall(DMDAVecGetArrayRead(tvd->mf_da, tvd->mf_local, &tvd->arr_mf_1d));
       break;
     case 2:
-      PetscCall(DMDAVecGetArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_2d));
+      PetscCall(DMDAVecGetArrayRead(tvd->mf_da, tvd->mf_local, &tvd->arr_mf_2d));
       break;
     case 3:
-      PetscCall(DMDAVecGetArrayRead(tvd->vel_da, tvd->vel_local, &tvd->arr_vel_3d));
+      PetscCall(DMDAVecGetArrayRead(tvd->mf_da, tvd->mf_local, &tvd->arr_mf_3d));
       break;
     default:
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
     }
   }
-  /* Scatter only the needed face velocity component from global to local */
-  PetscCall(VecScatterBegin(tvd->vel_scatter, vel, tvd->vel_local, INSERT_VALUES, SCATTER_FORWARD));
-  PetscCall(VecScatterEnd(tvd->vel_scatter, vel, tvd->vel_local, INSERT_VALUES, SCATTER_FORWARD));
+  /* Scatter only the needed face mass flux component from global to local */
+  PetscCall(VecScatterBegin(tvd->mf_scatter, mass_flux, tvd->mf_local, INSERT_VALUES, SCATTER_FORWARD));
+  PetscCall(VecScatterEnd(tvd->mf_scatter, mass_flux, tvd->mf_local, INSERT_VALUES, SCATTER_FORWARD));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

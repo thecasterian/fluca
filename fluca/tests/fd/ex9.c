@@ -12,12 +12,12 @@ static const char help[] = "Test convergence of TVD convection term d(u*phi)/dx\
 
 int main(int argc, char **argv)
 {
-  DM                  dm, vel_dm;
+  DM                  dm, mass_flux_dm;
   FlucaFD             fd_tvd, fd_scaled_tvd, fd_deriv;
-  Vec                 phi, vel, u_phi_face, conv;
-  Vec                 phi_local, vel_local;
+  Vec                 phi, mass_flux, u_phi_face, conv;
+  Vec                 phi_local, mass_flux_local;
   PetscInt            N, x, m, nExtrax, i, slot_elem, slot_face;
-  PetscScalar       **arr_phi, **arr_vel;
+  PetscScalar       **arr_phi, **arr_mass_flux;
   const PetscScalar **arr_coord;
   PetscInt            slot_coord_elem;
   PetscReal           error, tol, u;
@@ -32,13 +32,13 @@ int main(int argc, char **argv)
   PetscCall(DMStagGetGlobalSizes(dm, &N, NULL, NULL));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 0., 0., 0.));
 
-  /* Create face DM for velocity and face-interpolated phi */
-  PetscCall(DMStagCreateCompatibleDMStag(dm, 1, 0, 0, 0, &vel_dm));
-  PetscCall(DMStagSetUniformCoordinatesProduct(vel_dm, 0., 1., 0., 0., 0., 0.));
+  /* Create face DM for mass flux and face-interpolated phi */
+  PetscCall(DMStagCreateCompatibleDMStag(dm, 1, 0, 0, 0, &mass_flux_dm));
+  PetscCall(DMStagSetUniformCoordinatesProduct(mass_flux_dm, 0., 1., 0., 0., 0., 0.));
 
   PetscCall(DMStagGetCorners(dm, &x, NULL, NULL, &m, NULL, NULL, &nExtrax, NULL, NULL));
   PetscCall(DMStagGetLocationSlot(dm, DMSTAG_ELEMENT, 0, &slot_elem));
-  PetscCall(DMStagGetLocationSlot(vel_dm, DMSTAG_LEFT, 0, &slot_face));
+  PetscCall(DMStagGetLocationSlot(mass_flux_dm, DMSTAG_LEFT, 0, &slot_face));
   PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arr_coord, NULL, NULL));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &slot_coord_elem));
 
@@ -52,17 +52,17 @@ int main(int argc, char **argv)
   PetscCall(DMLocalToGlobal(dm, phi_local, INSERT_VALUES, phi));
   PetscCall(DMRestoreLocalVector(dm, &phi_local));
 
-  /* Create and fill uniform velocity at all faces */
+  /* Create and fill uniform mass flux at all faces (rho=1, so F = u) */
   u = 1.0;
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-vel", &u, NULL));
-  PetscCall(DMCreateGlobalVector(vel_dm, &vel));
-  PetscCall(DMGetLocalVector(vel_dm, &vel_local));
-  PetscCall(VecZeroEntries(vel_local));
-  PetscCall(DMStagVecGetArray(vel_dm, vel_local, &arr_vel));
-  for (i = x; i < x + m + nExtrax; ++i) arr_vel[i][slot_face] = u;
-  PetscCall(DMStagVecRestoreArray(vel_dm, vel_local, &arr_vel));
-  PetscCall(DMLocalToGlobal(vel_dm, vel_local, INSERT_VALUES, vel));
-  PetscCall(DMRestoreLocalVector(vel_dm, &vel_local));
+  PetscCall(DMCreateGlobalVector(mass_flux_dm, &mass_flux));
+  PetscCall(DMGetLocalVector(mass_flux_dm, &mass_flux_local));
+  PetscCall(VecZeroEntries(mass_flux_local));
+  PetscCall(DMStagVecGetArray(mass_flux_dm, mass_flux_local, &arr_mass_flux));
+  for (i = x; i < x + m + nExtrax; ++i) arr_mass_flux[i][slot_face] = u;
+  PetscCall(DMStagVecRestoreArray(mass_flux_dm, mass_flux_local, &arr_mass_flux));
+  PetscCall(DMLocalToGlobal(mass_flux_dm, mass_flux_local, INSERT_VALUES, mass_flux));
+  PetscCall(DMRestoreLocalVector(mass_flux_dm, &mass_flux_local));
 
   PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arr_coord, NULL, NULL));
 
@@ -70,7 +70,7 @@ int main(int argc, char **argv)
   PetscCall(FlucaFDSecondOrderTVDCreate(dm, FLUCAFD_X, 0, 0, &fd_tvd));
   PetscCall(FlucaFDSetFromOptions(fd_tvd));
   PetscCall(FlucaFDSetUp(fd_tvd));
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(fd_tvd, vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(fd_tvd, mass_flux, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(fd_tvd, phi));
 
   /* Scale TVD by velocity: element -> face producing u*phi_face */
@@ -78,8 +78,8 @@ int main(int argc, char **argv)
   PetscCall(FlucaFDSetUp(fd_scaled_tvd));
 
   /* Step 1: Apply scaled TVD to get u*phi at faces */
-  PetscCall(DMCreateGlobalVector(vel_dm, &u_phi_face));
-  PetscCall(FlucaFDApply(fd_scaled_tvd, dm, vel_dm, phi, u_phi_face));
+  PetscCall(DMCreateGlobalVector(mass_flux_dm, &u_phi_face));
+  PetscCall(FlucaFDApply(fd_scaled_tvd, dm, mass_flux_dm, phi, u_phi_face));
 
   /* First derivative: face -> element, 2nd order accuracy */
   PetscCall(FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_deriv));
@@ -87,7 +87,7 @@ int main(int argc, char **argv)
 
   /* Step 2: Apply derivative to get d(u*phi)/dx at cell centers */
   PetscCall(DMCreateGlobalVector(dm, &conv));
-  PetscCall(FlucaFDApply(fd_deriv, vel_dm, dm, u_phi_face, conv));
+  PetscCall(FlucaFDApply(fd_deriv, mass_flux_dm, dm, u_phi_face, conv));
 
   /* Compare against exact: d(u*phi)/dx = u * 2*pi*cos(2*pi*x) */
   {
@@ -124,9 +124,9 @@ int main(int argc, char **argv)
   PetscCall(VecDestroy(&u_phi_face));
   PetscCall(FlucaFDDestroy(&fd_scaled_tvd));
   PetscCall(FlucaFDDestroy(&fd_tvd));
-  PetscCall(VecDestroy(&vel));
+  PetscCall(VecDestroy(&mass_flux));
   PetscCall(VecDestroy(&phi));
-  PetscCall(DMDestroy(&vel_dm));
+  PetscCall(DMDestroy(&mass_flux_dm));
   PetscCall(DMDestroy(&dm));
 
   PetscCall(FlucaFinalize());

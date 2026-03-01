@@ -12,22 +12,22 @@ static const char help[] = "Solve 1D viscous Burger's equation using TVD scheme\
                            "  -nu <real>              : Kinematic viscosity (default: 0)\n";
 
 typedef struct {
-  DM        dm, dm_vel;
-  Vec       vel;
-  FlucaFD   fd_vel, fd_tvd, fd_scale_vel, fd;
+  DM        dm, dm_mass_flux;
+  Vec       mass_flux;
+  FlucaFD   fd_mass_flux, fd_tvd, fd_scale_mass_flux, fd;
   PetscReal nu;
 } AppCtx;
 
-static PetscErrorCode CreateVelocityDM(DM dm, DM *dm_vel, Vec *vel)
+static PetscErrorCode CreateMassFluxDM(DM dm, DM *dm_mass_flux, Vec *mass_flux)
 {
   PetscFunctionBegin;
-  PetscCall(DMStagCreateCompatibleDMStag(dm, 1, 0, 0, 0, dm_vel));
-  PetscCall(DMStagSetUniformCoordinatesProduct(*dm_vel, 0., 1., 0., 0., 0., 0.));
-  PetscCall(DMCreateGlobalVector(*dm_vel, vel));
+  PetscCall(DMStagCreateCompatibleDMStag(dm, 1, 0, 0, 0, dm_mass_flux));
+  PetscCall(DMStagSetUniformCoordinatesProduct(*dm_mass_flux, 0., 1., 0., 0., 0., 0.));
+  PetscCall(DMCreateGlobalVector(*dm_mass_flux, mass_flux));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode CreateVelocityOperator(AppCtx *ctx)
+static PetscErrorCode CreateMassFluxOperator(AppCtx *ctx)
 {
   FlucaFD fd_interp;
 
@@ -36,9 +36,9 @@ static PetscErrorCode CreateVelocityOperator(AppCtx *ctx)
   PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_X, 0, 2, DMSTAG_ELEMENT, 0, DMSTAG_LEFT, 0, &fd_interp));
   PetscCall(FlucaFDSetUp(fd_interp));
 
-  /* Scale by 0.5 to get u = phi/2 */
-  PetscCall(FlucaFDScaleCreateConstant(fd_interp, 0.5, &ctx->fd_vel));
-  PetscCall(FlucaFDSetUp(ctx->fd_vel));
+  /* Scale by 0.5 to get F = rho*u = phi/2 (rho=1) */
+  PetscCall(FlucaFDScaleCreateConstant(fd_interp, 0.5, &ctx->fd_mass_flux));
+  PetscCall(FlucaFDSetUp(ctx->fd_mass_flux));
 
   PetscCall(FlucaFDDestroy(&fd_interp));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -55,16 +55,16 @@ static PetscErrorCode CreateConvectionOperator(AppCtx *ctx, FlucaFD *fd_conv)
   PetscCall(FlucaFDSetFromOptions(ctx->fd_tvd));
   PetscCall(FlucaFDSetUp(ctx->fd_tvd));
 
-  /* Scale TVD output by velocity: phi_TVD -> u * phi_TVD at faces */
-  PetscCall(FlucaFDScaleCreateVector(ctx->fd_tvd, ctx->vel, 0, &ctx->fd_scale_vel));
-  PetscCall(FlucaFDSetUp(ctx->fd_scale_vel));
+  /* Scale TVD output by mass flux: phi_TVD -> F * phi_TVD at faces */
+  PetscCall(FlucaFDScaleCreateVector(ctx->fd_tvd, ctx->mass_flux, 0, &ctx->fd_scale_mass_flux));
+  PetscCall(FlucaFDSetUp(ctx->fd_scale_mass_flux));
 
   /* Derivative operator: d/dx (LEFT -> ELEMENT) */
   PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_conv_deriv));
   PetscCall(FlucaFDSetUp(fd_conv_deriv));
 
-  /* Compose: d/dx(u * phi_TVD) */
-  PetscCall(FlucaFDCompositionCreate(ctx->fd_scale_vel, fd_conv_deriv, fd_conv));
+  /* Compose: d/dx(F * phi_TVD) */
+  PetscCall(FlucaFDCompositionCreate(ctx->fd_scale_mass_flux, fd_conv_deriv, fd_conv));
   PetscCall(FlucaFDSetUp(*fd_conv));
 
   PetscCall(FlucaFDDestroy(&fd_conv_deriv));
@@ -103,12 +103,12 @@ static PetscErrorCode ComputeRHSFunction(TS ts, PetscReal t, Vec x, Vec F, void 
   AppCtx *ctx = (AppCtx *)ptr;
 
   PetscFunctionBegin;
-  /* Compute velocity u = phi/2 at faces */
-  PetscCall(FlucaFDApply(ctx->fd_vel, ctx->dm, ctx->dm_vel, x, ctx->vel));
+  /* Compute mass flux F = rho*u = phi/2 at faces (rho=1) */
+  PetscCall(FlucaFDApply(ctx->fd_mass_flux, ctx->dm, ctx->dm_mass_flux, x, ctx->mass_flux));
 
-  /* Update operators with current velocity and solution */
-  PetscCall(FlucaFDScaleSetVector(ctx->fd_scale_vel, ctx->vel, DMSTAG_LEFT, 0));
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
+  /* Update operators with current mass flux and solution */
+  PetscCall(FlucaFDScaleSetVector(ctx->fd_scale_mass_flux, ctx->mass_flux, DMSTAG_LEFT, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd, ctx->mass_flux, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, x));
 
   PetscCall(FlucaFDApply(ctx->fd, ctx->dm, ctx->dm, x, F));
@@ -122,12 +122,12 @@ static PetscErrorCode ComputeRHSJacobian(TS ts, PetscReal t, Vec x, Mat A, Mat P
   AppCtx *ctx = (AppCtx *)ptr;
 
   PetscFunctionBegin;
-  /* Compute velocity u = phi/2 at faces */
-  PetscCall(FlucaFDApply(ctx->fd_vel, ctx->dm, ctx->dm_vel, x, ctx->vel));
+  /* Compute mass flux F = rho*u = phi/2 at faces (rho=1) */
+  PetscCall(FlucaFDApply(ctx->fd_mass_flux, ctx->dm, ctx->dm_mass_flux, x, ctx->mass_flux));
 
-  /* Update operators with current velocity and solution */
-  PetscCall(FlucaFDScaleSetVector(ctx->fd_scale_vel, ctx->vel, DMSTAG_LEFT, 0));
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
+  /* Update operators with current mass flux and solution */
+  PetscCall(FlucaFDScaleSetVector(ctx->fd_scale_mass_flux, ctx->mass_flux, DMSTAG_LEFT, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd, ctx->mass_flux, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, x));
 
   PetscCall(MatZeroEntries(A));
@@ -198,9 +198,9 @@ int main(int argc, char **argv)
   ctx.nu = 0.001;
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-nu", &ctx.nu, NULL));
 
-  /* Create velocity DM and operator */
-  PetscCall(CreateVelocityDM(ctx.dm, &ctx.dm_vel, &ctx.vel));
-  PetscCall(CreateVelocityOperator(&ctx));
+  /* Create mass flux DM and operator */
+  PetscCall(CreateMassFluxDM(ctx.dm, &ctx.dm_mass_flux, &ctx.mass_flux));
+  PetscCall(CreateMassFluxOperator(&ctx));
 
   /* Create convection operator: d/dx(u * phi) */
   PetscCall(CreateConvectionOperator(&ctx, &fd_conv));
@@ -245,11 +245,11 @@ int main(int argc, char **argv)
   PetscCall(VecDestroy(&u));
   PetscCall(MatDestroy(&A));
   PetscCall(FlucaFDDestroy(&ctx.fd));
-  PetscCall(FlucaFDDestroy(&ctx.fd_scale_vel));
+  PetscCall(FlucaFDDestroy(&ctx.fd_scale_mass_flux));
   PetscCall(FlucaFDDestroy(&ctx.fd_tvd));
-  PetscCall(FlucaFDDestroy(&ctx.fd_vel));
-  PetscCall(VecDestroy(&ctx.vel));
-  PetscCall(DMDestroy(&ctx.dm_vel));
+  PetscCall(FlucaFDDestroy(&ctx.fd_mass_flux));
+  PetscCall(VecDestroy(&ctx.mass_flux));
+  PetscCall(DMDestroy(&ctx.dm_mass_flux));
   PetscCall(DMDestroy(&ctx.dm));
 
   PetscCall(FlucaFinalize());
