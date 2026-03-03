@@ -24,7 +24,8 @@ typedef struct {
   /* FlucaFD operators (applied separately due to different BC types) */
   FlucaFD fd_laplacian[PHYS_INS_MAX_DIM]; /* viscous Laplacian per velocity direction */
   FlucaFD fd_grad_p[PHYS_INS_MAX_DIM];    /* pressure gradient per velocity direction */
-  FlucaFD fd_div[PHYS_INS_MAX_DIM];       /* divergence per direction */
+  FlucaFD fd_rho_div_d[PHYS_INS_MAX_DIM]; /* rho * d(interp(u_d))/dx_d per direction */
+  FlucaFD fd_pstab;                       /* dt * (DTG - DG^st)(p) pressure stabilization (Sum) */
 
   /* Convection operators: C_d = sum_e d/dx_e(mass_flux_e * u_d) */
   FlucaFD fd_conv[PHYS_INS_MAX_DIM];                        /* summed convection per velocity dir */

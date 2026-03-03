@@ -110,9 +110,9 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     PetscCall(FlucaFDSetUp(ins->fd_grad_p[d]));
   }
 
-  /* --- Divergence per direction (wide stencil via face interpolation) --- */
+  /* --- Per-direction divergence components: rho * d(interp(u_d))/dx_d --- */
   for (d = 0; d < dim; d++) {
-    FlucaFD interp, face_deriv;
+    FlucaFD interp, face_deriv, div_raw;
 
     /* interp: interpolate u_d from element to face (0th derivative, 2nd order) */
     PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 0, 2, DMSTAG_ELEMENT, d, face_loc[d], 0, &interp));
@@ -123,10 +123,15 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     PetscCall(FlucaFDSetUp(face_deriv));
 
     /* composition: face_deriv(interp(x)) = d(interp(u_d))/dx_d */
-    PetscCall(FlucaFDCompositionCreate(interp, face_deriv, &ins->fd_div[d]));
-    PetscCall(SetVelocityDirichletBCs(phys, d, ins->fd_div[d]));
-    PetscCall(FlucaFDSetUp(ins->fd_div[d]));
+    PetscCall(FlucaFDCompositionCreate(interp, face_deriv, &div_raw));
+    PetscCall(FlucaFDSetUp(div_raw));
 
+    /* scale by rho: rho * d(interp(u_d))/dx_d */
+    PetscCall(FlucaFDScaleCreateConstant(div_raw, rho, &ins->fd_rho_div_d[d]));
+    PetscCall(SetVelocityDirichletBCs(phys, d, ins->fd_rho_div_d[d]));
+    PetscCall(FlucaFDSetUp(ins->fd_rho_div_d[d]));
+
+    PetscCall(FlucaFDDestroy(&div_raw));
     PetscCall(FlucaFDDestroy(&face_deriv));
     PetscCall(FlucaFDDestroy(&interp));
   }
@@ -189,6 +194,64 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     PetscCall(FlucaFDSetUp(ins->fd_conv[d]));
   }
 
+  /* --- Pressure stabilization: dt * sum_d (DTG_d - DG^st_d)(p) --- */
+  {
+    FlucaFD pstab_dir[PHYS_INS_MAX_DIM];
+    FlucaFD pstab_sum;
+
+    for (d = 0; d < dim; d++) {
+      FlucaFD face_grad_p, face_div_p, compact_d;
+      FlucaFD cell_grad_p, interp_p, td_p, wide_d;
+      FlucaFD neg_compact;
+      FlucaFD diff_ops[2];
+
+      /* Compact Laplacian DG^st_d: face_div_p(face_grad_p(p)) */
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, dim, face_loc[d], 0, &face_grad_p));
+      PetscCall(FlucaFDSetUp(face_grad_p));
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, face_loc[d], 0, DMSTAG_ELEMENT, dim, &face_div_p));
+      PetscCall(FlucaFDSetUp(face_div_p));
+      PetscCall(FlucaFDCompositionCreate(face_grad_p, face_div_p, &compact_d));
+      PetscCall(FlucaFDSetUp(compact_d));
+
+      /* Wide Laplacian DTG_d: face_div_p(interp_p(cell_grad_p(p))) */
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, dim, DMSTAG_ELEMENT, d, &cell_grad_p));
+      PetscCall(FlucaFDSetUp(cell_grad_p));
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 0, 2, DMSTAG_ELEMENT, d, face_loc[d], 0, &interp_p));
+      PetscCall(FlucaFDSetUp(interp_p));
+      PetscCall(FlucaFDCompositionCreate(interp_p, face_div_p, &td_p));
+      PetscCall(FlucaFDSetUp(td_p));
+      PetscCall(FlucaFDCompositionCreate(cell_grad_p, td_p, &wide_d));
+      PetscCall(FlucaFDSetUp(wide_d));
+
+      /* S_d = wide_d - compact_d */
+      PetscCall(FlucaFDScaleCreateConstant(compact_d, -1.0, &neg_compact));
+      PetscCall(FlucaFDSetUp(neg_compact));
+      diff_ops[0] = wide_d;
+      diff_ops[1] = neg_compact;
+      PetscCall(FlucaFDSumCreate(2, diff_ops, &pstab_dir[d]));
+      PetscCall(FlucaFDSetUp(pstab_dir[d]));
+
+      PetscCall(FlucaFDDestroy(&neg_compact));
+      PetscCall(FlucaFDDestroy(&wide_d));
+      PetscCall(FlucaFDDestroy(&td_p));
+      PetscCall(FlucaFDDestroy(&interp_p));
+      PetscCall(FlucaFDDestroy(&cell_grad_p));
+      PetscCall(FlucaFDDestroy(&compact_d));
+      PetscCall(FlucaFDDestroy(&face_div_p));
+      PetscCall(FlucaFDDestroy(&face_grad_p));
+    }
+
+    /* Sum over directions and scale by dt (initially 0) */
+    PetscCall(FlucaFDSumCreate(dim, pstab_dir, &pstab_sum));
+    PetscCall(FlucaFDSetUp(pstab_sum));
+    PetscCall(FlucaFDScaleCreateConstant(pstab_sum, 0.0, &ins->fd_pstab));
+    PetscCall(SetPressureNeumannBCs(phys, ins->fd_pstab));
+    PetscCall(FlucaFDSetUp(ins->fd_pstab));
+
+    PetscCall(FlucaFDDestroy(&pstab_sum));
+    for (d = 0; d < dim; d++) PetscCall(FlucaFDDestroy(&pstab_dir[d]));
+  }
+
   /* Create temp vector for residual assembly */
   PetscCall(DMCreateGlobalVector(sol_dm, &ins->temp));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -203,7 +266,7 @@ PetscErrorCode PhysINSDestroyOperators_Internal(Phys phys)
   for (d = 0; d < PHYS_INS_MAX_DIM; d++) {
     PetscCall(FlucaFDDestroy(&ins->fd_laplacian[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_grad_p[d]));
-    PetscCall(FlucaFDDestroy(&ins->fd_div[d]));
+    PetscCall(FlucaFDDestroy(&ins->fd_rho_div_d[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_conv[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_interp[d]));
     PetscCall(VecDestroy(&ins->mass_flux_face[d]));
@@ -214,6 +277,7 @@ PetscErrorCode PhysINSDestroyOperators_Internal(Phys phys)
       PetscCall(FlucaFDDestroy(&ins->fd_conv_comp[d][e]));
     }
   }
+  PetscCall(FlucaFDDestroy(&ins->fd_pstab));
   PetscCall(VecDestroy(&ins->temp));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -270,11 +334,13 @@ static PetscErrorCode ComputeSteadyResidual(Phys phys, PetscReal t, Vec x, Vec F
     PetscCall(VecAXPY(F, 1.0, temp));
   }
 
-  /* Continuity: div(u) */
+  /* Continuity: rho * div(interp(u)) + dt * S(p) */
   for (d = 0; d < dim; d++) {
-    PetscCall(FlucaFDApply(ins->fd_div[d], sol_dm, sol_dm, x, temp));
+    PetscCall(FlucaFDApply(ins->fd_rho_div_d[d], sol_dm, sol_dm, x, temp));
     PetscCall(VecAXPY(F, 1.0, temp));
   }
+  PetscCall(FlucaFDApply(ins->fd_pstab, sol_dm, sol_dm, x, temp));
+  PetscCall(VecAXPY(F, 1.0, temp));
 
   /* Subtract body force from momentum components */
   if (phys->bodyforce) {
@@ -401,7 +467,8 @@ PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
     PetscCall(FlucaFDGetOperator(ins->fd_laplacian[d], sol_dm, sol_dm, Pmat));
     PetscCall(FlucaFDGetOperator(ins->fd_grad_p[d], sol_dm, sol_dm, Pmat));
   }
-  for (d = 0; d < dim; d++) PetscCall(FlucaFDGetOperator(ins->fd_div[d], sol_dm, sol_dm, Pmat));
+  for (d = 0; d < dim; d++) PetscCall(FlucaFDGetOperator(ins->fd_rho_div_d[d], sol_dm, sol_dm, Pmat));
+  PetscCall(FlucaFDGetOperator(ins->fd_pstab, sol_dm, sol_dm, Pmat));
 
   /* Add shift * rho to velocity diagonal entries (mass matrix contribution) */
   PetscCall(DMStagGetCorners(sol_dm, &xs, &ys, &zs, &xm, &ym, &zm, NULL, NULL, NULL));
@@ -432,17 +499,42 @@ PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
 
 /* --- TS callbacks --------------------------------------------------------- */
 
+/* Update pressure stabilization scaling from the TS time step.
+   TSPSEUDO is not supported: its dt is a relaxation parameter, not a physical timestep. */
+static PetscErrorCode UpdatePressureStabilizationDt_Internal(TS ts, Phys_INS *ins)
+{
+  TSType    type;
+  PetscBool is_pseudo;
+  PetscReal dt;
+
+  PetscFunctionBegin;
+  PetscCall(TSGetType(ts, &type));
+  PetscCall(PetscStrcmp(type, TSPSEUDO, &is_pseudo));
+  PetscCheck(!is_pseudo, PetscObjectComm((PetscObject)ts), PETSC_ERR_SUP, "TSPSEUDO is not supported for PhysINS; use a real time integrator (e.g., beuler)");
+  PetscCall(TSGetTimeStep(ts, &dt));
+  PetscCall(FlucaFDScaleSetConstant(ins->fd_pstab, dt));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode IFunction_INS(TS ts, PetscReal t, Vec U, Vec U_t, Vec F, void *ctx)
 {
+  Phys      phys = (Phys)ctx;
+  Phys_INS *ins  = (Phys_INS *)phys->data;
+
   PetscFunctionBegin;
-  PetscCall(PhysComputeIFunction_INS((Phys)ctx, t, U, U_t, F));
+  PetscCall(UpdatePressureStabilizationDt_Internal(ts, ins));
+  PetscCall(PhysComputeIFunction_INS(phys, t, U, U_t, F));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode IJacobian_INS(TS ts, PetscReal t, Vec U, Vec U_t, PetscReal shift, Mat Amat, Mat Pmat, void *ctx)
 {
+  Phys      phys = (Phys)ctx;
+  Phys_INS *ins  = (Phys_INS *)phys->data;
+
   PetscFunctionBegin;
-  PetscCall(PhysComputeIJacobian_INS((Phys)ctx, t, U, U_t, shift, Amat, Pmat));
+  PetscCall(UpdatePressureStabilizationDt_Internal(ts, ins));
+  PetscCall(PhysComputeIJacobian_INS(phys, t, U, U_t, shift, Amat, Pmat));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
