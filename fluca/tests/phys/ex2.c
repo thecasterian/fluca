@@ -7,7 +7,7 @@ static const char help[] = "Verify PhysComputeIFunction vanishes near the manufa
                            "  u = -cos(pi*x)*sin(pi*y)\n"
                            "  v = sin(pi*x)*cos(pi*y)\n"
                            "  p = -(cos(2*pi*x) + cos(2*pi*y))/4\n"
-                           "Full NS body force: f = (u.grad)u - mu*nabla^2(u) + (1/rho)*grad(p)\n"
+                           "Full NS body force: f = rho*(u.grad)u - mu*nabla^2(u) + grad(p)\n"
                            "  Convection and pressure gradient cancel for this solution.\n"
                            "  f_x = -2*pi^2*cos(pi*x)*sin(pi*y)\n"
                            "  f_y =  2*pi^2*sin(pi*x)*cos(pi*y)\n"
@@ -38,9 +38,9 @@ static PetscErrorCode BCVelocity(PetscInt dim, const PetscReal x[], PetscInt com
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Full NS body force: f = (u.grad)u - mu*nabla^2(u) + (1/rho)*grad(p) with mu=rho=1.
-   For this Taylor-Green solution, the convection term (u.grad)u and the pressure gradient
-   (1/rho)*grad(p) cancel exactly, leaving only the viscous contribution. */
+/* Full NS body force: f = rho*(u.grad)u - mu*nabla^2(u) + grad(p) with mu=rho=1.
+   For this Taylor-Green solution, the convection term rho*(u.grad)u and the pressure gradient
+   grad(p) cancel exactly, leaving only the viscous contribution. */
 static PetscErrorCode BodyForce(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar f[], void *ctx)
 {
   PetscReal pi = PETSC_PI;

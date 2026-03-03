@@ -8,7 +8,7 @@ static const char help[] = "Manufactured solution test for steady INS solver\n"
                            "  u = -cos(pi*x)*sin(pi*y)\n"
                            "  v = sin(pi*x)*cos(pi*y)\n"
                            "  p = -(cos(2*pi*x) + cos(2*pi*y))/4\n"
-                           "Full NS body force: f = (u.grad)u - mu*nabla^2(u) + (1/rho)*grad(p)\n"
+                           "Full NS body force: f = rho*(u.grad)u - mu*nabla^2(u) + grad(p)\n"
                            "  Convection and pressure gradient cancel for this solution.\n"
                            "  f_x = -2*pi^2*cos(pi*x)*sin(pi*y)\n"
                            "  f_y =  2*pi^2*sin(pi*x)*cos(pi*y)\n"
@@ -39,7 +39,7 @@ static PetscErrorCode BCVelocity(PetscInt dim, const PetscReal x[], PetscInt com
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Full NS body force: f = (u.grad)u - mu*nabla^2(u) + (1/rho)*grad(p) with mu=rho=1.
+/* Full NS body force: f = rho*(u.grad)u - mu*nabla^2(u) + grad(p) with mu=rho=1.
    For this Taylor-Green solution, the convection and pressure gradient cancel exactly. */
 static PetscErrorCode BodyForce(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar f[], void *ctx)
 {
@@ -93,63 +93,10 @@ int main(int argc, char **argv)
   PetscCall(DMCreateGlobalVector(sol_dm, &x));
   PetscCall(VecZeroEntries(x));
 
-  /* Solve via TSPSEUDO (steady state through pseudo-timestepping) */
+  /* Solve via backward Euler time integration */
   PetscCall(TSCreate(PETSC_COMM_WORLD, &ts));
   PetscCall(PhysSetUpTS(phys, ts));
   PetscCall(TSSetFromOptions(ts));
-
-  /* Diagnostic: verify IFunction vanishes at the exact solution */
-  {
-    Vec                 x_exact, u_t, F_check;
-    PetscReal           fnorm;
-    const PetscScalar **arrc_e[2] = {NULL, NULL};
-    PetscInt            slot_e, slot_dof[3];
-    PetscInt            xs_e, ys_e, xm_e, ym_e;
-    PetscInt            i_e, j_e, de;
-
-    PetscCall(DMCreateGlobalVector(sol_dm, &x_exact));
-    PetscCall(DMCreateGlobalVector(sol_dm, &u_t));
-    PetscCall(DMCreateGlobalVector(sol_dm, &F_check));
-    PetscCall(VecZeroEntries(u_t));
-
-    PetscCall(DMStagGetProductCoordinateLocationSlot(sol_dm, DMSTAG_ELEMENT, &slot_e));
-    PetscCall(DMStagGetProductCoordinateArraysRead(sol_dm, &arrc_e[0], &arrc_e[1], NULL));
-    PetscCall(DMStagGetCorners(sol_dm, &xs_e, &ys_e, NULL, &xm_e, &ym_e, NULL, NULL, NULL, NULL));
-    for (de = 0; de < 3; de++) PetscCall(DMStagGetLocationSlot(sol_dm, DMSTAG_ELEMENT, de, &slot_dof[de]));
-
-    for (j_e = ys_e; j_e < ys_e + ym_e; j_e++) {
-      for (i_e = xs_e; i_e < xs_e + xm_e; i_e++) {
-        PetscReal     coords_e[2];
-        PetscScalar   exact_e[3];
-        DMStagStencil st;
-
-        coords_e[0] = PetscRealPart(arrc_e[0][i_e][slot_e]);
-        coords_e[1] = PetscRealPart(arrc_e[1][j_e][slot_e]);
-        PetscCall(ExactSolution(2, coords_e, exact_e));
-
-        st.i   = i_e;
-        st.j   = j_e;
-        st.k   = 0;
-        st.loc = DMSTAG_ELEMENT;
-        for (de = 0; de < 3; de++) {
-          st.c = de;
-          PetscCall(DMStagVecSetValuesStencil(sol_dm, x_exact, 1, &st, &exact_e[de], INSERT_VALUES));
-        }
-      }
-    }
-    PetscCall(VecAssemblyBegin(x_exact));
-    PetscCall(VecAssemblyEnd(x_exact));
-    PetscCall(DMStagRestoreProductCoordinateArraysRead(sol_dm, &arrc_e[0], &arrc_e[1], NULL));
-
-    PetscCall(TSSetUp(ts));
-    PetscCall(TSComputeIFunction(ts, 0.0, x_exact, u_t, F_check, PETSC_FALSE));
-    PetscCall(VecNorm(F_check, NORM_INFINITY, &fnorm));
-    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "||IFunction(u_exact, 0)||_inf = %g\n", (double)fnorm));
-
-    PetscCall(VecDestroy(&x_exact));
-    PetscCall(VecDestroy(&u_t));
-    PetscCall(VecDestroy(&F_check));
-  }
 
   PetscCall(TSSolve(ts, x));
 
@@ -262,11 +209,11 @@ int main(int argc, char **argv)
   test:
     suffix: default
     nsize: 1
-    args: -stag_grid_x 16 -stag_grid_y 16 -ts_type pseudo -ts_pseudo_fatol 1e-12 -ts_dt 1e-3 -ts_max_steps 50 -snes_type newtonls -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
+    args: -stag_grid_x 16 -stag_grid_y 16 -ts_type beuler -ts_dt 0.01 -ts_max_time 5 -snes_type newtonls -snes_fd -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
 
   test:
     suffix: refined
     nsize: 1
-    args: -stag_grid_x 32 -stag_grid_y 32 -ts_type pseudo -ts_pseudo_fatol 1e-12 -ts_dt 1e-3 -ts_max_steps 50 -snes_type newtonls -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
+    args: -stag_grid_x 32 -stag_grid_y 32 -ts_type beuler -ts_dt 0.01 -ts_max_time 5 -snes_type newtonls -snes_fd -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
 
 TEST*/

@@ -33,7 +33,7 @@ static PetscErrorCode BCVelocity(PetscInt dim, const PetscReal x[], PetscInt com
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Full NS body force: f = (u.grad)u - mu*nabla^2(u) + (1/rho)*grad(p)
+/* Full NS body force: f = rho*(u.grad)u - mu*nabla^2(u) + grad(p)
    For u=(y,-x), p=0, mu=rho=1: f = (-x, -y) + 0 + 0 = (-x, -y) */
 static PetscErrorCode BodyForce(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar f[], void *ctx)
 {

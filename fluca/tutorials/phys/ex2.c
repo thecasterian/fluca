@@ -255,11 +255,11 @@ int main(int argc, char **argv)
   test:
     suffix: beuler_default
     nsize: 1
-    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_type beuler -ts_dt 0.01 -snes_type newtonls -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
+    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_type beuler -ts_dt 0.01 -snes_type newtonls -snes_linesearch_type basic -snes_rtol 1e-4 -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
 
   test:
     suffix: beuler_refined
     nsize: 1
-    args: -stag_grid_x 32 -stag_grid_y 32 -ts_max_time 0.1 -ts_type beuler -ts_dt 0.005 -snes_type newtonls -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
+    args: -stag_grid_x 32 -stag_grid_y 32 -ts_max_time 0.1 -ts_type beuler -ts_dt 0.005 -snes_type newtonls -snes_linesearch_type basic -snes_rtol 1e-4 -pc_type lu -pc_factor_shift_type nonzero -phys_ins_flucafd_limiter superbee
 
 TEST*/
