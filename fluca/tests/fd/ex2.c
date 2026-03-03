@@ -62,7 +62,7 @@ int main(int argc, char **argv)
   for (c = 0; c < ncols; ++c) {
     if (col[c].c < 0)
       PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", j=%" PetscInt_FMT ", k=%" PetscInt_FMT ", loc=%s, c=%s_boundary, v=%g\n", c, col[c].i, col[c].j, col[c].k, DMStagStencilLocations[col[c].loc],
-                            FlucaFDBoundaryNames[-col[c].c - 1], v[c]));
+                            FlucaFDBoundaryNames[FLUCAFD_BOUNDARY_FACE(col[c].c)], v[c]));
     else
       PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", j=%" PetscInt_FMT ", k=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g\n", c, col[c].i, col[c].j, col[c].k, DMStagStencilLocations[col[c].loc], col[c].c, v[c]));
   }

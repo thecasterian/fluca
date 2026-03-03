@@ -179,10 +179,10 @@ static PetscErrorCode ComputeFaceCenteredGradient_Private(FlucaFD fd, PetscInt i
       default:
         SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
       }
-    } else if (FLUCAFD_BOUNDARY_FRONT <= col[c].c && col[c].c <= FLUCAFD_BOUNDARY_LEFT) {
+    } else if (col[c].c != FLUCAFD_CONSTANT) {
       /* Boundary value */
-      bnd_idx = -col[c].c - 1;
-      PetscCall(FlucaFDGetBoundaryValue_Internal(fd, bnd_idx, i, j, k, fd->output_loc, &bnd_val));
+      bnd_idx = FLUCAFD_BOUNDARY_FACE(col[c].c);
+      PetscCall(FlucaFDGetBoundaryValue_Internal(fd, bnd_idx, FLUCAFD_BOUNDARY_COMP(col[c].c), i, j, k, fd->output_loc, &bnd_val));
       *grad += v[c] * bnd_val;
     } else {
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported stencil point");
@@ -217,9 +217,9 @@ static PetscErrorCode ComputeCellCenteredPhi_Private(FlucaFD fd, PetscInt i, Pet
       default:
         SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
       }
-    } else if (FLUCAFD_BOUNDARY_FRONT <= col[c].c && col[c].c <= FLUCAFD_BOUNDARY_LEFT) {
-      bnd_idx = -col[c].c - 1;
-      PetscCall(FlucaFDGetBoundaryValue_Internal(fd, bnd_idx, i, j, k, fd->input_loc, &bnd_val));
+    } else if (col[c].c != FLUCAFD_CONSTANT) {
+      bnd_idx = FLUCAFD_BOUNDARY_FACE(col[c].c);
+      PetscCall(FlucaFDGetBoundaryValue_Internal(fd, bnd_idx, FLUCAFD_BOUNDARY_COMP(col[c].c), i, j, k, fd->input_loc, &bnd_val));
       *phi += v[c] * bnd_val;
     } else {
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported stencil point");

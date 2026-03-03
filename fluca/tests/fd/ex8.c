@@ -6,7 +6,7 @@ static const char help[] = "Test FlucaFDApply with spatially varying boundary co
                            "Domain: [0,1] x [0,1], f(x,y) = x*y, df/dx = y\n";
 
 /* Boundary condition callback: returns f(x,y) = x*y at boundary face center */
-static PetscErrorCode BCCallback(PetscInt dim, const PetscReal x[], PetscScalar *val, void *ctx)
+static PetscErrorCode BCCallback(PetscInt dim, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx)
 {
   PetscFunctionBeginUser;
   *val = x[0] * x[1];

@@ -100,9 +100,9 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
             result += v[c];
           } else {
             /* Boundary point: coefficient * boundary value */
-            bnd_idx = -col[c].c - 1;
+            bnd_idx = FLUCAFD_BOUNDARY_FACE(col[c].c);
             PetscCheck(bnd_idx >= 0 && bnd_idx < 2 * FLUCAFD_MAX_DIM, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Invalid boundary marker %" PetscInt_FMT " in stencil", col[c].c);
-            PetscCall(FlucaFDGetBoundaryValue_Internal(fd, bnd_idx, i, j, k, fd->output_loc, &bnd_val));
+            PetscCall(FlucaFDGetBoundaryValue_Internal(fd, bnd_idx, FLUCAFD_BOUNDARY_COMP(col[c].c), i, j, k, fd->output_loc, &bnd_val));
             result += v[c] * bnd_val;
           }
         }

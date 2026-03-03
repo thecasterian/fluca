@@ -34,8 +34,9 @@ typedef enum {
 } FlucaFDBoundaryConditionType;
 FLUCA_EXTERN const char *FlucaFDBoundaryConditionTypes[];
 
-/* Callback for spatially varying boundary conditions */
-typedef PetscErrorCode FlucaFDBoundaryConditionFn(PetscInt dim, const PetscReal x[], PetscScalar *val, void *ctx);
+/* Callback for spatially varying boundary conditions.
+   comp is the source DOF component of the off-grid stencil point. */
+typedef PetscErrorCode FlucaFDBoundaryConditionFn(PetscInt dim, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx);
 
 typedef struct {
   FlucaFDBoundaryConditionType type;
@@ -44,15 +45,23 @@ typedef struct {
   void                        *ctx;   /* callback context */
 } FlucaFDBoundaryCondition;
 
-/* Boundary value component markers for stencil points */
-#define FLUCAFD_BOUNDARY_LEFT  (-1)
-#define FLUCAFD_BOUNDARY_RIGHT (-2)
-#define FLUCAFD_BOUNDARY_DOWN  (-3)
-#define FLUCAFD_BOUNDARY_UP    (-4)
-#define FLUCAFD_BOUNDARY_BACK  (-5)
-#define FLUCAFD_BOUNDARY_FRONT (-6)
-/* Constant term marker for stencil points */
-#define FLUCAFD_CONSTANT (-7)
+/* Boundary marker encoding: packs face index and source component into col[c].c.
+   Face index ∈ [0, NFACES-1], comp ≥ 0.
+   For single-component operators (comp=0), markers are -1..-6 (backward compatible). */
+#define FLUCAFD_NFACES                      6 /* 2 faces per dimension, max 3 dimensions */
+#define FLUCAFD_BOUNDARY_MARKER(face, comp) (-(1 + (face) + FLUCAFD_NFACES * (comp)))
+#define FLUCAFD_BOUNDARY_FACE(marker)       ((-(marker)-1) % FLUCAFD_NFACES)
+#define FLUCAFD_BOUNDARY_COMP(marker)       ((-(marker)-1) / FLUCAFD_NFACES)
+
+#define FLUCAFD_BOUNDARY_LEFT  FLUCAFD_BOUNDARY_MARKER(0, 0) /* -1 */
+#define FLUCAFD_BOUNDARY_RIGHT FLUCAFD_BOUNDARY_MARKER(1, 0) /* -2 */
+#define FLUCAFD_BOUNDARY_DOWN  FLUCAFD_BOUNDARY_MARKER(2, 0) /* -3 */
+#define FLUCAFD_BOUNDARY_UP    FLUCAFD_BOUNDARY_MARKER(3, 0) /* -4 */
+#define FLUCAFD_BOUNDARY_BACK  FLUCAFD_BOUNDARY_MARKER(4, 0) /* -5 */
+#define FLUCAFD_BOUNDARY_FRONT FLUCAFD_BOUNDARY_MARKER(5, 0) /* -6 */
+
+/* Constant term marker for stencil points (must not collide with boundary markers) */
+#define FLUCAFD_CONSTANT PETSC_MIN_INT
 
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate(MPI_Comm, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetType(FlucaFD, FlucaFDType);

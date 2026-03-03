@@ -77,7 +77,7 @@ PetscErrorCode FlucaFDGetGhostCorners_Internal(FlucaFD fd, PetscInt dir, PetscBo
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDGetBoundaryValue_Internal(FlucaFD fd, PetscInt bnd_idx, PetscInt i, PetscInt j, PetscInt k, DMStagStencilLocation loc, PetscScalar *val)
+PetscErrorCode FlucaFDGetBoundaryValue_Internal(FlucaFD fd, PetscInt bnd_idx, PetscInt comp, PetscInt i, PetscInt j, PetscInt k, DMStagStencilLocation loc, PetscScalar *val)
 {
   PetscFunctionBegin;
   PetscCheck(bnd_idx >= 0 && bnd_idx < 2 * FLUCAFD_MAX_DIM, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Invalid boundary index %" PetscInt_FMT, bnd_idx);
@@ -99,7 +99,7 @@ PetscErrorCode FlucaFDGetBoundaryValue_Internal(FlucaFD fd, PetscInt bnd_idx, Pe
         bnd_coords[d] = PetscRealPart(fd->arr_coord[d][idx_d][slot]);
       }
     }
-    PetscCall(fd->bcs[bnd_idx].fn(fd->dim, bnd_coords, val, fd->bcs[bnd_idx].ctx));
+    PetscCall(fd->bcs[bnd_idx].fn(fd->dim, bnd_coords, comp, val, fd->bcs[bnd_idx].ctx));
   } else {
     *val = fd->bcs[bnd_idx].value;
   }
@@ -414,7 +414,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
         new_col.j = (off_dir == 1) ? bnd_idx : off_col.j;
         new_col.k = (off_dir == 2) ? bnd_idx : off_col.k;
         PetscCall(GetBoundaryStencilLocation_Private(off_col.loc, off_dir, &new_col.loc));
-        new_col.c = -(2 * off_dir + (is_low ? 1 : 2)); /* Boundary value marker: -1=left, -2=right, -3=down, -4=up, -5=back, -6=front */
+        new_col.c = FLUCAFD_BOUNDARY_MARKER(2 * off_dir + (is_low ? 0 : 1), off_col.c);
         PetscCall(FlucaFDAddStencilPoint_Internal(new_col, off_v * extrap_coeffs[0], ncols, col, v));
 
         /* Add on-grid points to stencil */
@@ -460,7 +460,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
         new_col.j = (off_dir == 1) ? bnd_idx : off_col.j;
         new_col.k = (off_dir == 2) ? bnd_idx : off_col.k;
         PetscCall(GetBoundaryStencilLocation_Private(off_col.loc, off_dir, &new_col.loc));
-        new_col.c = -(2 * off_dir + (is_low ? 1 : 2)); /* Boundary value marker: -1=left, -2=right, -3=down, -4=up, -5=back, -6=front */
+        new_col.c = FLUCAFD_BOUNDARY_MARKER(2 * off_dir + (is_low ? 0 : 1), off_col.c);
         PetscCall(FlucaFDAddStencilPoint_Internal(new_col, off_v / a_off, ncols, col, v));
 
         /* Add on-grid points to stencil */

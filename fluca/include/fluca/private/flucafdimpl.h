@@ -161,7 +161,7 @@ FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(DMStagStencil, Petsc
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt *, DMStagStencil[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, DMStagStencil[], PetscScalar[]);
 
-FLUCA_INTERN PetscErrorCode FlucaFDGetBoundaryValue_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt, DMStagStencilLocation, PetscScalar *);
+FLUCA_INTERN PetscErrorCode FlucaFDGetBoundaryValue_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, DMStagStencilLocation, PetscScalar *);
 
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDuplicate_Internal(FlucaFDTermLink, FlucaFDTermLink *);
