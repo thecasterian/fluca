@@ -93,7 +93,6 @@ PetscErrorCode PhysCreate_INS(Phys phys)
   for (f = 0; f < PHYS_INS_MAX_DIM; f++) {
     ins->fd_laplacian[f]   = NULL;
     ins->fd_grad_p[f]      = NULL;
-    ins->fd_rho_div_d[f]   = NULL;
     ins->fd_conv[f]        = NULL;
     ins->fd_interp[f]      = NULL;
     ins->dm_face[f]        = NULL;
@@ -104,6 +103,7 @@ PetscErrorCode PhysCreate_INS(Phys phys)
       ins->fd_conv_comp[f][g] = NULL;
     }
   }
+  ins->fd_div              = NULL;
   ins->fd_pstab            = NULL;
   ins->J                   = NULL;
   ins->is_vel              = NULL;
