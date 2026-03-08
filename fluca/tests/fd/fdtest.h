@@ -3,17 +3,23 @@
 #include <petscdmstag.h>
 #include <flucafd.h>
 
-/* Boundary names for printing (indexed by -c - 1) */
+/* Boundary face names for printing (indexed by boundary_face) */
 static const char *const FlucaFDBoundaryNames[] = {"left", "right", "down", "up", "back", "front"};
 
-static int CompareDMStagStencil(const void *a, const void *b, void *ctx)
+static int CompareFlucaFDStencilPoint(const void *a, const void *b, void *ctx)
 {
-  const DMStagStencil *sa = (const DMStagStencil *)a;
-  const DMStagStencil *sb = (const DMStagStencil *)b;
+  const FlucaFDStencilPoint *sa = (const FlucaFDStencilPoint *)a;
+  const FlucaFDStencilPoint *sb = (const FlucaFDStencilPoint *)b;
 
-  /* Boundary value markers (c < 0) go to the end */
-  if (sa->c < 0 && sb->c >= 0) return 1;
-  if (sa->c >= 0 && sb->c < 0) return -1;
+  /* Grid points first, then boundary, then constant */
+  if (sa->type != sb->type) {
+    if (sa->type == FLUCAFD_STENCIL_GRID) return -1;
+    if (sb->type == FLUCAFD_STENCIL_GRID) return 1;
+    if (sa->type == FLUCAFD_STENCIL_BOUNDARY) return -1;
+    if (sb->type == FLUCAFD_STENCIL_BOUNDARY) return 1;
+  }
+
+  if (sa->type == FLUCAFD_STENCIL_CONSTANT) return 0;
 
   if (sa->c < sb->c) return -1;
   if (sa->c > sb->c) return 1;
@@ -30,12 +36,17 @@ static int CompareDMStagStencil(const void *a, const void *b, void *ctx)
   if (sa->k < sb->k) return -1;
   if (sa->k > sb->k) return 1;
 
+  if (sa->type == FLUCAFD_STENCIL_BOUNDARY) {
+    if (sa->boundary_face < sb->boundary_face) return -1;
+    if (sa->boundary_face > sb->boundary_face) return 1;
+  }
+
   return 0;
 }
 
-static PetscErrorCode SortStencil(PetscInt ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode SortStencil(PetscInt ncols, FlucaFDStencilPoint points[])
 {
   PetscFunctionBegin;
-  if (ncols > 0) PetscCall(PetscTimSortWithArray(ncols, col, sizeof(DMStagStencil), v, sizeof(PetscScalar), CompareDMStagStencil, NULL));
+  if (ncols > 0) PetscCall(PetscTimSort(ncols, points, sizeof(FlucaFDStencilPoint), CompareFlucaFDStencilPoint, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

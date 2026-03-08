@@ -45,28 +45,31 @@ static PetscErrorCode FlucaFDSetUp_Composition(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, FlucaFDStencilPoint points[])
 {
   FlucaFD_Composition *comp = (FlucaFD_Composition *)fd->data;
-  DMStagStencil        outer_col[FLUCAFD_MAX_STENCIL_SIZE];
-  DMStagStencil        inner_col[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscScalar          outer_v[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscScalar          inner_v[FLUCAFD_MAX_STENCIL_SIZE];
+  FlucaFDStencilPoint  outer_points[FLUCAFD_MAX_STENCIL_SIZE];
+  FlucaFDStencilPoint  inner_points[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt             outer_ncols, inner_ncols;
   PetscInt             oc, ic;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencilRaw(comp->outer, i, j, k, &outer_ncols, outer_col, outer_v));
+  PetscCall(FlucaFDGetStencilRaw(comp->outer, i, j, k, &outer_ncols, outer_points));
 
   *ncols = 0;
   for (oc = 0; oc < outer_ncols; oc++) {
-    if (outer_col[oc].c < 0) {
+    if (outer_points[oc].type != FLUCAFD_STENCIL_GRID) {
       /* Constant or boundary marker from outer; pass through directly */
-      PetscCall(FlucaFDAddStencilPoint_Internal(outer_col[oc], outer_v[oc], ncols, col, v));
+      PetscCall(FlucaFDAddStencilPoint_Internal(&outer_points[oc], ncols, points));
       continue;
     }
-    PetscCall(FlucaFDGetStencilRaw(comp->inner, outer_col[oc].i, outer_col[oc].j, outer_col[oc].k, &inner_ncols, inner_col, inner_v));
-    for (ic = 0; ic < inner_ncols; ic++) PetscCall(FlucaFDAddStencilPoint_Internal(inner_col[ic], outer_v[oc] * inner_v[ic], ncols, col, v));
+    PetscCall(FlucaFDGetStencilRaw(comp->inner, outer_points[oc].i, outer_points[oc].j, outer_points[oc].k, &inner_ncols, inner_points));
+    for (ic = 0; ic < inner_ncols; ic++) {
+      FlucaFDStencilPoint scaled = inner_points[ic];
+
+      scaled.v *= outer_points[oc].v;
+      PetscCall(FlucaFDAddStencilPoint_Internal(&scaled, ncols, points));
+    }
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -13,13 +13,12 @@ static PetscErrorCode FillScaleVector(DM, Vec);
 
 int main(int argc, char **argv)
 {
-  DM            dm;
-  FlucaFD       fd_deriv, fd_scale;
-  PetscBool     is_constant;
-  Vec           vec;
-  PetscInt      M, idx, c, ncols;
-  DMStagStencil col[16];
-  PetscScalar   v[16];
+  DM                  dm;
+  FlucaFD             fd_deriv, fd_scale;
+  PetscBool           is_constant;
+  Vec                 vec;
+  PetscInt            M, idx, c, ncols;
+  FlucaFDStencilPoint points[16];
 
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
@@ -56,13 +55,14 @@ int main(int argc, char **argv)
   idx = M / 2;
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-i", &idx, NULL));
 
-  PetscCall(FlucaFDGetStencil(fd_scale, idx, 0, 0, &ncols, col, v));
-  PetscCall(SortStencil(ncols, col, v));
+  PetscCall(FlucaFDGetStencil(fd_scale, idx, 0, 0, &ncols, points));
+  PetscCall(SortStencil(ncols, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Scaled stencil at i=%" PetscInt_FMT ":\n", idx));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  ncols = %" PetscInt_FMT "\n", ncols));
   for (c = 0; c < ncols; ++c) {
-    if (col[c].c < 0) PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%s_boundary, v=%g\n", c, col[c].i, DMStagStencilLocations[col[c].loc], FlucaFDBoundaryNames[-col[c].c - 1], v[c]));
-    else PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g\n", c, col[c].i, DMStagStencilLocations[col[c].loc], col[c].c, v[c]));
+    if (points[c].type == FLUCAFD_STENCIL_BOUNDARY)
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%s_boundary, v=%g\n", c, points[c].i, DMStagStencilLocations[points[c].loc], FlucaFDBoundaryNames[points[c].boundary_face], points[c].v));
+    else PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g\n", c, points[c].i, DMStagStencilLocations[points[c].loc], points[c].c, points[c].v));
   }
 
   PetscCall(VecDestroy(&vec));

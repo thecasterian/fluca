@@ -72,14 +72,14 @@ static PetscErrorCode FlucaFDSetUp_Scale(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, FlucaFDStencilPoint points[])
 {
   FlucaFD_Scale *scale = (FlucaFD_Scale *)fd->data;
   PetscInt       n;
   PetscScalar    scale_value;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, ncols, col, v));
+  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, ncols, points));
 
   if (scale->is_constant) {
     scale_value = scale->constant;
@@ -99,7 +99,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscIn
     }
   }
 
-  for (n = 0; n < *ncols; n++) v[n] *= scale_value;
+  for (n = 0; n < *ncols; n++) points[n].v *= scale_value;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

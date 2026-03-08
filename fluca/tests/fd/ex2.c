@@ -12,12 +12,11 @@ static const char help[] = "Test FlucaFD sum operator\n"
 
 int main(int argc, char **argv)
 {
-  DM            dm;
-  FlucaFD       fd_deriv[3], fd_sum;
-  PetscInt      c, d, ncols;
-  PetscInt      N[3], idx[3];
-  DMStagStencil col[64];
-  PetscScalar   v[64];
+  DM                  dm;
+  FlucaFD             fd_deriv[3], fd_sum;
+  PetscInt            c, d, ncols;
+  PetscInt            N[3], idx[3];
+  FlucaFDStencilPoint points[64];
 
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
@@ -55,16 +54,17 @@ int main(int argc, char **argv)
     PetscCall(PetscOptionsGetInt(NULL, NULL, opt, &idx[d], NULL));
   }
 
-  PetscCall(FlucaFDGetStencil(fd_sum, idx[0], idx[1], idx[2], &ncols, col, v));
-  PetscCall(SortStencil(ncols, col, v));
+  PetscCall(FlucaFDGetStencil(fd_sum, idx[0], idx[1], idx[2], &ncols, points));
+  PetscCall(SortStencil(ncols, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Sum stencil at (i,j,k)=(%" PetscInt_FMT ",%" PetscInt_FMT ",%" PetscInt_FMT "):\n", idx[0], idx[1], idx[2]));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  ncols = %" PetscInt_FMT "\n", ncols));
   for (c = 0; c < ncols; ++c) {
-    if (col[c].c < 0)
-      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", j=%" PetscInt_FMT ", k=%" PetscInt_FMT ", loc=%s, c=%s_boundary, v=%g\n", c, col[c].i, col[c].j, col[c].k, DMStagStencilLocations[col[c].loc],
-                            FlucaFDBoundaryNames[-col[c].c - 1], v[c]));
+    if (points[c].type == FLUCAFD_STENCIL_BOUNDARY)
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", j=%" PetscInt_FMT ", k=%" PetscInt_FMT ", loc=%s, c=%s_boundary, v=%g\n", c, points[c].i, points[c].j, points[c].k, DMStagStencilLocations[points[c].loc],
+                            FlucaFDBoundaryNames[points[c].boundary_face], points[c].v));
     else
-      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", j=%" PetscInt_FMT ", k=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g\n", c, col[c].i, col[c].j, col[c].k, DMStagStencilLocations[col[c].loc], col[c].c, v[c]));
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", j=%" PetscInt_FMT ", k=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g\n", c, points[c].i, points[c].j, points[c].k, DMStagStencilLocations[points[c].loc],
+                            points[c].c, points[c].v));
   }
 
   PetscCall(FlucaFDDestroy(&fd_sum));

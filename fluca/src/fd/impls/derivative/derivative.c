@@ -60,11 +60,14 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
 
     deriv->ncols = stencil_size;
     for (c = 0; c < stencil_size; ++c) {
-      deriv->col[c].i   = (deriv->dir == FLUCAFD_X) ? (offset_start + c) : 0;
-      deriv->col[c].j   = (deriv->dir == FLUCAFD_Y) ? (offset_start + c) : 0;
-      deriv->col[c].k   = (deriv->dir == FLUCAFD_Z) ? (offset_start + c) : 0;
-      deriv->col[c].c   = fd->input_c;
-      deriv->col[c].loc = fd->input_loc;
+      deriv->col[c].type          = FLUCAFD_STENCIL_GRID;
+      deriv->col[c].loc           = fd->input_loc;
+      deriv->col[c].i             = (deriv->dir == FLUCAFD_X) ? (offset_start + c) : 0;
+      deriv->col[c].j             = (deriv->dir == FLUCAFD_Y) ? (offset_start + c) : 0;
+      deriv->col[c].k             = (deriv->dir == FLUCAFD_Z) ? (offset_start + c) : 0;
+      deriv->col[c].c             = fd->input_c;
+      deriv->col[c].boundary_face = 0;
+      deriv->col[c].v             = 0.;
     }
 
     /* Allocate coefficient arrays */
@@ -121,10 +124,11 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_Derivative(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode FlucaFDGetStencilRaw_Derivative(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, FlucaFDStencilPoint points[])
 {
   FlucaFD_Derivative *deriv = (FlucaFD_Derivative *)fd->data;
   PetscInt            c, idx;
+  const PetscScalar  *coeff_v;
 
   PetscFunctionBegin;
   switch (deriv->dir) {
@@ -142,16 +146,17 @@ static PetscErrorCode FlucaFDGetStencilRaw_Derivative(FlucaFD fd, PetscInt i, Pe
   }
 
   *ncols = deriv->ncols;
-  PetscCall(PetscArraycpy(col, deriv->col, *ncols));
-  if (idx < deriv->v_start) PetscCall(PetscArraycpy(v, deriv->v_prev, deriv->ncols));
-  else if (idx >= deriv->v_end) PetscCall(PetscArraycpy(v, deriv->v_next, deriv->ncols));
-  else PetscCall(PetscArraycpy(v, deriv->v[idx], deriv->ncols));
+  PetscCall(PetscArraycpy(points, deriv->col, *ncols));
+  if (idx < deriv->v_start) coeff_v = deriv->v_prev;
+  else if (idx >= deriv->v_end) coeff_v = deriv->v_next;
+  else coeff_v = deriv->v[idx];
 
-  /* Add the actual position to relative indices */
+  /* Add the actual position to relative indices and fill coefficients */
   for (c = 0; c < *ncols; ++c) {
-    col[c].i += i;
-    col[c].j += j;
-    col[c].k += k;
+    points[c].i += i;
+    points[c].j += j;
+    points[c].k += k;
+    points[c].v = coeff_v[c];
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

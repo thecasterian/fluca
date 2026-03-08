@@ -19,8 +19,7 @@ int main(int argc, char **argv)
   Vec                 phi_local, vel_local;
   const PetscScalar **arr_coord;
   PetscInt            slot_coord_elem;
-  DMStagStencil       col[64];
-  PetscScalar         v[64];
+  FlucaFDStencilPoint points[64];
 
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
@@ -112,14 +111,15 @@ int main(int argc, char **argv)
   idx = M / 2;
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-i", &idx, NULL));
 
-  PetscCall(FlucaFDGetStencil(fd_tvd, idx, 0, 0, &ncols, col, v));
-  PetscCall(SortStencil(ncols, col, v));
+  PetscCall(FlucaFDGetStencil(fd_tvd, idx, 0, 0, &ncols, points));
+  PetscCall(SortStencil(ncols, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Stencil at i=%" PetscInt_FMT ":\n", idx));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  ncols = %" PetscInt_FMT "\n", ncols));
   for (c = 0; c < ncols; ++c) {
-    if (col[c].c == FLUCAFD_CONSTANT) PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: constant, v=%g\n", c, v[c]));
-    else if (col[c].c < 0) PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%s_boundary, v=%g\n", c, col[c].i, DMStagStencilLocations[col[c].loc], FlucaFDBoundaryNames[-col[c].c - 1], v[c]));
-    else PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g\n", c, col[c].i, DMStagStencilLocations[col[c].loc], col[c].c, v[c]));
+    if (points[c].type == FLUCAFD_STENCIL_CONSTANT) PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: constant, v=%g\n", c, points[c].v));
+    else if (points[c].type == FLUCAFD_STENCIL_BOUNDARY)
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%s_boundary, v=%g\n", c, points[c].i, DMStagStencilLocations[points[c].loc], FlucaFDBoundaryNames[points[c].boundary_face], points[c].v));
+    else PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g\n", c, points[c].i, DMStagStencilLocations[points[c].loc], points[c].c, points[c].v));
   }
 
   PetscCall(FlucaFDDestroy(&fd_tvd));

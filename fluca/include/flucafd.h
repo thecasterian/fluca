@@ -39,15 +39,21 @@ typedef struct {
   PetscScalar                  value; /* for Dirichlet/Neumann boundary conditions */
 } FlucaFDBoundaryCondition;
 
-/* Boundary value component markers for stencil points */
-#define FLUCAFD_BOUNDARY_LEFT  (-1)
-#define FLUCAFD_BOUNDARY_RIGHT (-2)
-#define FLUCAFD_BOUNDARY_DOWN  (-3)
-#define FLUCAFD_BOUNDARY_UP    (-4)
-#define FLUCAFD_BOUNDARY_BACK  (-5)
-#define FLUCAFD_BOUNDARY_FRONT (-6)
-/* Constant term marker for stencil points */
-#define FLUCAFD_CONSTANT (-7)
+/* Stencil point types */
+typedef enum {
+  FLUCAFD_STENCIL_GRID,
+  FLUCAFD_STENCIL_BOUNDARY,
+  FLUCAFD_STENCIL_CONSTANT,
+} FlucaFDStencilPointType;
+
+typedef struct {
+  FlucaFDStencilPointType type;
+  DMStagStencilLocation   loc;
+  PetscInt                i, j, k;
+  PetscInt                c;
+  PetscInt                boundary_face; /* 0=left,1=right,2=down,3=up,4=back,5=front */
+  PetscScalar             v;
+} FlucaFDStencilPoint;
 
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate(MPI_Comm, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetType(FlucaFD, FlucaFDType);
@@ -67,8 +73,8 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSetOptionsPrefix(FlucaFD, const char[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDAppendOptionsPrefix(FlucaFD, const char[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOptionsPrefix(FlucaFD, const char *[]);
 
-FLUCA_EXTERN PetscErrorCode FlucaFDGetStencilRaw(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, DMStagStencil[], PetscScalar[]);
-FLUCA_EXTERN PetscErrorCode FlucaFDGetStencil(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, DMStagStencil[], PetscScalar[]);
+FLUCA_EXTERN PetscErrorCode FlucaFDGetStencilRaw(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_EXTERN PetscErrorCode FlucaFDGetStencil(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDApply(FlucaFD, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperator(FlucaFD, DM, DM, Mat);
 
