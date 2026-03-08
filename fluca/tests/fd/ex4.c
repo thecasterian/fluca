@@ -108,4 +108,9 @@ int main(int argc, char **argv)
     nsize: 1
     args: -inner_flucafd_dir x -inner_flucafd_deriv_order 1 -inner_flucafd_accu_order 2 -outer_flucafd_dir y -outer_flucafd_deriv_order 1 -outer_flucafd_accu_order 2 -comp_flucafd_left_bc_type dirichlet -i 0
 
+  test:
+    suffix: xy_first_deriv_second_accuracy_left_bc_dirichlet_down_bc_dirichlet
+    nsize: 1
+    args: -inner_flucafd_dir x -inner_flucafd_deriv_order 1 -inner_flucafd_accu_order 2 -outer_flucafd_dir y -outer_flucafd_deriv_order 1 -outer_flucafd_accu_order 2 -comp_flucafd_left_bc_type dirichlet -comp_flucafd_down_bc_type dirichlet -i 0 -j 0
+
 TEST*/
