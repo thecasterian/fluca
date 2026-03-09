@@ -157,6 +157,7 @@ FLUCA_INTERN PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt, PetscSca
 FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(const FlucaFDStencilPoint *, PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_INTERN PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 
 /* Convert FlucaFDStencilPoint to DMStagStencil (for PETSc API calls) */
 #define FlucaFDStencilPointToStencil(pt, st) \

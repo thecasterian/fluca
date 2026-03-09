@@ -102,6 +102,23 @@ PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt n, PetscScalar A[], Pe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscBool FlucaFDScaleRefsSame_Private(const FlucaFDStencilPoint *a, const FlucaFDStencilPoint *b)
+{
+  PetscInt s;
+
+  if (a->nscales != b->nscales) return PETSC_FALSE;
+  for (s = 0; s < a->nscales; s++) {
+    const FlucaFDScaleRef *sa = &a->scales[s];
+    const FlucaFDScaleRef *sb = &b->scales[s];
+
+    if (sa->dim != sb->dim) return PETSC_FALSE;
+    if (sa->i != sb->i || sa->j != sb->j || sa->k != sb->k) return PETSC_FALSE;
+    /* Compare array pointer identity: same Vec local array means same scale Vec */
+    if (sa->arr_1d != sb->arr_1d || sa->arr_2d != sb->arr_2d || sa->arr_3d != sb->arr_3d) return PETSC_FALSE;
+  }
+  return PETSC_TRUE;
+}
+
 static PetscBool FlucaFDStencilPointsSame_Private(const FlucaFDStencilPoint *a, const FlucaFDStencilPoint *b)
 {
   if (a->type != b->type) return PETSC_FALSE;
@@ -109,9 +126,11 @@ static PetscBool FlucaFDStencilPointsSame_Private(const FlucaFDStencilPoint *a, 
   case FLUCAFD_STENCIL_CONSTANT:
     return PETSC_TRUE;
   case FLUCAFD_STENCIL_BOUNDARY:
-    return (a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc && a->boundary_face == b->boundary_face) ? PETSC_TRUE : PETSC_FALSE;
+    if (!(a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc && a->boundary_face == b->boundary_face)) return PETSC_FALSE;
+    return FlucaFDScaleRefsSame_Private(a, b);
   case FLUCAFD_STENCIL_GRID:
-    return (a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc) ? PETSC_TRUE : PETSC_FALSE;
+    if (!(a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc)) return PETSC_FALSE;
+    return FlucaFDScaleRefsSame_Private(a, b);
   }
   return PETSC_FALSE;
 }
@@ -295,7 +314,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
       PetscScalar                  extrap_coeffs[FLUCAFD_MAX_STENCIL_SIZE];
       PetscScalar                  A[FLUCAFD_MAX_STENCIL_SIZE * FLUCAFD_MAX_STENCIL_SIZE];
       PetscScalar                  b[FLUCAFD_MAX_STENCIL_SIZE];
-      FlucaFDStencilPoint          new_point;
+      FlucaFDStencilPoint          new_point = {0};
       PetscInt                     n, r;
 
       periodic = fd->periodic[off_dir];
@@ -503,6 +522,39 @@ PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *ncols, FlucaFDS
     }
   }
   *ncols = ncols_new;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt ncols, FlucaFDStencilPoint points[])
+{
+  PetscInt               n, s;
+  const FlucaFDScaleRef *ref;
+  PetscScalar            val;
+
+  PetscFunctionBegin;
+  for (n = 0; n < ncols; n++) {
+    for (s = 0; s < points[n].nscales; s++) {
+      ref = &points[n].scales[s];
+      /* Scale ref indices are set by GetStencilRaw_Scale at the evaluation position (i,j,k),
+         which is always within the DMDA local array bounds. Off-grid scale ref positions
+         are not yet handled (future work). */
+      switch (ref->dim) {
+      case 1:
+        val = ref->arr_1d[ref->i];
+        break;
+      case 2:
+        val = ref->arr_2d[ref->j][ref->i];
+        break;
+      case 3:
+        val = ref->arr_3d[ref->k][ref->j][ref->i];
+        break;
+      default:
+        SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported dim %" PetscInt_FMT " in scale ref", ref->dim);
+      }
+      points[n].v *= val;
+    }
+    points[n].nscales = 0;
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

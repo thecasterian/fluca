@@ -42,6 +42,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_Sum(FlucaFD fd, PetscInt i, PetscInt 
   PetscInt              c;
 
   PetscFunctionBegin;
+  PetscCall(PetscMemzero(op_points, sizeof(op_points)));
   *ncols = 0;
 
   for (op = sum->oplink; op != NULL; op = op->next) {

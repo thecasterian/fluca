@@ -46,6 +46,19 @@ typedef enum {
   FLUCAFD_STENCIL_CONSTANT,
 } FlucaFDStencilPointType;
 
+/* Deferred vector scale reference. Array pointers are borrowed from FlucaFD_Scale's
+   DMDA local vector and are valid only while the owning FlucaFD object is alive.
+   Stencil points with nscales > 0 must not be stored beyond the current call frame. */
+typedef struct {
+  PetscInt             dim;
+  PetscInt             i, j, k; /* position to evaluate scale vec */
+  const PetscScalar   *arr_1d;
+  const PetscScalar  **arr_2d;
+  const PetscScalar ***arr_3d;
+} FlucaFDScaleRef;
+
+#define FLUCAFD_MAX_SCALES 4
+
 typedef struct {
   FlucaFDStencilPointType type;
   DMStagStencilLocation   loc;
@@ -53,6 +66,8 @@ typedef struct {
   PetscInt                c;
   PetscInt                boundary_face; /* 0=left,1=right,2=down,3=up,4=back,5=front */
   PetscScalar             v;
+  PetscInt                nscales;
+  FlucaFDScaleRef         scales[FLUCAFD_MAX_SCALES];
 } FlucaFDStencilPoint;
 
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate(MPI_Comm, FlucaFD *);

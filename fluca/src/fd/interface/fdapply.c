@@ -32,11 +32,20 @@ PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt
 
 PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, FlucaFDStencilPoint points[])
 {
+  FlucaFDStencilPoint merged[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscInt            merged_ncols, c;
+
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   PetscAssertPointer(ncols, 5);
   PetscAssertPointer(points, 6);
   PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, ncols, points));
+  PetscCall(FlucaFDResolveScaleRefs_Internal(*ncols, points));
+  /* Re-merge points that are now identical after scale resolution */
+  merged_ncols = 0;
+  for (c = 0; c < *ncols; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&points[c], &merged_ncols, merged));
+  *ncols = merged_ncols;
+  PetscCall(PetscArraycpy(points, merged, merged_ncols));
   PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, ncols, points));
   PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(ncols, points));
   PetscFunctionReturn(PETSC_SUCCESS);

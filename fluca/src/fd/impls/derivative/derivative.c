@@ -68,6 +68,7 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
       deriv->col[c].c             = fd->input_c;
       deriv->col[c].boundary_face = 0;
       deriv->col[c].v             = 0.;
+      deriv->col[c].nscales       = 0;
     }
 
     /* Allocate coefficient arrays */

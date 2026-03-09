@@ -192,6 +192,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
   PetscBool               periodic, at_prev_boundary, at_next_boundary;
 
   PetscFunctionBegin;
+  PetscCall(PetscMemzero(points, FLUCAFD_MAX_STENCIL_SIZE * sizeof(FlucaFDStencilPoint)));
   switch (tvd->dir) {
   case FLUCAFD_X:
     idx = i;

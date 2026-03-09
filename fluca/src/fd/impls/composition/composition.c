@@ -50,8 +50,9 @@ static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, P
   FlucaFD_Composition *comp = (FlucaFD_Composition *)fd->data;
   FlucaFDStencilPoint  outer_points[FLUCAFD_MAX_STENCIL_SIZE];
   FlucaFDStencilPoint  inner_points[FLUCAFD_MAX_STENCIL_SIZE];
+  FlucaFDStencilPoint  scaled;
   PetscInt             outer_ncols, inner_ncols;
-  PetscInt             oc, ic;
+  PetscInt             oc, ic, s;
 
   PetscFunctionBegin;
   PetscCall(FlucaFDGetStencilRaw(comp->outer, i, j, k, &outer_ncols, outer_points));
@@ -65,9 +66,13 @@ static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, P
     }
     PetscCall(FlucaFDGetStencilRaw(comp->inner, outer_points[oc].i, outer_points[oc].j, outer_points[oc].k, &inner_ncols, inner_points));
     for (ic = 0; ic < inner_ncols; ic++) {
-      FlucaFDStencilPoint scaled = inner_points[ic];
-
+      scaled = inner_points[ic];
+      /* Multiply unresolved coefficient by outer's unresolved coefficient */
       scaled.v *= outer_points[oc].v;
+      /* Inherit scale refs from outer point (appended after inner's refs) */
+      PetscCheck(scaled.nscales + outer_points[oc].nscales <= FLUCAFD_MAX_SCALES, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Composition would exceed FLUCAFD_MAX_SCALES=%d scale refs", FLUCAFD_MAX_SCALES);
+      for (s = 0; s < outer_points[oc].nscales; s++) scaled.scales[scaled.nscales + s] = outer_points[oc].scales[s];
+      scaled.nscales += outer_points[oc].nscales;
       PetscCall(FlucaFDAddStencilPoint_Internal(&scaled, ncols, points));
     }
   }
