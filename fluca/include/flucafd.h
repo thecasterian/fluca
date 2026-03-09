@@ -50,11 +50,9 @@ typedef enum {
    DMDA local vector and are valid only while the owning FlucaFD object is alive.
    Stencil points with nscales > 0 must not be stored beyond the current call frame. */
 typedef struct {
-  PetscInt             dim;
-  PetscInt             i, j, k; /* position to evaluate scale vec */
-  const PetscScalar   *arr_1d;
-  const PetscScalar  **arr_2d;
-  const PetscScalar ***arr_3d;
+  PetscInt    dim;
+  PetscInt    i, j, k; /* position to evaluate scale vec */
+  const void *arr;
 } FlucaFDScaleRef;
 
 #define FLUCAFD_MAX_SCALES 4

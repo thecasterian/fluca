@@ -33,21 +33,21 @@ static PetscErrorCode FlucaFDSetUp_Sum(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_Sum(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, FlucaFDStencilPoint points[])
+static PetscErrorCode FlucaFDGetStencilRaw_Sum(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_Sum          *sum = (FlucaFD_Sum *)fd->data;
   FlucaFDSumOperandLink op;
-  PetscInt              op_ncols;
+  PetscInt              op_npoints;
   FlucaFDStencilPoint   op_points[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt              c;
 
   PetscFunctionBegin;
   PetscCall(PetscMemzero(op_points, sizeof(op_points)));
-  *ncols = 0;
+  *npoints = 0;
 
   for (op = sum->oplink; op != NULL; op = op->next) {
-    PetscCall(FlucaFDGetStencilRaw(op->fd, i, j, k, &op_ncols, op_points));
-    for (c = 0; c < op_ncols; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&op_points[c], ncols, points));
+    PetscCall(FlucaFDGetStencilRaw(op->fd, i, j, k, &op_npoints, op_points));
+    for (c = 0; c < op_npoints; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&op_points[c], npoints, points));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

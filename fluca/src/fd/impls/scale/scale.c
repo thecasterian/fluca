@@ -72,30 +72,38 @@ static PetscErrorCode FlucaFDSetUp_Scale(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, FlucaFDStencilPoint points[])
+static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_Scale   *scale = (FlucaFD_Scale *)fd->data;
   PetscInt         n;
   FlucaFDScaleRef *ref;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, ncols, points));
+  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, npoints, points));
 
   if (scale->is_constant) {
     /* Constant scale: multiply v directly, no deferred ref needed */
-    for (n = 0; n < *ncols; n++) points[n].v *= scale->constant;
+    for (n = 0; n < *npoints; n++) points[n].v *= scale->constant;
   } else {
     /* Vector scale: tag each point with a deferred scale ref */
-    for (n = 0; n < *ncols; n++) {
+    for (n = 0; n < *npoints; n++) {
       PetscCheck(points[n].nscales < FLUCAFD_MAX_SCALES, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Stencil point already has %" PetscInt_FMT " deferred scale refs; FLUCAFD_MAX_SCALES=%d exceeded", points[n].nscales, FLUCAFD_MAX_SCALES);
-      ref         = &points[n].scales[points[n].nscales];
-      ref->dim    = fd->dim;
-      ref->i      = i;
-      ref->j      = j;
-      ref->k      = k;
-      ref->arr_1d = scale->arr_vec_1d;
-      ref->arr_2d = scale->arr_vec_2d;
-      ref->arr_3d = scale->arr_vec_3d;
+      ref      = &points[n].scales[points[n].nscales];
+      ref->dim = fd->dim;
+      ref->i   = i;
+      ref->j   = j;
+      ref->k   = k;
+      switch (fd->dim) {
+      case 1:
+        ref->arr = scale->arr_vec_1d;
+        break;
+      case 2:
+        ref->arr = scale->arr_vec_2d;
+        break;
+      case 3:
+        ref->arr = scale->arr_vec_3d;
+        break;
+      }
       points[n].nscales++;
     }
   }

@@ -66,8 +66,8 @@ typedef struct {
   PetscInt         deriv_order; /* 0, 1, 2, ... */
   PetscInt         accu_order;  /* 1, 2, 3, ... */
 
-  PetscInt            ncols;
-  FlucaFDStencilPoint col[FLUCAFD_MAX_STENCIL_SIZE]; /* stencil template with relative indices */
+  PetscInt            npoints;
+  FlucaFDStencilPoint points[FLUCAFD_MAX_STENCIL_SIZE]; /* stencil template with relative indices */
 
   PetscInt    v_start;
   PetscInt    v_end;

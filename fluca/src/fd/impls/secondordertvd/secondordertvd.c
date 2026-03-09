@@ -150,14 +150,14 @@ static PetscErrorCode FlucaFDSetUp_SecondOrderTVD(FlucaFD fd)
 static PetscErrorCode ComputeFaceCenteredGradient_Private(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscScalar *grad)
 {
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
-  PetscInt                ncols, c;
+  PetscInt                npoints, c;
   FlucaFDStencilPoint     points[FLUCAFD_MAX_STENCIL_SIZE];
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencil(tvd->fd_grad, i, j, k, &ncols, points));
+  PetscCall(FlucaFDGetStencil(tvd->fd_grad, i, j, k, &npoints, points));
 
   *grad = 0.;
-  for (c = 0; c < ncols; ++c) {
+  for (c = 0; c < npoints; ++c) {
     switch (points[c].type) {
     case FLUCAFD_STENCIL_GRID:
       switch (fd->dim) {
@@ -184,7 +184,7 @@ static PetscErrorCode ComputeFaceCenteredGradient_Private(FlucaFD fd, PetscInt i
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, FlucaFDStencilPoint points[])
+static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
   PetscInt                idx, i_u, j_u, k_u, i_d, j_d, k_d, i_fu, j_fu, k_fu, i_fc, j_fc, k_fc;
@@ -192,7 +192,6 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
   PetscBool               periodic, at_prev_boundary, at_next_boundary;
 
   PetscFunctionBegin;
-  PetscCall(PetscMemzero(points, FLUCAFD_MAX_STENCIL_SIZE * sizeof(FlucaFDStencilPoint)));
   switch (tvd->dir) {
   case FLUCAFD_X:
     idx = i;
@@ -234,7 +233,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
     j_d = j;
     k_d = k;
     if (at_prev_boundary) {
-      *ncols                  = 2;
+      *npoints                = 2;
       points[0].type          = FLUCAFD_STENCIL_GRID;
       points[0].loc           = fd->input_loc;
       points[0].i             = i_u;
@@ -243,6 +242,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       points[0].c             = fd->input_c;
       points[0].boundary_face = 0;
       points[0].v             = 0.5;
+      points[0].nscales       = 0;
       points[1].type          = FLUCAFD_STENCIL_GRID;
       points[1].loc           = fd->input_loc;
       points[1].i             = i_d;
@@ -251,6 +251,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       points[1].c             = fd->input_c;
       points[1].boundary_face = 0;
       points[1].v             = 0.5;
+      points[1].nscales       = 0;
     } else {
       alpha = tvd->alpha_plus[idx];
       i_fu  = (tvd->dir == FLUCAFD_X) ? i - 1 : i;
@@ -279,7 +280,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       default:
         SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
       }
-      *ncols                  = 2;
+      *npoints                = 2;
       points[0].type          = FLUCAFD_STENCIL_GRID;
       points[0].loc           = fd->input_loc;
       points[0].i             = i_u;
@@ -288,6 +289,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       points[0].c             = fd->input_c;
       points[0].boundary_face = 0;
       points[0].v             = 1.;
+      points[0].nscales       = 0;
       points[1].type          = FLUCAFD_STENCIL_CONSTANT;
       points[1].loc           = DMSTAG_ELEMENT;
       points[1].i             = 0;
@@ -296,6 +298,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       points[1].c             = 0;
       points[1].boundary_face = 0;
       points[1].v             = alpha * psi * (phi_d - phi_u);
+      points[1].nscales       = 0;
     }
   } else {
     i_u = i;
@@ -305,7 +308,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
     j_d = (tvd->dir == FLUCAFD_Y) ? j - 1 : j;
     k_d = (tvd->dir == FLUCAFD_Z) ? k - 1 : k;
     if (at_next_boundary) {
-      *ncols                  = 2;
+      *npoints                = 2;
       points[0].type          = FLUCAFD_STENCIL_GRID;
       points[0].loc           = fd->input_loc;
       points[0].i             = i_u;
@@ -314,6 +317,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       points[0].c             = fd->input_c;
       points[0].boundary_face = 0;
       points[0].v             = 0.5;
+      points[0].nscales       = 0;
       points[1].type          = FLUCAFD_STENCIL_GRID;
       points[1].loc           = fd->input_loc;
       points[1].i             = i_d;
@@ -322,6 +326,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       points[1].c             = fd->input_c;
       points[1].boundary_face = 0;
       points[1].v             = 0.5;
+      points[1].nscales       = 0;
     } else {
       alpha = tvd->alpha_minus[idx];
       i_fu  = (tvd->dir == FLUCAFD_X) ? i + 1 : i;
@@ -350,7 +355,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       default:
         SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
       }
-      *ncols                  = 2;
+      *npoints                = 2;
       points[0].type          = FLUCAFD_STENCIL_GRID;
       points[0].loc           = fd->input_loc;
       points[0].i             = i;
@@ -359,6 +364,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       points[0].c             = fd->input_c;
       points[0].boundary_face = 0;
       points[0].v             = 1.;
+      points[0].nscales       = 0;
       points[1].type          = FLUCAFD_STENCIL_CONSTANT;
       points[1].loc           = DMSTAG_ELEMENT;
       points[1].i             = 0;
@@ -367,6 +373,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
       points[1].c             = 0;
       points[1].boundary_face = 0;
       points[1].v             = alpha * psi * (phi_d - phi_u);
+      points[1].nscales       = 0;
     }
   }
   PetscFunctionReturn(PETSC_SUCCESS);

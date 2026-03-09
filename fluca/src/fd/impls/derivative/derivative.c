@@ -58,17 +58,17 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
     offset_start = -(stencil_size - 1) / 2;
     if (!input_use_face && output_use_face) offset_start -= 1;
 
-    deriv->ncols = stencil_size;
+    deriv->npoints = stencil_size;
     for (c = 0; c < stencil_size; ++c) {
-      deriv->col[c].type          = FLUCAFD_STENCIL_GRID;
-      deriv->col[c].loc           = fd->input_loc;
-      deriv->col[c].i             = (deriv->dir == FLUCAFD_X) ? (offset_start + c) : 0;
-      deriv->col[c].j             = (deriv->dir == FLUCAFD_Y) ? (offset_start + c) : 0;
-      deriv->col[c].k             = (deriv->dir == FLUCAFD_Z) ? (offset_start + c) : 0;
-      deriv->col[c].c             = fd->input_c;
-      deriv->col[c].boundary_face = 0;
-      deriv->col[c].v             = 0.;
-      deriv->col[c].nscales       = 0;
+      deriv->points[c].type          = FLUCAFD_STENCIL_GRID;
+      deriv->points[c].loc           = fd->input_loc;
+      deriv->points[c].i             = (deriv->dir == FLUCAFD_X) ? (offset_start + c) : 0;
+      deriv->points[c].j             = (deriv->dir == FLUCAFD_Y) ? (offset_start + c) : 0;
+      deriv->points[c].k             = (deriv->dir == FLUCAFD_Z) ? (offset_start + c) : 0;
+      deriv->points[c].c             = fd->input_c;
+      deriv->points[c].boundary_face = 0;
+      deriv->points[c].v             = 0.;
+      deriv->points[c].nscales       = 0;
     }
 
     /* Allocate coefficient arrays */
@@ -125,7 +125,7 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_Derivative(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, FlucaFDStencilPoint points[])
+static PetscErrorCode FlucaFDGetStencilRaw_Derivative(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_Derivative *deriv = (FlucaFD_Derivative *)fd->data;
   PetscInt            c, idx;
@@ -146,14 +146,14 @@ static PetscErrorCode FlucaFDGetStencilRaw_Derivative(FlucaFD fd, PetscInt i, Pe
     SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported direction");
   }
 
-  *ncols = deriv->ncols;
-  PetscCall(PetscArraycpy(points, deriv->col, *ncols));
+  *npoints = deriv->npoints;
+  PetscCall(PetscArraycpy(points, deriv->points, *npoints));
   if (idx < deriv->v_start) coeff_v = deriv->v_prev;
   else if (idx >= deriv->v_end) coeff_v = deriv->v_next;
   else coeff_v = deriv->v[idx];
 
   /* Add the actual position to relative indices and fill coefficients */
-  for (c = 0; c < *ncols; ++c) {
+  for (c = 0; c < *npoints; ++c) {
     points[c].i += i;
     points[c].j += j;
     points[c].k += k;
@@ -197,7 +197,7 @@ PetscErrorCode FlucaFDCreate_Derivative(FlucaFD fd)
   deriv->dir         = FLUCAFD_X;
   deriv->deriv_order = 1;
   deriv->accu_order  = 1;
-  deriv->ncols       = 0;
+  deriv->npoints     = 0;
   deriv->v_start     = 0;
   deriv->v_end       = 0;
   deriv->v           = NULL;

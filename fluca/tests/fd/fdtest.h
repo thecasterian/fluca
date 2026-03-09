@@ -44,9 +44,9 @@ static int CompareFlucaFDStencilPoint(const void *a, const void *b, void *ctx)
   return 0;
 }
 
-static PetscErrorCode SortStencil(PetscInt ncols, FlucaFDStencilPoint points[])
+static PetscErrorCode SortStencil(PetscInt npoints, FlucaFDStencilPoint points[])
 {
   PetscFunctionBegin;
-  if (ncols > 0) PetscCall(PetscTimSort(ncols, points, sizeof(FlucaFDStencilPoint), CompareFlucaFDStencilPoint, NULL));
+  if (npoints > 0) PetscCall(PetscTimSort(npoints, points, sizeof(FlucaFDStencilPoint), CompareFlucaFDStencilPoint, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

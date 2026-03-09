@@ -14,7 +14,7 @@ int main(int argc, char **argv)
   DM                  input_dm, output_dm;
   FlucaFD             fd_tvd;
   Vec                 phi, vel;
-  PetscInt            M, x, m, nExtrax, i, c, ncols, idx, slot_elem, slot_face;
+  PetscInt            M, x, m, nExtrax, i, c, npoints, idx, slot_elem, slot_face;
   PetscScalar       **arr_phi, **arr_vel;
   Vec                 phi_local, vel_local;
   const PetscScalar **arr_coord;
@@ -111,15 +111,15 @@ int main(int argc, char **argv)
   idx = M / 2;
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-i", &idx, NULL));
 
-  PetscCall(FlucaFDGetStencil(fd_tvd, idx, 0, 0, &ncols, points));
-  PetscCall(SortStencil(ncols, points));
+  PetscCall(FlucaFDGetStencil(fd_tvd, idx, 0, 0, &npoints, points));
+  PetscCall(SortStencil(npoints, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Stencil at i=%" PetscInt_FMT ":\n", idx));
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  ncols = %" PetscInt_FMT "\n", ncols));
-  for (c = 0; c < ncols; ++c) {
-    if (points[c].type == FLUCAFD_STENCIL_CONSTANT) PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: constant, v=%g\n", c, points[c].v));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints));
+  for (c = 0; c < npoints; ++c) {
+    if (points[c].type == FLUCAFD_STENCIL_CONSTANT) PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  points[%" PetscInt_FMT "]: constant, v=%g\n", c, points[c].v));
     else if (points[c].type == FLUCAFD_STENCIL_BOUNDARY)
-      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%s_boundary, v=%g\n", c, points[c].i, DMStagStencilLocations[points[c].loc], FlucaFDBoundaryNames[points[c].boundary_face], points[c].v));
-    else PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g\n", c, points[c].i, DMStagStencilLocations[points[c].loc], points[c].c, points[c].v));
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  points[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%s_boundary, v=%g\n", c, points[c].i, DMStagStencilLocations[points[c].loc], FlucaFDBoundaryNames[points[c].boundary_face], points[c].v));
+    else PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  points[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g\n", c, points[c].i, DMStagStencilLocations[points[c].loc], points[c].c, points[c].v));
   }
 
   PetscCall(FlucaFDDestroy(&fd_tvd));

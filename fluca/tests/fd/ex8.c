@@ -15,7 +15,7 @@ int main(int argc, char **argv)
   DM                  dm;
   FlucaFD             fd_deriv, fd_scale, fd_comp;
   Vec                 vec;
-  PetscInt            M, idx, c, ncols_raw, ncols;
+  PetscInt            M, idx, c, npoints_raw, npoints;
   FlucaFDStencilPoint raw_points[32], points[32];
   PetscBool           any_unresolved;
 
@@ -51,40 +51,40 @@ int main(int argc, char **argv)
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-i", &idx, NULL));
 
   /* TEST 1: GetStencilRaw should return nscales > 0, unresolved v */
-  PetscCall(FlucaFDGetStencilRaw(fd_scale, idx, 0, 0, &ncols_raw, raw_points));
+  PetscCall(FlucaFDGetStencilRaw(fd_scale, idx, 0, 0, &npoints_raw, raw_points));
   any_unresolved = PETSC_FALSE;
-  for (c = 0; c < ncols_raw; c++) {
+  for (c = 0; c < npoints_raw; c++) {
     if (raw_points[c].nscales > 0) {
       any_unresolved = PETSC_TRUE;
       break;
     }
   }
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "GetStencilRaw at i=%" PetscInt_FMT ":\n", idx));
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  ncols = %" PetscInt_FMT "\n", ncols_raw));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints_raw));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  has_unresolved_scales = %s\n", any_unresolved ? "true" : "false"));
   {
     FlucaFDStencilPoint sorted_raw[32];
-    for (c = 0; c < ncols_raw; c++) sorted_raw[c] = raw_points[c];
-    PetscCall(SortStencil(ncols_raw, sorted_raw));
-    for (c = 0; c < ncols_raw; c++)
-      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g, nscales=%" PetscInt_FMT "\n", c, sorted_raw[c].i, DMStagStencilLocations[sorted_raw[c].loc], sorted_raw[c].c,
+    for (c = 0; c < npoints_raw; c++) sorted_raw[c] = raw_points[c];
+    PetscCall(SortStencil(npoints_raw, sorted_raw));
+    for (c = 0; c < npoints_raw; c++)
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  points[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g, nscales=%" PetscInt_FMT "\n", c, sorted_raw[c].i, DMStagStencilLocations[sorted_raw[c].loc], sorted_raw[c].c,
                             (double)PetscRealPart(sorted_raw[c].v), sorted_raw[c].nscales));
   }
 
   /* TEST 2: GetStencil should return nscales == 0, fully resolved v */
-  PetscCall(FlucaFDGetStencil(fd_scale, idx, 0, 0, &ncols, points));
-  PetscCall(SortStencil(ncols, points));
+  PetscCall(FlucaFDGetStencil(fd_scale, idx, 0, 0, &npoints, points));
+  PetscCall(SortStencil(npoints, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "GetStencil at i=%" PetscInt_FMT ":\n", idx));
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  ncols = %" PetscInt_FMT "\n", ncols));
-  for (c = 0; c < ncols; c++)
-    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g, nscales=%" PetscInt_FMT "\n", c, points[c].i, DMStagStencilLocations[points[c].loc], points[c].c,
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints));
+  for (c = 0; c < npoints; c++)
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  points[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g, nscales=%" PetscInt_FMT "\n", c, points[c].i, DMStagStencilLocations[points[c].loc], points[c].c,
                           (double)PetscRealPart(points[c].v), points[c].nscales));
 
   /* TEST 3: Composition with inner vector-scaled operator */
   {
     FlucaFD             fd_outer;
     FlucaFDStencilPoint comp_raw[32], comp_resolved[32];
-    PetscInt            ncols_comp_raw, ncols_comp;
+    PetscInt            npoints_comp_raw, npoints_comp;
 
     PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_outer));
     PetscCall(FlucaFDSetType(fd_outer, FLUCAFDDERIVATIVE));
@@ -101,24 +101,24 @@ int main(int argc, char **argv)
     PetscCall(FlucaFDSetFromOptions(fd_comp));
     PetscCall(FlucaFDSetUp(fd_comp));
 
-    PetscCall(FlucaFDGetStencilRaw(fd_comp, idx, 0, 0, &ncols_comp_raw, comp_raw));
+    PetscCall(FlucaFDGetStencilRaw(fd_comp, idx, 0, 0, &npoints_comp_raw, comp_raw));
     any_unresolved = PETSC_FALSE;
-    for (c = 0; c < ncols_comp_raw; c++) {
+    for (c = 0; c < npoints_comp_raw; c++) {
       if (comp_raw[c].nscales > 0) {
         any_unresolved = PETSC_TRUE;
         break;
       }
     }
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Composition GetStencilRaw at i=%" PetscInt_FMT ":\n", idx));
-    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  ncols = %" PetscInt_FMT "\n", ncols_comp_raw));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints_comp_raw));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  has_unresolved_scales = %s\n", any_unresolved ? "true" : "false"));
 
-    PetscCall(FlucaFDGetStencil(fd_comp, idx, 0, 0, &ncols_comp, comp_resolved));
-    PetscCall(SortStencil(ncols_comp, comp_resolved));
+    PetscCall(FlucaFDGetStencil(fd_comp, idx, 0, 0, &npoints_comp, comp_resolved));
+    PetscCall(SortStencil(npoints_comp, comp_resolved));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Composition GetStencil at i=%" PetscInt_FMT ":\n", idx));
-    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  ncols = %" PetscInt_FMT "\n", ncols_comp));
-    for (c = 0; c < ncols_comp; c++)
-      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g, nscales=%" PetscInt_FMT "\n", c, comp_resolved[c].i, DMStagStencilLocations[comp_resolved[c].loc], comp_resolved[c].c,
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints_comp));
+    for (c = 0; c < npoints_comp; c++)
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  points[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g, nscales=%" PetscInt_FMT "\n", c, comp_resolved[c].i, DMStagStencilLocations[comp_resolved[c].loc], comp_resolved[c].c,
                             (double)PetscRealPart(comp_resolved[c].v), comp_resolved[c].nscales));
 
     PetscCall(FlucaFDDestroy(&fd_comp));

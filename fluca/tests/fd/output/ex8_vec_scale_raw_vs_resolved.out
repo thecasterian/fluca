@@ -1,18 +1,18 @@
 GetStencilRaw at i=3:
-  ncols = 2
+  npoints = 2
   has_unresolved_scales = true
-  col[0]: i=2, loc=ELEMENT, c=0, v=-4., nscales=1
-  col[1]: i=4, loc=ELEMENT, c=0, v=4., nscales=1
+  points[0]: i=2, loc=ELEMENT, c=0, v=-4., nscales=1
+  points[1]: i=4, loc=ELEMENT, c=0, v=4., nscales=1
 GetStencil at i=3:
-  ncols = 2
-  col[0]: i=2, loc=ELEMENT, c=0, v=-28., nscales=0
-  col[1]: i=4, loc=ELEMENT, c=0, v=28., nscales=0
+  npoints = 2
+  points[0]: i=2, loc=ELEMENT, c=0, v=-28., nscales=0
+  points[1]: i=4, loc=ELEMENT, c=0, v=28., nscales=0
 Composition GetStencilRaw at i=3:
-  ncols = 4
+  npoints = 4
   has_unresolved_scales = true
 Composition GetStencil at i=3:
-  ncols = 4
-  col[0]: i=2, loc=ELEMENT, c=0, v=224., nscales=0
-  col[1]: i=3, loc=ELEMENT, c=0, v=-288., nscales=0
-  col[2]: i=4, loc=ELEMENT, c=0, v=-224., nscales=0
-  col[3]: i=5, loc=ELEMENT, c=0, v=288., nscales=0
+  npoints = 4
+  points[0]: i=2, loc=ELEMENT, c=0, v=224., nscales=0
+  points[1]: i=3, loc=ELEMENT, c=0, v=-288., nscales=0
+  points[2]: i=4, loc=ELEMENT, c=0, v=-224., nscales=0
+  points[3]: i=5, loc=ELEMENT, c=0, v=288., nscales=0

@@ -19,35 +19,35 @@ static PetscErrorCode GetOutputLoopRange_Private(FlucaFD fd, DM output_dm, Petsc
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, FlucaFDStencilPoint points[])
+PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscAssertPointer(ncols, 5);
+  PetscAssertPointer(npoints, 5);
   PetscAssertPointer(points, 6);
-  PetscUseTypeMethod(fd, getstencilraw, i, j, k, ncols, points);
-  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(ncols, points));
+  PetscUseTypeMethod(fd, getstencilraw, i, j, k, npoints, points);
+  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, FlucaFDStencilPoint points[])
+PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFDStencilPoint merged[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscInt            merged_ncols, c;
+  PetscInt            merged_npoints, c;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscAssertPointer(ncols, 5);
+  PetscAssertPointer(npoints, 5);
   PetscAssertPointer(points, 6);
-  PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, ncols, points));
-  PetscCall(FlucaFDResolveScaleRefs_Internal(*ncols, points));
+  PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, npoints, points));
+  PetscCall(FlucaFDResolveScaleRefs_Internal(*npoints, points));
   /* Re-merge points that are now identical after scale resolution */
-  merged_ncols = 0;
-  for (c = 0; c < *ncols; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&points[c], &merged_ncols, merged));
-  *ncols = merged_ncols;
-  PetscCall(PetscArraycpy(points, merged, merged_ncols));
-  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, ncols, points));
-  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(ncols, points));
+  merged_npoints = 0;
+  for (c = 0; c < *npoints; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&points[c], &merged_npoints, merged));
+  *npoints = merged_npoints;
+  PetscCall(PetscArraycpy(points, merged, merged_npoints));
+  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, npoints, points));
+  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -60,7 +60,7 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
   PetscInt            i, j, k, c;
   DMStagStencil       row, stencil;
   FlucaFDStencilPoint points[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscInt            ncols;
+  PetscInt            npoints;
   PetscInt            ir, idx;
   PetscScalar         result;
 
@@ -94,9 +94,9 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
         row.k   = k;
         row.c   = fd->output_c;
         row.loc = fd->output_loc;
-        PetscCall(FlucaFDGetStencil(fd, i, j, k, &ncols, points));
+        PetscCall(FlucaFDGetStencil(fd, i, j, k, &npoints, points));
 
-        for (c = 0; c < ncols; ++c) {
+        for (c = 0; c < npoints; ++c) {
           switch (points[c].type) {
           case FLUCAFD_STENCIL_GRID:
             FlucaFDStencilPointToStencil(&points[c], &stencil);
@@ -135,7 +135,7 @@ PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
   FlucaFDStencilPoint points[FLUCAFD_MAX_STENCIL_SIZE];
   DMStagStencil       mat_col[FLUCAFD_MAX_STENCIL_SIZE];
   PetscScalar         mat_v[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscInt            ncols, mat_ncols;
+  PetscInt            npoints, mat_ncols;
   PetscInt            ir;
   PetscInt            ic[FLUCAFD_MAX_STENCIL_SIZE];
 
@@ -156,11 +156,11 @@ PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
         row.k   = k;
         row.c   = fd->output_c;
         row.loc = fd->output_loc;
-        PetscCall(FlucaFDGetStencil(fd, i, j, k, &ncols, points));
+        PetscCall(FlucaFDGetStencil(fd, i, j, k, &npoints, points));
 
         /* Collect only grid stencil points (skip boundary and constant terms) */
         mat_ncols = 0;
-        for (c = 0; c < ncols; ++c) {
+        for (c = 0; c < npoints; ++c) {
           if (points[c].type == FLUCAFD_STENCIL_GRID) {
             FlucaFDStencilPointToStencil(&points[c], &mat_col[mat_ncols]);
             mat_v[mat_ncols] = points[c].v;

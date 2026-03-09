@@ -1,4 +1,4 @@
 Stencil at i=4:
-  ncols = 2
-  col[0]: i=3, loc=ELEMENT, c=0, v=1.
-  col[1]: constant, v=0.0749108
+  npoints = 2
+  points[0]: i=3, loc=ELEMENT, c=0, v=1.
+  points[1]: constant, v=0.0749108
