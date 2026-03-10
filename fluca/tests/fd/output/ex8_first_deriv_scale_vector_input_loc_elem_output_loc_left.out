@@ -1,0 +1,9 @@
+GetStencilRaw at i=4:
+  npoints = 2
+  has_unresolved_scales = true
+  points[0]: i=3, loc=ELEMENT, c=0, v=-8., nscales=1
+  points[1]: i=4, loc=ELEMENT, c=0, v=8., nscales=1
+GetStencil at i=4:
+  npoints = 2
+  points[0]: i=3, loc=ELEMENT, c=0, v=-64., nscales=0
+  points[1]: i=4, loc=ELEMENT, c=0, v=64., nscales=0

@@ -7,11 +7,3 @@ GetStencil at i=3:
   npoints = 2
   points[0]: i=2, loc=ELEMENT, c=0, v=-28., nscales=0
   points[1]: i=4, loc=ELEMENT, c=0, v=28., nscales=0
-Composition GetStencilRaw at i=3:
-  npoints = 4
-  has_unresolved_scales = true
-Composition GetStencil at i=3:
-  npoints = 3
-  points[0]: i=1, loc=ELEMENT, c=0, v=80., nscales=0
-  points[1]: i=3, loc=ELEMENT, c=0, v=-224., nscales=0
-  points[2]: i=5, loc=ELEMENT, c=0, v=144., nscales=0
