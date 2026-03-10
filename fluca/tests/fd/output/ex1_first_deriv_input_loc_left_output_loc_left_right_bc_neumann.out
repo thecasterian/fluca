@@ -1,3 +1,3 @@
 Stencil at i=8:
   npoints = 1
-  points[0]: i=8, loc=LEFT, c=right_boundary, v=1.
+  points[0]: type=boundary(right), i=8, loc=LEFT, c=0, v=1.

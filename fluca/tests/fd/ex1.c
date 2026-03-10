@@ -12,7 +12,7 @@ int main(int argc, char **argv)
 {
   DM                  dm;
   FlucaFD             fd;
-  PetscInt            M, idx, c, npoints;
+  PetscInt            M, idx, npoints;
   FlucaFDStencilPoint points[64];
 
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
@@ -31,14 +31,9 @@ int main(int argc, char **argv)
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-i", &idx, NULL));
 
   PetscCall(FlucaFDGetStencil(fd, idx, 0, 0, &npoints, points));
-  PetscCall(SortStencil(npoints, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Stencil at i=%" PetscInt_FMT ":\n", idx));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints));
-  for (c = 0; c < npoints; ++c) {
-    if (points[c].type == FLUCAFD_STENCIL_BOUNDARY)
-      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  points[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%s_boundary, v=%g\n", c, points[c].i, DMStagStencilLocations[points[c].loc], FlucaFDBoundaryNames[points[c].boundary_face], points[c].v));
-    else PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  points[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g\n", c, points[c].i, DMStagStencilLocations[points[c].loc], points[c].c, points[c].v));
-  }
+  PetscCall(PrintStencil(1, npoints, points));
 
   PetscCall(FlucaFDDestroy(&fd));
   PetscCall(DMDestroy(&dm));

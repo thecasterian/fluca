@@ -1,5 +1,5 @@
 Stencil at i=4:
   npoints = 3
-  points[0]: i=3, loc=ELEMENT, c=0, v=64.
-  points[1]: i=4, loc=ELEMENT, c=0, v=-128.
-  points[2]: i=5, loc=ELEMENT, c=0, v=64.
+  points[0]: type=grid, i=3, loc=ELEMENT, c=0, v=64.
+  points[1]: type=grid, i=4, loc=ELEMENT, c=0, v=-128.
+  points[2]: type=grid, i=5, loc=ELEMENT, c=0, v=64.

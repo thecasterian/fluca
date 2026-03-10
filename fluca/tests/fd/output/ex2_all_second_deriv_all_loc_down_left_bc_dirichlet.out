@@ -1,9 +1,9 @@
 Sum stencil at (i,j,k)=(0,4,4):
   npoints = 7
-  points[0]: i=0, j=3, k=4, loc=DOWN, c=0, v=64.
-  points[1]: i=0, j=4, k=3, loc=DOWN, c=0, v=64.
-  points[2]: i=0, j=4, k=4, loc=DOWN, c=0, v=-512.
-  points[3]: i=0, j=4, k=5, loc=DOWN, c=0, v=64.
-  points[4]: i=0, j=5, k=4, loc=DOWN, c=0, v=64.
-  points[5]: i=1, j=4, k=4, loc=DOWN, c=0, v=85.3333
-  points[6]: i=0, j=4, k=4, loc=DOWN_LEFT, c=left_boundary, v=170.667
+  points[0]: type=grid, i=0, j=3, k=4, loc=DOWN, c=0, v=64.
+  points[1]: type=grid, i=0, j=4, k=3, loc=DOWN, c=0, v=64.
+  points[2]: type=grid, i=0, j=4, k=4, loc=DOWN, c=0, v=-512.
+  points[3]: type=grid, i=0, j=4, k=5, loc=DOWN, c=0, v=64.
+  points[4]: type=grid, i=0, j=5, k=4, loc=DOWN, c=0, v=64.
+  points[5]: type=grid, i=1, j=4, k=4, loc=DOWN, c=0, v=85.3333
+  points[6]: type=boundary(left), i=0, j=4, k=4, loc=DOWN_LEFT, c=0, v=170.667

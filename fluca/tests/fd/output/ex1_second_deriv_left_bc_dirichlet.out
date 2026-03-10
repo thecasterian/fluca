@@ -1,6 +1,6 @@
 Stencil at i=0:
   npoints = 4
-  points[0]: i=0, loc=ELEMENT, c=0, v=-320.
-  points[1]: i=1, loc=ELEMENT, c=0, v=128.
-  points[2]: i=2, loc=ELEMENT, c=0, v=-12.8
-  points[3]: i=0, loc=LEFT, c=left_boundary, v=204.8
+  points[0]: type=grid, i=0, loc=ELEMENT, c=0, v=-320.
+  points[1]: type=grid, i=1, loc=ELEMENT, c=0, v=128.
+  points[2]: type=grid, i=2, loc=ELEMENT, c=0, v=-12.8
+  points[3]: type=boundary(left), i=0, loc=LEFT, c=0, v=204.8

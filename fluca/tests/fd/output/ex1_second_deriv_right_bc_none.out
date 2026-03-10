@@ -1,6 +1,6 @@
 Stencil at i=7:
   npoints = 4
-  points[0]: i=4, loc=ELEMENT, c=0, v=-64.
-  points[1]: i=5, loc=ELEMENT, c=0, v=256.
-  points[2]: i=6, loc=ELEMENT, c=0, v=-320.
-  points[3]: i=7, loc=ELEMENT, c=0, v=128.
+  points[0]: type=grid, i=4, loc=ELEMENT, c=0, v=-64.
+  points[1]: type=grid, i=5, loc=ELEMENT, c=0, v=256.
+  points[2]: type=grid, i=6, loc=ELEMENT, c=0, v=-320.
+  points[3]: type=grid, i=7, loc=ELEMENT, c=0, v=128.

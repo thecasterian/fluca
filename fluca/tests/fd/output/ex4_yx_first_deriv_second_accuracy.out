@@ -1,6 +1,6 @@
 Sum stencil at (i,j)=(4,4):
   npoints = 4
-  points[0]: i=3, j=3, loc=ELEMENT, c=0, v=16.
-  points[1]: i=3, j=5, loc=ELEMENT, c=0, v=-16.
-  points[2]: i=5, j=3, loc=ELEMENT, c=0, v=-16.
-  points[3]: i=5, j=5, loc=ELEMENT, c=0, v=16.
+  points[0]: type=grid, i=3, j=3, loc=ELEMENT, c=0, v=16.
+  points[1]: type=grid, i=3, j=5, loc=ELEMENT, c=0, v=-16.
+  points[2]: type=grid, i=5, j=3, loc=ELEMENT, c=0, v=-16.
+  points[3]: type=grid, i=5, j=5, loc=ELEMENT, c=0, v=16.
