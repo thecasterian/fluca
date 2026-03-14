@@ -9,6 +9,7 @@
 #define FLUCAFD_ZERO_PIVOT_TOL   1e-14
 #define FLUCAFD_COEFF_ATOL       1e-10
 #define FLUCAFD_COEFF_RTOL       1e-8
+#define FLUCAFD_TVD_GRAD_TOL     1e-30
 
 FLUCA_EXTERN PetscBool      FlucaFDRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode FlucaFDRegisterAll(void);
@@ -158,6 +159,7 @@ FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(const FlucaFDStencil
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
+FLUCA_INTERN PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 
 /* Convert FlucaFDStencilPoint to DMStagStencil (for PETSc API calls) */
 #define FlucaFDStencilPointToStencil(pt, st) \

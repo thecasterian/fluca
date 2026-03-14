@@ -40,13 +40,14 @@ PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k,
   PetscAssertPointer(npoints, 5);
   PetscAssertPointer(points, 6);
   PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, npoints, points));
+  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, npoints, points));
   PetscCall(FlucaFDResolveScaleRefs_Internal(*npoints, points));
-  /* Re-merge points that are now identical after scale resolution */
+  PetscCall(FlucaFDResolveTVDRefs_Internal(*npoints, points));
+  /* Re-merge points that are now identical after ref resolution */
   merged_npoints = 0;
   for (c = 0; c < *npoints; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&points[c], &merged_npoints, merged));
   *npoints = merged_npoints;
   PetscCall(PetscArraycpy(points, merged, merged_npoints));
-  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, npoints, points));
   PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

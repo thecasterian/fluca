@@ -41,6 +41,13 @@ static int CompareFlucaFDStencilPoint(const void *a, const void *b, void *ctx)
     if (sa->boundary_face > sb->boundary_face) return 1;
   }
 
+  /* Sort by TVD ref role for stability when grid points differ only in TVD ref */
+  if (sa->ntvds != sb->ntvds) return (sa->ntvds < sb->ntvds) ? -1 : 1;
+  if (sa->ntvds > 0) {
+    if (sa->tvds[0].role < sb->tvds[0].role) return -1;
+    if (sa->tvds[0].role > sb->tvds[0].role) return 1;
+  }
+
   return 0;
 }
 

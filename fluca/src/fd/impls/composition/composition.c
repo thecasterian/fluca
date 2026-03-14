@@ -52,7 +52,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, P
   FlucaFDStencilPoint  inner_points[FLUCAFD_MAX_STENCIL_SIZE];
   FlucaFDStencilPoint  scaled;
   PetscInt             outer_npoints, inner_npoints;
-  PetscInt             oc, ic, s;
+  PetscInt             oc, ic, s, t;
 
   PetscFunctionBegin;
   PetscCall(FlucaFDGetStencilRaw(comp->outer, i, j, k, &outer_npoints, outer_points));
@@ -73,6 +73,10 @@ static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, P
       PetscCheck(scaled.nscales + outer_points[oc].nscales <= FLUCAFD_MAX_SCALES, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Composition would exceed FLUCAFD_MAX_SCALES=%d scale refs", FLUCAFD_MAX_SCALES);
       for (s = 0; s < outer_points[oc].nscales; s++) scaled.scales[scaled.nscales + s] = outer_points[oc].scales[s];
       scaled.nscales += outer_points[oc].nscales;
+      /* Inherit TVD ref from outer point */
+      PetscCheck(scaled.ntvds + outer_points[oc].ntvds <= FLUCAFD_MAX_TVDS, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Composition would exceed FLUCAFD_MAX_TVDS=%d TVD refs", FLUCAFD_MAX_TVDS);
+      for (t = 0; t < outer_points[oc].ntvds; t++) scaled.tvds[scaled.ntvds + t] = outer_points[oc].tvds[t];
+      scaled.ntvds += outer_points[oc].ntvds;
       PetscCall(FlucaFDAddStencilPoint_Internal(&scaled, npoints, points));
     }
   }

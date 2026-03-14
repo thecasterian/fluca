@@ -119,6 +119,17 @@ static PetscBool FlucaFDScaleRefsSame_Private(const FlucaFDStencilPoint *a, cons
   return PETSC_TRUE;
 }
 
+static PetscBool FlucaFDTVDRefsSame_Private(const FlucaFDStencilPoint *a, const FlucaFDStencilPoint *b)
+{
+  if (a->ntvds != b->ntvds) return PETSC_FALSE;
+  if (a->ntvds == 0) return PETSC_TRUE;
+  if (a->tvds[0].role != b->tvds[0].role) return PETSC_FALSE;
+  if (a->tvds[0].i != b->tvds[0].i || a->tvds[0].j != b->tvds[0].j || a->tvds[0].k != b->tvds[0].k) return PETSC_FALSE;
+  if (a->tvds[0].fd_grad != b->tvds[0].fd_grad) return PETSC_FALSE;
+  if (a->tvds[0].dir != b->tvds[0].dir) return PETSC_FALSE;
+  return PETSC_TRUE;
+}
+
 static PetscBool FlucaFDStencilPointsSame_Private(const FlucaFDStencilPoint *a, const FlucaFDStencilPoint *b)
 {
   if (a->type != b->type) return PETSC_FALSE;
@@ -127,10 +138,12 @@ static PetscBool FlucaFDStencilPointsSame_Private(const FlucaFDStencilPoint *a, 
     return PETSC_TRUE;
   case FLUCAFD_STENCIL_BOUNDARY:
     if (!(a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc && a->boundary_face == b->boundary_face)) return PETSC_FALSE;
-    return FlucaFDScaleRefsSame_Private(a, b);
+    if (!FlucaFDScaleRefsSame_Private(a, b)) return PETSC_FALSE;
+    return FlucaFDTVDRefsSame_Private(a, b);
   case FLUCAFD_STENCIL_GRID:
     if (!(a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc)) return PETSC_FALSE;
-    return FlucaFDScaleRefsSame_Private(a, b);
+    if (!FlucaFDScaleRefsSame_Private(a, b)) return PETSC_FALSE;
+    return FlucaFDTVDRefsSame_Private(a, b);
   }
   return PETSC_FALSE;
 }
@@ -410,7 +423,8 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *npoints
         }
         PetscCall(FlucaFDSolveLinearSystem_Internal(stencil_size, A, b, extrap_coeffs));
 
-        /* Add the boundary point to stencil */
+        /* Add the boundary point to stencil (inherit scale refs from off_point, but not TVD refs) */
+        new_point      = off_point;
         new_point.type = FLUCAFD_STENCIL_BOUNDARY;
         new_point.i    = (off_dir == 0) ? bnd_idx : off_point.i;
         new_point.j    = (off_dir == 1) ? bnd_idx : off_point.j;
@@ -419,6 +433,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *npoints
         new_point.c             = off_point.c;
         new_point.boundary_face = 2 * off_dir + (is_low ? 0 : 1);
         new_point.v             = off_point.v * extrap_coeffs[0];
+        new_point.ntvds         = 0;
         PetscCall(FlucaFDAddStencilPoint_Internal(&new_point, npoints, points));
 
         /* Add on-grid points to stencil */
@@ -461,7 +476,8 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *npoints
 
         /* v[off] = (v'[bnd] - a[0]*v[0] - ... ) / a_off */
 
-        /* Add the boundary point to stencil */
+        /* Add the boundary point to stencil (inherit scale refs from off_point, but not TVD refs) */
+        new_point      = off_point;
         new_point.type = FLUCAFD_STENCIL_BOUNDARY;
         new_point.i    = (off_dir == 0) ? bnd_idx : off_point.i;
         new_point.j    = (off_dir == 1) ? bnd_idx : off_point.j;
@@ -470,6 +486,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *npoints
         new_point.c             = off_point.c;
         new_point.boundary_face = 2 * off_dir + (is_low ? 0 : 1);
         new_point.v             = off_point.v / a_off;
+        new_point.ntvds         = 0;
         PetscCall(FlucaFDAddStencilPoint_Internal(&new_point, npoints, points));
 
         /* Add on-grid points to stencil */
@@ -554,6 +571,174 @@ PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt npoints, FlucaFDStencil
       points[n].v *= val;
     }
     points[n].nscales = 0;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode EvaluateGradient_Private(FlucaFD fd_grad, PetscInt dim, PetscInt i, PetscInt j, PetscInt k, const void *arr_phi, const FlucaFDBoundaryCondition bcs[], PetscScalar *grad)
+{
+  FlucaFDStencilPoint grad_points[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscInt            ngrad, c;
+
+  PetscFunctionBegin;
+  PetscCall(FlucaFDGetStencil(fd_grad, i, j, k, &ngrad, grad_points));
+  *grad = 0.;
+  for (c = 0; c < ngrad; c++) {
+    switch (grad_points[c].type) {
+    case FLUCAFD_STENCIL_GRID:
+      switch (dim) {
+      case 1:
+        *grad += grad_points[c].v * ((const PetscScalar *)arr_phi)[grad_points[c].i];
+        break;
+      case 2:
+        *grad += grad_points[c].v * ((const PetscScalar **)arr_phi)[grad_points[c].j][grad_points[c].i];
+        break;
+      case 3:
+        *grad += grad_points[c].v * ((const PetscScalar ***)arr_phi)[grad_points[c].k][grad_points[c].j][grad_points[c].i];
+        break;
+      default:
+        SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported dim");
+      }
+      break;
+    case FLUCAFD_STENCIL_BOUNDARY:
+      *grad += grad_points[c].v * bcs[grad_points[c].boundary_face].value;
+      break;
+    case FLUCAFD_STENCIL_CONSTANT:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unexpected constant in gradient stencil");
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscScalar ReadPhiValue_Private(PetscInt dim, const void *arr_phi, PetscInt i, PetscInt j, PetscInt k)
+{
+  switch (dim) {
+  case 1:
+    return ((const PetscScalar *)arr_phi)[i];
+  case 2:
+    return ((const PetscScalar **)arr_phi)[j][i];
+  case 3:
+    return ((const PetscScalar ***)arr_phi)[k][j][i];
+  default:
+    return 0.;
+  }
+}
+
+PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt npoints, FlucaFDStencilPoint points[])
+{
+  PetscInt       n;
+  FlucaFDTVDRef *ref;
+  PetscScalar    vel, alpha, grad_fu, grad_fc, r, psi, phi_u, phi_d;
+  PetscInt       idx, idx_fu, i_fu, j_fu, k_fu;
+  PetscInt       i_u, j_u, k_u, i_d, j_d, k_d;
+  PetscBool      is_upwind;
+
+  PetscFunctionBegin;
+  for (n = 0; n < npoints; n++) {
+    PetscCheck(points[n].ntvds == 0 || points[n].ntvds == 1, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Invalid ntvds %" PetscInt_FMT " (expected 0 or 1)", points[n].ntvds);
+    if (points[n].ntvds != 1) continue;
+    ref = &points[n].tvds[0];
+
+    PetscCheck(ref->arr_vel, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "TVD velocity field not set");
+    PetscCheck(ref->arr_phi, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "TVD solution field not set");
+
+    /* Read velocity at the face position */
+    switch (ref->dim) {
+    case 1:
+      vel = ((const PetscScalar *)ref->arr_vel)[ref->i];
+      break;
+    case 2:
+      vel = ((const PetscScalar **)ref->arr_vel)[ref->j][ref->i];
+      break;
+    case 3:
+      vel = ((const PetscScalar ***)ref->arr_vel)[ref->k][ref->j][ref->i];
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported dim in FlucaFDResolveTVDRefs_Internal");
+    }
+
+    /* Determine face index and upwind/downwind cell indices in TVD direction.
+       PREV cell is at (i-1) in the TVD direction, NEXT cell is at (i). */
+    switch (ref->dir) {
+    case FLUCAFD_X:
+      idx = ref->i;
+      break;
+    case FLUCAFD_Y:
+      idx = ref->j;
+      break;
+    case FLUCAFD_Z:
+      idx = ref->k;
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported TVD direction");
+    }
+
+    i_u = (ref->dir == FLUCAFD_X) ? ref->i - 1 : ref->i;
+    j_u = (ref->dir == FLUCAFD_Y) ? ref->j - 1 : ref->j;
+    k_u = (ref->dir == FLUCAFD_Z) ? ref->k - 1 : ref->k;
+    i_d = ref->i;
+    j_d = ref->j;
+    k_d = ref->k;
+    if (vel > 0) {
+      alpha = ref->alpha_plus[idx];
+      i_fu  = (ref->dir == FLUCAFD_X) ? ref->i - 1 : ref->i;
+      j_fu  = (ref->dir == FLUCAFD_Y) ? ref->j - 1 : ref->j;
+      k_fu  = (ref->dir == FLUCAFD_Z) ? ref->k - 1 : ref->k;
+    } else {
+      alpha = ref->alpha_minus[idx];
+      i_fu  = (ref->dir == FLUCAFD_X) ? ref->i + 1 : ref->i;
+      j_fu  = (ref->dir == FLUCAFD_Y) ? ref->j + 1 : ref->j;
+      k_fu  = (ref->dir == FLUCAFD_Z) ? ref->k + 1 : ref->k;
+      /* Swap upwind/downwind cells for vel <= 0 */
+      i_u = ref->i;
+      j_u = ref->j;
+      k_u = ref->k;
+      i_d = (ref->dir == FLUCAFD_X) ? ref->i - 1 : ref->i;
+      j_d = (ref->dir == FLUCAFD_Y) ? ref->j - 1 : ref->j;
+      k_d = (ref->dir == FLUCAFD_Z) ? ref->k - 1 : ref->k;
+    }
+
+    /* Check if upstream face is out of domain — fall back to plain averaging */
+    switch (ref->dir) {
+    case FLUCAFD_X:
+      idx_fu = i_fu;
+      break;
+    case FLUCAFD_Y:
+      idx_fu = j_fu;
+      break;
+    case FLUCAFD_Z:
+      idx_fu = k_fu;
+      break;
+    default:
+      idx_fu = 0;
+    }
+    if (!ref->periodic_dir && (idx_fu < 0 || idx_fu > ref->N_dir)) {
+      /* Upstream face is outside the domain; keep base v=0.5 as-is (plain averaging) */
+      points[n].ntvds = 0;
+      continue;
+    }
+
+    PetscCall(EvaluateGradient_Private(ref->fd_grad, ref->dim, i_fu, j_fu, k_fu, ref->arr_phi, ref->bcs, &grad_fu));
+    PetscCall(EvaluateGradient_Private(ref->fd_grad, ref->dim, ref->i, ref->j, ref->k, ref->arr_phi, ref->bcs, &grad_fc));
+
+    r   = (PetscAbsScalar(grad_fc) > FLUCAFD_TVD_GRAD_TOL) ? grad_fu / grad_fc : 1.;
+    psi = ref->limiter(r);
+
+    /* Determine if this point is the upwind or downwind cell */
+    is_upwind = ((vel > 0 && ref->role == FLUCAFD_TVD_PREV) || (vel <= 0 && ref->role == FLUCAFD_TVD_NEXT));
+
+    if (is_upwind) {
+      /* Upwind cell: GRID with weight 1 (v *= 2 converts base 0.5 to 1) */
+      points[n].v *= 2.;
+    } else {
+      /* Downwind cell: convert to CONSTANT with the TVD correction term.
+         v = base * 2 * alpha * psi * (phi_d - phi_u) where base includes any outer scale. */
+      phi_u = ReadPhiValue_Private(ref->dim, ref->arr_phi, i_u, j_u, k_u);
+      phi_d = ReadPhiValue_Private(ref->dim, ref->arr_phi, i_d, j_d, k_d);
+      points[n].v *= 2. * alpha * psi * (phi_d - phi_u);
+      points[n].type = FLUCAFD_STENCIL_CONSTANT;
+    }
+    points[n].ntvds = 0;
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
