@@ -71,8 +71,7 @@ typedef enum {
    for the internal arrays to remain valid. Stencil points with ntvds > 0
    must not be stored beyond the current call frame. */
 typedef struct {
-  FlucaFDTVDRefRole               role; /* PREV or NEXT */
-  PetscInt                        dim;
+  FlucaFDTVDRefRole               role;    /* PREV or NEXT */
   PetscInt                        i, j, k; /* face position where TVD is evaluated */
   FlucaFDDirection                dir;
   PetscInt                        N_dir;        /* domain size in TVD direction */
@@ -82,7 +81,7 @@ typedef struct {
   PetscScalar                    *alpha_minus;
   const void                     *arr_vel;
   const void                     *arr_phi;
-  FlucaFD                         fd_grad; /* gradient operator for face-centered gradient */
+  FlucaFD                         fd_grad; /* gradient operator (element -> face) */
   const FlucaFDBoundaryCondition *bcs;
 } FlucaFDTVDRef;
 

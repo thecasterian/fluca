@@ -1,5 +1,4 @@
 Stencil at i=8:
-  npoints = 3
+  npoints = 2
   points[0]: type=grid, i=7, loc=ELEMENT, c=0, v=1.
   points[1]: type=boundary(right), i=8, loc=LEFT, c=0, v=0.0625
-  points[2]: type=constant, v=-0.497592

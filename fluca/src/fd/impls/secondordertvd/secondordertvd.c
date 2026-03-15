@@ -184,7 +184,6 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
   points[0].nscales              = 0;
   points[0].ntvds                = 1;
   points[0].tvds[0].role         = FLUCAFD_TVD_PREV;
-  points[0].tvds[0].dim          = fd->dim;
   points[0].tvds[0].i            = i;
   points[0].tvds[0].j            = j;
   points[0].tvds[0].k            = k;
@@ -210,7 +209,6 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
   points[1].nscales              = 0;
   points[1].ntvds                = 1;
   points[1].tvds[0].role         = FLUCAFD_TVD_NEXT;
-  points[1].tvds[0].dim          = fd->dim;
   points[1].tvds[0].i            = i;
   points[1].tvds[0].j            = j;
   points[1].tvds[0].k            = k;
