@@ -1,3 +1,8 @@
+---
+name: petsc-conventions
+description: PETSc coding conventions for Fluca. Use when writing or reviewing C code in this project — covers naming, error handling, memory management, function structure, and the quick checklist.
+---
+
 # PETSc Coding Conventions for Fluca
 
 This project follows PETSc style. All C code must conform to these rules.
@@ -33,6 +38,8 @@ Function prototypes in headers **exclude parameter names** — types only.
 
 Visibility macros (`FLUCA_EXTERN`, `FLUCA_INTERN`) are only used in **header** declarations. Source file definitions do not need them — the declaration in the header is sufficient. Never use bare `extern`.
 
+Headers under `include/**/private/` are internal but still user-accessible. They follow the same rules as public headers — use `FLUCA_INTERN` for declarations, exclude parameter names from prototypes, etc.
+
 ## Function Structure
 
 Every function returning `PetscErrorCode` must follow this skeleton:
@@ -40,7 +47,7 @@ Every function returning `PetscErrorCode` must follow this skeleton:
 ```c
 PetscErrorCode FlucaFDDoSomething(FlucaFD fd, PetscInt n)
 {
-  PetscInt i;            /* all locals declared at block top */
+  PetscInt i;            /* all locals declared at block (scope) top */
 
   PetscFunctionBegin;    /* immediately after declarations + blank line */
   /* ... body ... */
@@ -121,6 +128,7 @@ Key points for writing new code:
 - **Header guards**: `#pragma once` as first non-comment line.
 - **Floating-point literals**: No trailing zeros after decimal point.
 - **Enums**: Always add a trailing comma after the last enumerator.
+- **Increment/decrement**: Prefer prefix (`++i`) over postfix (`i++`).
 
 ## Comments
 
@@ -168,7 +176,7 @@ PetscCall(FlucaFDDestroy(&fd));   /* Destroy takes pointer-to-pointer */
 - Call `PetscLogFlops()` directly with the flop count. Never accumulate in a local counter.
 - Register events with `PetscLogEventRegister()` and bracket with `PetscLogEventBegin/End`.
 
-## Quick Checklist
+## Quick Core Checklist
 
 - [ ] `PascalCase` functions with module prefix, `UPPER_SNAKE_CASE` enums/macros, suffixes for internal/private symbols
 - [ ] `PetscFunctionBegin` / `PetscFunctionReturn(PETSC_SUCCESS)` in every function
@@ -179,4 +187,6 @@ PetscCall(FlucaFDDestroy(&fd));   /* Destroy takes pointer-to-pointer */
 - [ ] `PetscInt` for indices/sizes, `PetscScalar` for floating point
 - [ ] Format specifiers: `PetscInt_FMT`, cast `PetscReal` to `double`
 - [ ] No bare `return`, no `malloc`/`free`, no `assert()`, no VLAs
-- [ ] Locals at block top, blank line before `PetscFunctionBegin`, no blank line before `PetscFunctionReturn`
+- [ ] Locals at block (scope) top, blank line before `PetscFunctionBegin`, no blank line before `PetscFunctionReturn`
+- [ ] `_Internal`, `_Private`, or class/type name suffix on all non-public functions
+- [ ] Functions that may raise an error (via `PetscCall`, `SETERRQ`, `PetscCheck`) must return `PetscErrorCode`

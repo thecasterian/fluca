@@ -156,6 +156,8 @@ DMRestoreLocalVector(dm, &local);
 
 **xe, ye, ze** — 0 or 1, indicating whether the local rank owns the extra boundary face/vertex in that direction. Loop bounds for face-located DOFs extend by these values.
 
+**IMPORTANT: `DMStagVecGetArray` and `DMStagVecGetArrayRead` require a local vector.** Never pass a global vector to these functions — it will silently produce wrong index mappings because global vectors lack the uniform `gxm × gym × gzm × entriesPerElement` layout that the array view assumes. Always scatter to a local vector first (`DMGlobalToLocal`) or obtain one via `DMGetLocalVector`.
+
 ## FlucaFD Operator System
 
 Polymorphic FD operators that compute stencils mapping input DOFs to output DOFs on DMStag.

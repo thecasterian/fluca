@@ -4,7 +4,7 @@ CFD framework for incompressible viscous flows on Cartesian grids, built on PETS
 
 ## Language and Build
 
-Pure C project (not C++). Follows PETSc coding conventions — see `.claude/rules/` for details.
+Pure C project (not C++). Follows PETSc coding conventions — see `petsc-conventions` skill for details.
 
 - **Memory**: `PetscNew`/`PetscMalloc1`/`PetscFree` — no `malloc`/`free`, no C++ smart pointers
 - **Error handling**: `PetscCall()`, `PetscCheck()` — no exceptions, no `assert()`
@@ -37,6 +37,11 @@ fluca/
 - Trunk-based development
 - Never commit directly to `main` — always create a new branch from the latest `main` and open a PR
 - Branch names must use a prefix: `feature/`, `refactor/`, `test/`, `doc/`, etc
+- When committing, only include source code files (`.c`, `.h`), build files (`CMakeLists.txt`), and test output files (`.out`). Never include documentation, `.claude/` files, or other non-source files unless explicitly requested.
+
+## Agent Code Modification Requirement
+
+Any agent that modifies code in this project **must** verify its changes against the `petsc-conventions` skill. When spawning such agents, include the skill content in the agent's prompt so it can self-check before returning results.
 
 ## Key Modules
 
