@@ -11,12 +11,11 @@ static const char help[] = "Test FlucaFD composition operator\n"
 
 int main(int argc, char **argv)
 {
-  DM            dm;
-  FlucaFD       fd_inner, fd_outer, fd_comp;
-  PetscInt      c, d, ncols;
-  PetscInt      N[2], idx[2];
-  DMStagStencil col[64];
-  PetscScalar   v[64];
+  DM                  dm;
+  FlucaFD             fd_inner, fd_outer, fd_comp;
+  PetscInt            d, npoints;
+  PetscInt            N[2], idx[2];
+  FlucaFDStencilPoint points[64];
 
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
@@ -57,15 +56,10 @@ int main(int argc, char **argv)
     PetscCall(PetscOptionsGetInt(NULL, NULL, opt, &idx[d], NULL));
   }
 
-  PetscCall(FlucaFDGetStencil(fd_comp, idx[0], idx[1], 0, &ncols, col, v));
-  PetscCall(SortStencil(ncols, col, v));
+  PetscCall(FlucaFDGetStencil(fd_comp, idx[0], idx[1], 0, &npoints, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Sum stencil at (i,j)=(%" PetscInt_FMT ",%" PetscInt_FMT "):\n", idx[0], idx[1]));
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  ncols = %" PetscInt_FMT "\n", ncols));
-  for (c = 0; c < ncols; ++c) {
-    if (col[c].c < 0)
-      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", j=%" PetscInt_FMT ", loc=%s, c=%s_boundary, v=%g\n", c, col[c].i, col[c].j, DMStagStencilLocations[col[c].loc], FlucaFDBoundaryNames[-col[c].c - 1], v[c]));
-    else PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  col[%" PetscInt_FMT "]: i=%" PetscInt_FMT ", j=%" PetscInt_FMT ", loc=%s, c=%" PetscInt_FMT ", v=%g\n", c, col[c].i, col[c].j, DMStagStencilLocations[col[c].loc], col[c].c, v[c]));
-  }
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints));
+  PetscCall(PrintStencil(2, npoints, points));
 
   PetscCall(FlucaFDDestroy(&fd_comp));
   PetscCall(FlucaFDDestroy(&fd_outer));
@@ -106,5 +100,10 @@ int main(int argc, char **argv)
     suffix: xy_first_deriv_second_accuracy_left_bc_dirichlet
     nsize: 1
     args: -inner_flucafd_dir x -inner_flucafd_deriv_order 1 -inner_flucafd_accu_order 2 -outer_flucafd_dir y -outer_flucafd_deriv_order 1 -outer_flucafd_accu_order 2 -comp_flucafd_left_bc_type dirichlet -i 0
+
+  test:
+    suffix: xy_first_deriv_second_accuracy_left_bc_dirichlet_down_bc_dirichlet
+    nsize: 1
+    args: -inner_flucafd_dir x -inner_flucafd_deriv_order 1 -inner_flucafd_accu_order 2 -outer_flucafd_dir y -outer_flucafd_deriv_order 1 -outer_flucafd_accu_order 2 -comp_flucafd_left_bc_type dirichlet -comp_flucafd_down_bc_type dirichlet -i 0 -j 0
 
 TEST*/

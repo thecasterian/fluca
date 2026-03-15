@@ -102,30 +102,76 @@ PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt n, PetscScalar A[], Pe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDAddStencilPoint_Internal(DMStagStencil new_col, PetscScalar new_v, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscBool FlucaFDScaleRefsSame_Private(const FlucaFDStencilPoint *a, const FlucaFDStencilPoint *b)
+{
+  PetscInt s;
+
+  if (a->nscales != b->nscales) return PETSC_FALSE;
+  for (s = 0; s < a->nscales; s++) {
+    const FlucaFDScaleRef *sa = &a->scales[s];
+    const FlucaFDScaleRef *sb = &b->scales[s];
+
+    if (sa->dim != sb->dim) return PETSC_FALSE;
+    if (sa->i != sb->i || sa->j != sb->j || sa->k != sb->k) return PETSC_FALSE;
+    /* Compare array pointer identity: same Vec local array means same scale Vec */
+    if (sa->arr != sb->arr) return PETSC_FALSE;
+  }
+  return PETSC_TRUE;
+}
+
+static PetscBool FlucaFDTVDRefsSame_Private(const FlucaFDStencilPoint *a, const FlucaFDStencilPoint *b)
+{
+  if (a->ntvds != b->ntvds) return PETSC_FALSE;
+  if (a->ntvds == 0) return PETSC_TRUE;
+  if (a->tvds[0].role != b->tvds[0].role) return PETSC_FALSE;
+  if (a->tvds[0].i != b->tvds[0].i || a->tvds[0].j != b->tvds[0].j || a->tvds[0].k != b->tvds[0].k) return PETSC_FALSE;
+  if (a->tvds[0].fd_grad != b->tvds[0].fd_grad) return PETSC_FALSE;
+  if (a->tvds[0].dir != b->tvds[0].dir) return PETSC_FALSE;
+  if (a->tvds[0].limiter != b->tvds[0].limiter) return PETSC_FALSE;
+  return PETSC_TRUE;
+}
+
+static PetscBool FlucaFDStencilPointsSame_Private(const FlucaFDStencilPoint *a, const FlucaFDStencilPoint *b)
+{
+  if (a->type != b->type) return PETSC_FALSE;
+  switch (a->type) {
+  case FLUCAFD_STENCIL_CONSTANT:
+    return PETSC_TRUE;
+  case FLUCAFD_STENCIL_BOUNDARY:
+    if (!(a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc && a->boundary_face == b->boundary_face)) return PETSC_FALSE;
+    if (!FlucaFDScaleRefsSame_Private(a, b)) return PETSC_FALSE;
+    return FlucaFDTVDRefsSame_Private(a, b);
+  case FLUCAFD_STENCIL_GRID:
+    if (!(a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc)) return PETSC_FALSE;
+    if (!FlucaFDScaleRefsSame_Private(a, b)) return PETSC_FALSE;
+    return FlucaFDTVDRefsSame_Private(a, b);
+  }
+  return PETSC_FALSE;
+}
+
+PetscErrorCode FlucaFDAddStencilPoint_Internal(const FlucaFDStencilPoint *new_point, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscInt  c;
   PetscBool found;
 
   PetscFunctionBegin;
   found = PETSC_FALSE;
-  for (c = 0; c < *ncols; ++c) {
-    if (col[c].i == new_col.i && col[c].j == new_col.j && col[c].k == new_col.k && col[c].c == new_col.c && col[c].loc == new_col.loc) {
-      v[c] += new_v;
+  for (c = 0; c < *npoints; ++c) {
+    if (FlucaFDStencilPointsSame_Private(&points[c], new_point)) {
+      points[c].v += new_point->v;
       found = PETSC_TRUE;
       break;
     }
   }
   if (!found) {
-    PetscCheck(*ncols < FLUCAFD_MAX_STENCIL_SIZE, PETSC_COMM_SELF, PETSC_ERR_SUP, "Resulting stencil is too large");
-    col[*ncols] = new_col;
-    v[*ncols]   = new_v;
-    ++(*ncols);
+    PetscCheck(*npoints < FLUCAFD_MAX_STENCIL_SIZE, PETSC_COMM_SELF, PETSC_ERR_SUP, "Resulting stencil is too large");
+    points[*npoints] = *new_point;
+    ++(*npoints);
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode IsOffGrid_Private(FlucaFD fd, const DMStagStencil *col, PetscInt *off_dir, PetscBool *is_low, PetscBool *is_off_grid)
+static PetscErrorCode IsOffGrid_Private(FlucaFD fd, const FlucaFDStencilPoint *point, PetscInt *off_dir, PetscBool *is_low, PetscBool *is_off_grid)
 {
   PetscInt  idx, gxs, gxm, gxe, d;
   PetscBool use_face_coord;
@@ -133,24 +179,24 @@ static PetscErrorCode IsOffGrid_Private(FlucaFD fd, const DMStagStencil *col, Pe
   PetscFunctionBegin;
   *is_off_grid = PETSC_FALSE;
 
-  /* Constant and boundary marker columns (c < 0) are not real grid points */
-  if (col->c < 0) PetscFunctionReturn(PETSC_SUCCESS);
+  /* Only grid points can be off-grid */
+  if (point->type != FLUCAFD_STENCIL_GRID) PetscFunctionReturn(PETSC_SUCCESS);
 
   for (d = 0; d < fd->dim; ++d) {
     switch (d) {
     case 0:
-      idx = col->i;
+      idx = point->i;
       break;
     case 1:
-      idx = col->j;
+      idx = point->j;
       break;
     case 2:
-      idx = col->k;
+      idx = point->k;
       break;
     default:
       SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
     }
-    PetscCall(FlucaFDUseFaceCoordinate_Internal(col->loc, d, &use_face_coord));
+    PetscCall(FlucaFDUseFaceCoordinate_Internal(point->loc, d, &use_face_coord));
     PetscCall(FlucaFDGetGhostCorners_Internal(fd, d, use_face_coord, &gxs, &gxm, &gxe));
 
     if (idx < gxs) {
@@ -168,7 +214,7 @@ static PetscErrorCode IsOffGrid_Private(FlucaFD fd, const DMStagStencil *col, Pe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode GetStencilSizeForOffGridPoint_Private(FlucaFD fd, const DMStagStencil *col, PetscInt dir, FlucaFDBoundaryConditionType bc_type, PetscInt *stencil_size)
+static PetscErrorCode GetStencilSizeForOffGridPoint_Private(FlucaFD fd, const FlucaFDStencilPoint *point, PetscInt dir, FlucaFDBoundaryConditionType bc_type, PetscInt *stencil_size)
 {
   FlucaFDTermLink term;
   PetscInt        order, min_order;
@@ -176,7 +222,7 @@ static PetscErrorCode GetStencilSizeForOffGridPoint_Private(FlucaFD fd, const DM
   PetscFunctionBegin;
   min_order = PETSC_INT_MAX;
   for (term = fd->termlink; term; term = term->next)
-    if (term->deriv_order[dir] != -1 && term->accu_order[dir] != PETSC_INT_MAX && term->input_loc == col->loc && term->input_c == col->c) {
+    if (term->deriv_order[dir] != -1 && term->accu_order[dir] != PETSC_INT_MAX && term->input_loc == point->loc && term->input_c == point->c) {
       order     = term->deriv_order[dir] + term->accu_order[dir];
       min_order = PetscMin(order, min_order);
     }
@@ -249,7 +295,25 @@ static PetscErrorCode GetBoundaryStencilLocation_Private(DMStagStencilLocation r
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+/* Clear TVD refs on both points of a TVD pair sharing the same face position
+   and direction. Raises an error if the pair (two matching points) is not found. */
+static PetscErrorCode ClearTVDPair_Private(PetscInt npoints, FlucaFDStencilPoint points[], const FlucaFDTVDRef *ref)
+{
+  PetscInt p, found;
+
+  PetscFunctionBegin;
+  found = 0;
+  for (p = 0; p < npoints; p++) {
+    if (points[p].ntvds == 1 && points[p].tvds[0].dir == ref->dir && points[p].tvds[0].i == ref->i && points[p].tvds[0].j == ref->j && points[p].tvds[0].k == ref->k) {
+      points[p].ntvds = 0;
+      ++found;
+    }
+  }
+  PetscCheck(found == 2, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Expected TVD pair (2 matching points) but found %" PetscInt_FMT, found);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscInt       iter;
   const PetscInt max_iter = 100;
@@ -261,8 +325,8 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
 
     /* Find an off-grid point */
     off_idx = -1;
-    for (c = 0; c < *ncols; ++c) {
-      PetscCall(IsOffGrid_Private(fd, &col[c], &off_dir, &is_low, &is_off_grid));
+    for (c = 0; c < *npoints; ++c) {
+      PetscCall(IsOffGrid_Private(fd, &points[c], &off_dir, &is_low, &is_off_grid));
       if (is_off_grid) {
         off_idx = c;
         break;
@@ -270,10 +334,12 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
     }
     if (off_idx < 0) break;
 
+    /* Clear TVD refs on the off-grid point and its pair */
+    if (points[off_idx].ntvds > 0) PetscCall(ClearTVDPair_Private(*npoints, points, &points[off_idx].tvds[0]));
+
     /* Process this off-grid point */
     {
-      const DMStagStencil          off_col = col[off_idx];
-      const PetscScalar            off_v   = v[off_idx];
+      const FlucaFDStencilPoint    off_point = points[off_idx];
       FlucaFDBoundaryConditionType bc_type;
       const PetscScalar          **arr_coord;
       PetscBool                    periodic, use_face_coord;
@@ -283,7 +349,7 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
       PetscScalar                  extrap_coeffs[FLUCAFD_MAX_STENCIL_SIZE];
       PetscScalar                  A[FLUCAFD_MAX_STENCIL_SIZE * FLUCAFD_MAX_STENCIL_SIZE];
       PetscScalar                  b[FLUCAFD_MAX_STENCIL_SIZE];
-      DMStagStencil                new_col;
+      FlucaFDStencilPoint          new_point = {0};
       PetscInt                     n, r;
 
       periodic = fd->periodic[off_dir];
@@ -293,10 +359,10 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
       else bc_type = FLUCAFD_BC_NONE;
 
       arr_coord = fd->arr_coord[off_dir];
-      PetscCall(FlucaFDUseFaceCoordinate_Internal(off_col.loc, off_dir, &use_face_coord));
+      PetscCall(FlucaFDUseFaceCoordinate_Internal(off_point.loc, off_dir, &use_face_coord));
       coord_slot = use_face_coord ? fd->slot_coord_prev : fd->slot_coord_elem;
 
-      PetscCall(GetStencilSizeForOffGridPoint_Private(fd, &off_col, off_dir, bc_type, &stencil_size));
+      PetscCall(GetStencilSizeForOffGridPoint_Private(fd, &off_point, off_dir, bc_type, &stencil_size));
       PetscCheck(stencil_size <= FLUCAFD_MAX_STENCIL_SIZE, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Stencil size %" PetscInt_FMT " exceeds maximum %d", stencil_size, FLUCAFD_MAX_STENCIL_SIZE);
 
       /* Local grid info */
@@ -308,13 +374,13 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
       h_next         = arr_coord[last_face_idx][fd->slot_coord_prev] - arr_coord[last_face_idx - 1][fd->slot_coord_prev];
       switch (off_dir) {
       case 0:
-        off_grid_idx = off_col.i;
+        off_grid_idx = off_point.i;
         break;
       case 1:
-        off_grid_idx = off_col.j;
+        off_grid_idx = off_point.j;
         break;
       case 2:
-        off_grid_idx = off_col.k;
+        off_grid_idx = off_point.k;
         break;
       default:
         SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported direction");
@@ -322,11 +388,8 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
       PetscCall(FlucaFDGetCoordinate_Internal(arr_coord, off_grid_idx, coord_slot, gxs, gxm + gxe, h_prev, h_next, &off_coord));
 
       /* Remove the off-grid point from stencil */
-      for (c = off_idx; c < *ncols - 1; ++c) {
-        col[c] = col[c + 1];
-        v[c]   = v[c + 1];
-      }
-      --(*ncols);
+      for (c = off_idx; c < *npoints - 1; ++c) points[c] = points[c + 1];
+      --(*npoints);
 
       /* Handle based on BC type */
       switch (bc_type) {
@@ -344,19 +407,21 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
 
         /* Add on-grid points to stencil */
         for (n = 0; n < stencil_size; ++n) {
-          new_col = off_col;
+          new_point      = off_point;
+          new_point.type = FLUCAFD_STENCIL_GRID;
           switch (off_dir) {
           case 0:
-            new_col.i = start_idx + n;
+            new_point.i = start_idx + n;
             break;
           case 1:
-            new_col.j = start_idx + n;
+            new_point.j = start_idx + n;
             break;
           case 2:
-            new_col.k = start_idx + n;
+            new_point.k = start_idx + n;
             break;
           }
-          PetscCall(FlucaFDAddStencilPoint_Internal(new_col, off_v * extrap_coeffs[n], ncols, col, v));
+          new_point.v = off_point.v * extrap_coeffs[n];
+          PetscCall(FlucaFDAddStencilPoint_Internal(&new_point, npoints, points));
         }
         break;
 
@@ -380,29 +445,36 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
         }
         PetscCall(FlucaFDSolveLinearSystem_Internal(stencil_size, A, b, extrap_coeffs));
 
-        /* Add the boundary point to stencil */
-        new_col.i = (off_dir == 0) ? bnd_idx : off_col.i;
-        new_col.j = (off_dir == 1) ? bnd_idx : off_col.j;
-        new_col.k = (off_dir == 2) ? bnd_idx : off_col.k;
-        PetscCall(GetBoundaryStencilLocation_Private(off_col.loc, off_dir, &new_col.loc));
-        new_col.c = -(2 * off_dir + (is_low ? 1 : 2)); /* Boundary value marker: -1=left, -2=right, -3=down, -4=up, -5=back, -6=front */
-        PetscCall(FlucaFDAddStencilPoint_Internal(new_col, off_v * extrap_coeffs[0], ncols, col, v));
+        /* Add the boundary point to stencil (inherit scale refs from off_point, but not TVD refs) */
+        new_point      = off_point;
+        new_point.type = FLUCAFD_STENCIL_BOUNDARY;
+        new_point.i    = (off_dir == 0) ? bnd_idx : off_point.i;
+        new_point.j    = (off_dir == 1) ? bnd_idx : off_point.j;
+        new_point.k    = (off_dir == 2) ? bnd_idx : off_point.k;
+        PetscCall(GetBoundaryStencilLocation_Private(off_point.loc, off_dir, &new_point.loc));
+        new_point.c             = off_point.c;
+        new_point.boundary_face = 2 * off_dir + (is_low ? 0 : 1);
+        new_point.v             = off_point.v * extrap_coeffs[0];
+        new_point.ntvds         = 0;
+        PetscCall(FlucaFDAddStencilPoint_Internal(&new_point, npoints, points));
 
         /* Add on-grid points to stencil */
         for (n = 0; n < stencil_size - 1; ++n) {
-          new_col = off_col;
+          new_point      = off_point;
+          new_point.type = FLUCAFD_STENCIL_GRID;
           switch (off_dir) {
           case 0:
-            new_col.i = start_idx + n;
+            new_point.i = start_idx + n;
             break;
           case 1:
-            new_col.j = start_idx + n;
+            new_point.j = start_idx + n;
             break;
           case 2:
-            new_col.k = start_idx + n;
+            new_point.k = start_idx + n;
             break;
           }
-          PetscCall(FlucaFDAddStencilPoint_Internal(new_col, off_v * extrap_coeffs[n + 1], ncols, col, v));
+          new_point.v = off_point.v * extrap_coeffs[n + 1];
+          PetscCall(FlucaFDAddStencilPoint_Internal(&new_point, npoints, points));
         }
         break;
 
@@ -426,29 +498,36 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
 
         /* v[off] = (v'[bnd] - a[0]*v[0] - ... ) / a_off */
 
-        /* Add the boundary point to stencil */
-        new_col.i = (off_dir == 0) ? bnd_idx : off_col.i;
-        new_col.j = (off_dir == 1) ? bnd_idx : off_col.j;
-        new_col.k = (off_dir == 2) ? bnd_idx : off_col.k;
-        PetscCall(GetBoundaryStencilLocation_Private(off_col.loc, off_dir, &new_col.loc));
-        new_col.c = -(2 * off_dir + (is_low ? 1 : 2)); /* Boundary value marker: -1=left, -2=right, -3=down, -4=up, -5=back, -6=front */
-        PetscCall(FlucaFDAddStencilPoint_Internal(new_col, off_v / a_off, ncols, col, v));
+        /* Add the boundary point to stencil (inherit scale refs from off_point, but not TVD refs) */
+        new_point      = off_point;
+        new_point.type = FLUCAFD_STENCIL_BOUNDARY;
+        new_point.i    = (off_dir == 0) ? bnd_idx : off_point.i;
+        new_point.j    = (off_dir == 1) ? bnd_idx : off_point.j;
+        new_point.k    = (off_dir == 2) ? bnd_idx : off_point.k;
+        PetscCall(GetBoundaryStencilLocation_Private(off_point.loc, off_dir, &new_point.loc));
+        new_point.c             = off_point.c;
+        new_point.boundary_face = 2 * off_dir + (is_low ? 0 : 1);
+        new_point.v             = off_point.v / a_off;
+        new_point.ntvds         = 0;
+        PetscCall(FlucaFDAddStencilPoint_Internal(&new_point, npoints, points));
 
         /* Add on-grid points to stencil */
         for (n = 0; n < stencil_size - 1; ++n) {
-          new_col = off_col;
+          new_point      = off_point;
+          new_point.type = FLUCAFD_STENCIL_GRID;
           switch (off_dir) {
           case 0:
-            new_col.i = start_idx + n;
+            new_point.i = start_idx + n;
             break;
           case 1:
-            new_col.j = start_idx + n;
+            new_point.j = start_idx + n;
             break;
           case 2:
-            new_col.k = start_idx + n;
+            new_point.k = start_idx + n;
             break;
           }
-          PetscCall(FlucaFDAddStencilPoint_Internal(new_col, -off_v * extrap_coeffs[n + 1] / a_off, ncols, col, v));
+          new_point.v = -off_point.v * extrap_coeffs[n + 1] / a_off;
+          PetscCall(FlucaFDAddStencilPoint_Internal(&new_point, npoints, points));
         }
         break;
 
@@ -459,30 +538,193 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *ncols, 
   }
 
   PetscCheck(iter < max_iter, PetscObjectComm((PetscObject)fd), PETSC_ERR_CONV_FAILED, "Failed to remove all off-grid points after %" PetscInt_FMT " iterations", max_iter);
-  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(ncols, col, v));
+  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscScalar       v_abssum;
-  PetscInt          ncols_new, c;
+  PetscInt          npoints_new, c;
   PetscBool         remove;
   const PetscScalar atol = FLUCAFD_COEFF_ATOL, rtol = FLUCAFD_COEFF_RTOL;
 
   PetscFunctionBegin;
   v_abssum = 0.;
-  for (c = 0; c < *ncols; ++c) v_abssum += PetscAbs(v[c]);
-  ncols_new = 0;
-  for (c = 0; c < *ncols; ++c) {
-    remove = PetscAbs(v[c]) < atol || PetscAbs(v[c] / v_abssum) < rtol;
+  for (c = 0; c < *npoints; ++c) v_abssum += PetscAbs(points[c].v);
+  npoints_new = 0;
+  for (c = 0; c < *npoints; ++c) {
+    remove = PetscAbs(points[c].v) < atol || PetscAbs(points[c].v / v_abssum) < rtol;
     if (!remove) {
-      col[ncols_new] = col[c];
-      v[ncols_new]   = v[c];
-      ++ncols_new;
+      points[npoints_new] = points[c];
+      ++npoints_new;
     }
   }
-  *ncols = ncols_new;
+  *npoints = npoints_new;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt npoints, FlucaFDStencilPoint points[])
+{
+  PetscInt               n, s;
+  const FlucaFDScaleRef *ref;
+  PetscScalar            val;
+
+  PetscFunctionBegin;
+  for (n = 0; n < npoints; n++) {
+    for (s = 0; s < points[n].nscales; s++) {
+      ref = &points[n].scales[s];
+      /* Scale ref indices are set by GetStencilRaw_Scale at the evaluation position (i,j,k),
+         which is always within the DMDA local array bounds. Off-grid scale ref positions
+         are not yet handled (future work). */
+      switch (ref->dim) {
+      case 1:
+        val = ((const PetscScalar *)ref->arr)[ref->i];
+        break;
+      case 2:
+        val = ((const PetscScalar **)ref->arr)[ref->j][ref->i];
+        break;
+      case 3:
+        val = ((const PetscScalar ***)ref->arr)[ref->k][ref->j][ref->i];
+        break;
+      default:
+        SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported dim %" PetscInt_FMT " in scale ref", ref->dim);
+      }
+      points[n].v *= val;
+    }
+    points[n].nscales = 0;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode EvaluateGradient_Private(FlucaFD fd_grad, PetscInt dim, PetscInt i, PetscInt j, PetscInt k, const void *arr_phi, const FlucaFDBoundaryCondition bcs[], PetscScalar *grad)
+{
+  FlucaFDStencilPoint grad_points[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscInt            ngrad, c;
+
+  PetscFunctionBegin;
+  PetscCall(FlucaFDGetStencil(fd_grad, i, j, k, &ngrad, grad_points));
+  *grad = 0.;
+  for (c = 0; c < ngrad; c++) {
+    switch (grad_points[c].type) {
+    case FLUCAFD_STENCIL_GRID:
+      switch (dim) {
+      case 1:
+        *grad += grad_points[c].v * ((const PetscScalar *)arr_phi)[grad_points[c].i];
+        break;
+      case 2:
+        *grad += grad_points[c].v * ((const PetscScalar **)arr_phi)[grad_points[c].j][grad_points[c].i];
+        break;
+      case 3:
+        *grad += grad_points[c].v * ((const PetscScalar ***)arr_phi)[grad_points[c].k][grad_points[c].j][grad_points[c].i];
+        break;
+      default:
+        SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported dim");
+      }
+      break;
+    case FLUCAFD_STENCIL_BOUNDARY:
+      *grad += grad_points[c].v * bcs[grad_points[c].boundary_face].value;
+      break;
+    case FLUCAFD_STENCIL_CONSTANT:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unexpected constant in gradient stencil");
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ReadPhiValue_Private(PetscInt dim, const void *arr, PetscInt i, PetscInt j, PetscInt k, PetscScalar *val)
+{
+  PetscFunctionBegin;
+  switch (dim) {
+  case 1:
+    *val = ((const PetscScalar *)arr)[i];
+    break;
+  case 2:
+    *val = ((const PetscScalar **)arr)[j][i];
+    break;
+  case 3:
+    *val = ((const PetscScalar ***)arr)[k][j][i];
+    break;
+  default:
+    SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported dim %" PetscInt_FMT " in ReadPhiValue_Private", dim);
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt npoints, FlucaFDStencilPoint points[])
+{
+  PetscInt             n;
+  const FlucaFDTVDRef *ref;
+  PetscScalar          vel;
+  PetscInt             idx;
+  PetscInt             i_fu, j_fu, k_fu;
+
+  PetscFunctionBegin;
+  for (n = 0; n < npoints; n++) {
+    PetscScalar alpha, grad_fu, grad_fc, r, psi, phi_u, phi_d;
+    PetscBool   is_upwind;
+    PetscInt    i_u, j_u, k_u, i_d, j_d, k_d;
+
+    if (points[n].ntvds != 1) continue;
+    ref = &points[n].tvds[0];
+
+    PetscCall(ReadPhiValue_Private(ref->fd_grad->dim, ref->arr_vel, ref->i, ref->j, ref->k, &vel));
+
+    switch (ref->dir) {
+    case FLUCAFD_X:
+      idx = ref->i;
+      break;
+    case FLUCAFD_Y:
+      idx = ref->j;
+      break;
+    case FLUCAFD_Z:
+      idx = ref->k;
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported TVD direction");
+    }
+
+    if (vel >= 0) {
+      alpha = ref->alpha_plus[idx];
+      i_fu  = (ref->dir == FLUCAFD_X) ? ref->i - 1 : ref->i;
+      j_fu  = (ref->dir == FLUCAFD_Y) ? ref->j - 1 : ref->j;
+      k_fu  = (ref->dir == FLUCAFD_Z) ? ref->k - 1 : ref->k;
+      i_u   = (ref->dir == FLUCAFD_X) ? ref->i - 1 : ref->i;
+      j_u   = (ref->dir == FLUCAFD_Y) ? ref->j - 1 : ref->j;
+      k_u   = (ref->dir == FLUCAFD_Z) ? ref->k - 1 : ref->k;
+      i_d   = ref->i;
+      j_d   = ref->j;
+      k_d   = ref->k;
+    } else {
+      alpha = ref->alpha_minus[idx];
+      i_fu  = (ref->dir == FLUCAFD_X) ? ref->i + 1 : ref->i;
+      j_fu  = (ref->dir == FLUCAFD_Y) ? ref->j + 1 : ref->j;
+      k_fu  = (ref->dir == FLUCAFD_Z) ? ref->k + 1 : ref->k;
+      i_u   = ref->i;
+      j_u   = ref->j;
+      k_u   = ref->k;
+      i_d   = (ref->dir == FLUCAFD_X) ? ref->i - 1 : ref->i;
+      j_d   = (ref->dir == FLUCAFD_Y) ? ref->j - 1 : ref->j;
+      k_d   = (ref->dir == FLUCAFD_Z) ? ref->k - 1 : ref->k;
+    }
+
+    PetscCall(EvaluateGradient_Private(ref->fd_grad, ref->fd_grad->dim, i_fu, j_fu, k_fu, ref->arr_phi, ref->bcs, &grad_fu));
+    PetscCall(EvaluateGradient_Private(ref->fd_grad, ref->fd_grad->dim, ref->i, ref->j, ref->k, ref->arr_phi, ref->bcs, &grad_fc));
+
+    r   = (PetscAbsScalar(grad_fc) > FLUCAFD_TVD_GRAD_TOL) ? grad_fu / grad_fc : 1.;
+    psi = ref->limiter(r);
+
+    is_upwind = (vel >= 0 && ref->role == FLUCAFD_TVD_PREV) || (vel < 0 && ref->role == FLUCAFD_TVD_NEXT);
+    if (is_upwind) {
+      points[n].v *= 2.;
+    } else {
+      PetscCall(ReadPhiValue_Private(ref->fd_grad->dim, ref->arr_phi, i_u, j_u, k_u, &phi_u));
+      PetscCall(ReadPhiValue_Private(ref->fd_grad->dim, ref->arr_phi, i_d, j_d, k_d, &phi_d));
+      points[n].v *= 2. * alpha * psi * (phi_d - phi_u);
+      points[n].type = FLUCAFD_STENCIL_CONSTANT;
+    }
+    points[n].ntvds = 0;
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

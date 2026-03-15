@@ -7,9 +7,8 @@ set(TEST_SRCS
     ex2.c
     ex3.c
     ex4.c
-    ex5.c
-    ex6.c
     ex7.c
+    ex8.c
 )
 
 foreach(test_src ${TEST_SRCS})

@@ -72,34 +72,41 @@ static PetscErrorCode FlucaFDSetUp_Scale(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
-  FlucaFD_Scale *scale = (FlucaFD_Scale *)fd->data;
-  PetscInt       n;
-  PetscScalar    scale_value;
+  FlucaFD_Scale   *scale = (FlucaFD_Scale *)fd->data;
+  PetscInt         n;
+  FlucaFDScaleRef *ref;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, ncols, col, v));
+  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, npoints, points));
 
   if (scale->is_constant) {
-    scale_value = scale->constant;
+    /* Constant scale: multiply v directly, no deferred ref needed */
+    for (n = 0; n < *npoints; n++) points[n].v *= scale->constant;
   } else {
-    switch (fd->dim) {
-    case 1:
-      scale_value = scale->arr_vec_1d[i];
-      break;
-    case 2:
-      scale_value = scale->arr_vec_2d[j][i];
-      break;
-    case 3:
-      scale_value = scale->arr_vec_3d[k][j][i];
-      break;
-    default:
-      SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
+    /* Vector scale: tag each point with a deferred scale ref */
+    for (n = 0; n < *npoints; n++) {
+      PetscCheck(points[n].nscales < FLUCAFD_MAX_SCALES, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Stencil point already has %" PetscInt_FMT " deferred scale refs; FLUCAFD_MAX_SCALES=%d exceeded", points[n].nscales, FLUCAFD_MAX_SCALES);
+      ref      = &points[n].scales[points[n].nscales];
+      ref->dim = fd->dim;
+      ref->i   = i;
+      ref->j   = j;
+      ref->k   = k;
+      switch (fd->dim) {
+      case 1:
+        ref->arr = scale->arr_vec_1d;
+        break;
+      case 2:
+        ref->arr = scale->arr_vec_2d;
+        break;
+      case 3:
+        ref->arr = scale->arr_vec_3d;
+        break;
+      }
+      ++points[n].nscales;
     }
   }
-
-  for (n = 0; n < *ncols; n++) v[n] *= scale_value;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

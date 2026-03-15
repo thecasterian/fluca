@@ -9,6 +9,7 @@
 #define FLUCAFD_ZERO_PIVOT_TOL   1e-14
 #define FLUCAFD_COEFF_ATOL       1e-10
 #define FLUCAFD_COEFF_RTOL       1e-8
+#define FLUCAFD_TVD_GRAD_TOL     1e-30
 
 FLUCA_EXTERN PetscBool      FlucaFDRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode FlucaFDRegisterAll(void);
@@ -27,7 +28,7 @@ typedef struct _FlucaFDOps *FlucaFDOps;
 struct _FlucaFDOps {
   PetscErrorCode (*setfromoptions)(FlucaFD, PetscOptionItems);
   PetscErrorCode (*setup)(FlucaFD);
-  PetscErrorCode (*getstencilraw)(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, DMStagStencil[], PetscScalar[]);
+  PetscErrorCode (*getstencilraw)(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
   PetscErrorCode (*destroy)(FlucaFD);
   PetscErrorCode (*view)(FlucaFD, PetscViewer);
 };
@@ -66,8 +67,8 @@ typedef struct {
   PetscInt         deriv_order; /* 0, 1, 2, ... */
   PetscInt         accu_order;  /* 1, 2, 3, ... */
 
-  PetscInt      ncols;
-  DMStagStencil col[FLUCAFD_MAX_STENCIL_SIZE]; /* stencil with relative indices */
+  PetscInt            npoints;
+  FlucaFDStencilPoint points[FLUCAFD_MAX_STENCIL_SIZE]; /* stencil template with relative indices */
 
   PetscInt    v_start;
   PetscInt    v_end;
@@ -154,9 +155,11 @@ FLUCA_INTERN PetscErrorCode FlucaFDUseFaceCoordinate_Internal(DMStagStencilLocat
 FLUCA_INTERN PetscErrorCode FlucaFDGetCoordinate_Internal(const PetscScalar **, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar, PetscScalar, PetscScalar *);
 FLUCA_INTERN PetscErrorCode FlucaFDGetGhostCorners_Internal(FlucaFD, PetscInt, PetscBool, PetscInt *, PetscInt *, PetscInt *);
 FLUCA_INTERN PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt, PetscScalar[], PetscScalar[], PetscScalar[]);
-FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(DMStagStencil, PetscScalar, PetscInt *, DMStagStencil[], PetscScalar[]);
-FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt *, DMStagStencil[], PetscScalar[]);
-FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, DMStagStencil[], PetscScalar[]);
+FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(const FlucaFDStencilPoint *, PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_INTERN PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
+FLUCA_INTERN PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDuplicate_Internal(FlucaFDTermLink, FlucaFDTermLink *);

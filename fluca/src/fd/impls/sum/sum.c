@@ -33,21 +33,21 @@ static PetscErrorCode FlucaFDSetUp_Sum(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_Sum(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+static PetscErrorCode FlucaFDGetStencilRaw_Sum(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_Sum          *sum = (FlucaFD_Sum *)fd->data;
   FlucaFDSumOperandLink op;
-  PetscInt              op_ncols;
-  DMStagStencil         op_col[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscScalar           op_v[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscInt              op_npoints;
+  FlucaFDStencilPoint   op_points[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt              c;
 
   PetscFunctionBegin;
-  *ncols = 0;
+  PetscCall(PetscMemzero(op_points, sizeof(op_points)));
+  *npoints = 0;
 
   for (op = sum->oplink; op != NULL; op = op->next) {
-    PetscCall(FlucaFDGetStencilRaw(op->fd, i, j, k, &op_ncols, op_col, op_v));
-    for (c = 0; c < op_ncols; c++) PetscCall(FlucaFDAddStencilPoint_Internal(op_col[c], op_v[c], ncols, col, v));
+    PetscCall(FlucaFDGetStencilRaw(op->fd, i, j, k, &op_npoints, op_points));
+    for (c = 0; c < op_npoints; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&op_points[c], npoints, points));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -119,6 +119,7 @@ PetscErrorCode FlucaFDSumCreate(PetscInt n, const FlucaFD ops[], FlucaFD *fd)
   PetscAssertPointer(ops, 2);
   for (i = 0; i < n; ++i) {
     PetscValidHeaderSpecific(ops[i], FLUCAFD_CLASSID, 2);
+    if (i > 0) PetscCheckSameComm(ops[0], 2, ops[i], 2);
     PetscCheck(ops[i]->setupcalled, PetscObjectComm((PetscObject)ops[i]), PETSC_ERR_ARG_WRONGSTATE, "Operand %" PetscInt_FMT " must be set up before calling FlucaFDSumCreate", i);
   }
   PetscAssertPointer(fd, 3);

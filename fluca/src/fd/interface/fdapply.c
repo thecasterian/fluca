@@ -1,5 +1,16 @@
 #include <fluca/private/flucafdimpl.h>
 
+// clang-format off
+#define FlucaFDStencilPointToStencil(pt, st) \
+  do { \
+    (st)->loc = (pt)->loc; \
+    (st)->i   = (pt)->i; \
+    (st)->j   = (pt)->j; \
+    (st)->k   = (pt)->k; \
+    (st)->c   = (pt)->c; \
+  } while (0)
+// clang-format on
+
 static PetscErrorCode GetOutputLoopRange_Private(FlucaFD fd, DM output_dm, PetscInt *i_start, PetscInt *j_start, PetscInt *k_start, PetscInt *i_end, PetscInt *j_end, PetscInt *k_end)
 {
   PetscInt  xs, ys, zs, xm, ym, zm, nExtrax, nExtray, nExtraz;
@@ -19,44 +30,51 @@ static PetscErrorCode GetOutputLoopRange_Private(FlucaFD fd, DM output_dm, Petsc
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscAssertPointer(ncols, 5);
-  PetscAssertPointer(col, 6);
-  PetscAssertPointer(v, 7);
-  PetscUseTypeMethod(fd, getstencilraw, i, j, k, ncols, col, v);
-  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(ncols, col, v));
+  PetscAssertPointer(npoints, 5);
+  PetscAssertPointer(points, 6);
+  PetscUseTypeMethod(fd, getstencilraw, i, j, k, npoints, points);
+  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
+PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
+  FlucaFDStencilPoint merged[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscInt            merged_npoints, c;
+
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscAssertPointer(ncols, 5);
-  PetscAssertPointer(col, 6);
-  PetscAssertPointer(v, 7);
-  PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, ncols, col, v));
-  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, ncols, col, v));
-  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(ncols, col, v));
+  PetscAssertPointer(npoints, 5);
+  PetscAssertPointer(points, 6);
+  PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, npoints, points));
+  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, npoints, points));
+  PetscCall(FlucaFDResolveScaleRefs_Internal(*npoints, points));
+  PetscCall(FlucaFDResolveTVDRefs_Internal(*npoints, points));
+  /* Re-merge points that are now identical after ref resolution */
+  merged_npoints = 0;
+  for (c = 0; c < *npoints; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&points[c], &merged_npoints, merged));
+  *npoints = merged_npoints;
+  PetscCall(PetscArraycpy(points, merged, merged_npoints));
+  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
 {
-  Vec                x_local, y_local;
-  const PetscScalar *x_arr;
-  PetscScalar       *y_arr;
-  PetscInt           i_start, j_start, k_start, i_end, j_end, k_end;
-  PetscInt           i, j, k, c;
-  DMStagStencil      row;
-  DMStagStencil      col[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscScalar        v[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscInt           ncols;
-  PetscInt           ir, idx, bnd_idx;
-  PetscScalar        result;
+  Vec                 x_local, y_local;
+  const PetscScalar  *x_arr;
+  PetscScalar        *y_arr;
+  PetscInt            i_start, j_start, k_start, i_end, j_end, k_end;
+  PetscInt            i, j, k, c;
+  DMStagStencil       row, stencil;
+  FlucaFDStencilPoint points[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscInt            npoints;
+  PetscInt            ir, idx;
+  PetscScalar         result;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
@@ -88,21 +106,22 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
         row.k   = k;
         row.c   = fd->output_c;
         row.loc = fd->output_loc;
-        PetscCall(FlucaFDGetStencil(fd, i, j, k, &ncols, col, v));
+        PetscCall(FlucaFDGetStencil(fd, i, j, k, &npoints, points));
 
-        for (c = 0; c < ncols; ++c) {
-          if (col[c].c >= 0) {
-            /* Interior point: read from input vector */
-            PetscCall(DMStagStencilToIndexLocal(input_dm, fd->dim, 1, &col[c], &idx));
-            result += v[c] * x_arr[idx];
-          } else if (col[c].c == FLUCAFD_CONSTANT) {
-            /* Constant term */
-            result += v[c];
-          } else {
-            /* Boundary point: coefficient * boundary value */
-            bnd_idx = -col[c].c - 1;
-            PetscCheck(bnd_idx >= 0 && bnd_idx < 2 * FLUCAFD_MAX_DIM, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Invalid boundary marker %" PetscInt_FMT " in stencil", col[c].c);
-            result += v[c] * fd->bcs[bnd_idx].value;
+        for (c = 0; c < npoints; ++c) {
+          switch (points[c].type) {
+          case FLUCAFD_STENCIL_GRID:
+            FlucaFDStencilPointToStencil(&points[c], &stencil);
+            PetscCall(DMStagStencilToIndexLocal(input_dm, fd->dim, 1, &stencil, &idx));
+            result += points[c].v * x_arr[idx];
+            break;
+          case FLUCAFD_STENCIL_CONSTANT:
+            result += points[c].v;
+            break;
+          case FLUCAFD_STENCIL_BOUNDARY:
+            PetscCheck(points[c].boundary_face >= 0 && points[c].boundary_face < 2 * FLUCAFD_MAX_DIM, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Invalid boundary face %" PetscInt_FMT " in stencil", points[c].boundary_face);
+            result += points[c].v * fd->bcs[points[c].boundary_face].value;
+            break;
           }
         }
 
@@ -122,16 +141,15 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
 
 PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
 {
-  PetscInt      i_start, j_start, k_start, i_end, j_end, k_end;
-  PetscInt      i, j, k, c;
-  DMStagStencil row;
-  DMStagStencil col[FLUCAFD_MAX_STENCIL_SIZE];
-  DMStagStencil mat_col[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscScalar   v[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscScalar   mat_v[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscInt      ncols, mat_ncols;
-  PetscInt      ir;
-  PetscInt      ic[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscInt            i_start, j_start, k_start, i_end, j_end, k_end;
+  PetscInt            i, j, k, c;
+  DMStagStencil       row;
+  FlucaFDStencilPoint points[FLUCAFD_MAX_STENCIL_SIZE];
+  DMStagStencil       mat_col[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscScalar         mat_v[FLUCAFD_MAX_STENCIL_SIZE];
+  PetscInt            npoints, mat_ncols;
+  PetscInt            ir;
+  PetscInt            ic[FLUCAFD_MAX_STENCIL_SIZE];
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
@@ -150,19 +168,19 @@ PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
         row.k   = k;
         row.c   = fd->output_c;
         row.loc = fd->output_loc;
-        PetscCall(FlucaFDGetStencil(fd, i, j, k, &ncols, col, v));
+        PetscCall(FlucaFDGetStencil(fd, i, j, k, &npoints, points));
 
-        /* Collect only interior stencil points (skip boundary and constant terms) */
+        /* Collect only grid stencil points (skip boundary and constant terms) */
         mat_ncols = 0;
-        for (c = 0; c < ncols; ++c) {
-          if (col[c].c >= 0) {
-            mat_col[mat_ncols] = col[c];
-            mat_v[mat_ncols]   = v[c];
+        for (c = 0; c < npoints; ++c) {
+          if (points[c].type == FLUCAFD_STENCIL_GRID) {
+            FlucaFDStencilPointToStencil(&points[c], &mat_col[mat_ncols]);
+            mat_v[mat_ncols] = points[c].v;
             ++mat_ncols;
           }
         }
 
-        /* Set matrix values for interior points */
+        /* Set matrix values for grid points */
         if (mat_ncols > 0) {
           PetscCall(DMStagStencilToIndexLocal(output_dm, fd->dim, 1, &row, &ir));
           PetscCall(DMStagStencilToIndexLocal(input_dm, fd->dim, mat_ncols, mat_col, ic));

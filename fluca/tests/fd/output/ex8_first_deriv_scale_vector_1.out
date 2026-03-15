@@ -1,0 +1,9 @@
+GetStencilRaw at i=3:
+  npoints = 2
+  has_unresolved_scales = true
+  points[0]: type=grid, i=2, loc=ELEMENT, c=0, v=-4., scales=[(i=3)]
+  points[1]: type=grid, i=4, loc=ELEMENT, c=0, v=4., scales=[(i=3)]
+GetStencil at i=3:
+  npoints = 2
+  points[0]: type=grid, i=2, loc=ELEMENT, c=0, v=-28.
+  points[1]: type=grid, i=4, loc=ELEMENT, c=0, v=28.

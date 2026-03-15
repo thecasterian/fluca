@@ -39,15 +39,64 @@ typedef struct {
   PetscScalar                  value; /* for Dirichlet/Neumann boundary conditions */
 } FlucaFDBoundaryCondition;
 
-/* Boundary value component markers for stencil points */
-#define FLUCAFD_BOUNDARY_LEFT  (-1)
-#define FLUCAFD_BOUNDARY_RIGHT (-2)
-#define FLUCAFD_BOUNDARY_DOWN  (-3)
-#define FLUCAFD_BOUNDARY_UP    (-4)
-#define FLUCAFD_BOUNDARY_BACK  (-5)
-#define FLUCAFD_BOUNDARY_FRONT (-6)
-/* Constant term marker for stencil points */
-#define FLUCAFD_CONSTANT (-7)
+/* Stencil point types */
+typedef enum {
+  FLUCAFD_STENCIL_GRID,
+  FLUCAFD_STENCIL_BOUNDARY,
+  FLUCAFD_STENCIL_CONSTANT,
+} FlucaFDStencilPointType;
+
+/* Deferred vector scale reference. Array pointers are borrowed from FlucaFD_Scale's
+   DMDA local vector and are valid only while the owning FlucaFD object is alive.
+   Stencil points with nscales > 0 must not be stored beyond the current call frame. */
+typedef struct {
+  PetscInt    dim;
+  PetscInt    i, j, k; /* position to evaluate scale vec */
+  const void *arr;
+} FlucaFDScaleRef;
+
+#define FLUCAFD_MAX_SCALES 4
+#define FLUCAFD_MAX_TVDS   1
+
+/* Limiter function type (forward declaration for FlucaFDTVDRef) */
+typedef PetscScalar FlucaFDLimiterFn(PetscScalar);
+
+/* Role of a stencil point in a TVD pair */
+typedef enum {
+  FLUCAFD_TVD_PREV, /* cell at index-1 in the TVD direction */
+  FLUCAFD_TVD_NEXT, /* cell at index   in the TVD direction */
+} FlucaFDTVDRefRole;
+
+/* Deferred TVD non-linear term reference. The owning FlucaFD must be alive
+   for the internal arrays to remain valid. Stencil points with ntvds > 0
+   must not be stored beyond the current call frame. */
+typedef struct {
+  FlucaFDTVDRefRole               role;    /* PREV or NEXT */
+  PetscInt                        i, j, k; /* face position where TVD is evaluated */
+  FlucaFDDirection                dir;
+  PetscInt                        N_dir;        /* domain size in TVD direction */
+  PetscBool                       periodic_dir; /* periodicity in TVD direction */
+  FlucaFDLimiterFn               *limiter;
+  PetscScalar                    *alpha_plus;
+  PetscScalar                    *alpha_minus;
+  const void                     *arr_vel;
+  const void                     *arr_phi;
+  FlucaFD                         fd_grad; /* gradient operator (element -> face) */
+  const FlucaFDBoundaryCondition *bcs;
+} FlucaFDTVDRef;
+
+typedef struct {
+  FlucaFDStencilPointType type;
+  DMStagStencilLocation   loc;
+  PetscInt                i, j, k;
+  PetscInt                c;
+  PetscInt                boundary_face; /* 0=left,1=right,2=down,3=up,4=back,5=front */
+  PetscScalar             v;
+  PetscInt                nscales;
+  FlucaFDScaleRef         scales[FLUCAFD_MAX_SCALES];
+  PetscInt                ntvds;
+  FlucaFDTVDRef           tvds[FLUCAFD_MAX_TVDS];
+} FlucaFDStencilPoint;
 
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate(MPI_Comm, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetType(FlucaFD, FlucaFDType);
@@ -67,8 +116,8 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSetOptionsPrefix(FlucaFD, const char[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDAppendOptionsPrefix(FlucaFD, const char[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOptionsPrefix(FlucaFD, const char *[]);
 
-FLUCA_EXTERN PetscErrorCode FlucaFDGetStencilRaw(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, DMStagStencil[], PetscScalar[]);
-FLUCA_EXTERN PetscErrorCode FlucaFDGetStencil(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, DMStagStencil[], PetscScalar[]);
+FLUCA_EXTERN PetscErrorCode FlucaFDGetStencilRaw(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_EXTERN PetscErrorCode FlucaFDGetStencil(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDApply(FlucaFD, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperator(FlucaFD, DM, DM, Mat);
 
@@ -95,7 +144,6 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSumGetNumOperands(FlucaFD, PetscInt *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSumAddOperand(FlucaFD, FlucaFD);
 
 /* FLUCAFDSECONDORDERTVD specific */
-typedef PetscScalar            FlucaFDLimiterFn(PetscScalar);
 FLUCA_EXTERN PetscFunctionList FlucaFDLimiterList;
 
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDCreate(DM, FlucaFDDirection, PetscInt, PetscInt, FlucaFD *);

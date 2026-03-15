@@ -147,49 +147,12 @@ static PetscErrorCode FlucaFDSetUp_SecondOrderTVD(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ComputeFaceCenteredGradient_Private(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscScalar *grad)
+static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
-  FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
-  PetscInt                ncols, bnd_idx, c;
-  DMStagStencil           col[FLUCAFD_MAX_STENCIL_SIZE];
-  PetscScalar             v[FLUCAFD_MAX_STENCIL_SIZE];
-
-  PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencil(tvd->fd_grad, i, j, k, &ncols, col, v));
-
-  *grad = 0.;
-  for (c = 0; c < ncols; ++c)
-    if (col[c].c >= 0) {
-      /* Interior point */
-      switch (fd->dim) {
-      case 1:
-        *grad += v[c] * tvd->arr_phi_1d[col[c].i];
-        break;
-      case 2:
-        *grad += v[c] * tvd->arr_phi_2d[col[c].j][col[c].i];
-        break;
-      case 3:
-        *grad += v[c] * tvd->arr_phi_3d[col[c].k][col[c].j][col[c].i];
-        break;
-      default:
-        SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
-      }
-    } else if (FLUCAFD_BOUNDARY_FRONT <= col[c].c && col[c].c <= FLUCAFD_BOUNDARY_LEFT) {
-      /* Boundary value */
-      bnd_idx = -col[c].c - 1;
-      *grad += v[c] * fd->bcs[bnd_idx].value;
-    } else {
-      SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported stencil point");
-    }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *ncols, DMStagStencil col[], PetscScalar v[])
-{
-  FlucaFD_SecondOrderTVD *tvd = (FlucaFD_SecondOrderTVD *)fd->data;
-  PetscInt                idx, i_u, j_u, k_u, i_d, j_d, k_d, i_fu, j_fu, k_fu, i_fc, j_fc, k_fc;
-  PetscScalar             vel, alpha, grad_fu, grad_fc, r, psi, phi_u, phi_d;
-  PetscBool               periodic, at_prev_boundary, at_next_boundary;
+  FlucaFD_SecondOrderTVD *tvd     = (FlucaFD_SecondOrderTVD *)fd->data;
+  const void             *arr_vel = (fd->dim == 1) ? (const void *)tvd->arr_vel_1d : (fd->dim == 2) ? (const void *)tvd->arr_vel_2d : (const void *)tvd->arr_vel_3d;
+  const void             *arr_phi = (fd->dim == 1) ? (const void *)tvd->arr_phi_1d : (fd->dim == 2) ? (const void *)tvd->arr_phi_2d : (const void *)tvd->arr_phi_3d;
+  PetscInt                idx;
 
   PetscFunctionBegin;
   switch (tvd->dir) {
@@ -207,151 +170,58 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
   }
   PetscCheck(tvd->alpha_start <= idx && idx < tvd->alpha_end, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Face index out of range");
 
-  switch (fd->dim) {
-  case 1:
-    vel = tvd->arr_vel_1d[i];
-    break;
-  case 2:
-    vel = tvd->arr_vel_2d[j][i];
-    break;
-  case 3:
-    vel = tvd->arr_vel_3d[k][j][i];
-    break;
-  default:
-    SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
-  }
+  /* Always emit TVD refs; the resolver falls back to plain averaging when the
+     upstream face is out of domain (matching old vel-dependent boundary logic). */
+  *npoints                       = 2;
+  points[0].type                 = FLUCAFD_STENCIL_GRID;
+  points[0].loc                  = fd->input_loc;
+  points[0].i                    = (tvd->dir == FLUCAFD_X) ? i - 1 : i;
+  points[0].j                    = (tvd->dir == FLUCAFD_Y) ? j - 1 : j;
+  points[0].k                    = (tvd->dir == FLUCAFD_Z) ? k - 1 : k;
+  points[0].c                    = fd->input_c;
+  points[0].boundary_face        = 0;
+  points[0].v                    = 0.5;
+  points[0].nscales              = 0;
+  points[0].ntvds                = 1;
+  points[0].tvds[0].role         = FLUCAFD_TVD_PREV;
+  points[0].tvds[0].i            = i;
+  points[0].tvds[0].j            = j;
+  points[0].tvds[0].k            = k;
+  points[0].tvds[0].dir          = tvd->dir;
+  points[0].tvds[0].N_dir        = fd->N[tvd->dir];
+  points[0].tvds[0].periodic_dir = fd->periodic[tvd->dir];
+  points[0].tvds[0].limiter      = tvd->limiter;
+  points[0].tvds[0].alpha_plus   = tvd->alpha_plus;
+  points[0].tvds[0].alpha_minus  = tvd->alpha_minus;
+  points[0].tvds[0].arr_vel      = arr_vel;
+  points[0].tvds[0].arr_phi      = arr_phi;
+  points[0].tvds[0].fd_grad      = tvd->fd_grad;
+  points[0].tvds[0].bcs          = fd->bcs;
 
-  periodic         = fd->periodic[tvd->dir];
-  at_prev_boundary = (idx == 0 && !periodic);
-  at_next_boundary = (idx == fd->N[tvd->dir] && !periodic);
-
-  if (vel > 0) {
-    i_u = (tvd->dir == FLUCAFD_X) ? i - 1 : i;
-    j_u = (tvd->dir == FLUCAFD_Y) ? j - 1 : j;
-    k_u = (tvd->dir == FLUCAFD_Z) ? k - 1 : k;
-    i_d = i;
-    j_d = j;
-    k_d = k;
-    if (at_prev_boundary) {
-      *ncols     = 2;
-      col[0].i   = i_u;
-      col[0].j   = j_u;
-      col[0].k   = k_u;
-      col[0].loc = fd->input_loc;
-      col[0].c   = fd->input_c;
-      col[1].i   = i_d;
-      col[1].j   = j_d;
-      col[1].k   = k_d;
-      col[1].loc = fd->input_loc;
-      col[1].c   = fd->input_c;
-      v[0]       = 0.5;
-      v[1]       = 0.5;
-    } else {
-      alpha = tvd->alpha_plus[idx];
-      i_fu  = (tvd->dir == FLUCAFD_X) ? i - 1 : i;
-      j_fu  = (tvd->dir == FLUCAFD_Y) ? j - 1 : j;
-      k_fu  = (tvd->dir == FLUCAFD_Z) ? k - 1 : k;
-      i_fc  = i;
-      j_fc  = j;
-      k_fc  = k;
-      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fu, j_fu, k_fu, &grad_fu));
-      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fc, j_fc, k_fc, &grad_fc));
-      r   = (PetscAbsScalar(grad_fc) > 1e-30) ? grad_fu / grad_fc : 1.;
-      psi = tvd->limiter(r);
-      switch (fd->dim) {
-      case 1:
-        phi_u = tvd->arr_phi_1d[i_u];
-        phi_d = tvd->arr_phi_1d[i_d];
-        break;
-      case 2:
-        phi_u = tvd->arr_phi_2d[j_u][i_u];
-        phi_d = tvd->arr_phi_2d[j_d][i_d];
-        break;
-      case 3:
-        phi_u = tvd->arr_phi_3d[k_u][j_u][i_u];
-        phi_d = tvd->arr_phi_3d[k_d][j_d][i_d];
-        break;
-      default:
-        SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
-      }
-      *ncols     = 2;
-      col[0].i   = i_u;
-      col[0].j   = j_u;
-      col[0].k   = k_u;
-      col[0].loc = fd->input_loc;
-      col[0].c   = fd->input_c;
-      col[1].i   = 0;
-      col[1].j   = 0;
-      col[1].k   = 0;
-      col[1].loc = DMSTAG_ELEMENT;
-      col[1].c   = FLUCAFD_CONSTANT;
-      v[0]       = 1.;
-      v[1]       = alpha * psi * (phi_d - phi_u);
-    }
-  } else {
-    i_u = i;
-    j_u = j;
-    k_u = k;
-    i_d = (tvd->dir == FLUCAFD_X) ? i - 1 : i;
-    j_d = (tvd->dir == FLUCAFD_Y) ? j - 1 : j;
-    k_d = (tvd->dir == FLUCAFD_Z) ? k - 1 : k;
-    if (at_next_boundary) {
-      *ncols     = 2;
-      col[0].i   = i_u;
-      col[0].j   = j_u;
-      col[0].k   = k_u;
-      col[0].loc = fd->input_loc;
-      col[0].c   = fd->input_c;
-      col[1].i   = i_d;
-      col[1].j   = j_d;
-      col[1].k   = k_d;
-      col[1].loc = fd->input_loc;
-      col[1].c   = fd->input_c;
-      v[0]       = 0.5;
-      v[1]       = 0.5;
-    } else {
-      alpha = tvd->alpha_minus[idx];
-      i_fu  = (tvd->dir == FLUCAFD_X) ? i + 1 : i;
-      j_fu  = (tvd->dir == FLUCAFD_Y) ? j + 1 : j;
-      k_fu  = (tvd->dir == FLUCAFD_Z) ? k + 1 : k;
-      i_fc  = i;
-      j_fc  = j;
-      k_fc  = k;
-      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fu, j_fu, k_fu, &grad_fu));
-      PetscCall(ComputeFaceCenteredGradient_Private(fd, i_fc, j_fc, k_fc, &grad_fc));
-      r   = (PetscAbsScalar(grad_fc) > 1e-30) ? grad_fu / grad_fc : 1.;
-      psi = tvd->limiter(r);
-      switch (fd->dim) {
-      case 1:
-        phi_u = tvd->arr_phi_1d[i_u];
-        phi_d = tvd->arr_phi_1d[i_d];
-        break;
-      case 2:
-        phi_u = tvd->arr_phi_2d[j_u][i_u];
-        phi_d = tvd->arr_phi_2d[j_d][i_d];
-        break;
-      case 3:
-        phi_u = tvd->arr_phi_3d[k_u][j_u][i_u];
-        phi_d = tvd->arr_phi_3d[k_d][j_d][i_d];
-        break;
-      default:
-        SETERRQ(PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Unsupported dim");
-      }
-      *ncols     = 2;
-      col[0].i   = i;
-      col[0].j   = j;
-      col[0].k   = k;
-      col[0].loc = fd->input_loc;
-      col[0].c   = fd->input_c;
-      col[1].i   = 0;
-      col[1].j   = 0;
-      col[1].k   = 0;
-      col[1].loc = DMSTAG_ELEMENT;
-      col[1].c   = FLUCAFD_CONSTANT;
-      v[0]       = 1.;
-      v[1]       = alpha * psi * (phi_d - phi_u);
-    }
-  }
+  points[1].type                 = FLUCAFD_STENCIL_GRID;
+  points[1].loc                  = fd->input_loc;
+  points[1].i                    = i;
+  points[1].j                    = j;
+  points[1].k                    = k;
+  points[1].c                    = fd->input_c;
+  points[1].boundary_face        = 0;
+  points[1].v                    = 0.5;
+  points[1].nscales              = 0;
+  points[1].ntvds                = 1;
+  points[1].tvds[0].role         = FLUCAFD_TVD_NEXT;
+  points[1].tvds[0].i            = i;
+  points[1].tvds[0].j            = j;
+  points[1].tvds[0].k            = k;
+  points[1].tvds[0].dir          = tvd->dir;
+  points[1].tvds[0].N_dir        = fd->N[tvd->dir];
+  points[1].tvds[0].periodic_dir = fd->periodic[tvd->dir];
+  points[1].tvds[0].limiter      = tvd->limiter;
+  points[1].tvds[0].alpha_plus   = tvd->alpha_plus;
+  points[1].tvds[0].alpha_minus  = tvd->alpha_minus;
+  points[1].tvds[0].arr_vel      = arr_vel;
+  points[1].tvds[0].arr_phi      = arr_phi;
+  points[1].tvds[0].fd_grad      = tvd->fd_grad;
+  points[1].tvds[0].bcs          = fd->bcs;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -531,7 +401,7 @@ PetscErrorCode FlucaFDSecondOrderTVDSetVelocity(FlucaFD fd, Vec vel, PetscInt ve
   PetscCheck(isstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Vector is not on DMStag");
 
   /* Recreate scatter if DM or component changed */
-  if (vel_dm != tvd->vel_dm || vel_c != tvd->vel_c) {
+  if (fd->setupcalled && (vel_dm != tvd->vel_dm || vel_c != tvd->vel_c)) {
     if (tvd->vel_dm) {
       switch (fd->dim) {
       case 1:
@@ -594,7 +464,7 @@ PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD fd, Vec phi)
   PetscCheck(isstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Vector is not on DMStag");
 
   /* Recreate scatter if DM changed */
-  if (phi_dm != tvd->phi_dm) {
+  if (fd->setupcalled && phi_dm != tvd->phi_dm) {
     if (tvd->phi_dm) {
       switch (fd->dim) {
       case 1:
