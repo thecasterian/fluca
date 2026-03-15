@@ -401,7 +401,7 @@ PetscErrorCode FlucaFDSecondOrderTVDSetVelocity(FlucaFD fd, Vec vel, PetscInt ve
   PetscCheck(isstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Vector is not on DMStag");
 
   /* Recreate scatter if DM or component changed */
-  if (vel_dm != tvd->vel_dm || vel_c != tvd->vel_c) {
+  if (fd->setupcalled && (vel_dm != tvd->vel_dm || vel_c != tvd->vel_c)) {
     if (tvd->vel_dm) {
       switch (fd->dim) {
       case 1:
@@ -464,7 +464,7 @@ PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD fd, Vec phi)
   PetscCheck(isstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Vector is not on DMStag");
 
   /* Recreate scatter if DM changed */
-  if (phi_dm != tvd->phi_dm) {
+  if (fd->setupcalled && phi_dm != tvd->phi_dm) {
     if (tvd->phi_dm) {
       switch (fd->dim) {
       case 1:

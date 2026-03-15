@@ -119,6 +119,7 @@ PetscErrorCode FlucaFDSumCreate(PetscInt n, const FlucaFD ops[], FlucaFD *fd)
   PetscAssertPointer(ops, 2);
   for (i = 0; i < n; ++i) {
     PetscValidHeaderSpecific(ops[i], FLUCAFD_CLASSID, 2);
+    if (i > 0) PetscCheckSameComm(ops[0], 2, ops[i], 2);
     PetscCheck(ops[i]->setupcalled, PetscObjectComm((PetscObject)ops[i]), PETSC_ERR_ARG_WRONGSTATE, "Operand %" PetscInt_FMT " must be set up before calling FlucaFDSumCreate", i);
   }
   PetscAssertPointer(fd, 3);

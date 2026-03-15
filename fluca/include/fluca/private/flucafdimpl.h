@@ -161,16 +161,6 @@ FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, 
 FLUCA_INTERN PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 
-/* Convert FlucaFDStencilPoint to DMStagStencil (for PETSc API calls) */
-#define FlucaFDStencilPointToStencil(pt, st) \
-  do { \
-    (st)->loc = (pt)->loc; \
-    (st)->i   = (pt)->i; \
-    (st)->j   = (pt)->j; \
-    (st)->k   = (pt)->k; \
-    (st)->c   = (pt)->c; \
-  } while (0)
-
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDuplicate_Internal(FlucaFDTermLink, FlucaFDTermLink *);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkAppend_Internal(FlucaFDTermLink *, FlucaFDTermLink);

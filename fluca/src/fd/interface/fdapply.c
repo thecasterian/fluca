@@ -1,5 +1,16 @@
 #include <fluca/private/flucafdimpl.h>
 
+// clang-format off
+#define FlucaFDStencilPointToStencil(pt, st) \
+  do { \
+    (st)->loc = (pt)->loc; \
+    (st)->i   = (pt)->i; \
+    (st)->j   = (pt)->j; \
+    (st)->k   = (pt)->k; \
+    (st)->c   = (pt)->c; \
+  } while (0)
+// clang-format on
+
 static PetscErrorCode GetOutputLoopRange_Private(FlucaFD fd, DM output_dm, PetscInt *i_start, PetscInt *j_start, PetscInt *k_start, PetscInt *i_end, PetscInt *j_end, PetscInt *k_end)
 {
   PetscInt  xs, ys, zs, xm, ym, zm, nExtrax, nExtray, nExtraz;

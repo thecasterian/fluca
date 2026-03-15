@@ -104,7 +104,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscIn
         ref->arr = scale->arr_vec_3d;
         break;
       }
-      points[n].nscales++;
+      ++points[n].nscales;
     }
   }
   PetscFunctionReturn(PETSC_SUCCESS);
