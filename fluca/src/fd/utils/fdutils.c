@@ -1,6 +1,64 @@
 #include <fluca/private/flucafdimpl.h>
 #include <petscdmda.h>
 
+PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD fd, PetscInt boundary_face, PetscInt i, PetscInt j, PetscInt k, PetscScalar *value)
+{
+  const FlucaFDBoundaryCondition *bc;
+
+  PetscFunctionBegin;
+  PetscCheck(boundary_face >= 0 && boundary_face < 2 * fd->dim, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "boundary_face %" PetscInt_FMT " out of range for %" PetscInt_FMT "D problem", boundary_face, fd->dim);
+  bc = &fd->bcs[boundary_face];
+  if (bc->fn) {
+    PetscReal x[FLUCAFD_MAX_DIM];
+    PetscInt  d, idx[FLUCAFD_MAX_DIM];
+    PetscInt  dir;
+
+    idx[0] = i;
+    idx[1] = j;
+    idx[2] = k;
+
+    /* Boundary face determines the direction (0=left/right, 1=down/up, 2=back/front) */
+    dir = boundary_face / 2;
+
+    /* For the boundary direction, the boundary index is 0 or N[dir]. Use slot_coord_prev
+       (face coordinate). For other directions, use element slot. */
+    for (d = 0; d < fd->dim; ++d) {
+      PetscInt  gxs, gxm, gxe, slot;
+      PetscBool use_face;
+
+      use_face = (d == dir);
+      slot     = use_face ? fd->slot_coord_prev : fd->slot_coord_elem;
+      PetscCall(FlucaFDGetGhostCorners_Internal(fd, d, use_face, &gxs, &gxm, &gxe));
+
+      /* Compute h_prev and h_next for extrapolation */
+      {
+        const PetscScalar **arr_coord = fd->arr_coord[d];
+        PetscScalar         h_prev, h_next, coord;
+        PetscInt            first_face_idx, last_face_idx;
+        PetscBool           periodic;
+        PetscInt            gxs_face, gxm_face, gxe_face;
+
+        periodic = fd->periodic[d];
+        PetscCall(FlucaFDGetGhostCorners_Internal(fd, d, PETSC_TRUE, &gxs_face, &gxm_face, &gxe_face));
+        first_face_idx = gxs_face;
+        last_face_idx  = gxs_face + gxm_face - ((fd->is_last_rank[d] && !periodic) ? 0 : 1);
+        h_prev         = arr_coord[first_face_idx + 1][fd->slot_coord_prev] - arr_coord[first_face_idx][fd->slot_coord_prev];
+        h_next         = arr_coord[last_face_idx][fd->slot_coord_prev] - arr_coord[last_face_idx - 1][fd->slot_coord_prev];
+
+        PetscCall(FlucaFDGetCoordinate_Internal(arr_coord, idx[d], slot, gxs, gxm + gxe, h_prev, h_next, &coord));
+        x[d] = PetscRealPart(coord);
+      }
+    }
+    /* Fill remaining dimensions with 0 */
+    for (d = fd->dim; d < FLUCAFD_MAX_DIM; ++d) x[d] = 0.;
+
+    PetscCall(bc->fn(fd->dim, x, bc->fn_ctx, value));
+  } else {
+    *value = bc->value;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode FlucaFDValidateOperand_Internal(FlucaFD parent, FlucaFD operand)
 {
   PetscBool compatible, set;
@@ -597,7 +655,7 @@ PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt npoints, FlucaFDStencil
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode EvaluateGradient_Private(FlucaFD fd_grad, PetscInt dim, PetscInt i, PetscInt j, PetscInt k, const void *arr_phi, const FlucaFDBoundaryCondition bcs[], PetscScalar *grad)
+static PetscErrorCode EvaluateGradient_Private(FlucaFD fd_grad, PetscInt dim, PetscInt i, PetscInt j, PetscInt k, const void *arr_phi, PetscScalar *grad)
 {
   FlucaFDStencilPoint grad_points[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt            ngrad, c;
@@ -622,9 +680,13 @@ static PetscErrorCode EvaluateGradient_Private(FlucaFD fd_grad, PetscInt dim, Pe
         SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported dim");
       }
       break;
-    case FLUCAFD_STENCIL_BOUNDARY:
-      *grad += grad_points[c].v * bcs[grad_points[c].boundary_face].value;
+    case FLUCAFD_STENCIL_BOUNDARY: {
+      PetscScalar bc_val;
+
+      PetscCall(FlucaFDEvaluateBCValue_Internal(fd_grad, grad_points[c].boundary_face, grad_points[c].i, grad_points[c].j, grad_points[c].k, &bc_val));
+      *grad += grad_points[c].v * bc_val;
       break;
+    }
     case FLUCAFD_STENCIL_CONSTANT:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unexpected constant in gradient stencil");
     }
@@ -708,8 +770,8 @@ PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt npoints, FlucaFDStencilPo
       k_d   = (ref->dir == FLUCAFD_Z) ? ref->k - 1 : ref->k;
     }
 
-    PetscCall(EvaluateGradient_Private(ref->fd_grad, ref->fd_grad->dim, i_fu, j_fu, k_fu, ref->arr_phi, ref->bcs, &grad_fu));
-    PetscCall(EvaluateGradient_Private(ref->fd_grad, ref->fd_grad->dim, ref->i, ref->j, ref->k, ref->arr_phi, ref->bcs, &grad_fc));
+    PetscCall(EvaluateGradient_Private(ref->fd_grad, ref->fd_grad->dim, i_fu, j_fu, k_fu, ref->arr_phi, &grad_fu));
+    PetscCall(EvaluateGradient_Private(ref->fd_grad, ref->fd_grad->dim, ref->i, ref->j, ref->k, ref->arr_phi, &grad_fc));
 
     r   = (PetscAbsScalar(grad_fc) > FLUCAFD_TVD_GRAD_TOL) ? grad_fu / grad_fc : 1.;
     psi = ref->limiter(r);

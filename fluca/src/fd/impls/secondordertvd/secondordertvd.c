@@ -196,7 +196,6 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
   points[0].tvds[0].arr_vel      = arr_vel;
   points[0].tvds[0].arr_phi      = arr_phi;
   points[0].tvds[0].fd_grad      = tvd->fd_grad;
-  points[0].tvds[0].bcs          = fd->bcs;
 
   points[1].type                 = FLUCAFD_STENCIL_GRID;
   points[1].loc                  = fd->input_loc;
@@ -221,7 +220,6 @@ static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i
   points[1].tvds[0].arr_vel      = arr_vel;
   points[1].tvds[0].arr_phi      = arr_phi;
   points[1].tvds[0].fd_grad      = tvd->fd_grad;
-  points[1].tvds[0].bcs          = fd->bcs;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

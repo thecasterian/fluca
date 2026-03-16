@@ -49,7 +49,7 @@ static PetscErrorCode CreateConvectionDiffusionOperator(AppCtx *ctx, FlucaFD *fd
   FlucaFD                  fd_scaled_tvd, fd_conv_deriv, fd_conv;
   FlucaFD                  fd_diff_inner, fd_diff_scaled, fd_diff_outer, fd_diff, fd_neg_diff;
   FlucaFD                  operands[2];
-  FlucaFDBoundaryCondition bcs[2];
+  FlucaFDBoundaryCondition bcs[2] = {{0}};
 
   PetscFunctionBegin;
 
