@@ -39,9 +39,10 @@ fluca/
 - Branch names must use a prefix: `feature/`, `refactor/`, `test/`, `doc/`, etc
 - When committing, only include source code files (`.c`, `.h`), build files (`CMakeLists.txt`), and test output files (`.out`). Never include documentation, `.claude/` files, or other non-source files unless explicitly requested.
 
-## Agent Code Modification Requirement
+## Agent Requirements
 
-Any agent that modifies code in this project **must** verify its changes against the `petsc-conventions` skill. When spawning such agents, include the skill content in the agent's prompt so it can self-check before returning results.
+- Any agent that modifies code in this project **must** verify its changes against the `petsc-conventions` skill. When spawning such agents, tell them to read `.claude/skills/petsc-conventions/SKILL.md` so they can self-check before returning results.
+- Any agent that adds tests **must** follow the `add-test` skill workflow. When spawning such agents, tell them to read `.claude/skills/add-test/SKILL.md` so they handle source generation, CMakeLists.txt registration, golden output capture, and ctest verification correctly.
 
 ## Key Modules
 
