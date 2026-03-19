@@ -1,0 +1,708 @@
+# NS Redesign Plan
+
+## Context
+
+FlucaFD (finite difference operator on DMStag) is fully implemented. The current NS module uses hardcoded stencils (~5000 lines), a custom ABF preconditioner, manual Crank-Nicolson timestepping, 4 separate DMStag objects via Mesh, and DMComposite/VecNest/MatNest. This redesign replaces all of that.
+
+### Architecture change
+
+```
+Before:  User -> NS -> (TS/SNES internally, Mesh, DMComposite, VecNest, MatNest, ABF)
+After:   User -> TS directly, Phys provides operators + callbacks
+```
+
+The NS module is removed entirely. A new **Phys** (physical model) class replaces it. Phys is a polymorphic PETSc-style class whose subtypes represent different governing equations. Each subtype constructs FlucaFD operators and provides callback functions (`IFunction`/`IJacobian` for TS). The user creates and drives TS directly.
+
+### Decisions
+
+- **DM separation**: User provides a **base DM** (grid topology + coordinates) via `PhysSetBaseDM()`. Phys creates its own **solution DM** with the correct DOFs for its subtype during `PhysSetUp()`. Retrieved via `PhysGetSolutionDM()`. This decouples grid specification (user's concern) from DOF layout (physical model's concern).
+- **Formulation**: Monolithic (all unknowns solved simultaneously). Rhie-Chow pressure stabilization applied as a separate operator in the continuity equation.
+- **Solver**: User creates TS directly. Phys wires callbacks via `PhysSetUpTS()`. No separate SNES path — steady-state problems use `TSPSEUDO` or solve as the limit of an unsteady problem.
+- **Phys subtypes**: Polymorphic by physical model. For now, only `PHYSINS` (incompressible Navier-Stokes). Different subtypes define different DOF layouts on the solution DM (e.g., INS: dim+1 element DOFs; Boussinesq: dim+2).
+- **Spatial discretization**: FlucaFD operators replace all hardcoded stencils. FlucaFD already supports function-based BC values and per-component boundary conditions on `main`.
+- **Preconditioner**: Default is ILU; user can configure `PCFIELDSPLIT` or any other PC via the options database.
+- **Parameters**: Subtype-specific setters (`PhysINSSetDensity`, `PhysINSSetViscosity`) plus options database (`-phys_ins_density`, `-phys_ins_viscosity`).
+- **Mesh module**: Left untouched; removed in a separate follow-up task.
+- **Convection**: Second-order TVD scheme with configurable flux limiter for upwind-biased convection. Mass flux (rho * u) used at faces, not bare velocity.
+
+### Reference implementation
+
+The `feature/ns-redesign` branch contains a working implementation of Phases 0--3. This plan is written for implementation on `main`. Where the branch's design differs from this plan, the branch has priority. Key differences between `main` and the branch are noted where relevant.
+
+---
+
+## User flow example
+
+```c
+/* Create base DM (grid topology + coordinates only, DOFs don't matter) */
+DMStagCreate2d(comm, bx, by, M, N, ..., 0, 0, 1, stencil, width, NULL, NULL, &base_dm);
+DMStagSetUniformCoordinatesProduct(base_dm, ...);
+
+/* Create physical model */
+PhysCreate(comm, &phys);
+PhysSetType(phys, PHYSINS);
+PhysSetBaseDM(phys, base_dm);
+PhysINSSetDensity(phys, rho);
+PhysINSSetViscosity(phys, mu);
+PhysINSSetBoundaryCondition(phys, 0 /* left */, bc);
+/* ... more BCs ... */
+PhysSetFromOptions(phys);
+PhysSetUp(phys);   /* creates solution DM with correct DOFs internally */
+
+/* Get the solution DM (has dim+1 element DOFs for INS) */
+DM sol_dm;
+PhysGetSolutionDM(phys, &sol_dm);
+
+/* Create and configure TS */
+TSCreate(comm, &ts);
+PhysSetUpTS(phys, ts);   /* sets DM, wires IFunction/IJacobian */
+TSSetFromOptions(ts);     /* user controls -ts_type, -ts_dt, -ts_max_time */
+
+/* Solve */
+DMCreateGlobalVector(sol_dm, &sol);
+/* ... set initial condition ... */
+TSSolve(ts, sol);
+
+/* Cleanup */
+VecDestroy(&sol);
+TSDestroy(&ts);
+PhysDestroy(&phys);
+DMDestroy(&base_dm);
+```
+
+---
+
+## Public API (`flucaphys.h`)
+
+All Phys API — including INS-specific types and functions — lives in a single header.
+
+```c
+typedef struct _p_Phys *Phys;
+typedef const char *PhysType;
+
+#define PHYSINS "ins"   /* Incompressible Navier-Stokes */
+
+FLUCA_EXTERN PetscClassId PHYS_CLASSID;
+
+/* Body force callback */
+typedef PetscErrorCode PhysBodyForceFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar f[], void *ctx);
+
+/* INS boundary condition types */
+typedef enum {
+  PHYS_INS_BC_NONE,
+  PHYS_INS_BC_VELOCITY,
+} PhysINSBCType;
+
+/* INS boundary condition callback: returns value of field component at boundary coordinates.
+   comp is the solution DOF component being queried (0..dim-1 for velocity, dim for pressure). */
+typedef PetscErrorCode PhysINSBCFn(PetscInt dim, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx);
+
+typedef struct {
+  PhysINSBCType  type;
+  PhysINSBCFn   *fn;
+  void          *ctx;
+} PhysINSBC;
+
+/* Lifecycle */
+FLUCA_EXTERN PetscErrorCode PhysCreate(MPI_Comm, Phys *);
+FLUCA_EXTERN PetscErrorCode PhysSetType(Phys, PhysType);
+FLUCA_EXTERN PetscErrorCode PhysGetType(Phys, PhysType *);
+FLUCA_EXTERN PetscErrorCode PhysSetBaseDM(Phys, DM);
+FLUCA_EXTERN PetscErrorCode PhysGetBaseDM(Phys, DM *);
+FLUCA_EXTERN PetscErrorCode PhysGetSolutionDM(Phys, DM *);
+FLUCA_EXTERN PetscErrorCode PhysSetFromOptions(Phys);
+FLUCA_EXTERN PetscErrorCode PhysSetUp(Phys);
+FLUCA_EXTERN PetscErrorCode PhysDestroy(Phys *);
+FLUCA_EXTERN PetscErrorCode PhysView(Phys, PetscViewer);
+FLUCA_EXTERN PetscErrorCode PhysViewFromOptions(Phys, PetscObject, const char[]);
+
+/* Options prefix */
+FLUCA_EXTERN PetscErrorCode PhysSetOptionsPrefix(Phys, const char[]);
+FLUCA_EXTERN PetscErrorCode PhysAppendOptionsPrefix(Phys, const char[]);
+FLUCA_EXTERN PetscErrorCode PhysGetOptionsPrefix(Phys, const char *[]);
+
+/* Body force (base class) */
+FLUCA_EXTERN PetscErrorCode PhysSetBodyForce(Phys, PhysBodyForceFn *, void *);
+
+/* Solver setup (TS only) */
+FLUCA_EXTERN PetscErrorCode PhysSetUpTS(Phys, TS);
+
+/* Direct residual/Jacobian access (for testing) */
+FLUCA_EXTERN PetscErrorCode PhysComputeIFunction(Phys, PetscReal, Vec, Vec, Vec);
+FLUCA_EXTERN PetscErrorCode PhysComputeIJacobian(Phys, PetscReal, Vec, Vec, PetscReal, Mat, Mat);
+
+/* PHYSINS specific */
+FLUCA_EXTERN PetscErrorCode PhysINSSetDensity(Phys, PetscReal);
+FLUCA_EXTERN PetscErrorCode PhysINSGetDensity(Phys, PetscReal *);
+FLUCA_EXTERN PetscErrorCode PhysINSSetViscosity(Phys, PetscReal);
+FLUCA_EXTERN PetscErrorCode PhysINSGetViscosity(Phys, PetscReal *);
+FLUCA_EXTERN PetscErrorCode PhysINSSetBoundaryCondition(Phys, PetscInt, PhysINSBC);
+FLUCA_EXTERN PetscErrorCode PhysINSGetBoundaryCondition(Phys, PetscInt, PhysINSBC *);
+
+/* Registration */
+FLUCA_EXTERN PetscFunctionList PhysList;
+FLUCA_EXTERN PetscErrorCode    PhysRegister(const char[], PetscErrorCode (*)(Phys));
+```
+
+### Design notes
+
+**No separate `flucaphysins.h`**: INS-specific types and functions are in `flucaphys.h`. This keeps the user-facing include simple.
+
+**No `PhysBoundaryFace` enum**: Boundary faces are identified by `PetscInt` index (0=left, 1=right, 2=down, 3=up, 4=back, 5=front), matching the FlucaFD convention.
+
+**No SNES path**: `PhysSetUpSNES` was removed during the reference implementation. TS subsumes SNES — steady-state problems can use `TSPSEUDO` or simply run TS to steady state.
+
+**BC callback adapter**: The `PhysINSBCFn` signature `(dim, x[], comp, *val, ctx)` includes `comp`, but `main`'s `FlucaFDBCValueFn` signature `(dim, x[], ctx, *value)` does not. The INS subtype bridges this with a small adapter struct per boundary face that captures the component and calls the user's `PhysINSBCFn`. Since `main` already supports per-component BCs via `FlucaFDSetBoundaryConditions(fd, comp, bcs[])`, the adapter is set per-component on each FlucaFD operator.
+
+---
+
+## Internal data structures
+
+### Base class (`physimpl.h`)
+
+```c
+struct _PhysOps {
+  PetscErrorCode (*setfromoptions)(Phys, PetscOptionItems);
+  PetscErrorCode (*setup)(Phys);
+  PetscErrorCode (*destroy)(Phys);
+  PetscErrorCode (*view)(Phys, PetscViewer);
+  PetscErrorCode (*createsolutiondm)(Phys);
+  PetscErrorCode (*setupts)(Phys, TS);
+  PetscErrorCode (*computeifunction)(Phys, PetscReal, Vec, Vec, Vec);
+  PetscErrorCode (*computeijacobian)(Phys, PetscReal, Vec, Vec, PetscReal, Mat, Mat);
+};
+
+struct _p_Phys {
+  PETSCHEADER(struct _PhysOps);
+
+  /* Parameters */
+  DM               base_dm;      /* user-provided DMStag (grid topology + coordinates) */
+  PhysBodyForceFn *bodyforce;
+  void            *bodyforce_ctx;
+
+  /* Data */
+  DM       sol_dm;   /* solution DMStag (created by subtype during setup) */
+  PetscInt dim;      /* spatial dimension (extracted from base_dm) */
+  void    *data;     /* subtype-specific */
+
+  /* State */
+  PetscBool setupcalled;
+};
+```
+
+### INS subtype (`physinsimpl.h`)
+
+```c
+#define PHYS_INS_MAX_DIM   3
+#define PHYS_INS_MAX_FACES (2 * PHYS_INS_MAX_DIM)
+
+/* Adapter to bridge PhysINSBCFn (has comp) to FlucaFDBCValueFn (no comp) */
+typedef struct {
+  PhysINSBCFn *fn;
+  void        *ctx;
+  PetscInt     comp;  /* which solution component this adapter is wired for */
+} PhysINS_BCAdapter;
+
+typedef struct {
+  PetscReal rho;   /* density */
+  PetscReal mu;    /* dynamic viscosity */
+
+  /* Boundary conditions (one per face: left, right, down, up, back, front) */
+  PhysINSBC bcs[PHYS_INS_MAX_FACES];
+
+  /* BC adapters: [comp][face] — created during setup to bridge PhysINSBCFn to FlucaFDBCValueFn */
+  PhysINS_BCAdapter bc_adapters[PHYS_INS_MAX_DIM + 1][PHYS_INS_MAX_FACES];
+
+  /* FlucaFD operators */
+  FlucaFD fd_laplacian[PHYS_INS_MAX_DIM]; /* -mu * nabla^2 u_d per velocity direction */
+  FlucaFD fd_grad_p[PHYS_INS_MAX_DIM];    /* dp/dx_d per velocity direction */
+  FlucaFD fd_div;                         /* rho * div(interp(u)) — single Sum over directions */
+  FlucaFD fd_pstab;                       /* dt * (DTG - DG^st)(p) pressure stabilization */
+
+  /* Convection: C_d = sum_e d/dx_e(F_e * u_d_TVD) where F_e = rho * u_e */
+  FlucaFD fd_conv[PHYS_INS_MAX_DIM];                        /* summed convection per velocity dir */
+  FlucaFD fd_tvd[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM];       /* TVD interp: [d][e] = u_d along e */
+  FlucaFD fd_scale_vel[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM]; /* mass flux scaling: [d][e] */
+  FlucaFD fd_conv_comp[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM]; /* composed conv: [d][e] */
+  FlucaFD fd_interp[PHYS_INS_MAX_DIM];                      /* cell-to-face interpolation per dir */
+  DM      dm_face[PHYS_INS_MAX_DIM];                        /* face DMs for mass flux */
+  Vec     mass_flux_face[PHYS_INS_MAX_DIM];                 /* face mass flux vectors (rho * u) */
+
+  /* Solver data */
+  Mat          J;
+  IS           is_vel;
+  IS           is_p;
+  MatNullSpace nullspace;
+  Vec          temp;
+  PetscBool    has_pressure_outlet;
+} Phys_INS;
+```
+
+---
+
+## Phase 0: Boundary-safe TVD phi evaluation
+
+**Goal**: Fix SecondOrderTVD to evaluate phi values at near-boundary cells through the BC machinery rather than reading raw array values. This is a prerequisite for correct convection near boundaries.
+
+**Problem**: `ReadPhiValue_Private` in `secondordertvd.c` directly accesses `arr_phi[k][j][i]` without bounds checking or BC evaluation. When `i_u` or `i_d` fall on off-grid cells near boundaries, this reads undefined values.
+
+**Solution**: Create an internal identity operator `fd_phi` (0th-order derivative, element-to-element) with BCs. Use it to evaluate phi at near-boundary cells instead of direct array access. This is the approach taken in the reference implementation (`feature/ns-redesign`, commit `5d9c018`).
+
+### Changes
+
+| File | Change |
+|------|--------|
+| `src/fd/impls/secondordertvd/secondordertvd.c` | Add `fd_phi` field to `FlucaFD_SecondOrderTVD`. Replace `ReadPhiValue_Private` with `ComputeCellCenteredPhi_Private` that uses `fd_phi` for boundary cells. |
+
+### Test
+
+Existing TVD tests should continue to pass. Add a test case with Dirichlet BCs at boundaries to verify correct phi evaluation near domain edges.
+
+### Verification
+
+```bash
+cmake --build build && ctest --test-dir build -R "tests_fd"
+```
+
+---
+
+## Phase 1: Phys base class scaffold
+
+**Goal**: New `fluca_phys` library builds successfully. No working subtypes yet.
+
+### Source layout
+
+```
+fluca/
+├── include/
+│   ├── flucaphys.h              # Public Phys + INS API (single header)
+│   └── fluca/private/
+│       ├── physimpl.h           # Base class impl
+│       └── physinsimpl.h        # INS subtype impl
+├── src/
+│   └── phys/
+│       ├── CMakeLists.txt
+│       ├── interface/
+│       │   ├── physbasic.c      # Create, SetUp, Destroy, SetUpTS, ComputeIFunction/IJacobian
+│       │   ├── physopts.c       # SetBaseDM, GetBaseDM, GetSolutionDM, SetFromOptions, prefix
+│       │   ├── physpkg.c        # Package init, event registration
+│       │   └── physreg.c        # Type registration
+│       └── impls/
+│           └── ins/             # (Phase 2)
+```
+
+### PhysSetUp base logic
+
+1. Validate base DM is DMStag
+2. Extract dim from base DM
+3. Call subtype `createsolutiondm` op (creates `sol_dm` via `DMStagCreateCompatibleDMStag` with correct DOFs)
+4. Call subtype `setup` op (builds FlucaFD operators, determines null space, validates BCs)
+
+### PhysSetUpTS
+
+Dispatch to subtype op:
+```c
+PetscErrorCode PhysSetUpTS(Phys phys, TS ts)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscCheck(phys->setupcalled, ...);
+  PetscUseTypeMethod(phys, setupts, ts);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+```
+
+### CMakeLists.txt
+
+```cmake
+add_library(fluca_phys SHARED
+    interface/physbasic.c
+    interface/physopts.c
+    interface/physpkg.c
+    interface/physreg.c
+)
+target_link_libraries(fluca_phys PUBLIC fluca::fd)
+add_library(fluca::phys ALIAS fluca_phys)
+```
+
+Add `add_subdirectory(phys)` to `src/CMakeLists.txt`.
+
+### Verification
+
+`cmake --build build` succeeds.
+
+---
+
+## Phase 2: PHYSINS -- Stokes (linear, no convection)
+
+**Goal**: Verify the FlucaFD operator infrastructure with a linear Stokes problem solved through TS.
+
+### Files to create
+
+| File | Contents |
+|------|----------|
+| `include/fluca/private/physinsimpl.h` | Phys_INS struct |
+| `src/phys/impls/ins/ins.c` | PhysCreate_INS, Setup, solution DM creation, parameter setters |
+| `src/phys/impls/ins/insops.c` | Operator construction, IFunction, IJacobian, TS callbacks |
+
+### Solution DM creation (inside PhysSetUp_INS)
+
+```c
+/* INS: dim velocity + 1 pressure at ELEMENT */
+DMStagCreateCompatibleDMStag(base_dm, 0, 0, 0, dim + 1, &phys->sol_dm);
+```
+
+### BC adapter
+
+The INS subtype wraps `PhysINSBCFn` to `FlucaFDBCValueFn` using `PhysINS_BCAdapter`:
+
+```c
+static PetscErrorCode PhysINS_BCAdapterFn(PetscInt dim, const PetscReal x[], void *ctx, PetscScalar *value)
+{
+  PhysINS_BCAdapter *a = (PhysINS_BCAdapter *)ctx;
+
+  PetscFunctionBeginUser;
+  PetscCall(a->fn(dim, x, a->comp, value, a->ctx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+```
+
+When setting BCs on a FlucaFD operator, the INS code iterates over input components:
+```c
+static PetscErrorCode SetVelocityDirichletBCs(Phys phys, FlucaFD fd, PetscInt comp)
+{
+  Phys_INS                *ins = (Phys_INS *)phys->data;
+  FlucaFDBoundaryCondition fd_bcs[2 * PHYS_INS_MAX_DIM] = {{0}};
+
+  PetscFunctionBegin;
+  for (PetscInt f = 0; f < 2 * phys->dim; f++) {
+    if (ins->bcs[f].type == PHYS_INS_BC_VELOCITY && ins->bcs[f].fn) {
+      ins->bc_adapters[comp][f].fn   = ins->bcs[f].fn;
+      ins->bc_adapters[comp][f].ctx  = ins->bcs[f].ctx;
+      ins->bc_adapters[comp][f].comp = comp;
+      fd_bcs[f].type   = FLUCAFD_BC_DIRICHLET;
+      fd_bcs[f].fn     = PhysINS_BCAdapterFn;
+      fd_bcs[f].fn_ctx = &ins->bc_adapters[comp][f];
+    }
+  }
+  PetscCall(FlucaFDSetBoundaryConditions(fd, comp, fd_bcs));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+```
+
+### Operator construction (inside PhysSetUp_INS)
+
+All operators use `sol_dm` (the solution DM with dim+1 element DOFs). Face locations indexed by direction: `face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK}`.
+
+**Viscous Laplacian** (`fd_laplacian[d]`):
+```
+-mu * nabla^2 u_d = sum_e Composition(Scale(-mu, Derivative(ELEMENT,d -> face[e],0)), Derivative(face[e],0 -> ELEMENT,d))
+```
+Velocity Dirichlet BCs on the Sum operator (component d).
+
+**Pressure gradient** (`fd_grad_p[d]`):
+```
+dp/dx_d = Derivative(ELEMENT,dim -> ELEMENT,d)
+```
+Pressure Neumann (zero) BCs (component dim).
+
+**Divergence** (`fd_div`):
+```
+rho * div(interp(u)) = rho * sum_d Composition(Derivative(ELEMENT,d -> face[d],0), Derivative(face[d],0 -> ELEMENT,dim))
+```
+Single Sum operator. Velocity Dirichlet BCs per input component d.
+
+**Pressure stabilization** (`fd_pstab`):
+```
+dt * sum_d (DTG_d - DG^st_d)(p)
+  where DG^st_d = Composition(Derivative(ELEMENT,dim -> face[d],0), Derivative(face[d],0 -> ELEMENT,dim))
+  and   DTG_d   = Composition(Derivative(ELEMENT,dim -> ELEMENT,d), Composition(Derivative(ELEMENT,d -> face[d],0), Derivative(face[d],0 -> ELEMENT,dim)))
+```
+Scaled by physical dt at each TS step. Initial scale is 0. Pressure Neumann BCs.
+
+### Callbacks
+
+**IFunction**: `F = rho * U_dot + steady_residual`
+```
+steady_residual = sum_d(-mu * nabla^2 u_d + dp/dx_d) + rho * div(interp(u)) + dt * S(p) - f_body
+```
+Mass term `rho * U_dot` added only for velocity DOFs (not pressure).
+
+**IJacobian**: Assemble monolithic Mat using `FlucaFDGetOperator` for each operator. Add `shift * rho` to velocity diagonal entries.
+
+### Test
+
+- `tests/phys/ex1.c`: Create INS, verify solution DM has dim+1 element DOFs.
+- `tests/phys/ex2.c`: Manufactured Stokes solution (e.g., Taylor-Green at t=0). Verify `PhysComputeIFunction` produces zero residual for the exact solution.
+
+### Verification
+
+```bash
+cmake --build build && ctest --test-dir build -R "tests_phys"
+```
+
+---
+
+## Phase 3: PHYSINS -- full Navier-Stokes (convection)
+
+**Goal**: Add nonlinear convection term for full incompressible NS.
+
+### Convection term for momentum equation d
+
+```
+C_d = sum_e d/dx_e(F_e * u_d_TVD)
+  where F_e = rho * u_e (mass flux at faces)
+```
+
+Using FlucaFD:
+1. **TVD interpolation**: `FlucaFDSecondOrderTVDCreate(sol_dm, e, d, 0)` — interpolates `u_d` (ELEMENT,d) to face (face_loc[e],0) using TVD limiter
+2. **Scale by face mass flux**: `FlucaFDScaleCreateVector(tvd, mass_flux_face[e], 0)` — multiplies by `F_e`
+3. **Face derivative**: `FlucaFDDerivativeCreate(sol_dm, e, 1, 2, face_loc[e], 0, ELEMENT, d)` — maps back to cell
+4. **Compose**: `FlucaFDCompositionCreate(scaled_tvd, face_deriv)`
+5. **Sum over e**: `FlucaFDSumCreate(dim, conv_comp_per_e)`
+
+TVD limiter is configurable via `-phys_ins_tvd_limiter_type`.
+
+### Face DMs and mass flux
+
+For each direction `e`:
+```c
+/* Face DM: 1 DOF at face location */
+DMStagCreateCompatibleDMStag(sol_dm, 0, 1 /* 2D edge */, 0, 0, &dm_face[e]);
+DMCreateGlobalVector(dm_face[e], &mass_flux_face[e]);
+```
+
+### Convection velocity update (each SNES/TS iteration)
+
+1. Interpolate each velocity component to faces: `FlucaFDApply(fd_interp[e], sol_dm, dm_face[e], U, mass_flux_face[e])`
+2. Scale by rho: `VecScale(mass_flux_face[e], rho)`
+3. Update TVD and scale operators with new mass flux and current solution
+
+### Jacobian (Picard linearization)
+
+Convection matrix assembled with current velocity (frozen). Updated each iteration via `UpdateConvectionVelocity_Internal`.
+
+### IFunction (TS, unsteady)
+
+```
+F(t, U, U_dot) = rho * U_dot + C(U) - mu * nabla^2 U + grad(p) + rho * div(interp(U)) + dt * S(p) - f_body
+```
+
+### IJacobian (TS)
+
+```
+J = shift * rho * I_vel + dF_steady/dU
+```
+where `I_vel` is identity on velocity DOFs only.
+
+### Test
+
+- `tests/phys/ex3.c`: Verify convection operator with a known rotating flow `u=(y,-x), p=0`. Check that `(u.grad)u` matches the analytical result.
+
+### Tutorial
+
+- `tutorials/phys/ex1.c`: Taylor-Green vortex 2D with TS. Verify L2 errors.
+- `tutorials/phys/ex2.c`: Unsteady manufactured solution with body force.
+
+### Verification
+
+```bash
+cmake --build build && ctest --test-dir build -R "tests_phys"
+```
+
+---
+
+## Phase 4: Additional BC types and preconditioner
+
+### Phase 4a: Additional INS boundary condition types
+
+Add `PHYS_INS_BC_PRESSURE_OUTLET` and `PHYS_INS_BC_SYMMETRY`:
+
+```c
+typedef enum {
+  PHYS_INS_BC_NONE,
+  PHYS_INS_BC_VELOCITY,          /* existing */
+  PHYS_INS_BC_PRESSURE_OUTLET,   /* new */
+  PHYS_INS_BC_SYMMETRY,          /* new */
+} PhysINSBCType;
+```
+
+BC-to-FlucaFD translation:
+
+| INS BC type | Velocity operators | Pressure operators |
+|-------------|-------------------|--------------------|
+| `VELOCITY` | Dirichlet + fn | Neumann (zero) |
+| `PRESSURE_OUTLET` | Neumann (zero) | Dirichlet + fn |
+| `SYMMETRY` | Dirichlet (normal) / Neumann (tangential) | Neumann (zero) |
+
+When a pressure outlet BC exists, skip creating the pressure null space (`has_pressure_outlet = PETSC_TRUE`).
+
+Test: `tests/phys/ex4.c` — channel flow with velocity inlet + pressure outlet.
+
+### Phase 4b: PCFIELDSPLIT default
+
+Set PCFIELDSPLIT as the default preconditioner for better scalability:
+
+```c
+PCFieldSplitSetIS(pc, "velocity", ins->is_vel);
+PCFieldSplitSetIS(pc, "pressure", ins->is_p);
+PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR);
+```
+
+User can override via command line:
+```
+-pc_fieldsplit_type schur
+-fieldsplit_velocity_ksp_type gmres
+-fieldsplit_pressure_ksp_type preonly
+-fieldsplit_pressure_pc_type jacobi
+```
+
+---
+
+## Phase 5: Remove NS module
+
+**Goal**: Delete the entire NS module. Update all dependents.
+
+### Files to delete
+
+| File | Reason |
+|------|--------|
+| `src/ns/` (entire directory) | Replaced by Phys |
+| `src/seg/` (entire directory) | Empty placeholder, never implemented |
+| `include/flucans.h` | Replaced by `flucaphys.h` |
+| `include/flucansbc.h` | BC types moved to `flucaphys.h` |
+| `include/fluca/private/nsimpl.h` | Replaced by `physimpl.h` |
+| `include/fluca/private/nslinearcnimpl.h` | Gone |
+
+Remove `add_subdirectory(ns)` and `add_subdirectory(seg)` from `src/CMakeLists.txt`.
+
+### Migrate existing tests and app
+
+| File | Changes |
+|------|---------|
+| `tests/cavity_flow/cavity_flow_2d.c` | Use DMStagCreate2d + Phys + TS |
+| `tests/cavity_flow/cavity_flow_3d.c` | Same for 3D |
+| `tests/taylor_green_vortex/taylor_green_vortex.c` | Use Phys + TS |
+| `app/main.c` | Rewrite with new API |
+
+Update CMakeLists.txt: link `fluca::phys` instead of `fluca::ns`.
+
+Regenerate golden output files.
+
+### Verification
+
+```bash
+cmake --build build && ctest --test-dir build -R "tests_"
+```
+
+---
+
+## Key Technical Details
+
+### Base DM vs. Solution DM
+
+The user provides a **base DM** that defines the grid (cell count, boundary types, coordinates, partitioning). The Phys subtype creates a **solution DM** with the correct DOF layout during `PhysSetUp()`:
+
+```
+PhysSetBaseDM(phys, base_dm)
+    │
+    ▼  PhysSetUp(phys)
+    │    ├── createsolutiondm op: DMStagCreateCompatibleDMStag(base_dm, ..., &sol_dm)
+    │    └── setup op: build FlucaFD operators on sol_dm
+    │
+PhysGetSolutionDM(phys, &sol_dm)  →  pass to TS
+```
+
+For INS: `DMStagCreateCompatibleDMStag(base_dm, 0, 0, 0, dim + 1, &sol_dm)` — dim velocity + 1 pressure at ELEMENT.
+
+### Boundary condition adapter
+
+`PhysINSBCFn` has a `comp` parameter so the user writes one callback for all velocity components. `FlucaFDBCValueFn` on `main` does not have `comp`. The INS subtype bridges this with `PhysINS_BCAdapter`:
+
+```c
+typedef struct {
+  PhysINSBCFn *fn;
+  void        *ctx;
+  PetscInt     comp;
+} PhysINS_BCAdapter;
+
+static PetscErrorCode PhysINS_BCAdapterFn(PetscInt dim, const PetscReal x[], void *ctx, PetscScalar *value)
+{
+  PhysINS_BCAdapter *a = (PhysINS_BCAdapter *)ctx;
+
+  PetscFunctionBeginUser;
+  PetscCall(a->fn(dim, x, a->comp, value, a->ctx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+```
+
+The adapter structs are stored in `Phys_INS` as `bc_adapters[comp][face]`. They're initialized once during setup and passed as `fn_ctx` to `FlucaFDSetBoundaryConditions(fd, comp, bcs[])`.
+
+### Null space handling
+
+When all boundaries have velocity Dirichlet BCs (no pressure outlet), pressure is determined only up to a constant. The INS subtype creates an explicit null space vector on the pressure sub-IS:
+```c
+VecGetSubVector(nullvec, is_p, &subvec);
+VecSet(subvec, 1.0 / PetscSqrtReal((PetscReal)np));
+VecRestoreSubVector(nullvec, is_p, &subvec);
+MatNullSpaceCreate(comm, PETSC_FALSE, 1, &nullvec, &nullspace);
+MatSetNullSpace(J, nullspace);
+```
+
+### Dimension independence
+
+All operator construction loops over `d = 0..dim-1`. Face location for direction d:
+- d=0: `DMSTAG_LEFT`, d=1: `DMSTAG_DOWN`, d=2: `DMSTAG_BACK`
+
+No separate 2D/3D code paths for operator construction. Body force evaluation has dim-specific loops (2D: i,j; 3D: i,j,k) since it accesses coordinate arrays directly.
+
+---
+
+## Files summary
+
+### Modified (Phase 0)
+
+| File | Change |
+|------|--------|
+| `src/fd/impls/secondordertvd/secondordertvd.c` | Add `fd_phi` identity operator for boundary-safe phi evaluation |
+
+### Created (new)
+
+| File | Phase |
+|------|-------|
+| `include/flucaphys.h` | 1 |
+| `include/fluca/private/physimpl.h` | 1 |
+| `include/fluca/private/physinsimpl.h` | 2 |
+| `src/phys/CMakeLists.txt` | 1 |
+| `src/phys/interface/physbasic.c` | 1 |
+| `src/phys/interface/physopts.c` | 1 |
+| `src/phys/interface/physpkg.c` | 1 |
+| `src/phys/interface/physreg.c` | 1 |
+| `src/phys/impls/ins/ins.c` | 2 |
+| `src/phys/impls/ins/insops.c` | 2--3 |
+| `tests/phys/CMakeLists.txt` | 2 |
+| `tests/phys/ex1.c` (DM DOFs) | 2 |
+| `tests/phys/ex2.c` (Stokes IFunction) | 2 |
+| `tests/phys/ex3.c` (convection) | 3 |
+| `tutorials/phys/ex1.c` (Taylor-Green) | 3 |
+| `tutorials/phys/ex2.c` (unsteady manufactured) | 3 |
+
+### Deleted (Phase 5)
+
+| File |
+|------|
+| `src/ns/` (entire directory) |
+| `src/seg/` (entire directory) |
+| `include/flucans.h` |
+| `include/flucansbc.h` |
+| `include/fluca/private/nsimpl.h` |
+| `include/fluca/private/nslinearcnimpl.h` |
+
+### Migrated (Phase 5)
+
+| File |
+|------|
+| `tests/cavity_flow/cavity_flow_2d.c` |
+| `tests/cavity_flow/cavity_flow_3d.c` |
+| `tests/taylor_green_vortex/taylor_green_vortex.c` |
+| `app/main.c` |
