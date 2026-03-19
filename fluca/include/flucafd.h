@@ -112,8 +112,8 @@ FLUCA_EXTERN PetscErrorCode FlucaFDViewFromOptions(FlucaFD, PetscObject, const c
 FLUCA_EXTERN PetscErrorCode FlucaFDSetDM(FlucaFD, DM);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetInputLocation(FlucaFD, DMStagStencilLocation, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetOutputLocation(FlucaFD, DMStagStencilLocation, PetscInt);
-FLUCA_EXTERN PetscErrorCode FlucaFDSetBoundaryConditions(FlucaFD, const FlucaFDBoundaryCondition[]);
-FLUCA_EXTERN PetscErrorCode FlucaFDGetBoundaryConditions(FlucaFD, FlucaFDBoundaryCondition[]);
+FLUCA_EXTERN PetscErrorCode FlucaFDSetBoundaryConditions(FlucaFD, PetscInt, const FlucaFDBoundaryCondition[]);
+FLUCA_EXTERN PetscErrorCode FlucaFDGetBoundaryConditions(FlucaFD, PetscInt, FlucaFDBoundaryCondition[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetFromOptions(FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetOptionsPrefix(FlucaFD, const char[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDAppendOptionsPrefix(FlucaFD, const char[]);

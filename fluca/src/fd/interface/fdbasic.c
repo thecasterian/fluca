@@ -12,7 +12,7 @@ const char *FlucaFDBoundaryConditionTypes[] = {"NONE", "DIRICHLET", "NEUMANN", "
 PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
 {
   FlucaFD  f;
-  PetscInt d;
+  PetscInt comp, d;
 
   PetscFunctionBegin;
   PetscAssertPointer(fd, 2);
@@ -24,11 +24,13 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
   f->output_c   = 0;
   f->output_loc = DMSTAG_ELEMENT;
   f->dm         = NULL;
-  for (d = 0; d < 2 * FLUCAFD_MAX_DIM; ++d) {
-    f->bcs[d].type   = FLUCAFD_BC_NONE;
-    f->bcs[d].value  = 0.;
-    f->bcs[d].fn     = NULL;
-    f->bcs[d].fn_ctx = NULL;
+  for (comp = 0; comp < FLUCAFD_MAX_COMPONENT; ++comp) {
+    for (d = 0; d < 2 * FLUCAFD_MAX_DIM; ++d) {
+      f->bcs[comp][d].type   = FLUCAFD_BC_NONE;
+      f->bcs[comp][d].value  = 0.;
+      f->bcs[comp][d].fn     = NULL;
+      f->bcs[comp][d].fn_ctx = NULL;
+    }
   }
   f->dim = PETSC_DETERMINE;
   for (d = 0; d < FLUCAFD_MAX_DIM; ++d) {
@@ -171,7 +173,7 @@ PetscErrorCode FlucaFDViewFromOptions(FlucaFD fd, PetscObject obj, const char na
 PetscErrorCode FlucaFDSetUp(FlucaFD fd)
 {
   PetscBool      isdmstag;
-  PetscInt       d;
+  PetscInt       comp, d;
   DMBoundaryType bt[FLUCAFD_MAX_DIM];
 
   PetscFunctionBegin;
@@ -192,11 +194,13 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   PetscCall(DMStagGetStencilWidth(fd->dm, &fd->stencil_width));
 
   /* Clear stale BC entries beyond the actual dimension */
-  for (d = 2 * fd->dim; d < 2 * FLUCAFD_MAX_DIM; ++d) {
-    fd->bcs[d].type   = FLUCAFD_BC_NONE;
-    fd->bcs[d].value  = 0.;
-    fd->bcs[d].fn     = NULL;
-    fd->bcs[d].fn_ctx = NULL;
+  for (comp = 0; comp < FLUCAFD_MAX_COMPONENT; ++comp) {
+    for (d = 2 * fd->dim; d < 2 * FLUCAFD_MAX_DIM; ++d) {
+      fd->bcs[comp][d].type   = FLUCAFD_BC_NONE;
+      fd->bcs[comp][d].value  = 0.;
+      fd->bcs[comp][d].fn     = NULL;
+      fd->bcs[comp][d].fn_ctx = NULL;
+    }
   }
 
   /* Get coordinate arrays and slots directly from DMStag */

@@ -74,7 +74,7 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
   FlucaFDStencilPoint points[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt            npoints;
   PetscInt            ir, idx;
-  PetscScalar         result;
+  PetscScalar         result, bc_val;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
@@ -118,13 +118,10 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
           case FLUCAFD_STENCIL_CONSTANT:
             result += points[c].v;
             break;
-          case FLUCAFD_STENCIL_BOUNDARY: {
-            PetscScalar bc_val;
-
-            PetscCall(FlucaFDEvaluateBCValue_Internal(fd, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
+          case FLUCAFD_STENCIL_BOUNDARY:
+            PetscCall(FlucaFDEvaluateBCValue_Internal(fd, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
             result += points[c].v * bc_val;
             break;
-          }
           }
         }
 

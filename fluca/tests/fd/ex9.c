@@ -67,7 +67,7 @@ int main(int argc, char **argv)
   PetscCall(FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_const));
   bcs_const[0].value = left_val;
   bcs_const[1].value = right_val;
-  PetscCall(FlucaFDSetBoundaryConditions(fd_const, bcs_const));
+  PetscCall(FlucaFDSetBoundaryConditions(fd_const, 0, bcs_const));
   PetscCall(FlucaFDSetFromOptions(fd_const));
   PetscCall(FlucaFDSetUp(fd_const));
 
@@ -80,7 +80,7 @@ int main(int argc, char **argv)
   bcs_fn[1].value  = 99.;
   bcs_fn[1].fn     = ConstValBCFn;
   bcs_fn[1].fn_ctx = &right_val;
-  PetscCall(FlucaFDSetBoundaryConditions(fd_fn, bcs_fn));
+  PetscCall(FlucaFDSetBoundaryConditions(fd_fn, 0, bcs_fn));
   PetscCall(FlucaFDSetFromOptions(fd_fn));
   PetscCall(FlucaFDSetUp(fd_fn));
 
@@ -111,13 +111,13 @@ int main(int argc, char **argv)
   test:
     suffix: dirichlet_fn
     nsize: 1
-    args: -flucafd_left_bc_type dirichlet -flucafd_right_bc_type dirichlet -left_val 0 -right_val 1
+    args: -flucafd_0_left_bc_type dirichlet -flucafd_0_right_bc_type dirichlet -left_val 0 -right_val 1
     output_file: output/empty.out
 
   test:
     suffix: neumann_fn
     nsize: 1
-    args: -flucafd_left_bc_type neumann -flucafd_right_bc_type neumann -left_val 0 -right_val 2
+    args: -flucafd_0_left_bc_type neumann -flucafd_0_right_bc_type neumann -left_val 0 -right_val 2
     output_file: output/empty.out
 
 TEST*/

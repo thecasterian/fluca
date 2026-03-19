@@ -5,6 +5,7 @@
 #include <petscdmstag.h>
 
 #define FLUCAFD_MAX_DIM          3
+#define FLUCAFD_MAX_COMPONENT    8
 #define FLUCAFD_MAX_STENCIL_SIZE 32
 #define FLUCAFD_ZERO_PIVOT_TOL   1e-14
 #define FLUCAFD_COEFF_ATOL       1e-10
@@ -41,7 +42,7 @@ struct _p_FlucaFD {
   PetscInt                 input_c;
   DMStagStencilLocation    output_loc;
   PetscInt                 output_c;
-  FlucaFDBoundaryCondition bcs[2 * FLUCAFD_MAX_DIM];
+  FlucaFDBoundaryCondition bcs[FLUCAFD_MAX_COMPONENT][2 * FLUCAFD_MAX_DIM];
 
   /* Data ----------------------------------------------------------------- */
   DM                  dm;
@@ -161,7 +162,7 @@ FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, 
 FLUCA_INTERN PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 
-FLUCA_INTERN PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar *);
+FLUCA_INTERN PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar *);
 
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDuplicate_Internal(FlucaFDTermLink, FlucaFDTermLink *);

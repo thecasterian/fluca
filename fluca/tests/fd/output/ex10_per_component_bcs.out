@@ -1,0 +1,16 @@
+Stencil at i=0 (left boundary):
+  npoints = 6
+  points[0]: type=grid, i=0, loc=ELEMENT, c=0, v=8.
+  points[1]: type=grid, i=1, loc=ELEMENT, c=0, v=2.66667
+  points[2]: type=grid, i=0, loc=ELEMENT, c=1, v=-4.
+  points[3]: type=grid, i=1, loc=ELEMENT, c=1, v=4.
+  points[4]: type=boundary(left), i=0, loc=LEFT, c=0, v=-10.6667
+  points[5]: type=boundary(left), i=0, loc=LEFT, c=1, v=0.5
+Stencil at i=7 (right boundary):
+  npoints = 6
+  points[0]: type=grid, i=6, loc=ELEMENT, c=0, v=-2.66667
+  points[1]: type=grid, i=7, loc=ELEMENT, c=0, v=-8.
+  points[2]: type=grid, i=6, loc=ELEMENT, c=1, v=-4.
+  points[3]: type=grid, i=7, loc=ELEMENT, c=1, v=4.
+  points[4]: type=boundary(right), i=8, loc=LEFT, c=0, v=10.6667
+  points[5]: type=boundary(right), i=8, loc=LEFT, c=1, v=0.5

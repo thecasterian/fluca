@@ -76,7 +76,7 @@ static PetscErrorCode FlucaFDSetUp_SecondOrderTVD(FlucaFD fd)
 
   /* Create internal gradient operator for dphi/dx (element -> face) */
   PetscCall(FlucaFDDerivativeCreate(fd->dm, tvd->dir, 1, 1, fd->input_loc, fd->input_c, fd->output_loc, 0, &tvd->fd_grad));
-  PetscCall(FlucaFDSetBoundaryConditions(tvd->fd_grad, fd->bcs));
+  PetscCall(FlucaFDSetBoundaryConditions(tvd->fd_grad, fd->input_c, fd->bcs[fd->input_c]));
   PetscCall(FlucaFDSetUp(tvd->fd_grad));
 
   /*

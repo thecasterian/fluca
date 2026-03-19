@@ -71,7 +71,7 @@ int main(int argc, char **argv)
     bcs[0].value = 0.;
     bcs[1].type  = FLUCAFD_BC_DIRICHLET;
     bcs[1].value = 1.;
-    PetscCall(FlucaFDSetBoundaryConditions(fd_tvd, bcs));
+    PetscCall(FlucaFDSetBoundaryConditions(fd_tvd, 0, bcs));
   }
   PetscCall(FlucaFDSetFromOptions(fd_tvd));
   PetscCall(FlucaFDSetUp(fd_tvd));
@@ -80,7 +80,7 @@ int main(int argc, char **argv)
   {
     FlucaFDBoundaryCondition bcs[2];
 
-    PetscCall(FlucaFDGetBoundaryConditions(fd_tvd, bcs));
+    PetscCall(FlucaFDGetBoundaryConditions(fd_tvd, 0, bcs));
     switch (bcs[0].type) {
     case FLUCAFD_BC_DIRICHLET:
       bcs[0].value = 0.;
@@ -101,7 +101,7 @@ int main(int argc, char **argv)
     default:
       break;
     }
-    PetscCall(FlucaFDSetBoundaryConditions(fd_tvd, bcs));
+    PetscCall(FlucaFDSetBoundaryConditions(fd_tvd, 0, bcs));
   }
 
   PetscCall(FlucaFDSecondOrderTVDSetVelocity(fd_tvd, vel, 0));
@@ -140,21 +140,21 @@ int main(int argc, char **argv)
   test:
     suffix: left_bc_dirichlet
     nsize: 1
-    args: -i 0 -flucafd_left_bc_type dirichlet
+    args: -i 0 -flucafd_0_left_bc_type dirichlet
 
   test:
     suffix: left_bc_neumann
     nsize: 1
-    args: -i 0 -flucafd_left_bc_type neumann
+    args: -i 0 -flucafd_0_left_bc_type neumann
 
   test:
     suffix: right_bc_dirichlet
     nsize: 1
-    args: -i 8 -flucafd_right_bc_type dirichlet
+    args: -i 8 -flucafd_0_right_bc_type dirichlet
 
   test:
     suffix: right_bc_neumann
     nsize: 1
-    args: -i 8 -flucafd_right_bc_type neumann
+    args: -i 8 -flucafd_0_right_bc_type neumann
 
 TEST*/
