@@ -108,7 +108,7 @@ static PetscErrorCode ComputeRHSFunction(TS ts, PetscReal t, Vec x, Vec F, void 
 
   /* Update operators with current velocity and solution */
   PetscCall(FlucaFDScaleSetVector(ctx->fd_scale_vel, ctx->vel, DMSTAG_LEFT, 0));
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, x));
 
   PetscCall(FlucaFDApply(ctx->fd, ctx->dm, ctx->dm, x, F));
@@ -127,7 +127,7 @@ static PetscErrorCode ComputeRHSJacobian(TS ts, PetscReal t, Vec x, Mat A, Mat P
 
   /* Update operators with current velocity and solution */
   PetscCall(FlucaFDScaleSetVector(ctx->fd_scale_vel, ctx->vel, DMSTAG_LEFT, 0));
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, x));
 
   PetscCall(MatZeroEntries(A));

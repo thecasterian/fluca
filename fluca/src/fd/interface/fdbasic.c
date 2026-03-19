@@ -12,7 +12,7 @@ const char *FlucaFDBoundaryConditionTypes[] = {"NONE", "DIRICHLET", "NEUMANN", "
 PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
 {
   FlucaFD  f;
-  PetscInt d;
+  PetscInt comp, d;
 
   PetscFunctionBegin;
   PetscAssertPointer(fd, 2);
@@ -24,9 +24,13 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
   f->output_c   = 0;
   f->output_loc = DMSTAG_ELEMENT;
   f->dm         = NULL;
-  for (d = 0; d < 2 * FLUCAFD_MAX_DIM; ++d) {
-    f->bcs[d].type  = FLUCAFD_BC_NONE;
-    f->bcs[d].value = 0.;
+  for (comp = 0; comp < FLUCAFD_MAX_COMPONENT; ++comp) {
+    for (d = 0; d < 2 * FLUCAFD_MAX_DIM; ++d) {
+      f->bcs[comp][d].type   = FLUCAFD_BC_NONE;
+      f->bcs[comp][d].value  = 0.;
+      f->bcs[comp][d].fn     = NULL;
+      f->bcs[comp][d].fn_ctx = NULL;
+    }
   }
   f->dim = PETSC_DETERMINE;
   for (d = 0; d < FLUCAFD_MAX_DIM; ++d) {
@@ -169,7 +173,7 @@ PetscErrorCode FlucaFDViewFromOptions(FlucaFD fd, PetscObject obj, const char na
 PetscErrorCode FlucaFDSetUp(FlucaFD fd)
 {
   PetscBool      isdmstag;
-  PetscInt       d;
+  PetscInt       comp, d;
   DMBoundaryType bt[FLUCAFD_MAX_DIM];
 
   PetscFunctionBegin;
@@ -188,6 +192,16 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   PetscCall(DMStagGetIsFirstRank(fd->dm, &fd->is_first_rank[0], &fd->is_first_rank[1], &fd->is_first_rank[2]));
   PetscCall(DMStagGetIsLastRank(fd->dm, &fd->is_last_rank[0], &fd->is_last_rank[1], &fd->is_last_rank[2]));
   PetscCall(DMStagGetStencilWidth(fd->dm, &fd->stencil_width));
+
+  /* Clear stale BC entries beyond the actual dimension */
+  for (comp = 0; comp < FLUCAFD_MAX_COMPONENT; ++comp) {
+    for (d = 2 * fd->dim; d < 2 * FLUCAFD_MAX_DIM; ++d) {
+      fd->bcs[comp][d].type   = FLUCAFD_BC_NONE;
+      fd->bcs[comp][d].value  = 0.;
+      fd->bcs[comp][d].fn     = NULL;
+      fd->bcs[comp][d].fn_ctx = NULL;
+    }
+  }
 
   /* Get coordinate arrays and slots directly from DMStag */
   PetscCall(DMStagGetProductCoordinateArraysRead(fd->dm, &fd->arr_coord[0], &fd->arr_coord[1], &fd->arr_coord[2]));

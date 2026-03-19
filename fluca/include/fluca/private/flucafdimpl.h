@@ -5,6 +5,7 @@
 #include <petscdmstag.h>
 
 #define FLUCAFD_MAX_DIM          3
+#define FLUCAFD_MAX_COMPONENT    8
 #define FLUCAFD_MAX_STENCIL_SIZE 32
 #define FLUCAFD_ZERO_PIVOT_TOL   1e-14
 #define FLUCAFD_COEFF_ATOL       1e-10
@@ -41,7 +42,7 @@ struct _p_FlucaFD {
   PetscInt                 input_c;
   DMStagStencilLocation    output_loc;
   PetscInt                 output_c;
-  FlucaFDBoundaryCondition bcs[2 * FLUCAFD_MAX_DIM];
+  FlucaFDBoundaryCondition bcs[FLUCAFD_MAX_COMPONENT][2 * FLUCAFD_MAX_DIM];
 
   /* Data ----------------------------------------------------------------- */
   DM                  dm;
@@ -124,15 +125,15 @@ typedef struct {
   PetscScalar *alpha_plus_base;
   PetscScalar *alpha_minus_base;
 
-  /* Velocity field (face-centered, single component on left/down/back face) */
-  PetscInt             vel_c;
-  DM                   vel_dm;      /* original DMStag (from Vec) */
-  DM                   vel_da;      /* DMDA for local storage (1 DOF) */
-  Vec                  vel_local;   /* local vector on vel_da */
-  VecScatter           vel_scatter; /* global DMStag vel -> local DMDA vel */
-  const PetscScalar   *arr_vel_1d;
-  const PetscScalar  **arr_vel_2d;
-  const PetscScalar ***arr_vel_3d;
+  /* Mass flux field (face-centered, single component on left/down/back face) */
+  PetscInt             mf_c;
+  DM                   mf_dm;      /* original DMStag (from Vec) */
+  DM                   mf_da;      /* DMDA for local storage (1 DOF) */
+  Vec                  mf_local;   /* local vector on mf_da */
+  VecScatter           mf_scatter; /* global DMStag mf -> local DMDA mf */
+  const PetscScalar   *arr_mf_1d;
+  const PetscScalar  **arr_mf_2d;
+  const PetscScalar ***arr_mf_3d;
 
   /* Current solution field (element-centered, single component) */
   DM                   phi_dm;      /* original DMStag (from Vec) */
@@ -160,6 +161,8 @@ FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscIn
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
+
+FLUCA_INTERN PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar *);
 
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDuplicate_Internal(FlucaFDTermLink, FlucaFDTermLink *);

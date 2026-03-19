@@ -49,7 +49,7 @@ static PetscErrorCode CreateConvectionDiffusionOperator(AppCtx *ctx, FlucaFD *fd
   FlucaFD                  fd_scaled_tvd, fd_conv_deriv, fd_conv;
   FlucaFD                  fd_diff_inner, fd_diff_scaled, fd_diff_outer, fd_diff, fd_neg_diff;
   FlucaFD                  operands[2];
-  FlucaFDBoundaryCondition bcs[2];
+  FlucaFDBoundaryCondition bcs[2] = {{0}};
 
   PetscFunctionBegin;
 
@@ -60,7 +60,7 @@ static PetscErrorCode CreateConvectionDiffusionOperator(AppCtx *ctx, FlucaFD *fd
 
   /* Convection operator: d/dx(rho * u * phi) */
   PetscCall(FlucaFDSecondOrderTVDCreate(ctx->dm, FLUCAFD_X, 0, 0, &ctx->fd_tvd));
-  PetscCall(FlucaFDSetBoundaryConditions(ctx->fd_tvd, bcs));
+  PetscCall(FlucaFDSetBoundaryConditions(ctx->fd_tvd, 0, bcs));
   PetscCall(FlucaFDSetFromOptions(ctx->fd_tvd));
   PetscCall(FlucaFDSetUp(ctx->fd_tvd));
 
@@ -71,7 +71,7 @@ static PetscErrorCode CreateConvectionDiffusionOperator(AppCtx *ctx, FlucaFD *fd
   PetscCall(FlucaFDSetUp(fd_conv_deriv));
 
   PetscCall(FlucaFDCompositionCreate(fd_scaled_tvd, fd_conv_deriv, &fd_conv));
-  PetscCall(FlucaFDSetBoundaryConditions(fd_conv, bcs));
+  PetscCall(FlucaFDSetBoundaryConditions(fd_conv, 0, bcs));
   PetscCall(FlucaFDSetUp(fd_conv));
 
   /* Negative diffusion operator: - d/dx(gamma * d/dx phi) */
@@ -88,14 +88,14 @@ static PetscErrorCode CreateConvectionDiffusionOperator(AppCtx *ctx, FlucaFD *fd
   PetscCall(FlucaFDSetUp(fd_diff));
 
   PetscCall(FlucaFDScaleCreateConstant(fd_diff, -1., &fd_neg_diff));
-  PetscCall(FlucaFDSetBoundaryConditions(fd_neg_diff, bcs));
+  PetscCall(FlucaFDSetBoundaryConditions(fd_neg_diff, 0, bcs));
   PetscCall(FlucaFDSetUp(fd_neg_diff));
 
   /* Sum */
   operands[0] = fd_conv;
   operands[1] = fd_neg_diff;
   PetscCall(FlucaFDSumCreate(2, operands, fd_convdiff));
-  PetscCall(FlucaFDSetBoundaryConditions(*fd_convdiff, bcs));
+  PetscCall(FlucaFDSetBoundaryConditions(*fd_convdiff, 0, bcs));
   PetscCall(FlucaFDSetUp(*fd_convdiff));
 
   /* Cleanup intermediate operators */
@@ -115,7 +115,7 @@ static PetscErrorCode ComputeFunction(SNES snes, Vec x, Vec b, void *ptr)
   AppCtx *ctx = (AppCtx *)ptr;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, x));
   PetscCall(FlucaFDApply(ctx->fd, ctx->dm, ctx->dm, x, b));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -126,7 +126,7 @@ static PetscErrorCode ComputeJacobian(SNES snes, Vec x, Mat A, Mat P, void *ptr)
   AppCtx *ctx = (AppCtx *)ptr;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, x));
   PetscCall(MatZeroEntries(A));
   PetscCall(FlucaFDGetOperator(ctx->fd, ctx->dm, ctx->dm, A));

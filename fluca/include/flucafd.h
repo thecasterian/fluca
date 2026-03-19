@@ -34,9 +34,13 @@ typedef enum {
 } FlucaFDBoundaryConditionType;
 FLUCA_EXTERN const char *FlucaFDBoundaryConditionTypes[];
 
+typedef PetscErrorCode (*FlucaFDBCValueFn)(PetscInt dim, const PetscReal x[], void *ctx, PetscScalar *value);
+
 typedef struct {
   FlucaFDBoundaryConditionType type;
-  PetscScalar                  value; /* for Dirichlet/Neumann boundary conditions */
+  PetscScalar                  value;  /* constant value (used when fn == NULL) */
+  FlucaFDBCValueFn             fn;     /* function-based value (NULL = use constant) */
+  void                        *fn_ctx; /* user context for fn */
 } FlucaFDBoundaryCondition;
 
 /* Stencil point types */
@@ -71,18 +75,17 @@ typedef enum {
    for the internal arrays to remain valid. Stencil points with ntvds > 0
    must not be stored beyond the current call frame. */
 typedef struct {
-  FlucaFDTVDRefRole               role;    /* PREV or NEXT */
-  PetscInt                        i, j, k; /* face position where TVD is evaluated */
-  FlucaFDDirection                dir;
-  PetscInt                        N_dir;        /* domain size in TVD direction */
-  PetscBool                       periodic_dir; /* periodicity in TVD direction */
-  FlucaFDLimiterFn               *limiter;
-  PetscScalar                    *alpha_plus;
-  PetscScalar                    *alpha_minus;
-  const void                     *arr_vel;
-  const void                     *arr_phi;
-  FlucaFD                         fd_grad; /* gradient operator (element -> face) */
-  const FlucaFDBoundaryCondition *bcs;
+  FlucaFDTVDRefRole role;    /* PREV or NEXT */
+  PetscInt          i, j, k; /* face position where TVD is evaluated */
+  FlucaFDDirection  dir;
+  PetscInt          N_dir;        /* domain size in TVD direction */
+  PetscBool         periodic_dir; /* periodicity in TVD direction */
+  FlucaFDLimiterFn *limiter;
+  PetscScalar      *alpha_plus;
+  PetscScalar      *alpha_minus;
+  const void       *arr_mf;
+  const void       *arr_phi;
+  FlucaFD           fd_grad; /* gradient operator (element -> face) */
 } FlucaFDTVDRef;
 
 typedef struct {
@@ -109,8 +112,8 @@ FLUCA_EXTERN PetscErrorCode FlucaFDViewFromOptions(FlucaFD, PetscObject, const c
 FLUCA_EXTERN PetscErrorCode FlucaFDSetDM(FlucaFD, DM);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetInputLocation(FlucaFD, DMStagStencilLocation, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetOutputLocation(FlucaFD, DMStagStencilLocation, PetscInt);
-FLUCA_EXTERN PetscErrorCode FlucaFDSetBoundaryConditions(FlucaFD, const FlucaFDBoundaryCondition[]);
-FLUCA_EXTERN PetscErrorCode FlucaFDGetBoundaryConditions(FlucaFD, FlucaFDBoundaryCondition[]);
+FLUCA_EXTERN PetscErrorCode FlucaFDSetBoundaryConditions(FlucaFD, PetscInt, const FlucaFDBoundaryCondition[]);
+FLUCA_EXTERN PetscErrorCode FlucaFDGetBoundaryConditions(FlucaFD, PetscInt, FlucaFDBoundaryCondition[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetFromOptions(FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetOptionsPrefix(FlucaFD, const char[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDAppendOptionsPrefix(FlucaFD, const char[]);
@@ -149,7 +152,7 @@ FLUCA_EXTERN PetscFunctionList FlucaFDLimiterList;
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDCreate(DM, FlucaFDDirection, PetscInt, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetDirection(FlucaFD, FlucaFDDirection);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetLimiter(FlucaFD, const char *);
-FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetVelocity(FlucaFD, Vec, PetscInt);
+FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetMassFlux(FlucaFD, Vec, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD, Vec);
 
 FLUCA_EXTERN PetscFunctionList FlucaFDList;

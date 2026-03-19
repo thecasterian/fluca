@@ -74,7 +74,7 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
   FlucaFDStencilPoint points[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt            npoints;
   PetscInt            ir, idx;
-  PetscScalar         result;
+  PetscScalar         result, bc_val;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
@@ -119,8 +119,8 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
             result += points[c].v;
             break;
           case FLUCAFD_STENCIL_BOUNDARY:
-            PetscCheck(points[c].boundary_face >= 0 && points[c].boundary_face < 2 * FLUCAFD_MAX_DIM, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Invalid boundary face %" PetscInt_FMT " in stencil", points[c].boundary_face);
-            result += points[c].v * fd->bcs[points[c].boundary_face].value;
+            PetscCall(FlucaFDEvaluateBCValue_Internal(fd, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
+            result += points[c].v * bc_val;
             break;
           }
         }

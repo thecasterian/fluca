@@ -89,6 +89,8 @@ Examples from the codebase: `first_deriv`, `second_deriv_left_bc_dirichlet`, `al
 
 ## Checklist
 
+- [ ] Test validates an internal algorithm directly — no SNES or TS solve required
+- [ ] Inputs are constructed analytically; expected outputs are known without running a solver
 - [ ] `/*TEST*/` block has `suffix` and `args`
 - [ ] Source added to `TEST_SRCS` in CMakeLists.txt
 - [ ] Golden output captured from actual run (never hand-written)

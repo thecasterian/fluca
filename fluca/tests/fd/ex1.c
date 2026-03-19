@@ -61,7 +61,7 @@ int main(int argc, char **argv)
   test:
     suffix: second_deriv_left_bc_dirichlet
     nsize: 1
-    args: -flucafd_left_bc_type dirichlet -flucafd_deriv_order 2 -flucafd_accu_order 2 -i 0
+    args: -flucafd_0_left_bc_type dirichlet -flucafd_deriv_order 2 -flucafd_accu_order 2 -i 0
 
   test:
     suffix: second_deriv_right_bc_none
@@ -71,7 +71,7 @@ int main(int argc, char **argv)
   test:
     suffix: second_deriv_right_bc_neumann
     nsize: 1
-    args: -flucafd_right_bc_type neumann -flucafd_deriv_order 2 -flucafd_accu_order 2 -i 7
+    args: -flucafd_0_right_bc_type neumann -flucafd_deriv_order 2 -flucafd_accu_order 2 -i 7
 
   test:
     suffix: second_deriv_refined
@@ -106,7 +106,7 @@ int main(int argc, char **argv)
   test:
     suffix: first_deriv_input_loc_elem_output_loc_left_left_bc_neumann
     nsize: 1
-    args: -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc element -flucafd_output_loc left -flucafd_left_bc_type neumann -i 0
+    args: -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc element -flucafd_output_loc left -flucafd_0_left_bc_type neumann -i 0
 
   test:
     suffix: first_deriv_input_loc_elem_output_loc_left_left_bc_periodic
@@ -126,12 +126,12 @@ int main(int argc, char **argv)
   test:
     suffix: first_deriv_input_loc_left_output_loc_left_left_bc_dirichlet
     nsize: 1
-    args: -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -flucafd_left_bc_type dirichlet -i 0
+    args: -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -flucafd_0_left_bc_type dirichlet -i 0
 
   test:
     suffix: first_deriv_input_loc_left_output_loc_left_left_bc_neumann
     nsize: 1
-    args: -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -flucafd_left_bc_type neumann -i 0
+    args: -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -flucafd_0_left_bc_type neumann -i 0
 
   test:
     suffix: first_deriv_input_loc_left_output_loc_left_left_bc_periodic
@@ -146,12 +146,12 @@ int main(int argc, char **argv)
   test:
     suffix: first_deriv_input_loc_left_output_loc_left_right_bc_dirichlet
     nsize: 1
-    args: -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -flucafd_right_bc_type dirichlet -i 8
+    args: -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -flucafd_0_right_bc_type dirichlet -i 8
 
   test:
     suffix: first_deriv_input_loc_left_output_loc_left_right_bc_neumann
     nsize: 1
-    args: -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -flucafd_right_bc_type neumann -i 8
+    args: -flucafd_deriv_order 1 -flucafd_accu_order 2 -flucafd_input_loc left -flucafd_output_loc left -flucafd_0_right_bc_type neumann -i 8
 
   test:
     suffix: first_deriv_input_loc_left_output_loc_left_right_bc_periodic
