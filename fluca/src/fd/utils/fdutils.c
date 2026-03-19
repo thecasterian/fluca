@@ -719,7 +719,7 @@ PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt npoints, FlucaFDStencilPo
 {
   PetscInt             n;
   const FlucaFDTVDRef *ref;
-  PetscScalar          vel;
+  PetscScalar          mf;
   PetscInt             idx;
   PetscInt             i_fu, j_fu, k_fu;
 
@@ -732,7 +732,7 @@ PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt npoints, FlucaFDStencilPo
     if (points[n].ntvds != 1) continue;
     ref = &points[n].tvds[0];
 
-    PetscCall(ReadPhiValue_Private(ref->fd_grad->dim, ref->arr_vel, ref->i, ref->j, ref->k, &vel));
+    PetscCall(ReadPhiValue_Private(ref->fd_grad->dim, ref->arr_mf, ref->i, ref->j, ref->k, &mf));
 
     switch (ref->dir) {
     case FLUCAFD_X:
@@ -748,7 +748,7 @@ PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt npoints, FlucaFDStencilPo
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported TVD direction");
     }
 
-    if (vel >= 0) {
+    if (mf >= 0) {
       alpha = ref->alpha_plus[idx];
       i_fu  = (ref->dir == FLUCAFD_X) ? ref->i - 1 : ref->i;
       j_fu  = (ref->dir == FLUCAFD_Y) ? ref->j - 1 : ref->j;
@@ -778,7 +778,7 @@ PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt npoints, FlucaFDStencilPo
     r   = (PetscAbsScalar(grad_fc) > FLUCAFD_TVD_GRAD_TOL) ? grad_fu / grad_fc : 1.;
     psi = ref->limiter(r);
 
-    is_upwind = (vel >= 0 && ref->role == FLUCAFD_TVD_PREV) || (vel < 0 && ref->role == FLUCAFD_TVD_NEXT);
+    is_upwind = (mf >= 0 && ref->role == FLUCAFD_TVD_PREV) || (mf < 0 && ref->role == FLUCAFD_TVD_NEXT);
     if (is_upwind) {
       points[n].v *= 2.;
     } else {

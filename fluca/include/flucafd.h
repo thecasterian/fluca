@@ -83,7 +83,7 @@ typedef struct {
   FlucaFDLimiterFn *limiter;
   PetscScalar      *alpha_plus;
   PetscScalar      *alpha_minus;
-  const void       *arr_vel;
+  const void       *arr_mf;
   const void       *arr_phi;
   FlucaFD           fd_grad; /* gradient operator (element -> face) */
 } FlucaFDTVDRef;
@@ -152,7 +152,7 @@ FLUCA_EXTERN PetscFunctionList FlucaFDLimiterList;
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDCreate(DM, FlucaFDDirection, PetscInt, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetDirection(FlucaFD, FlucaFDDirection);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetLimiter(FlucaFD, const char *);
-FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetVelocity(FlucaFD, Vec, PetscInt);
+FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetMassFlux(FlucaFD, Vec, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD, Vec);
 
 FLUCA_EXTERN PetscFunctionList FlucaFDList;

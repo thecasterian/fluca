@@ -115,7 +115,7 @@ static PetscErrorCode ComputeFunction(SNES snes, Vec x, Vec b, void *ptr)
   AppCtx *ctx = (AppCtx *)ptr;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, x));
   PetscCall(FlucaFDApply(ctx->fd, ctx->dm, ctx->dm, x, b));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -126,7 +126,7 @@ static PetscErrorCode ComputeJacobian(SNES snes, Vec x, Mat A, Mat P, void *ptr)
   AppCtx *ctx = (AppCtx *)ptr;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDSecondOrderTVDSetVelocity(ctx->fd_tvd, ctx->vel, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, x));
   PetscCall(MatZeroEntries(A));
   PetscCall(FlucaFDGetOperator(ctx->fd, ctx->dm, ctx->dm, A));
