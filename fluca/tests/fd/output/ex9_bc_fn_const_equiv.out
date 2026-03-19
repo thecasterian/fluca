@@ -1,2 +1,0 @@
-Test 1 (const-equiv function BC): ||y_fn - y_const||_inf = 0.
-Test 2 (Neumann function BC differs from const): ||y_fn - y_const||_inf = 809.739
