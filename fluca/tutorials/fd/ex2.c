@@ -74,7 +74,7 @@ static PetscErrorCode ComputeRHSFunction(TS ts, PetscReal t, Vec u, Vec F, void 
   PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, u));
 
-  PetscCall(FlucaFDApply(ctx->fd, ctx->dm, ctx->dm, u, F));
+  PetscCall(FlucaFDApply(ctx->fd, t, ctx->dm, ctx->dm, u, F));
   /* RHS is negative of convection term */
   PetscCall(VecScale(F, -1.));
   PetscFunctionReturn(PETSC_SUCCESS);

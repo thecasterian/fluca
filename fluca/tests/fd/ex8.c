@@ -66,7 +66,7 @@ int main(int argc, char **argv)
   PetscCall(PrintStencil(1, npoints_raw, raw_points));
 
   /* GetStencil: should have nscales == 0 (fully resolved) */
-  PetscCall(FlucaFDGetStencil(fd_scale, idx, 0, 0, &npoints, points));
+  PetscCall(FlucaFDGetStencil(fd_scale, 0., idx, 0, 0, &npoints, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "GetStencil at i=%" PetscInt_FMT ":\n", idx));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints));
   PetscCall(PrintStencil(1, npoints, points));

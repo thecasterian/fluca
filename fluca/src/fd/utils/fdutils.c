@@ -1,7 +1,7 @@
 #include <fluca/private/flucafdimpl.h>
 #include <petscdmda.h>
 
-PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD fd, PetscInt component, PetscInt boundary_face, PetscInt i, PetscInt j, PetscInt k, PetscScalar *value)
+PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD fd, PetscReal t, PetscInt component, PetscInt boundary_face, PetscInt i, PetscInt j, PetscInt k, PetscScalar *value)
 {
   const FlucaFDBoundaryCondition *bc;
 
@@ -53,7 +53,7 @@ PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD fd, PetscInt component, P
     /* Fill remaining dimensions with 0 */
     for (d = fd->dim; d < FLUCAFD_MAX_DIM; ++d) x[d] = 0.;
 
-    PetscCall(bc->fn(fd->dim, x, bc->fn_ctx, value));
+    PetscCall(bc->fn(fd->dim, t, x, bc->fn_ctx, value));
   } else {
     *value = bc->value;
   }
@@ -657,13 +657,13 @@ PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt npoints, FlucaFDStencil
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode EvaluateGradient_Private(FlucaFD fd_grad, PetscInt dim, PetscInt i, PetscInt j, PetscInt k, const void *arr_phi, PetscScalar *grad)
+static PetscErrorCode EvaluateGradient_Private(FlucaFD fd_grad, PetscReal t, PetscInt dim, PetscInt i, PetscInt j, PetscInt k, const void *arr_phi, PetscScalar *grad)
 {
   FlucaFDStencilPoint grad_points[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt            ngrad, c;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencil(fd_grad, i, j, k, &ngrad, grad_points));
+  PetscCall(FlucaFDGetStencil(fd_grad, t, i, j, k, &ngrad, grad_points));
   *grad = 0.;
   for (c = 0; c < ngrad; c++) {
     switch (grad_points[c].type) {
@@ -685,7 +685,7 @@ static PetscErrorCode EvaluateGradient_Private(FlucaFD fd_grad, PetscInt dim, Pe
     case FLUCAFD_STENCIL_BOUNDARY: {
       PetscScalar bc_val;
 
-      PetscCall(FlucaFDEvaluateBCValue_Internal(fd_grad, grad_points[c].c, grad_points[c].boundary_face, grad_points[c].i, grad_points[c].j, grad_points[c].k, &bc_val));
+      PetscCall(FlucaFDEvaluateBCValue_Internal(fd_grad, t, grad_points[c].c, grad_points[c].boundary_face, grad_points[c].i, grad_points[c].j, grad_points[c].k, &bc_val));
       *grad += grad_points[c].v * bc_val;
       break;
     }
@@ -715,7 +715,7 @@ static PetscErrorCode ReadPhiValue_Private(PetscInt dim, const void *arr, PetscI
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt npoints, FlucaFDStencilPoint points[])
+PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscReal t, PetscInt npoints, FlucaFDStencilPoint points[])
 {
   PetscInt             n;
   const FlucaFDTVDRef *ref;
@@ -772,8 +772,8 @@ PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscInt npoints, FlucaFDStencilPo
       k_d   = (ref->dir == FLUCAFD_Z) ? ref->k - 1 : ref->k;
     }
 
-    PetscCall(EvaluateGradient_Private(ref->fd_grad, ref->fd_grad->dim, i_fu, j_fu, k_fu, ref->arr_phi, &grad_fu));
-    PetscCall(EvaluateGradient_Private(ref->fd_grad, ref->fd_grad->dim, ref->i, ref->j, ref->k, ref->arr_phi, &grad_fc));
+    PetscCall(EvaluateGradient_Private(ref->fd_grad, t, ref->fd_grad->dim, i_fu, j_fu, k_fu, ref->arr_phi, &grad_fu));
+    PetscCall(EvaluateGradient_Private(ref->fd_grad, t, ref->fd_grad->dim, ref->i, ref->j, ref->k, ref->arr_phi, &grad_fc));
 
     r   = (PetscAbsScalar(grad_fc) > FLUCAFD_TVD_GRAD_TOL) ? grad_fu / grad_fc : 1.;
     psi = ref->limiter(r);

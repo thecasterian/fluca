@@ -34,12 +34,12 @@ typedef enum {
 } FlucaFDBoundaryConditionType;
 FLUCA_EXTERN const char *FlucaFDBoundaryConditionTypes[];
 
-typedef PetscErrorCode (*FlucaFDBCValueFn)(PetscInt dim, const PetscReal x[], void *ctx, PetscScalar *value);
+typedef PetscErrorCode FlucaFDBCValueFn(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value);
 
 typedef struct {
   FlucaFDBoundaryConditionType type;
   PetscScalar                  value;  /* constant value (used when fn == NULL) */
-  FlucaFDBCValueFn             fn;     /* function-based value (NULL = use constant) */
+  FlucaFDBCValueFn            *fn;     /* function-based value (NULL = use constant) */
   void                        *fn_ctx; /* user context for fn */
 } FlucaFDBoundaryCondition;
 
@@ -120,8 +120,8 @@ FLUCA_EXTERN PetscErrorCode FlucaFDAppendOptionsPrefix(FlucaFD, const char[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOptionsPrefix(FlucaFD, const char *[]);
 
 FLUCA_EXTERN PetscErrorCode FlucaFDGetStencilRaw(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
-FLUCA_EXTERN PetscErrorCode FlucaFDGetStencil(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
-FLUCA_EXTERN PetscErrorCode FlucaFDApply(FlucaFD, DM, DM, Vec, Vec);
+FLUCA_EXTERN PetscErrorCode FlucaFDGetStencil(FlucaFD, PetscReal, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_EXTERN PetscErrorCode FlucaFDApply(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperator(FlucaFD, DM, DM, Mat);
 
 /* FLUCAFDDERIVATIVE specific */

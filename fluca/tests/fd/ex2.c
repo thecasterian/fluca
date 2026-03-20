@@ -54,7 +54,7 @@ int main(int argc, char **argv)
     PetscCall(PetscOptionsGetInt(NULL, NULL, opt, &idx[d], NULL));
   }
 
-  PetscCall(FlucaFDGetStencil(fd_sum, idx[0], idx[1], idx[2], &npoints, points));
+  PetscCall(FlucaFDGetStencil(fd_sum, 0., idx[0], idx[1], idx[2], &npoints, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Sum stencil at (i,j,k)=(%" PetscInt_FMT ",%" PetscInt_FMT ",%" PetscInt_FMT "):\n", idx[0], idx[1], idx[2]));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints));
   PetscCall(PrintStencil(3, npoints, points));

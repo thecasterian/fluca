@@ -107,12 +107,12 @@ int main(int argc, char **argv)
   /* Print stencils at boundary-adjacent indices */
   PetscCall(DMStagGetGlobalSizes(dm_out, &M, NULL, NULL));
 
-  PetscCall(FlucaFDGetStencil(fd_sum, 0, 0, 0, &npoints, points));
+  PetscCall(FlucaFDGetStencil(fd_sum, 0., 0, 0, 0, &npoints, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Stencil at i=0 (left boundary):\n"));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints));
   PetscCall(PrintStencil(1, npoints, points));
 
-  PetscCall(FlucaFDGetStencil(fd_sum, M - 1, 0, 0, &npoints, points));
+  PetscCall(FlucaFDGetStencil(fd_sum, 0., M - 1, 0, 0, &npoints, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Stencil at i=%" PetscInt_FMT " (right boundary):\n", M - 1));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints));
   PetscCall(PrintStencil(1, npoints, points));
@@ -122,13 +122,13 @@ int main(int argc, char **argv)
   PetscCall(FillInputVector(dm_in, u));
 
   PetscCall(DMCreateGlobalVector(dm_out, &y_sum));
-  PetscCall(FlucaFDApply(fd_sum, dm_in, dm_out, u, y_sum));
+  PetscCall(FlucaFDApply(fd_sum, 0., dm_in, dm_out, u, y_sum));
 
   /* Apply individual operators and sum results manually */
   PetscCall(DMCreateGlobalVector(dm_out, &y_a));
   PetscCall(DMCreateGlobalVector(dm_out, &y_b));
-  PetscCall(FlucaFDApply(fd_a, dm_in, dm_out, u, y_a));
-  PetscCall(FlucaFDApply(fd_b, dm_in, dm_out, u, y_b));
+  PetscCall(FlucaFDApply(fd_a, 0., dm_in, dm_out, u, y_a));
+  PetscCall(FlucaFDApply(fd_b, 0., dm_in, dm_out, u, y_b));
 
   /* y_sum should equal y_a + y_b */
   PetscCall(VecAXPY(y_a, 1.0, y_b));
