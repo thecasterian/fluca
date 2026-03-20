@@ -16,11 +16,11 @@ The NS module is removed entirely. A new **Phys** (physical model) class replace
 ### Decisions
 
 - **DM separation**: User provides a **base DM** (grid topology + coordinates) via `PhysSetBaseDM()`. Phys creates its own **solution DM** with the correct DOFs for its subtype during `PhysSetUp()`. Retrieved via `PhysGetSolutionDM()`. This decouples grid specification (user's concern) from DOF layout (physical model's concern).
-- **Formulation**: Monolithic IMEX (all unknowns solved simultaneously at each implicit stage). The incompressible NS equations are transformed from a DAE into a first-order ODE by differentiating the pressure-stabilized continuity equation, following [Bakhvalov 2025](https://arxiv.org/abs/2506.09519). Convection is treated explicitly (RHSFunction) and diffusion + pressure implicitly (IFunction).
+- **Formulation**: Monolithic IMEX (all unknowns solved simultaneously at each implicit stage). The incompressible NS equations are transformed from a DAE into a first-order ODE by applying the `alpha + d/dt` operator to the pressure-stabilized continuity equation, following [Bakhvalov 2025](https://arxiv.org/abs/2506.09519). All operators are affine (boundary contributions baked in); no separate H(t) term. Convection is treated explicitly (RHSFunction) and diffusion + pressure + continuity implicitly (IFunction).
 - **Time integration**: TSARKIMEX (additive Runge-Kutta IMEX). Stiffly accurate schemes recommended. Default: `TSARKIMEX3` (3rd order, L-stable). User controls via `-ts_type`, `-ts_arkimex_type`.
 - **Solver**: User creates TS directly. Phys wires callbacks via `PhysSetUpTS()`. No separate SNES path — steady-state problems use `TSPSEUDO` or solve as the limit of an unsteady problem.
 - **Phys subtypes**: Polymorphic by physical model. For now, only `PHYSINS` (incompressible Navier-Stokes). Different subtypes define different DOF layouts on the solution DM (e.g., INS: dim+1 element DOFs; Boussinesq: dim+2).
-- **Spatial discretization**: FlucaFD operators replace all hardcoded stencils. FlucaFD already supports function-based BC values and per-component boundary conditions on `main`.
+- **Spatial discretization**: FlucaFD operators replace all hardcoded stencils. FlucaFD already supports function-based BC values and per-component boundary conditions on `main`. A new `FlucaFDApplyDot` function and `fn_dot` field in `FlucaFDBoundaryCondition` are added as a prerequisite (see Phase 0) to support the ODE-transformed continuity equation, where operators must be applied to time derivatives with distinct ghost fill.
 - **Preconditioner**: Default is ILU; user can configure `PCFIELDSPLIT` or any other PC via the options database.
 - **Parameters**: Subtype-specific setters (`PhysINSSetDensity`, `PhysINSSetViscosity`) plus options database (`-phys_ins_density`, `-phys_ins_viscosity`).
 - **Mesh module**: Left untouched; removed in a separate follow-up task.
@@ -40,7 +40,7 @@ The incompressible Navier-Stokes equations are discretized in space to give:
 
 ```
 Momentum:    rho * du/dt + F_conv(u) + Gp = mu * L * u + f(t)
-Continuity:  Du + sigma_0 * S * p = H(t)
+Continuity:  Du + sigma_0 * S * p = 0
 ```
 
 where:
@@ -55,22 +55,23 @@ where:
 | `S` | pressure stabilization = DTG - DG^st >= 0 | `fd_pstab` (includes sigma_0 factor) |
 | `F_conv` | nonlinear convection | `fd_conv[d]` |
 | `f(t)` | body force | user callback |
-| `H(t)` | boundary contributions to continuity | from BCs |
+
+All spatial operators (D, S, G, L) are **affine** — boundary contributions are baked in via FlucaFD boundary conditions. There is no separate H(t) term; the operators handle boundary values internally during ghost fill.
 
 The pressure stabilization S arises from collocated (Rhie-Chow) discretization. It is the difference between the "wide" Laplacian DTG (cell -> face interpolation -> face gradient -> divergence) and the "compact" staggered Laplacian DG^st (direct face gradient -> divergence). The stabilization parameter is `sigma_0 = dt / rho`, matching the classical Rhie-Chow coefficient.
 
 ### ODE transformation
 
-With `sigma_0 > 0` and `sigma_1 = 0`, the continuity equation is algebraic (no dp/dt), making the system a DAE. Following [Bakhvalov 2025, Sec. 5.3], we differentiate the continuity equation w.r.t. time to obtain a first-order ODE:
+With `sigma_0 > 0` and `sigma_1 = 0`, the continuity equation is algebraic (no dp/dt), making the system a DAE. Following [Bakhvalov 2025, Sec. 5.3], we apply the operator `alpha + d/dt` (where `alpha = 1/dt`) to the continuity equation to obtain a first-order ODE:
 
 ```
 Momentum:    rho * du/dt + F_conv(u) + Gp = mu * L * u + f(t)
-Continuity': rho * D * (du/dt) + sigma_0 * S * (dp/dt) = dH/dt - alpha * Xi^{n-1}
+Continuity': alpha * D(u) + D_dot(du/dt) + alpha * sigma_0 * S(p) + sigma_0 * S_dot(dp/dt) = 0
 ```
 
-where:
-- `Xi^{n-1} = rho * D * u^{n-1} + sigma_0 * S * p^{n-1} - H(t^{n-1})` is the undifferentiated continuity residual from the previous time step
-- `alpha = 1 / dt` is the constraint feedback parameter that drives any constraint drift to zero; scaling as `1 / dt` ensures one e-folding per time step regardless of step size
+where `D(·)` and `S(·)` denote affine operators applied with value BCs (using `FlucaFDApply`), while `D_dot(·)` and `S_dot(·)` denote the same operators applied with time-derivative BCs (using `FlucaFDApplyDot`). The `_dot` variants compute time derivatives of BC values automatically: zero for constant BCs, central FD approximation for time-dependent `fn`, or exact `fn_dot` if provided.
+
+The `alpha * D(u) + alpha * sigma_0 * S(p)` terms act as constraint feedback: they drive any violation of the undifferentiated continuity equation to zero with rate `alpha`. The `D_dot(du/dt) + sigma_0 * S_dot(dp/dt)` terms enforce the time derivative of the constraint.
 
 Both du/dt and dp/dt now appear, giving a proper ODE with mass matrix:
 
@@ -85,33 +86,36 @@ M = [                          ]
 M is lower-triangular and invertible (given sigma_0 > 0 and proper BCs), so the system is a well-posed ODE.
 
 Key properties:
-- Without the `alpha * Xi^{n-1}` feedback, only d/dt(constraint) = 0 is enforced — initial constraint errors persist. The feedback makes errors decay as ~exp(-alpha * t).
-- `Xi^{n-1}` is computed once per time step from the previous solution.
-- `dH/dt` vanishes for time-independent BCs and enclosed domains (the common case).
+- The `alpha + d/dt` operator combines constraint feedback and time differentiation into a single expression — no separate Xi computation or dH/dt term is needed.
+- Without the `alpha` terms, only d/dt(constraint) = 0 is enforced — initial constraint errors persist. The feedback makes errors decay as ~exp(-alpha * t).
+- Because all operators are affine (boundary contributions baked in), boundary terms are handled automatically through the ghost fill mechanism. `FlucaFDApply` uses value BCs; `FlucaFDApplyDot` uses time-derivative BCs.
 
 ### IMEX splitting for TSARKIMEX
 
-The ODE is split into implicit (stiff) and explicit (non-stiff) parts:
+The ODE is split into implicit (stiff) and explicit (non-stiff) parts. The entire continuity row is implicit — the `alpha + d/dt` formulation places all continuity terms in the IFunction:
 
 **IFunction** `F(t, y, y_dot)`:
 ```
 F_momentum   = rho * u_dot - mu * L * u + Gp
-F_continuity = fd_div(u_dot) + fd_pstab(p_dot)
-             = rho * D * u_dot + sigma_0 * S * p_dot
+F_continuity = alpha * D(u) + D_dot(u_dot) + alpha * sigma_0 * S(p) + sigma_0 * S_dot(p_dot)
 ```
+
+where `D(·)`, `S(·)` use `FlucaFDApply` (value BCs) and `D_dot(·)`, `S_dot(·)` use `FlucaFDApplyDot` (time-derivative BCs).
 
 **RHSFunction** `G(t, y)`:
 ```
 G_momentum   = -F_conv(u) + f(t)
-G_continuity = dH/dt - alpha * Xi^{n-1}
+G_continuity = 0
 ```
 
 **IJacobian** `dF/dy + shift * dF/dy_dot`:
 ```
-[ shift * rho * I - mu * L          G             ]
-[                                                   ]
-[      shift * rho * D         shift * sigma_0 * S ]
+[       shift * rho * I - mu * L                G               ]
+[                                                                 ]
+[ (shift + alpha) * rho * D    (shift + alpha) * sigma_0 * S     ]
 ```
+
+The continuity row uses `shift + alpha` because the IFunction depends on both `y` (via the `alpha * D(u)` and `alpha * sigma_0 * S(p)` feedback terms) and `y_dot` (via the `D_dot(u_dot)` and `S_dot(p_dot)` terms). The Jacobian matrices from `FlucaFDGetOperator` are the same for both — BC values only affect the affine (constant) term, which drops out of the Jacobian.
 
 **RHSJacobian** `dG/dy`:
 ```
@@ -122,15 +126,15 @@ G_continuity = dH/dt - alpha * Xi^{n-1}
 
 The Picard-linearized convection Jacobian (frozen velocity) is used for `d(-F_conv)/du`.
 
-Note that the entire continuity row in the IJacobian is proportional to `shift` (from y_dot, not y). Each implicit TSARKIMEX stage solves a linear system (for constant viscosity) — SNES converges in one iteration with `-snes_type ksponly`.
+Note: for constant viscosity, the IJacobian is constant for fixed `shift` and `alpha`. Each implicit TSARKIMEX stage solves a linear system — SNES converges in one iteration with `-snes_type ksponly`.
 
 ### Stabilization parameter update
 
-`sigma_0 = dt / rho` depends on the time step. The `fd_pstab` operator's scale factor and `Xi^{n-1}` must be updated whenever dt changes. This is done in a `TSPreStep` callback:
+`sigma_0 = dt / rho` depends on the time step. The `fd_pstab` operator's scale factor and `alpha` must be updated whenever dt changes. This is done in a `TSPreStep` callback:
 
 1. Query `TSGetTimeStep(ts, &dt)`
 2. Update `fd_pstab` scale factor to `dt / rho`
-3. Compute `Xi^{n-1}` from the previous solution
+3. Update `alpha = 1 / dt`
 
 Fixed dt (`-ts_adapt_type none`) is recommended initially since varying sigma_0 introduces O(dt) perturbations to the stabilization.
 
@@ -200,12 +204,14 @@ typedef enum {
 
 /* INS boundary condition callback: returns value of field component at boundary coordinates.
    comp is the solution DOF component being queried (0..dim-1 for velocity, dim for pressure). */
-typedef PetscErrorCode PhysINSBCFn(PetscInt dim, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx);
+typedef PetscErrorCode PhysINSBCFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx);
 
 typedef struct {
   PhysINSBCType  type;
-  PhysINSBCFn   *fn;
+  PhysINSBCFn   *fn;       /* value BC: u_bc(t, x, comp) */
   void          *ctx;
+  PhysINSBCFn   *fn_dot;   /* time derivative BC: du_bc/dt(t, x, comp); NULL = use FD approx of fn */
+  void          *fn_dot_ctx;
 } PhysINSBC;
 
 /* Lifecycle */
@@ -258,7 +264,7 @@ FLUCA_EXTERN PetscErrorCode    PhysRegister(const char[], PetscErrorCode (*)(Phy
 
 **No SNES path**: `PhysSetUpSNES` was removed during the reference implementation. TS subsumes SNES — steady-state problems can use `TSPSEUDO` or simply run TS to steady state.
 
-**BC callback adapter**: The `PhysINSBCFn` signature `(dim, x[], comp, *val, ctx)` includes `comp`, but `main`'s `FlucaFDBCValueFn` signature `(dim, x[], ctx, *value)` does not. The INS subtype bridges this with a small adapter struct per boundary face that captures the component and calls the user's `PhysINSBCFn`. Since `main` already supports per-component BCs via `FlucaFDSetBoundaryConditions(fd, comp, bcs[])`, the adapter is set per-component on each FlucaFD operator.
+**BC callback adapter**: The `PhysINSBCFn` signature `(dim, t, x[], comp, *val, ctx)` includes `comp`, but `FlucaFDBCValueFn` signature `(dim, t, x[], ctx, *value)` does not. The INS subtype bridges this with a small adapter struct per boundary face that captures the component and calls the user's `PhysINSBCFn`. Since `main` already supports per-component BCs via `FlucaFDSetBoundaryConditions(fd, comp, bcs[])`, the adapter is set per-component on each FlucaFD operator.
 
 ---
 
@@ -306,9 +312,11 @@ struct _p_Phys {
 
 /* Adapter to bridge PhysINSBCFn (has comp) to FlucaFDBCValueFn (no comp) */
 typedef struct {
-  PhysINSBCFn *fn;
+  PhysINSBCFn *fn;       /* value callback */
+  PhysINSBCFn *fn_dot;   /* time derivative callback (may be NULL) */
   void        *ctx;
-  PetscInt     comp;  /* which solution component this adapter is wired for */
+  void        *ctx_dot;
+  PetscInt     comp;     /* which solution component this adapter is wired for */
 } PhysINS_BCAdapter;
 
 typedef struct {
@@ -344,12 +352,76 @@ typedef struct {
   IS           is_vel;
   IS           is_p;
   MatNullSpace nullspace;
-  Vec          xi;        /* Xi^{n-1}: continuity residual from previous step */
-  Vec          temp;
+  Vec          temp;      /* work vector for IFunction computation */
   PetscReal    dt_current; /* current dt for sigma_0 update detection */
   PetscBool    has_pressure_outlet;
 } Phys_INS;
 ```
+
+---
+
+## Phase 0: FlucaFD time-dependent and time-derivative BC support
+
+**Goal**: Make FlucaFD boundary conditions time-aware and add support for applying operators with time-derivative BCs, needed for the ODE-transformed continuity equation.
+
+### Already done on `main`
+
+**`FlucaFDBCValueFn`** — `t` parameter added:
+```c
+typedef PetscErrorCode (*FlucaFDBCValueFn)(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value);
+```
+
+**`FlucaFDApply`** and **`FlucaFDGetStencil`** — `t` parameter added:
+```c
+PetscErrorCode FlucaFDApply(FlucaFD fd, PetscReal t, DM dm_in, DM dm_out, Vec x, Vec y);
+PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscReal t, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint[]);
+```
+
+All internal functions (`FlucaFDEvaluateBCValue_Internal`, `FlucaFDResolveTVDRefs_Internal`) and call sites (tests, tutorials) are updated. `FlucaFDGetOperator` passes `t = 0` since BC values only affect the affine term, not the linear part.
+
+### Remaining: `fn_dot` and `FlucaFDApplyDot`
+
+**`FlucaFDBoundaryCondition`** — add `fn_dot` field:
+```c
+typedef struct {
+  FlucaFDBCType      type;
+  PetscScalar        value;
+  FlucaFDBCValueFn  *fn;         /* u_bc(t, x) — value BC */
+  void              *fn_ctx;
+  FlucaFDBCValueFn  *fn_dot;     /* du_bc/dt(t, x) — explicit time derivative (optional) */
+  void              *fn_dot_ctx;
+} FlucaFDBoundaryCondition;
+```
+
+**`FlucaFDApplyDot()`** — new public function:
+```c
+PetscErrorCode FlucaFDApplyDot(FlucaFD fd, PetscReal t, DM dm_in, DM dm_out, Vec x, Vec y);
+```
+
+Same stencil and coefficients as `FlucaFDApply`, but uses time-derivative BC values for ghost fill. The BC value for `ApplyDot` is determined by the following priority:
+
+| `fn` | `fn_dot` | Ghost value |
+|------|----------|-------------|
+| NULL | NULL | 0 (constant BC has zero time derivative) |
+| set | NULL | `(fn(t+h, x) - fn(t-h, x)) / (2h)` with `h = 1e-5` |
+| set | set | `fn_dot(t, x)` (exact, no approximation) |
+
+When `fn` is set but `fn_dot` is NULL, the time derivative is approximated by central finite difference using the existing `fn`. This is the default for time-dependent BCs — users only need to provide `fn_dot` if higher accuracy is required or `fn` is not smooth.
+
+For composite operators (Sum, Composition, Scale), the "use dot BCs" mode propagates through the dispatch chain.
+
+### Implementation notes
+
+- The Jacobian matrix from `FlucaFDGetOperator` is unchanged — BC values only affect the affine (constant) term, not the linear part. The same matrix is valid for both `Apply` and `ApplyDot`.
+- Internally, the `_dot` mode can be implemented as a flag on the base FlucaFD struct that the ghost fill routine checks. Set before recursive apply, cleared after.
+
+### Verification
+
+Existing tests pass unchanged. Add tests that verify:
+- Constant BC (`fn = NULL`): `FlucaFDApplyDot` ghost value is zero.
+- Steady function BC (`fn` returns time-independent value): `FlucaFDApplyDot` ghost value is approximately zero.
+- Time-dependent function BC (`fn` returns `sin(t) * g(x)`): `FlucaFDApplyDot` ghost value matches `cos(t) * g(x)` within FD tolerance.
+- Explicit `fn_dot`: `FlucaFDApplyDot` uses `fn_dot` exactly.
 
 ---
 
@@ -441,20 +513,29 @@ DMStagCreateCompatibleDMStag(base_dm, 0, 0, 0, dim + 1, &phys->sol_dm);
 
 ### BC adapter
 
-The INS subtype wraps `PhysINSBCFn` to `FlucaFDBCValueFn` using `PhysINS_BCAdapter`:
+The INS subtype wraps `PhysINSBCFn` to `FlucaFDBCValueFn` using `PhysINS_BCAdapter`. The same adapter struct bridges both `fn` (value) and `fn_dot` (time derivative):
 
 ```c
-static PetscErrorCode PhysINS_BCAdapterFn(PetscInt dim, const PetscReal x[], void *ctx, PetscScalar *value)
+static PetscErrorCode PhysINS_BCAdapterFn(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
 {
   PhysINS_BCAdapter *a = (PhysINS_BCAdapter *)ctx;
 
   PetscFunctionBeginUser;
-  PetscCall(a->fn(dim, x, a->comp, value, a->ctx));
+  PetscCall(a->fn(dim, t, x, a->comp, value, a->ctx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PhysINS_BCAdapterFnDot(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
+{
+  PhysINS_BCAdapter *a = (PhysINS_BCAdapter *)ctx;
+
+  PetscFunctionBeginUser;
+  PetscCall(a->fn_dot(dim, t, x, a->comp, value, a->ctx_dot));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 ```
 
-When setting BCs on a FlucaFD operator, the INS code iterates over input components:
+When setting BCs on a FlucaFD operator, the INS code wires both `fn` and `fn_dot`:
 ```c
 static PetscErrorCode SetVelocityDirichletBCs(Phys phys, FlucaFD fd, PetscInt comp)
 {
@@ -464,12 +545,16 @@ static PetscErrorCode SetVelocityDirichletBCs(Phys phys, FlucaFD fd, PetscInt co
   PetscFunctionBegin;
   for (PetscInt f = 0; f < 2 * phys->dim; f++) {
     if (ins->bcs[f].type == PHYS_INS_BC_VELOCITY && ins->bcs[f].fn) {
-      ins->bc_adapters[comp][f].fn   = ins->bcs[f].fn;
-      ins->bc_adapters[comp][f].ctx  = ins->bcs[f].ctx;
-      ins->bc_adapters[comp][f].comp = comp;
-      fd_bcs[f].type   = FLUCAFD_BC_DIRICHLET;
-      fd_bcs[f].fn     = PhysINS_BCAdapterFn;
-      fd_bcs[f].fn_ctx = &ins->bc_adapters[comp][f];
+      ins->bc_adapters[comp][f].fn      = ins->bcs[f].fn;
+      ins->bc_adapters[comp][f].fn_dot  = ins->bcs[f].fn_dot;
+      ins->bc_adapters[comp][f].ctx     = ins->bcs[f].ctx;
+      ins->bc_adapters[comp][f].ctx_dot = ins->bcs[f].fn_dot_ctx;
+      ins->bc_adapters[comp][f].comp    = comp;
+      fd_bcs[f].type       = FLUCAFD_BC_DIRICHLET;
+      fd_bcs[f].fn         = PhysINS_BCAdapterFn;
+      fd_bcs[f].fn_ctx     = &ins->bc_adapters[comp][f];
+      fd_bcs[f].fn_dot     = ins->bcs[f].fn_dot ? PhysINS_BCAdapterFnDot : NULL;
+      fd_bcs[f].fn_dot_ctx = &ins->bc_adapters[comp][f];
     }
   }
   PetscCall(FlucaFDSetBoundaryConditions(fd, comp, fd_bcs));
@@ -541,29 +626,36 @@ DMCreateGlobalVector(dm_face[e], &mass_flux_face[e]);
 ```c
 /* F_momentum = rho * u_dot - mu * nabla^2(u) + grad(p) */
 for (d = 0; d < dim; d++) {
-  FlucaFDApply(fd_laplacian[d], sol_dm, sol_dm, U, F);   /* -mu * L * u_d -> F[d] */
-  FlucaFDApply(fd_grad_p[d], sol_dm, sol_dm, U, F);      /* dp/dx_d -> F[d] */
+  FlucaFDApply(fd_laplacian[d], t, sol_dm, sol_dm, U, F);   /* -mu * L * u_d -> F[d] */
+  FlucaFDApply(fd_grad_p[d], t, sol_dm, sol_dm, U, F);    /* dp/dx_d -> F[d] */
 }
 /* Add rho * u_dot to momentum rows of F */
 AddScaledVelocityDot(rho, Udot, F);
 
-/* F_continuity = rho * D * u_dot + sigma_0 * S * p_dot */
-FlucaFDApply(fd_div, sol_dm, sol_dm, Udot, F);    /* rho * D * u_dot -> F[dim] */
-FlucaFDApply(fd_pstab, sol_dm, sol_dm, Udot, F);  /* sigma_0 * S * p_dot -> F[dim] */
+/* F_continuity = alpha * D(u) + D_dot(u_dot) + alpha * sigma_0 * S(p) + sigma_0 * S_dot(p_dot) */
+/* Compute constraint feedback: alpha * [D(u) + sigma_0 * S(p)] */
+VecZeroEntries(temp);
+FlucaFDApply(fd_div, t, sol_dm, sol_dm, U, temp);     /* D(u)           */
+FlucaFDApply(fd_pstab, t, sol_dm, sol_dm, U, temp);   /* + sigma_0 * S(p) */
+AddScaledContinuity(ins->alpha, temp, F);           /* scale by alpha, add to F[dim] */
+
+/* Compute time derivative part: D_dot(u_dot) + sigma_0 * S_dot(p_dot) */
+FlucaFDApplyDot(fd_div, t, sol_dm, sol_dm, Udot, F);   /* D_dot(u_dot)           -> F[dim] */
+FlucaFDApplyDot(fd_pstab, t, sol_dm, sol_dm, Udot, F); /* + sigma_0 * S_dot(p_dot) -> F[dim] */
 ```
 
 ### IJacobian
 
 ```
-[ shift * rho * I - mu * L          G             ]
-[                                                   ]
-[      shift * rho * D         shift * sigma_0 * S ]
+[       shift * rho * I - mu * L                G               ]
+[                                                                 ]
+[ (shift + alpha) * rho * D    (shift + alpha) * sigma_0 * S     ]
 ```
 
-Assembled using `FlucaFDGetOperator` for each operator. The shift factor multiplies the time-derivative contributions:
+Assembled using `FlucaFDGetOperator` for each operator:
 - Velocity diagonal: `shift * rho` (from `rho * u_dot`)
-- Continuity-velocity block: `shift * (rho * D matrix)` (from `rho * D * u_dot`)
-- Continuity-pressure block: `shift * (sigma_0 * S matrix)` (from `sigma_0 * S * p_dot`)
+- Continuity-velocity block: `(shift + alpha) * (rho * D matrix)` (from `alpha * D(u)` + `D_dot(u_dot)`)
+- Continuity-pressure block: `(shift + alpha) * (sigma_0 * S matrix)` (from `alpha * sigma_0 * S(p)` + `sigma_0 * S_dot(p_dot)`)
 
 ### RHSFunction (explicit part)
 
@@ -571,14 +663,12 @@ Assembled using `FlucaFDGetOperator` for each operator. The shift factor multipl
 /* G_momentum = -C(u) + f(t) */
 UpdateConvectionVelocity(U);  /* recompute mass flux and TVD state */
 for (d = 0; d < dim; d++) {
-  FlucaFDApply(fd_conv[d], sol_dm, sol_dm, U, G);  /* -C_d -> G[d] */
+  FlucaFDApply(fd_conv[d], t, sol_dm, sol_dm, U, G);  /* -C_d -> G[d] */
 }
 /* Add body force f(t) if set */
 AddBodyForce(phys, t, G);
 
-/* G_continuity = -alpha * Xi^{n-1} */
-/* xi was computed in TSPreStep; scale by -alpha and add to G[dim] */
-AddScaledConstraintFeedback(-ins->alpha, ins->xi, G);
+/* G_continuity = 0 (constraint feedback is in IFunction) */
 ```
 
 ### RHSJacobian
@@ -604,7 +694,7 @@ static PetscErrorCode PhysSetUpTS_INS(Phys phys, TS ts)
   /* Default to TSARKIMEX with stiffly accurate 3rd order scheme */
   PetscCall(TSSetType(ts, TSARKIMEX));
 
-  /* Update sigma_0 and Xi^{n-1} at each step */
+  /* Update sigma_0 and alpha when dt changes */
   PetscCall(TSSetPreStep(ts, PhysPreStep_INS));
 
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -619,7 +709,6 @@ static PetscErrorCode PhysPreStep_INS(TS ts)
   Phys      phys;
   Phys_INS *ins;
   PetscReal dt;
-  Vec       U;
 
   PetscFunctionBegin;
   PetscCall(TSGetApplicationContext(ts, &phys));
@@ -632,12 +721,6 @@ static PetscErrorCode PhysPreStep_INS(TS ts)
     ins->alpha      = 1.0 / dt;
     ins->dt_current = dt;
   }
-
-  /* Compute Xi^{n-1} = fd_div(u^{n-1}) + fd_pstab(p^{n-1}) */
-  PetscCall(TSGetSolution(ts, &U));
-  PetscCall(VecZeroEntries(ins->xi));
-  PetscCall(FlucaFDApply(ins->fd_div, phys->sol_dm, phys->sol_dm, U, ins->xi));
-  PetscCall(FlucaFDApply(ins->fd_pstab, phys->sol_dm, phys->sol_dm, U, ins->xi));
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -767,26 +850,21 @@ For INS: `DMStagCreateCompatibleDMStag(base_dm, 0, 0, 0, dim + 1, &sol_dm)` — 
 
 ### Boundary condition adapter
 
-`PhysINSBCFn` has a `comp` parameter so the user writes one callback for all velocity components. `FlucaFDBCValueFn` on `main` does not have `comp`. The INS subtype bridges this with `PhysINS_BCAdapter`:
+`PhysINSBCFn` has a `comp` parameter so the user writes one callback for all velocity components. `FlucaFDBCValueFn` on `main` does not have `comp`. The INS subtype bridges this with `PhysINS_BCAdapter`, which carries both `fn` (value) and `fn_dot` (time derivative) callbacks:
 
 ```c
 typedef struct {
-  PhysINSBCFn *fn;
+  PhysINSBCFn *fn;       /* value callback */
+  PhysINSBCFn *fn_dot;   /* time derivative callback (may be NULL) */
   void        *ctx;
+  void        *ctx_dot;
   PetscInt     comp;
 } PhysINS_BCAdapter;
-
-static PetscErrorCode PhysINS_BCAdapterFn(PetscInt dim, const PetscReal x[], void *ctx, PetscScalar *value)
-{
-  PhysINS_BCAdapter *a = (PhysINS_BCAdapter *)ctx;
-
-  PetscFunctionBeginUser;
-  PetscCall(a->fn(dim, x, a->comp, value, a->ctx));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
 ```
 
-The adapter structs are stored in `Phys_INS` as `bc_adapters[comp][face]`. They're initialized once during setup and passed as `fn_ctx` to `FlucaFDSetBoundaryConditions(fd, comp, bcs[])`.
+The adapter provides two `FlucaFDBCValueFn` wrappers: `PhysINS_BCAdapterFn` (for `fn`) and `PhysINS_BCAdapterFnDot` (for `fn_dot`). Both are set on each `FlucaFDBoundaryCondition` entry so that `FlucaFDApply` uses value BCs and `FlucaFDApplyDot` uses time-derivative BCs through the same operator.
+
+The adapter structs are stored in `Phys_INS` as `bc_adapters[comp][face]`. They're initialized once during setup and passed as `fn_ctx` / `fn_dot_ctx` to `FlucaFDSetBoundaryConditions(fd, comp, bcs[])`.
 
 ### Null space handling
 
@@ -809,6 +887,16 @@ No separate 2D/3D code paths for operator construction. Body force evaluation ha
 ---
 
 ## Files summary
+
+### Modified (Phase 0)
+
+| File | Change |
+|------|--------|
+| `include/flucafd.h` | Add `t` to `FlucaFDBCValueFn`, `FlucaFDApply`, `FlucaFDGetStencil`; add `fn_dot`, `fn_dot_ctx` to `FlucaFDBoundaryCondition`; declare `FlucaFDApplyDot` |
+| `src/fd/interface/fdapply.c` | Thread `t` through `FlucaFDApply`, `FlucaFDGetStencil`, `FlucaFDGetOperator`; implement `FlucaFDApplyDot` |
+| `src/fd/utils/fdutils.c` | Thread `t` through `FlucaFDEvaluateBCValue_Internal`, `FlucaFDResolveTVDRefs_Internal` |
+| `src/fd/impls/*/` | Propagate dot-BC mode through subtypes |
+| `tests/fd/`, `tutorials/fd/` | Update all `FlucaFDApply` and `FlucaFDGetStencil` call sites to include `t` |
 
 ### Created (new)
 
