@@ -11,12 +11,13 @@ Before:  User -> NS -> (TS/SNES internally, Mesh, DMComposite, VecNest, MatNest,
 After:   User -> TS directly, Phys provides operators + callbacks
 ```
 
-The NS module is removed entirely. A new **Phys** (physical model) class replaces it. Phys is a polymorphic PETSc-style class whose subtypes represent different governing equations. Each subtype constructs FlucaFD operators and provides callback functions (`IFunction`/`IJacobian` for TS). The user creates and drives TS directly.
+The NS module is removed entirely. A new **Phys** (physical model) class replaces it. Phys is a polymorphic PETSc-style class whose subtypes represent different governing equations. Each subtype constructs FlucaFD operators and provides callback functions (`IFunction`/`IJacobian`/`RHSFunction` for TS). The user creates and drives TS directly.
 
 ### Decisions
 
 - **DM separation**: User provides a **base DM** (grid topology + coordinates) via `PhysSetBaseDM()`. Phys creates its own **solution DM** with the correct DOFs for its subtype during `PhysSetUp()`. Retrieved via `PhysGetSolutionDM()`. This decouples grid specification (user's concern) from DOF layout (physical model's concern).
-- **Formulation**: Monolithic (all unknowns solved simultaneously). Rhie-Chow pressure stabilization applied as a separate operator in the continuity equation.
+- **Formulation**: Monolithic IMEX (all unknowns solved simultaneously at each implicit stage). The incompressible NS equations are transformed from a DAE into a first-order ODE by differentiating the pressure-stabilized continuity equation, following [Bakhvalov 2025](https://arxiv.org/abs/2506.09519). Convection is treated explicitly (RHSFunction) and diffusion + pressure implicitly (IFunction).
+- **Time integration**: TSARKIMEX (additive Runge-Kutta IMEX). Stiffly accurate schemes recommended. Default: `TSARKIMEX3` (3rd order, L-stable). User controls via `-ts_type`, `-ts_arkimex_type`.
 - **Solver**: User creates TS directly. Phys wires callbacks via `PhysSetUpTS()`. No separate SNES path — steady-state problems use `TSPSEUDO` or solve as the limit of an unsteady problem.
 - **Phys subtypes**: Polymorphic by physical model. For now, only `PHYSINS` (incompressible Navier-Stokes). Different subtypes define different DOF layouts on the solution DM (e.g., INS: dim+1 element DOFs; Boussinesq: dim+2).
 - **Spatial discretization**: FlucaFD operators replace all hardcoded stencils. FlucaFD already supports function-based BC values and per-component boundary conditions on `main`.
@@ -27,7 +28,111 @@ The NS module is removed entirely. A new **Phys** (physical model) class replace
 
 ### Reference implementation
 
-The `feature/ns-redesign` branch contains a working implementation of Phases 0--3. This plan is written for implementation on `main`. Where the branch's design differs from this plan, the branch has priority. Key differences between `main` and the branch are noted where relevant.
+The `feature/ns-redesign` branch contains a working implementation of Phases 0--3 from the original plan. This revised plan is written for implementation on `main`. Where the branch's design differs from this plan, this plan has priority.
+
+---
+
+## Formulation
+
+### Governing equations (semidiscrete)
+
+The incompressible Navier-Stokes equations are discretized in space to give:
+
+```
+Momentum:    rho * du/dt + F_conv(u) + Gp = mu * L * u + f(t)
+Continuity:  Du + sigma_0 * S * p = H(t)
+```
+
+where:
+
+| Symbol | Meaning | Fluca operator |
+|--------|---------|----------------|
+| `u` | cell-centered velocity (dim components) | solution DOFs 0..dim-1 |
+| `p` | cell-centered pressure (1 component) | solution DOF dim |
+| `G` | pressure gradient | `fd_grad_p[d]` |
+| `L` | viscous Laplacian (L < 0) | via `fd_laplacian[d]` |
+| `D` | divergence of interpolated velocity | `fd_div` (includes rho factor) |
+| `S` | pressure stabilization = DTG - DG^st >= 0 | `fd_pstab` (includes sigma_0 factor) |
+| `F_conv` | nonlinear convection | `fd_conv[d]` |
+| `f(t)` | body force | user callback |
+| `H(t)` | boundary contributions to continuity | from BCs |
+
+The pressure stabilization S arises from collocated (Rhie-Chow) discretization. It is the difference between the "wide" Laplacian DTG (cell -> face interpolation -> face gradient -> divergence) and the "compact" staggered Laplacian DG^st (direct face gradient -> divergence). The stabilization parameter is `sigma_0 = dt / rho`, matching the classical Rhie-Chow coefficient.
+
+### ODE transformation
+
+With `sigma_0 > 0` and `sigma_1 = 0`, the continuity equation is algebraic (no dp/dt), making the system a DAE. Following [Bakhvalov 2025, Sec. 5.3], we differentiate the continuity equation w.r.t. time to obtain a first-order ODE:
+
+```
+Momentum:    rho * du/dt + F_conv(u) + Gp = mu * L * u + f(t)
+Continuity': rho * D * (du/dt) + sigma_0 * S * (dp/dt) = dH/dt - alpha * Xi^{n-1}
+```
+
+where:
+- `Xi^{n-1} = rho * D * u^{n-1} + sigma_0 * S * p^{n-1} - H(t^{n-1})` is the undifferentiated continuity residual from the previous time step
+- `alpha = 1 / dt` is the constraint feedback parameter that drives any constraint drift to zero; scaling as `1 / dt` ensures one e-folding per time step regardless of step size
+
+Both du/dt and dp/dt now appear, giving a proper ODE with mass matrix:
+
+```
+M * dy/dt = rhs,   y = (u, p)^T
+
+    [ rho * I        0        ]
+M = [                          ]
+    [ rho * D    sigma_0 * S  ]
+```
+
+M is lower-triangular and invertible (given sigma_0 > 0 and proper BCs), so the system is a well-posed ODE.
+
+Key properties:
+- Without the `alpha * Xi^{n-1}` feedback, only d/dt(constraint) = 0 is enforced — initial constraint errors persist. The feedback makes errors decay as ~exp(-alpha * t).
+- `Xi^{n-1}` is computed once per time step from the previous solution.
+- `dH/dt` vanishes for time-independent BCs and enclosed domains (the common case).
+
+### IMEX splitting for TSARKIMEX
+
+The ODE is split into implicit (stiff) and explicit (non-stiff) parts:
+
+**IFunction** `F(t, y, y_dot)`:
+```
+F_momentum   = rho * u_dot - mu * L * u + Gp
+F_continuity = fd_div(u_dot) + fd_pstab(p_dot)
+             = rho * D * u_dot + sigma_0 * S * p_dot
+```
+
+**RHSFunction** `G(t, y)`:
+```
+G_momentum   = -F_conv(u) + f(t)
+G_continuity = dH/dt - alpha * Xi^{n-1}
+```
+
+**IJacobian** `dF/dy + shift * dF/dy_dot`:
+```
+[ shift * rho * I - mu * L          G             ]
+[                                                   ]
+[      shift * rho * D         shift * sigma_0 * S ]
+```
+
+**RHSJacobian** `dG/dy`:
+```
+[ d(-F_conv)/du    0 ]
+[                    ]
+[       0          0 ]
+```
+
+The Picard-linearized convection Jacobian (frozen velocity) is used for `d(-F_conv)/du`.
+
+Note that the entire continuity row in the IJacobian is proportional to `shift` (from y_dot, not y). Each implicit TSARKIMEX stage solves a linear system (for constant viscosity) — SNES converges in one iteration with `-snes_type ksponly`.
+
+### Stabilization parameter update
+
+`sigma_0 = dt / rho` depends on the time step. The `fd_pstab` operator's scale factor and `Xi^{n-1}` must be updated whenever dt changes. This is done in a `TSPreStep` callback:
+
+1. Query `TSGetTimeStep(ts, &dt)`
+2. Update `fd_pstab` scale factor to `dt / rho`
+3. Compute `Xi^{n-1}` from the previous solution
+
+Fixed dt (`-ts_adapt_type none`) is recommended initially since varying sigma_0 introduces O(dt) perturbations to the stabilization.
 
 ---
 
@@ -55,7 +160,7 @@ PhysGetSolutionDM(phys, &sol_dm);
 
 /* Create and configure TS */
 TSCreate(comm, &ts);
-PhysSetUpTS(phys, ts);   /* sets DM, wires IFunction/IJacobian */
+PhysSetUpTS(phys, ts);   /* sets DM, wires IFunction/IJacobian/RHSFunction */
 TSSetFromOptions(ts);     /* user controls -ts_type, -ts_dt, -ts_max_time */
 
 /* Solve */
@@ -130,6 +235,7 @@ FLUCA_EXTERN PetscErrorCode PhysSetUpTS(Phys, TS);
 /* Direct residual/Jacobian access (for testing) */
 FLUCA_EXTERN PetscErrorCode PhysComputeIFunction(Phys, PetscReal, Vec, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode PhysComputeIJacobian(Phys, PetscReal, Vec, Vec, PetscReal, Mat, Mat);
+FLUCA_EXTERN PetscErrorCode PhysComputeRHSFunction(Phys, PetscReal, Vec, Vec);
 
 /* PHYSINS specific */
 FLUCA_EXTERN PetscErrorCode PhysINSSetDensity(Phys, PetscReal);
@@ -170,6 +276,8 @@ struct _PhysOps {
   PetscErrorCode (*setupts)(Phys, TS);
   PetscErrorCode (*computeifunction)(Phys, PetscReal, Vec, Vec, Vec);
   PetscErrorCode (*computeijacobian)(Phys, PetscReal, Vec, Vec, PetscReal, Mat, Mat);
+  PetscErrorCode (*computerhsfunction)(Phys, PetscReal, Vec, Vec);
+  PetscErrorCode (*computerhsjacobian)(Phys, PetscReal, Vec, Mat, Mat);
 };
 
 struct _p_Phys {
@@ -206,6 +314,7 @@ typedef struct {
 typedef struct {
   PetscReal rho;   /* density */
   PetscReal mu;    /* dynamic viscosity */
+  PetscReal alpha; /* constraint feedback parameter = 1/dt */
 
   /* Boundary conditions (one per face: left, right, down, up, back, front) */
   PhysINSBC bcs[PHYS_INS_MAX_FACES];
@@ -213,13 +322,14 @@ typedef struct {
   /* BC adapters: [comp][face] — created during setup to bridge PhysINSBCFn to FlucaFDBCValueFn */
   PhysINS_BCAdapter bc_adapters[PHYS_INS_MAX_DIM + 1][PHYS_INS_MAX_FACES];
 
-  /* FlucaFD operators */
+  /* FlucaFD operators (implicit part) */
   FlucaFD fd_laplacian[PHYS_INS_MAX_DIM]; /* -mu * nabla^2 u_d per velocity direction */
   FlucaFD fd_grad_p[PHYS_INS_MAX_DIM];    /* dp/dx_d per velocity direction */
   FlucaFD fd_div;                         /* rho * div(interp(u)) — single Sum over directions */
-  FlucaFD fd_pstab;                       /* dt * (DTG - DG^st)(p) pressure stabilization */
+  FlucaFD fd_pstab;                       /* sigma_0 * S(p) pressure stabilization */
 
-  /* Convection: C_d = sum_e d/dx_e(F_e * u_d_TVD) where F_e = rho * u_e */
+  /* FlucaFD operators (explicit part — convection) */
+  /* C_d = sum_e d/dx_e(F_e * u_d_TVD) where F_e = rho * u_e */
   FlucaFD fd_conv[PHYS_INS_MAX_DIM];                        /* summed convection per velocity dir */
   FlucaFD fd_tvd[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM];       /* TVD interp: [d][e] = u_d along e */
   FlucaFD fd_scale_vel[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM]; /* mass flux scaling: [d][e] */
@@ -229,39 +339,16 @@ typedef struct {
   Vec     mass_flux_face[PHYS_INS_MAX_DIM];                 /* face mass flux vectors (rho * u) */
 
   /* Solver data */
-  Mat          J;
+  Mat          J;         /* IJacobian matrix */
+  Mat          J_rhs;     /* RHSJacobian matrix (Picard convection) */
   IS           is_vel;
   IS           is_p;
   MatNullSpace nullspace;
+  Vec          xi;        /* Xi^{n-1}: continuity residual from previous step */
   Vec          temp;
+  PetscReal    dt_current; /* current dt for sigma_0 update detection */
   PetscBool    has_pressure_outlet;
 } Phys_INS;
-```
-
----
-
-## Phase 0: Boundary-safe TVD phi evaluation
-
-**Goal**: Fix SecondOrderTVD to evaluate phi values at near-boundary cells through the BC machinery rather than reading raw array values. This is a prerequisite for correct convection near boundaries.
-
-**Problem**: `ReadPhiValue_Private` in `secondordertvd.c` directly accesses `arr_phi[k][j][i]` without bounds checking or BC evaluation. When `i_u` or `i_d` fall on off-grid cells near boundaries, this reads undefined values.
-
-**Solution**: Create an internal identity operator `fd_phi` (0th-order derivative, element-to-element) with BCs. Use it to evaluate phi at near-boundary cells instead of direct array access. This is the approach taken in the reference implementation (`feature/ns-redesign`, commit `5d9c018`).
-
-### Changes
-
-| File | Change |
-|------|--------|
-| `src/fd/impls/secondordertvd/secondordertvd.c` | Add `fd_phi` field to `FlucaFD_SecondOrderTVD`. Replace `ReadPhiValue_Private` with `ComputeCellCenteredPhi_Private` that uses `fd_phi` for boundary cells. |
-
-### Test
-
-Existing TVD tests should continue to pass. Add a test case with Dirichlet BCs at boundaries to verify correct phi evaluation near domain edges.
-
-### Verification
-
-```bash
-cmake --build build && ctest --test-dir build -R "tests_fd"
 ```
 
 ---
@@ -283,7 +370,7 @@ fluca/
 │   └── phys/
 │       ├── CMakeLists.txt
 │       ├── interface/
-│       │   ├── physbasic.c      # Create, SetUp, Destroy, SetUpTS, ComputeIFunction/IJacobian
+│       │   ├── physbasic.c      # Create, SetUp, Destroy, SetUpTS, ComputeI/RHSFunction/Jacobian
 │       │   ├── physopts.c       # SetBaseDM, GetBaseDM, GetSolutionDM, SetFromOptions, prefix
 │       │   ├── physpkg.c        # Package init, event registration
 │       │   └── physreg.c        # Type registration
@@ -333,9 +420,9 @@ Add `add_subdirectory(phys)` to `src/CMakeLists.txt`.
 
 ---
 
-## Phase 2: PHYSINS -- Stokes (linear, no convection)
+## Phase 2: PHYSINS -- full incompressible Navier-Stokes
 
-**Goal**: Verify the FlucaFD operator infrastructure with a linear Stokes problem solved through TS.
+**Goal**: Complete INS subtype with IMEX time integration via TSARKIMEX. Viscous + pressure terms implicit, convection explicit.
 
 ### Files to create
 
@@ -343,7 +430,7 @@ Add `add_subdirectory(phys)` to `src/CMakeLists.txt`.
 |------|----------|
 | `include/fluca/private/physinsimpl.h` | Phys_INS struct |
 | `src/phys/impls/ins/ins.c` | PhysCreate_INS, Setup, solution DM creation, parameter setters |
-| `src/phys/impls/ins/insops.c` | Operator construction, IFunction, IJacobian, TS callbacks |
+| `src/phys/impls/ins/insops.c` | Operator construction, IFunction, IJacobian, RHSFunction, RHSJacobian, TS callbacks |
 
 ### Solution DM creation (inside PhysSetUp_INS)
 
@@ -410,58 +497,35 @@ Pressure Neumann (zero) BCs (component dim).
 ```
 rho * div(interp(u)) = rho * sum_d Composition(Derivative(ELEMENT,d -> face[d],0), Derivative(face[d],0 -> ELEMENT,dim))
 ```
-Single Sum operator. Velocity Dirichlet BCs per input component d.
+Single Sum operator. Velocity Dirichlet BCs per input component d. The rho factor is baked in so that `fd_div` applied to `y_dot` gives `rho * D * u_dot` for the differentiated continuity.
 
 **Pressure stabilization** (`fd_pstab`):
 ```
-dt * sum_d (DTG_d - DG^st_d)(p)
+sigma_0 * sum_d (DTG_d - DG^st_d)(p)
   where DG^st_d = Composition(Derivative(ELEMENT,dim -> face[d],0), Derivative(face[d],0 -> ELEMENT,dim))
   and   DTG_d   = Composition(Derivative(ELEMENT,dim -> ELEMENT,d), Composition(Derivative(ELEMENT,d -> face[d],0), Derivative(face[d],0 -> ELEMENT,dim)))
 ```
-Scaled by physical dt at each TS step. Initial scale is 0. Pressure Neumann BCs.
+Scaled by `sigma_0 = dt / rho`. Initial scale is 0 (updated by TSPreStep). Pressure Neumann BCs. When applied to `y_dot`, gives `sigma_0 * S * p_dot` for the differentiated continuity.
 
-### Callbacks
-
-**IFunction**: `F = rho * U_dot + steady_residual`
-```
-steady_residual = sum_d(-mu * nabla^2 u_d + dp/dx_d) + rho * div(interp(u)) + dt * S(p) - f_body
-```
-Mass term `rho * U_dot` added only for velocity DOFs (not pressure).
-
-**IJacobian**: Assemble monolithic Mat using `FlucaFDGetOperator` for each operator. Add `shift * rho` to velocity diagonal entries.
-
-### Test
-
-- `tests/phys/ex1.c`: Create INS, verify solution DM has dim+1 element DOFs.
-- `tests/phys/ex2.c`: Manufactured Stokes solution (e.g., Taylor-Green at t=0). Verify `PhysComputeIFunction` produces zero residual for the exact solution.
-
-### Verification
-
-```bash
-cmake --build build && ctest --test-dir build -R "tests_phys"
-```
-
----
-
-## Phase 3: PHYSINS -- full Navier-Stokes (convection)
-
-**Goal**: Add nonlinear convection term for full incompressible NS.
-
-### Convection term for momentum equation d
-
+**Convection** (`fd_conv[d]`):
 ```
 C_d = sum_e d/dx_e(F_e * u_d_TVD)
   where F_e = rho * u_e (mass flux at faces)
 ```
-
 Using FlucaFD:
-1. **TVD interpolation**: `FlucaFDSecondOrderTVDCreate(sol_dm, e, d, 0)` — interpolates `u_d` (ELEMENT,d) to face (face_loc[e],0) using TVD limiter
-2. **Scale by face mass flux**: `FlucaFDScaleCreateVector(tvd, mass_flux_face[e], 0)` — multiplies by `F_e`
-3. **Face derivative**: `FlucaFDDerivativeCreate(sol_dm, e, 1, 2, face_loc[e], 0, ELEMENT, d)` — maps back to cell
-4. **Compose**: `FlucaFDCompositionCreate(scaled_tvd, face_deriv)`
-5. **Sum over e**: `FlucaFDSumCreate(dim, conv_comp_per_e)`
+1. `FlucaFDSecondOrderTVDCreate(sol_dm, e, d, 0)` — interpolates `u_d` to face using TVD limiter
+2. `FlucaFDScaleCreateVector(tvd, mass_flux_face[e], 0)` — multiplies by `F_e`
+3. `FlucaFDDerivativeCreate(sol_dm, e, 1, 2, face_loc[e], 0, ELEMENT, d)` — face derivative
+4. `FlucaFDCompositionCreate(scaled_tvd, face_deriv)` — compose
+5. `FlucaFDSumCreate(dim, conv_comp_per_e)` — sum over e
 
 TVD limiter is configurable via `-phys_ins_tvd_limiter_type`.
+
+**Cell-to-face interpolation** (`fd_interp[d]`):
+```
+Derivative(ELEMENT, d -> face[d], 0)
+```
+Used to compute face mass flux from cell-centered velocity.
 
 ### Face DMs and mass flux
 
@@ -472,36 +536,122 @@ DMStagCreateCompatibleDMStag(sol_dm, 0, 1 /* 2D edge */, 0, 0, &dm_face[e]);
 DMCreateGlobalVector(dm_face[e], &mass_flux_face[e]);
 ```
 
-### Convection velocity update (each SNES/TS iteration)
+### IFunction (implicit part)
 
-1. Interpolate each velocity component to faces: `FlucaFDApply(fd_interp[e], sol_dm, dm_face[e], U, mass_flux_face[e])`
-2. Scale by rho: `VecScale(mass_flux_face[e], rho)`
-3. Update TVD and scale operators with new mass flux and current solution
+```c
+/* F_momentum = rho * u_dot - mu * nabla^2(u) + grad(p) */
+for (d = 0; d < dim; d++) {
+  FlucaFDApply(fd_laplacian[d], sol_dm, sol_dm, U, F);   /* -mu * L * u_d -> F[d] */
+  FlucaFDApply(fd_grad_p[d], sol_dm, sol_dm, U, F);      /* dp/dx_d -> F[d] */
+}
+/* Add rho * u_dot to momentum rows of F */
+AddScaledVelocityDot(rho, Udot, F);
 
-### Jacobian (Picard linearization)
+/* F_continuity = rho * D * u_dot + sigma_0 * S * p_dot */
+FlucaFDApply(fd_div, sol_dm, sol_dm, Udot, F);    /* rho * D * u_dot -> F[dim] */
+FlucaFDApply(fd_pstab, sol_dm, sol_dm, Udot, F);  /* sigma_0 * S * p_dot -> F[dim] */
+```
 
-Convection matrix assembled with current velocity (frozen). Updated each iteration via `UpdateConvectionVelocity_Internal`.
-
-### IFunction (TS, unsteady)
+### IJacobian
 
 ```
-F(t, U, U_dot) = rho * U_dot + C(U) - mu * nabla^2 U + grad(p) + rho * div(interp(U)) + dt * S(p) - f_body
+[ shift * rho * I - mu * L          G             ]
+[                                                   ]
+[      shift * rho * D         shift * sigma_0 * S ]
 ```
 
-### IJacobian (TS)
+Assembled using `FlucaFDGetOperator` for each operator. The shift factor multiplies the time-derivative contributions:
+- Velocity diagonal: `shift * rho` (from `rho * u_dot`)
+- Continuity-velocity block: `shift * (rho * D matrix)` (from `rho * D * u_dot`)
+- Continuity-pressure block: `shift * (sigma_0 * S matrix)` (from `sigma_0 * S * p_dot`)
 
+### RHSFunction (explicit part)
+
+```c
+/* G_momentum = -C(u) + f(t) */
+UpdateConvectionVelocity(U);  /* recompute mass flux and TVD state */
+for (d = 0; d < dim; d++) {
+  FlucaFDApply(fd_conv[d], sol_dm, sol_dm, U, G);  /* -C_d -> G[d] */
+}
+/* Add body force f(t) if set */
+AddBodyForce(phys, t, G);
+
+/* G_continuity = -alpha * Xi^{n-1} */
+/* xi was computed in TSPreStep; scale by -alpha and add to G[dim] */
+AddScaledConstraintFeedback(-ins->alpha, ins->xi, G);
 ```
-J = shift * rho * I_vel + dF_steady/dU
+
+### RHSJacobian
+
+The Picard-linearized convection matrix (frozen velocity). Assembled from `FlucaFDGetOperator` for each `fd_conv[d]`. Only has entries in the velocity-velocity block; pressure and continuity rows are zero.
+
+### PhysSetUpTS_INS
+
+```c
+static PetscErrorCode PhysSetUpTS_INS(Phys phys, TS ts)
+{
+  Phys_INS *ins = (Phys_INS *)phys->data;
+
+  PetscFunctionBegin;
+  PetscCall(TSSetDM(ts, phys->sol_dm));
+
+  /* Wire IMEX callbacks */
+  PetscCall(TSSetIFunction(ts, NULL, PhysIFunction_INS, phys));
+  PetscCall(TSSetIJacobian(ts, ins->J, ins->J, PhysIJacobian_INS, phys));
+  PetscCall(TSSetRHSFunction(ts, NULL, PhysRHSFunction_INS, phys));
+  PetscCall(TSSetRHSJacobian(ts, ins->J_rhs, ins->J_rhs, PhysRHSJacobian_INS, phys));
+
+  /* Default to TSARKIMEX with stiffly accurate 3rd order scheme */
+  PetscCall(TSSetType(ts, TSARKIMEX));
+
+  /* Update sigma_0 and Xi^{n-1} at each step */
+  PetscCall(TSSetPreStep(ts, PhysPreStep_INS));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 ```
-where `I_vel` is identity on velocity DOFs only.
+
+### TSPreStep callback
+
+```c
+static PetscErrorCode PhysPreStep_INS(TS ts)
+{
+  Phys      phys;
+  Phys_INS *ins;
+  PetscReal dt;
+  Vec       U;
+
+  PetscFunctionBegin;
+  PetscCall(TSGetApplicationContext(ts, &phys));
+  ins = (Phys_INS *)phys->data;
+  PetscCall(TSGetTimeStep(ts, &dt));
+
+  /* Update sigma_0 = dt / rho and alpha = 1 / dt */
+  if (dt != ins->dt_current) {
+    PetscCall(FlucaFDScaleSetScalar(ins->fd_pstab, dt / ins->rho));
+    ins->alpha      = 1.0 / dt;
+    ins->dt_current = dt;
+  }
+
+  /* Compute Xi^{n-1} = fd_div(u^{n-1}) + fd_pstab(p^{n-1}) */
+  PetscCall(TSGetSolution(ts, &U));
+  PetscCall(VecZeroEntries(ins->xi));
+  PetscCall(FlucaFDApply(ins->fd_div, phys->sol_dm, phys->sol_dm, U, ins->xi));
+  PetscCall(FlucaFDApply(ins->fd_pstab, phys->sol_dm, phys->sol_dm, U, ins->xi));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+```
 
 ### Test
 
+- `tests/phys/ex1.c`: Create INS, verify solution DM has dim+1 element DOFs.
+- `tests/phys/ex2.c`: Manufactured Stokes solution (e.g., Taylor-Green at t=0). Set RHSFunction to zero (no convection). Verify `PhysComputeIFunction` produces zero residual for the exact solution with exact `u_dot`.
 - `tests/phys/ex3.c`: Verify convection operator with a known rotating flow `u=(y,-x), p=0`. Check that `(u.grad)u` matches the analytical result.
 
 ### Tutorial
 
-- `tutorials/phys/ex1.c`: Taylor-Green vortex 2D with TS. Verify L2 errors.
+- `tutorials/phys/ex1.c`: Taylor-Green vortex 2D with TSARKIMEX. Verify L2 errors.
 - `tutorials/phys/ex2.c`: Unsteady manufactured solution with body force.
 
 ### Verification
@@ -512,9 +662,9 @@ cmake --build build && ctest --test-dir build -R "tests_phys"
 
 ---
 
-## Phase 4: Additional BC types and preconditioner
+## Phase 3: Additional BC types and preconditioner
 
-### Phase 4a: Additional INS boundary condition types
+### Phase 3a: Additional INS boundary condition types
 
 Add `PHYS_INS_BC_PRESSURE_OUTLET` and `PHYS_INS_BC_SYMMETRY`:
 
@@ -539,7 +689,7 @@ When a pressure outlet BC exists, skip creating the pressure null space (`has_pr
 
 Test: `tests/phys/ex4.c` — channel flow with velocity inlet + pressure outlet.
 
-### Phase 4b: PCFIELDSPLIT default
+### Phase 3b: PCFIELDSPLIT default
 
 Set PCFIELDSPLIT as the default preconditioner for better scalability:
 
@@ -559,7 +709,7 @@ User can override via command line:
 
 ---
 
-## Phase 5: Remove NS module
+## Phase 4: Remove NS module
 
 **Goal**: Delete the entire NS module. Update all dependents.
 
@@ -660,12 +810,6 @@ No separate 2D/3D code paths for operator construction. Body force evaluation ha
 
 ## Files summary
 
-### Modified (Phase 0)
-
-| File | Change |
-|------|--------|
-| `src/fd/impls/secondordertvd/secondordertvd.c` | Add `fd_phi` identity operator for boundary-safe phi evaluation |
-
 ### Created (new)
 
 | File | Phase |
@@ -679,15 +823,15 @@ No separate 2D/3D code paths for operator construction. Body force evaluation ha
 | `src/phys/interface/physpkg.c` | 1 |
 | `src/phys/interface/physreg.c` | 1 |
 | `src/phys/impls/ins/ins.c` | 2 |
-| `src/phys/impls/ins/insops.c` | 2--3 |
+| `src/phys/impls/ins/insops.c` | 2 |
 | `tests/phys/CMakeLists.txt` | 2 |
 | `tests/phys/ex1.c` (DM DOFs) | 2 |
 | `tests/phys/ex2.c` (Stokes IFunction) | 2 |
-| `tests/phys/ex3.c` (convection) | 3 |
-| `tutorials/phys/ex1.c` (Taylor-Green) | 3 |
-| `tutorials/phys/ex2.c` (unsteady manufactured) | 3 |
+| `tests/phys/ex3.c` (convection) | 2 |
+| `tutorials/phys/ex1.c` (Taylor-Green) | 2 |
+| `tutorials/phys/ex2.c` (unsteady manufactured) | 2 |
 
-### Deleted (Phase 5)
+### Deleted (Phase 4)
 
 | File |
 |------|
@@ -698,7 +842,7 @@ No separate 2D/3D code paths for operator construction. Body force evaluation ha
 | `include/fluca/private/nsimpl.h` |
 | `include/fluca/private/nslinearcnimpl.h` |
 
-### Migrated (Phase 5)
+### Migrated (Phase 4)
 
 | File |
 |------|
