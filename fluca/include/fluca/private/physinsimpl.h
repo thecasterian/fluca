@@ -52,3 +52,14 @@ typedef struct {
   PetscReal    dt_current; /* current dt for sigma_0 update detection */
   PetscBool    has_pressure_outlet;
 } Phys_INS;
+
+/* Internal functions defined in insops.c */
+FLUCA_INTERN PetscErrorCode PhysINSBuildOperators_Internal(Phys);
+FLUCA_INTERN PetscErrorCode PhysINSDestroyOperators_Internal(Phys);
+FLUCA_INTERN PetscErrorCode PhysINSCreateSolverData_Internal(Phys);
+
+/* Ops defined in insops.c, wired from ins.c */
+FLUCA_INTERN PetscErrorCode PhysSetUpTS_INS(Phys, TS);
+FLUCA_INTERN PetscErrorCode PhysComputeIFunction_INS(Phys, PetscReal, Vec, Vec, Vec);
+FLUCA_INTERN PetscErrorCode PhysComputeIJacobian_INS(Phys, PetscReal, Vec, Vec, PetscReal, Mat, Mat);
+FLUCA_INTERN PetscErrorCode PhysComputeRHSFunction_INS(Phys, PetscReal, Vec, Vec);

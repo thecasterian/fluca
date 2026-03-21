@@ -1,5 +1,7 @@
 #include <fluca/private/physimpl.h>
 
+FLUCA_EXTERN PetscErrorCode PhysCreate_INS(Phys);
+
 PetscErrorCode PhysRegister(const char sname[], PetscErrorCode (*function)(Phys))
 {
   PetscFunctionBegin;
@@ -14,6 +16,6 @@ PetscErrorCode PhysRegisterAll(void)
   if (PhysRegisterAllCalled) PetscFunctionReturn(PETSC_SUCCESS);
   PhysRegisterAllCalled = PETSC_TRUE;
 
-  /* No subtypes registered yet — Phase 2 will add PHYSINS here */
+  PetscCall(PhysRegister(PHYSINS, PhysCreate_INS));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
