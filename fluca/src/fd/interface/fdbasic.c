@@ -26,10 +26,12 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
   f->dm         = NULL;
   for (comp = 0; comp < FLUCAFD_MAX_COMPONENT; ++comp) {
     for (d = 0; d < 2 * FLUCAFD_MAX_DIM; ++d) {
-      f->bcs[comp][d].type   = FLUCAFD_BC_NONE;
-      f->bcs[comp][d].value  = 0.;
-      f->bcs[comp][d].fn     = NULL;
-      f->bcs[comp][d].fn_ctx = NULL;
+      f->bcs[comp][d].type       = FLUCAFD_BC_NONE;
+      f->bcs[comp][d].value      = 0.;
+      f->bcs[comp][d].fn         = NULL;
+      f->bcs[comp][d].fn_ctx     = NULL;
+      f->bcs[comp][d].fn_dot     = NULL;
+      f->bcs[comp][d].fn_dot_ctx = NULL;
     }
   }
   f->dim = PETSC_DETERMINE;
@@ -196,10 +198,12 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   /* Clear stale BC entries beyond the actual dimension */
   for (comp = 0; comp < FLUCAFD_MAX_COMPONENT; ++comp) {
     for (d = 2 * fd->dim; d < 2 * FLUCAFD_MAX_DIM; ++d) {
-      fd->bcs[comp][d].type   = FLUCAFD_BC_NONE;
-      fd->bcs[comp][d].value  = 0.;
-      fd->bcs[comp][d].fn     = NULL;
-      fd->bcs[comp][d].fn_ctx = NULL;
+      fd->bcs[comp][d].type       = FLUCAFD_BC_NONE;
+      fd->bcs[comp][d].value      = 0.;
+      fd->bcs[comp][d].fn         = NULL;
+      fd->bcs[comp][d].fn_ctx     = NULL;
+      fd->bcs[comp][d].fn_dot     = NULL;
+      fd->bcs[comp][d].fn_dot_ctx = NULL;
     }
   }
 

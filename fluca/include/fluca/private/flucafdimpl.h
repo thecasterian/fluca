@@ -163,6 +163,7 @@ FLUCA_INTERN PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt, FlucaFDSt
 FLUCA_INTERN PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscReal, PetscInt, FlucaFDStencilPoint[]);
 
 FLUCA_INTERN PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD, PetscReal, PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar *);
+FLUCA_INTERN PetscErrorCode FlucaFDEvaluateBCValueDot_Internal(FlucaFD, PetscReal, PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar *);
 
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDuplicate_Internal(FlucaFDTermLink, FlucaFDTermLink *);

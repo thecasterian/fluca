@@ -63,7 +63,7 @@ PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscReal t, PetscInt i, PetscInt j
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDApply(FlucaFD fd, PetscReal t, DM input_dm, DM output_dm, Vec x, Vec y)
+static PetscErrorCode FlucaFDApply_Private(FlucaFD fd, PetscReal t, DM input_dm, DM output_dm, Vec x, Vec y, PetscBool use_dot_bc)
 {
   Vec                 x_local, y_local;
   const PetscScalar  *x_arr;
@@ -77,13 +77,6 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, PetscReal t, DM input_dm, DM output_dm, 
   PetscScalar         result, bc_val;
 
   PetscFunctionBegin;
-  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 3, DMSTAG);
-  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 4, DMSTAG);
-  PetscValidHeaderSpecific(x, VEC_CLASSID, 5);
-  PetscValidHeaderSpecific(y, VEC_CLASSID, 6);
-  PetscCheck(fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "FlucaFD not setup");
-
   /* Scatter input to local vector (fills ghost values) */
   PetscCall(DMGetLocalVector(input_dm, &x_local));
   PetscCall(DMGlobalToLocal(input_dm, x, INSERT_VALUES, x_local));
@@ -119,7 +112,11 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, PetscReal t, DM input_dm, DM output_dm, 
             result += points[c].v;
             break;
           case FLUCAFD_STENCIL_BOUNDARY:
-            PetscCall(FlucaFDEvaluateBCValue_Internal(fd, t, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
+            if (use_dot_bc) {
+              PetscCall(FlucaFDEvaluateBCValueDot_Internal(fd, t, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
+            } else {
+              PetscCall(FlucaFDEvaluateBCValue_Internal(fd, t, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
+            }
             result += points[c].v * bc_val;
             break;
           }
@@ -136,6 +133,32 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, PetscReal t, DM input_dm, DM output_dm, 
   PetscCall(DMLocalToGlobal(output_dm, y_local, INSERT_VALUES, y));
   PetscCall(DMRestoreLocalVector(output_dm, &y_local));
   PetscCall(DMRestoreLocalVector(input_dm, &x_local));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDApply(FlucaFD fd, PetscReal t, DM input_dm, DM output_dm, Vec x, Vec y)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 3, DMSTAG);
+  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 4, DMSTAG);
+  PetscValidHeaderSpecific(x, VEC_CLASSID, 5);
+  PetscValidHeaderSpecific(y, VEC_CLASSID, 6);
+  PetscCheck(fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "FlucaFD not setup");
+  PetscCall(FlucaFDApply_Private(fd, t, input_dm, output_dm, x, y, PETSC_FALSE));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDApplyDot(FlucaFD fd, PetscReal t, DM input_dm, DM output_dm, Vec x, Vec y)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 3, DMSTAG);
+  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 4, DMSTAG);
+  PetscValidHeaderSpecific(x, VEC_CLASSID, 5);
+  PetscValidHeaderSpecific(y, VEC_CLASSID, 6);
+  PetscCheck(fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "FlucaFD not setup");
+  PetscCall(FlucaFDApply_Private(fd, t, input_dm, output_dm, x, y, PETSC_TRUE));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
