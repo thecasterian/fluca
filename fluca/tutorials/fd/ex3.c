@@ -151,6 +151,7 @@ static PetscErrorCode ComputeRHSFunction(TS ts, PetscReal t, Vec u, Vec F, void 
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd_y, u));
 
   /* RHS = operator(u) (operator already has correct signs) */
+  PetscCall(VecZeroEntries(F));
   PetscCall(FlucaFDApply(ctx->fd, t, ctx->dm, ctx->dm, u, F));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

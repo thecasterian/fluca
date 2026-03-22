@@ -83,26 +83,26 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
   PetscReal mu = ins->mu, rho = ins->rho;
 
   PetscFunctionBegin;
-  /* --- Viscous Laplacian per velocity direction: -mu * nabla^2 u_d --- */
+  /* --- fd_laplacian[d] = sum_e d/dx_e(-mu * d(u_d)/dx_e) --- */
   for (d = 0; d < dim; d++) {
     FlucaFD comp_ops[PHYS_INS_MAX_DIM];
 
     for (e = 0; e < dim; e++) {
       FlucaFD inner, scaled, outer;
 
-      /* inner: d/de from (ELEMENT, d) to (face_loc[e], 0) */
+      /* d(u_d)/dx_e */
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, d, face_loc[e], 0, &inner));
       PetscCall(FlucaFDSetUp(inner));
 
-      /* scaled: -mu * inner */
+      /* -mu * d(u_d)/dx_e */
       PetscCall(FlucaFDScaleCreateConstant(inner, -mu, &scaled));
       PetscCall(FlucaFDSetUp(scaled));
 
-      /* outer: d/de from (face_loc[e], 0) to (ELEMENT, d) */
+      /* d/dx_e(...) back to element */
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, face_loc[e], 0, DMSTAG_ELEMENT, d, &outer));
       PetscCall(FlucaFDSetUp(outer));
 
-      /* composition: outer(scaled(x)) = d/de(-mu * du_d/de) */
+      /* d/dx_e(-mu * d(u_d)/dx_e) */
       PetscCall(FlucaFDCompositionCreate(scaled, outer, &comp_ops[e]));
       PetscCall(FlucaFDSetUp(comp_ops[e]));
 
@@ -111,7 +111,6 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
       PetscCall(FlucaFDDestroy(&inner));
     }
 
-    /* Sum over directions: -mu * nabla^2 u_d */
     PetscCall(FlucaFDSumCreate(dim, comp_ops, &ins->fd_laplacian[d]));
     PetscCall(SetVelocityDirichletBCs(phys, ins->fd_laplacian[d], d));
     PetscCall(FlucaFDSetUp(ins->fd_laplacian[d]));
@@ -119,33 +118,33 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     for (e = 0; e < dim; e++) PetscCall(FlucaFDDestroy(&comp_ops[e]));
   }
 
-  /* --- Pressure gradient per velocity direction: dp/dx_d --- */
+  /* --- fd_grad_p[d] = dp/dx_d --- */
   for (d = 0; d < dim; d++) {
     PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, dim, DMSTAG_ELEMENT, d, &ins->fd_grad_p[d]));
     PetscCall(SetPressureNeumannBCs(phys, ins->fd_grad_p[d], dim));
     PetscCall(FlucaFDSetUp(ins->fd_grad_p[d]));
   }
 
-  /* --- Divergence: rho * sum_d d(interp(u_d))/dx_d --- */
+  /* --- fd_div = rho * sum_d d/dx_d(interp_d(u_d)) --- */
   {
     FlucaFD div_comp[PHYS_INS_MAX_DIM];
 
     for (d = 0; d < dim; d++) {
       FlucaFD interp, face_deriv, div_raw;
 
-      /* interp: interpolate u_d from element to face (0th derivative = interpolation) */
+      /* interp_d(u_d) */
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 0, 2, DMSTAG_ELEMENT, d, face_loc[d], 0, &interp));
       PetscCall(FlucaFDSetUp(interp));
 
-      /* face_deriv: d/dx_d from face to element pressure DOF */
+      /* d/dx_d(...) -> pressure DOF */
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, face_loc[d], 0, DMSTAG_ELEMENT, dim, &face_deriv));
       PetscCall(FlucaFDSetUp(face_deriv));
 
-      /* composition: face_deriv(interp(x)) = d(interp(u_d))/dx_d */
+      /* d/dx_d(interp_d(u_d)) */
       PetscCall(FlucaFDCompositionCreate(interp, face_deriv, &div_raw));
       PetscCall(FlucaFDSetUp(div_raw));
 
-      /* scale by rho */
+      /* rho * d/dx_d(interp_d(u_d)) */
       PetscCall(FlucaFDScaleCreateConstant(div_raw, rho, &div_comp[d]));
       PetscCall(FlucaFDSetUp(div_comp[d]));
 
@@ -154,7 +153,6 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
       PetscCall(FlucaFDDestroy(&interp));
     }
 
-    /* Sum over directions with velocity BCs per input component */
     PetscCall(FlucaFDSumCreate(dim, div_comp, &ins->fd_div));
     for (d = 0; d < dim; d++) PetscCall(SetVelocityDirichletBCs(phys, ins->fd_div, d));
     PetscCall(FlucaFDSetUp(ins->fd_div));
@@ -162,7 +160,7 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     for (d = 0; d < dim; d++) PetscCall(FlucaFDDestroy(&div_comp[d]));
   }
 
-  /* --- Pressure stabilization: sigma_0 * sum_d (DTG_d - DG^st_d)(p) --- */
+  /* --- fd_pstab = sigma_0 * S(p), S(p) = sum_d (D(G(p)) - L(p))_d --- */
   {
     FlucaFD pstab_dir[PHYS_INS_MAX_DIM];
     FlucaFD pstab_sum;
@@ -173,7 +171,7 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
       FlucaFD neg_compact;
       FlucaFD diff_ops[2];
 
-      /* Compact Laplacian DG^st_d: face_div_p(face_grad_p(p)) */
+      /* L_d(p) = d/dx_d(dp/dx_d): compact staggered Laplacian */
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, dim, face_loc[d], 0, &face_grad_p));
       PetscCall(FlucaFDSetUp(face_grad_p));
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, face_loc[d], 0, DMSTAG_ELEMENT, dim, &face_div_p));
@@ -181,7 +179,7 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
       PetscCall(FlucaFDCompositionCreate(face_grad_p, face_div_p, &compact_d));
       PetscCall(FlucaFDSetUp(compact_d));
 
-      /* Wide Laplacian DTG_d: face_div_p(interp_p(cell_grad_p(p))) */
+      /* D(G(p))_d = d/dx_d(interp_d(dp/dx_d)): wide Laplacian via cell gradient + interpolation */
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, dim, DMSTAG_ELEMENT, d, &cell_grad_p));
       PetscCall(FlucaFDSetUp(cell_grad_p));
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 0, 2, DMSTAG_ELEMENT, d, face_loc[d], 0, &interp_p));
@@ -191,7 +189,7 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
       PetscCall(FlucaFDCompositionCreate(cell_grad_p, td_p, &wide_d));
       PetscCall(FlucaFDSetUp(wide_d));
 
-      /* S_d = wide_d - compact_d */
+      /* S_d(p) = D(G(p))_d - L_d(p) */
       PetscCall(FlucaFDScaleCreateConstant(compact_d, -1.0, &neg_compact));
       PetscCall(FlucaFDSetUp(neg_compact));
       diff_ops[0] = wide_d;
@@ -209,7 +207,7 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
       PetscCall(FlucaFDDestroy(&face_grad_p));
     }
 
-    /* Sum over directions and scale by sigma_0 (initially 0, updated by TSPreStep) */
+    /* sigma_0 * sum_d S_d(p); sigma_0 initially 0, updated to dt by TSPreStep */
     PetscCall(FlucaFDSumCreate(dim, pstab_dir, &pstab_sum));
     PetscCall(FlucaFDSetUp(pstab_sum));
     PetscCall(FlucaFDScaleCreateConstant(pstab_sum, 0.0, &ins->fd_pstab));
@@ -220,62 +218,66 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     for (d = 0; d < dim; d++) PetscCall(FlucaFDDestroy(&pstab_dir[d]));
   }
 
-  /* --- Face DMs and interpolation operators for convection --- */
-  for (e = 0; e < dim; e++) {
+  /* --- dm_face (single), mass_flux = F_d = rho * interp_d(u_d), fd_interp[d] --- */
+  {
     DM cdm;
 
-    /* Face DM: 1 DOF at edge (2D) or face (3D) location */
     switch (dim) {
     case 2:
-      PetscCall(DMStagCreateCompatibleDMStag(sol_dm, 0, 1, 0, 0, &ins->dm_face[e]));
+      PetscCall(DMStagCreateCompatibleDMStag(sol_dm, 0, 1, 0, 0, &ins->dm_face));
       break;
     case 3:
-      PetscCall(DMStagCreateCompatibleDMStag(sol_dm, 0, 0, 1, 0, &ins->dm_face[e]));
+      PetscCall(DMStagCreateCompatibleDMStag(sol_dm, 0, 0, 1, 0, &ins->dm_face));
       break;
     default:
       SETERRQ(PetscObjectComm((PetscObject)phys), PETSC_ERR_SUP, "Unsupported dimension %" PetscInt_FMT, dim);
     }
-    PetscCall(DMStagSetCoordinateDMType(ins->dm_face[e], DMPRODUCT));
+    PetscCall(DMStagSetCoordinateDMType(ins->dm_face, DMPRODUCT));
     PetscCall(DMGetCoordinateDM(sol_dm, &cdm));
-    PetscCall(DMSetCoordinateDM(ins->dm_face[e], cdm));
-    PetscCall(DMCreateGlobalVector(ins->dm_face[e], &ins->mass_flux_face[e]));
-
-    /* Interpolation: u_e from ELEMENT,e to face_loc[e],0 */
+    PetscCall(DMSetCoordinateDM(ins->dm_face, cdm));
+    PetscCall(DMCreateGlobalVector(ins->dm_face, &ins->mass_flux));
+  }
+  for (e = 0; e < dim; e++) {
+    /* interp_e(u_e) */
     PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, e, face_loc[e], 0, &ins->fd_interp[e]));
     PetscCall(SetVelocityDirichletBCs(phys, ins->fd_interp[e], e));
     PetscCall(FlucaFDSetUp(ins->fd_interp[e]));
   }
 
-  /* --- Convection operators: C_d = sum_e d/dx_e(F_e * u_d_TVD) --- */
+  /* --- fd_conv[d] = sum_e d/dx_e(F_e * TVD_e(u_d)) --- */
   for (d = 0; d < dim; d++) {
+    FlucaFD conv_comp[PHYS_INS_MAX_DIM];
+
     for (e = 0; e < dim; e++) {
       FlucaFD face_deriv;
 
-      /* TVD interpolation: u_d (ELEMENT,d) -> u_d_TVD (face_loc[e],0) */
+      /* TVD_e(u_d) */
       PetscCall(FlucaFDSecondOrderTVDCreate(sol_dm, (FlucaFDDirection)e, d, 0, &ins->fd_tvd[d][e]));
       PetscCall(FlucaFDAppendOptionsPrefix(ins->fd_tvd[d][e], "phys_ins_"));
       PetscCall(FlucaFDSetFromOptions(ins->fd_tvd[d][e]));
       PetscCall(FlucaFDSetUp(ins->fd_tvd[d][e]));
 
-      /* Scale by face mass flux: u_d_TVD * F_e */
-      PetscCall(FlucaFDScaleCreateVector(ins->fd_tvd[d][e], ins->mass_flux_face[e], 0, &ins->fd_scale_vel[d][e]));
-      PetscCall(FlucaFDSetUp(ins->fd_scale_vel[d][e]));
+      /* F_e * TVD_e(u_d) */
+      PetscCall(FlucaFDScaleCreateVector(ins->fd_tvd[d][e], ins->mass_flux, 0, &ins->fd_momentum_flux[d][e]));
+      PetscCall(FlucaFDSetUp(ins->fd_momentum_flux[d][e]));
 
-      /* Face derivative: d/dx_e (face_loc[e],0 -> ELEMENT,d) */
+      /* d/dx_e(...) back to element */
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, face_loc[e], 0, DMSTAG_ELEMENT, d, &face_deriv));
       PetscCall(FlucaFDSetUp(face_deriv));
 
-      /* Compose: d/dx_e(F_e * u_d_TVD) */
-      PetscCall(FlucaFDCompositionCreate(ins->fd_scale_vel[d][e], face_deriv, &ins->fd_conv_comp[d][e]));
-      PetscCall(FlucaFDSetUp(ins->fd_conv_comp[d][e]));
+      /* d/dx_e(F_e * TVD_e(u_d)) */
+      PetscCall(FlucaFDCompositionCreate(ins->fd_momentum_flux[d][e], face_deriv, &conv_comp[e]));
+      PetscCall(FlucaFDSetUp(conv_comp[e]));
 
       PetscCall(FlucaFDDestroy(&face_deriv));
     }
 
-    /* Sum over e: C_d = sum_e d/dx_e(F_e * u_d_TVD) */
-    PetscCall(FlucaFDSumCreate(dim, ins->fd_conv_comp[d], &ins->fd_conv[d]));
+    /* sum_e d/dx_e(F_e * TVD_e(u_d)) */
+    PetscCall(FlucaFDSumCreate(dim, conv_comp, &ins->fd_conv[d]));
     PetscCall(SetVelocityDirichletBCs(phys, ins->fd_conv[d], d));
     PetscCall(FlucaFDSetUp(ins->fd_conv[d]));
+
+    for (e = 0; e < dim; e++) PetscCall(FlucaFDDestroy(&conv_comp[e]));
   }
 
   /* Create temp vector for residual assembly */
@@ -294,16 +296,15 @@ PetscErrorCode PhysINSDestroyOperators_Internal(Phys phys)
     PetscCall(FlucaFDDestroy(&ins->fd_grad_p[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_conv[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_interp[d]));
-    PetscCall(VecDestroy(&ins->mass_flux_face[d]));
-    PetscCall(DMDestroy(&ins->dm_face[d]));
     for (e = 0; e < PHYS_INS_MAX_DIM; e++) {
       PetscCall(FlucaFDDestroy(&ins->fd_tvd[d][e]));
-      PetscCall(FlucaFDDestroy(&ins->fd_scale_vel[d][e]));
-      PetscCall(FlucaFDDestroy(&ins->fd_conv_comp[d][e]));
+      PetscCall(FlucaFDDestroy(&ins->fd_momentum_flux[d][e]));
     }
   }
   PetscCall(FlucaFDDestroy(&ins->fd_div));
   PetscCall(FlucaFDDestroy(&ins->fd_pstab));
+  PetscCall(VecDestroy(&ins->mass_flux));
+  PetscCall(DMDestroy(&ins->dm_face));
   PetscCall(VecDestroy(&ins->temp));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -318,18 +319,17 @@ static PetscErrorCode UpdateConvectionVelocity_Internal(Phys phys, PetscReal t, 
   PetscInt  dim    = phys->dim, d, e;
 
   PetscFunctionBegin;
-  /* Interpolate each velocity component to faces and scale by rho to get mass flux */
-  for (e = 0; e < dim; e++) {
-    PetscCall(FlucaFDApply(ins->fd_interp[e], t, sol_dm, ins->dm_face[e], U, ins->mass_flux_face[e]));
-    PetscCall(VecScale(ins->mass_flux_face[e], rho));
-  }
+  /* mass_flux = sum_d interp_d(u_d), then scale by rho to get F_d at each face */
+  PetscCall(VecZeroEntries(ins->mass_flux));
+  for (e = 0; e < dim; e++) PetscCall(FlucaFDApply(ins->fd_interp[e], t, sol_dm, ins->dm_face, U, ins->mass_flux));
+  PetscCall(VecScale(ins->mass_flux, rho));
 
-  /* Update TVD and scale operators with current mass flux and solution */
+  /* Update TVD_e(u_d) and F_e * TVD_e(u_d) with current state */
   for (d = 0; d < dim; d++) {
     for (e = 0; e < dim; e++) {
-      PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ins->fd_tvd[d][e], ins->mass_flux_face[e], 0));
+      PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ins->fd_tvd[d][e], ins->mass_flux, 0));
       PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ins->fd_tvd[d][e], U));
-      PetscCall(FlucaFDScaleSetVector(ins->fd_scale_vel[d][e], ins->mass_flux_face[e], face_loc[e], 0));
+      PetscCall(FlucaFDScaleSetVector(ins->fd_momentum_flux[d][e], ins->mass_flux, face_loc[e], 0));
     }
   }
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -347,15 +347,17 @@ PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
   PetscFunctionBegin;
   PetscCall(VecZeroEntries(F));
 
-  /* Momentum: -mu * L * u_d + dp/dx_d for each velocity direction */
+  /* F_momentum_d = fd_laplacian[d](u) + fd_grad_p[d](p) */
   for (d = 0; d < dim; d++) {
+    PetscCall(VecZeroEntries(temp));
     PetscCall(FlucaFDApply(ins->fd_laplacian[d], t, sol_dm, sol_dm, U, temp));
     PetscCall(VecAXPY(F, 1.0, temp));
+    PetscCall(VecZeroEntries(temp));
     PetscCall(FlucaFDApply(ins->fd_grad_p[d], t, sol_dm, sol_dm, U, temp));
     PetscCall(VecAXPY(F, 1.0, temp));
   }
 
-  /* Add mass term: rho * U_dot for velocity DOFs only, using IS to extract velocity sub-vector */
+  /* F_momentum_d += rho * du_d/dt */
   {
     Vec F_vel, Ut_vel;
 
@@ -366,21 +368,25 @@ PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
     PetscCall(VecRestoreSubVector(F, ins->is_vel, &F_vel));
   }
 
-  /* Continuity: alpha * D(u) + D_dot(u_dot) + alpha * sigma_0 * S(p) + sigma_0 * S_dot(p_dot)
-     Each FlucaFDApply uses INSERT_VALUES, so operators sharing the same output DOF (ELEMENT, dim)
-     must be applied and accumulated separately to avoid overwriting. */
+  /* F_continuity = alpha * [D(u) + sigma_0 * S(p)] + [D_dot(du/dt) + sigma_0 * S_dot(dp/dt)]
+     D and S share the same output DOF (ELEMENT, dim). FlucaFDApply uses INSERT_VALUES,
+     so each operator must be applied and accumulated separately. */
 
-  /* Constraint feedback: alpha * D(u) */
+  /* alpha * D(u) */
+  PetscCall(VecZeroEntries(temp));
   PetscCall(FlucaFDApply(ins->fd_div, t, sol_dm, sol_dm, U, temp));
   PetscCall(VecAXPY(F, ins->alpha, temp));
-  /* Constraint feedback: alpha * sigma_0 * S(p) */
+  /* alpha * sigma_0 * S(p) */
+  PetscCall(VecZeroEntries(temp));
   PetscCall(FlucaFDApply(ins->fd_pstab, t, sol_dm, sol_dm, U, temp));
   PetscCall(VecAXPY(F, ins->alpha, temp));
 
-  /* Time derivative part: D_dot(u_dot) */
+  /* D_dot(du/dt) */
+  PetscCall(VecZeroEntries(temp));
   PetscCall(FlucaFDApplyDot(ins->fd_div, t, sol_dm, sol_dm, U_t, temp));
   PetscCall(VecAXPY(F, 1.0, temp));
-  /* Time derivative part: sigma_0 * S_dot(p_dot) */
+  /* sigma_0 * S_dot(dp/dt) */
+  PetscCall(VecZeroEntries(temp));
   PetscCall(FlucaFDApplyDot(ins->fd_pstab, t, sol_dm, sol_dm, U_t, temp));
   PetscCall(VecAXPY(F, 1.0, temp));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -401,20 +407,18 @@ PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
   PetscFunctionBegin;
   PetscCall(MatZeroEntries(Pmat));
 
-  /* Velocity rows: -mu * L + G (no overlap with continuity rows since output_c < dim) */
+  /* Velocity rows: fd_laplacian[d] + fd_grad_p[d] (output_c = d < dim) */
   for (d = 0; d < dim; d++) {
     PetscCall(FlucaFDGetOperator(ins->fd_laplacian[d], sol_dm, sol_dm, Pmat));
     PetscCall(FlucaFDGetOperator(ins->fd_grad_p[d], sol_dm, sol_dm, Pmat));
   }
 
-  /* Continuity rows: D and S (output_c = dim, no overlap with velocity rows).
-     FlucaFDGetOperator ADDs the natural operator coefficients (rho for D, sigma_0 for S).
-     We need (shift + alpha) * [D + S], so we add them first, then scale the continuity
-     rows by (shift + alpha) after assembly. */
+  /* Continuity rows: fd_div + fd_pstab (output_c = dim, no overlap with velocity rows).
+     These are later scaled by (shift + alpha) via MatDiagonalScale. */
   PetscCall(FlucaFDGetOperator(ins->fd_div, sol_dm, sol_dm, Pmat));
   PetscCall(FlucaFDGetOperator(ins->fd_pstab, sol_dm, sol_dm, Pmat));
 
-  /* Add shift * rho to velocity diagonal entries */
+  /* Velocity diagonal: + shift * rho (from rho * du_d/dt) */
   PetscCall(DMStagGetCorners(sol_dm, &xs, &ys, &zs, &xm, &ym, &zm, NULL, NULL, NULL));
   row.loc = DMSTAG_ELEMENT;
   for (k = zs; k < zs + zm; k++) {
@@ -435,7 +439,7 @@ PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
   PetscCall(MatAssemblyBegin(Pmat, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(Pmat, MAT_FINAL_ASSEMBLY));
 
-  /* Scale continuity rows by (shift + alpha) using MatDiagonalScale with the IS */
+  /* Continuity rows *= (shift + alpha) */
   {
     Vec diag_scale;
     PetscCall(MatCreateVecs(Pmat, NULL, &diag_scale));
@@ -471,13 +475,14 @@ PetscErrorCode PhysComputeRHSFunction_INS(Phys phys, PetscReal t, Vec U, Vec G)
   /* Update convection operators with current velocity */
   PetscCall(UpdateConvectionVelocity_Internal(phys, t, U));
 
-  /* Momentum: -C_d for each velocity direction */
+  /* G_momentum_d = -fd_conv[d](u) */
   for (d = 0; d < dim; d++) {
+    PetscCall(VecZeroEntries(temp));
     PetscCall(FlucaFDApply(ins->fd_conv[d], t, sol_dm, sol_dm, U, temp));
     PetscCall(VecAXPY(G, -1.0, temp));
   }
 
-  /* Add body force f(t) if set */
+  /* G_momentum_d += f_d(t) */
   if (phys->bodyforce) {
     const PetscScalar **arrc[3] = {NULL, NULL, NULL};
     PetscInt            xs, ys, zs, xm, ym, zm, slot_elem;
@@ -516,7 +521,7 @@ PetscErrorCode PhysComputeRHSFunction_INS(Phys phys, PetscReal t, Vec U, Vec G)
     PetscCall(VecAssemblyEnd(G));
   }
 
-  /* G_continuity = 0 (constraint feedback is in IFunction) */
+  /* G_continuity = 0 */
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -529,7 +534,7 @@ static PetscErrorCode UpdatePressureStabilizationDt_Internal(TS ts, Phys_INS *in
   PetscFunctionBegin;
   PetscCall(TSGetTimeStep(ts, &dt));
   if (dt != ins->dt_current) {
-    PetscCall(FlucaFDScaleSetConstant(ins->fd_pstab, dt / ins->rho));
+    PetscCall(FlucaFDScaleSetConstant(ins->fd_pstab, dt));
     ins->alpha      = 1.0 / dt;
     ins->dt_current = dt;
   }

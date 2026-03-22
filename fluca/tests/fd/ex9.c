@@ -90,7 +90,9 @@ int main(int argc, char **argv)
 
   PetscCall(DMCreateGlobalVector(dm, &y_const));
   PetscCall(DMCreateGlobalVector(dm, &y_fn));
+  PetscCall(VecZeroEntries(y_const));
   PetscCall(FlucaFDApply(fd_const, 0., dm, dm, u, y_const));
+  PetscCall(VecZeroEntries(y_fn));
   PetscCall(FlucaFDApply(fd_fn, 0., dm, dm, u, y_fn));
 
   PetscCall(VecAXPY(y_fn, -1.0, y_const));

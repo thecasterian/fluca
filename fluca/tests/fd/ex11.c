@@ -145,7 +145,9 @@ int main(int argc, char **argv)
   PetscCall(FlucaFDSetBoundaryConditions(fd_ref, 0, bcs_ref));
   PetscCall(FlucaFDSetUp(fd_ref));
 
+  PetscCall(VecZeroEntries(y_test));
   PetscCall(FlucaFDApplyDot(fd_test, t, dm, dm, u, y_test));
+  PetscCall(VecZeroEntries(y_ref));
   PetscCall(FlucaFDApply(fd_ref, t, dm, dm, u, y_ref));
 
   PetscCall(VecAXPY(y_test, -1., y_ref));

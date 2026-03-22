@@ -117,6 +117,7 @@ static PetscErrorCode ComputeFunction(SNES snes, Vec x, Vec b, void *ptr)
   PetscFunctionBegin;
   PetscCall(FlucaFDSecondOrderTVDSetMassFlux(ctx->fd_tvd, ctx->vel, 0));
   PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(ctx->fd_tvd, x));
+  PetscCall(VecZeroEntries(b));
   PetscCall(FlucaFDApply(ctx->fd, 0., ctx->dm, ctx->dm, x, b));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

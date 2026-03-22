@@ -26,21 +26,19 @@ typedef struct {
   /* BC adapters: [comp][face] — created during setup to bridge PhysINSBCFn to FlucaFDBCValueFn */
   PhysINS_BCAdapter bc_adapters[PHYS_INS_MAX_DIM + 1][PHYS_INS_MAX_FACES];
 
-  /* FlucaFD operators (implicit part) */
-  FlucaFD fd_laplacian[PHYS_INS_MAX_DIM]; /* -mu * nabla^2 u_d per velocity direction */
-  FlucaFD fd_grad_p[PHYS_INS_MAX_DIM];    /* dp/dx_d per velocity direction */
-  FlucaFD fd_div;                         /* rho * div(interp(u)) — single Sum over directions */
-  FlucaFD fd_pstab;                       /* sigma_0 * S(p) pressure stabilization */
+  /* Implicit operators */
+  FlucaFD fd_laplacian[PHYS_INS_MAX_DIM]; /* sum_e d/dx_e(-mu * d(u_d)/dx_e) */
+  FlucaFD fd_grad_p[PHYS_INS_MAX_DIM];    /* dp/dx_d */
+  FlucaFD fd_div;                         /* rho * sum_d d/dx_d(interp_d(u_d)) */
+  FlucaFD fd_pstab;                       /* sigma_0 * S(p); sigma_0 = dt, S(p) = D(G(p)) - L(p) = pressure stabilization operator */
 
-  /* FlucaFD operators (explicit part — convection) */
-  /* C_d = sum_e d/dx_e(F_e * u_d_TVD) where F_e = rho * u_e */
-  FlucaFD fd_conv[PHYS_INS_MAX_DIM];                        /* summed convection per velocity dir */
-  FlucaFD fd_tvd[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM];       /* TVD interp: [d][e] = u_d along e */
-  FlucaFD fd_scale_vel[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM]; /* mass flux scaling: [d][e] */
-  FlucaFD fd_conv_comp[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM]; /* composed conv: [d][e] */
-  FlucaFD fd_interp[PHYS_INS_MAX_DIM];                      /* cell-to-face interpolation per dir */
-  DM      dm_face[PHYS_INS_MAX_DIM];                        /* face DMs for mass flux */
-  Vec     mass_flux_face[PHYS_INS_MAX_DIM];                 /* face mass flux vectors (rho * u) */
+  /* Explicit operators */
+  FlucaFD fd_conv[PHYS_INS_MAX_DIM];                            /* sum_e d/dx_e(F_e * TVD_e(u_d)) */
+  FlucaFD fd_tvd[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM];           /* TVD_e(u_d) = TVD interpolate u_d to face e */
+  FlucaFD fd_momentum_flux[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM]; /* F_e * TVD_e(u_d) */
+  FlucaFD fd_interp[PHYS_INS_MAX_DIM];                          /* interp_d(u_d) = linearly interpolate u_d to face d */
+  DM      dm_face;                                              /* single face DM: 1 DOF per face in each direction */
+  Vec     mass_flux;                                            /* F_d = rho * interp_d(u_d) on dm_face for all d */
 
   /* Solver data */
   Mat          J;     /* IJacobian matrix */

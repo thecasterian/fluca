@@ -122,12 +122,15 @@ int main(int argc, char **argv)
   PetscCall(FillInputVector(dm_in, u));
 
   PetscCall(DMCreateGlobalVector(dm_out, &y_sum));
+  PetscCall(VecZeroEntries(y_sum));
   PetscCall(FlucaFDApply(fd_sum, 0., dm_in, dm_out, u, y_sum));
 
   /* Apply individual operators and sum results manually */
   PetscCall(DMCreateGlobalVector(dm_out, &y_a));
   PetscCall(DMCreateGlobalVector(dm_out, &y_b));
+  PetscCall(VecZeroEntries(y_a));
   PetscCall(FlucaFDApply(fd_a, 0., dm_in, dm_out, u, y_a));
+  PetscCall(VecZeroEntries(y_b));
   PetscCall(FlucaFDApply(fd_b, 0., dm_in, dm_out, u, y_b));
 
   /* y_sum should equal y_a + y_b */

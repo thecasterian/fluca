@@ -130,7 +130,7 @@ static PetscErrorCode FlucaFDApply_Private(FlucaFD fd, PetscReal t, DM input_dm,
 
   PetscCall(VecRestoreArray(y_local, &y_arr));
   PetscCall(VecRestoreArrayRead(x_local, &x_arr));
-  PetscCall(DMLocalToGlobal(output_dm, y_local, INSERT_VALUES, y));
+  PetscCall(DMLocalToGlobal(output_dm, y_local, ADD_VALUES, y));
   PetscCall(DMRestoreLocalVector(output_dm, &y_local));
   PetscCall(DMRestoreLocalVector(input_dm, &x_local));
   PetscFunctionReturn(PETSC_SUCCESS);
