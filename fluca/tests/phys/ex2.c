@@ -97,7 +97,7 @@ int main(int argc, char **argv)
   Phys      phys;
   Vec       Y, Ydot, F, G;
   PetscInt  N   = 8;
-  PetscReal rho = 1.0, mu = 1.0, nu, norm, h, tol;
+  PetscReal rho = 1., mu = 1., nu, norm, h, tol;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
@@ -108,7 +108,7 @@ int main(int argc, char **argv)
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC, N, N, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 1, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
-  PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0.0, 2 * PETSC_PI, 0.0, 2 * PETSC_PI, 0.0, 0.0));
+  PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 2 * PETSC_PI, 0., 2 * PETSC_PI, 0., 0.));
 
   /* Create Phys INS (periodic — no explicit BCs needed) */
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
@@ -136,12 +136,12 @@ int main(int argc, char **argv)
      For the exact TGV solution this equals -(u.grad)u analytically.
      RHSFunction momentum = -C(u) = -(u.grad)u analytically.
      So F - G should be zero (up to discretization error between centered FD and TVD). */
-  PetscCall(PhysComputeIFunction(phys, 0.0, Y, Ydot, F));
-  PetscCall(PhysComputeRHSFunction(phys, 0.0, Y, G));
+  PetscCall(PhysComputeIFunction(phys, 0., Y, Ydot, F));
+  PetscCall(PhysComputeRHSFunction(phys, 0., Y, G));
 
   /* F - G should be zero for the exact solution (up to discretization error).
      On 8x8 this is O(h^2) since centered FD and TVD have different truncation. */
-  PetscCall(VecAXPY(F, -1.0, G));
+  PetscCall(VecAXPY(F, -1., G));
   PetscCall(VecNorm(F, NORM_INFINITY, &norm));
   /* The TVD limiter degrades to first order at extrema, so the infinity-norm
      error between centered-FD IFunction and TVD RHSFunction is O(h). */

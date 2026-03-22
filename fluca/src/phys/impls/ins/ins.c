@@ -81,10 +81,10 @@ PetscErrorCode PhysCreate_INS(Phys phys)
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&ins));
-  ins->rho        = 1.0;
-  ins->mu         = 1.0;
-  ins->alpha      = 0.0;
-  ins->dt_current = 0.0;
+  ins->rho        = 1.;
+  ins->mu         = 1.;
+  ins->alpha      = 0.;
+  ins->dt_current = 0.;
 
   /* Initialize BCs to NONE */
   for (f = 0; f < PHYS_INS_MAX_FACES; f++) {
