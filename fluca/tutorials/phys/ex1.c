@@ -166,7 +166,8 @@ int main(int argc, char **argv)
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
 
   /* Create TS and wire Phys callbacks.
-     PhysSetUpTS sets DM, IFunction, IJacobian, RHSFunction, and defaults to TSARKIMEX. */
+     PhysSetUpTS sets DM, IFunction, IJacobian, RHSFunction, defaults to TSARKIMEX,
+     and configures PCFIELDSPLIT with velocity/pressure splitting. */
   PetscCall(TSCreate(PETSC_COMM_WORLD, &ts));
   PetscCall(PhysSetUpTS(phys, ts));
   /* Defaults; override with -ts_max_time, -ts_dt, -ts_adapt_type */
@@ -201,11 +202,11 @@ int main(int argc, char **argv)
   test:
     suffix: l2
     nsize: 1
-    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_arkimex_type l2 -ts_adapt_type none -snes_type ksponly -pc_type jacobi
+    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_arkimex_type l2 -ts_adapt_type none
 
   test:
     suffix: prssp2
     nsize: 1
-    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_arkimex_type prssp2 -ts_adapt_type none -snes_type ksponly -pc_type jacobi
+    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_arkimex_type prssp2 -ts_adapt_type none
 
 TEST*/
