@@ -160,36 +160,29 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     for (d = 0; d < dim; d++) PetscCall(FlucaFDDestroy(&div_comp[d]));
   }
 
-  /* --- fd_pstab = sigma_0 * S(p), S(p) = sum_d (D(G(p)) - L(p))_d --- */
+  /* --- fd_pstab = sigma_0 * S(p), S(p) = sum_d [d(dp/dx_d)/dx_d - d^2p/dx_d^2] --- */
   {
     FlucaFD pstab_dir[PHYS_INS_MAX_DIM];
     FlucaFD pstab_sum;
 
     for (d = 0; d < dim; d++) {
-      FlucaFD face_grad_p, face_div_p, compact_d;
-      FlucaFD cell_grad_p, interp_p, td_p, wide_d;
-      FlucaFD neg_compact;
+      FlucaFD cell_grad_p, cell_div_p, wide_d;
+      FlucaFD compact_d, neg_compact;
       FlucaFD diff_ops[2];
 
-      /* L_d(p) = d/dx_d(dp/dx_d): compact staggered Laplacian */
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, dim, face_loc[d], 0, &face_grad_p));
-      PetscCall(FlucaFDSetUp(face_grad_p));
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, face_loc[d], 0, DMSTAG_ELEMENT, dim, &face_div_p));
-      PetscCall(FlucaFDSetUp(face_div_p));
-      PetscCall(FlucaFDCompositionCreate(face_grad_p, face_div_p, &compact_d));
-      PetscCall(FlucaFDSetUp(compact_d));
-
-      /* D(G(p))_d = d/dx_d(interp_d(dp/dx_d)): wide Laplacian via cell gradient + interpolation */
+      /* d(dp/dx_d)/dx_d: wide second derivative via two cell-centered first derivatives */
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, dim, DMSTAG_ELEMENT, d, &cell_grad_p));
       PetscCall(FlucaFDSetUp(cell_grad_p));
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 0, 2, DMSTAG_ELEMENT, d, face_loc[d], 0, &interp_p));
-      PetscCall(FlucaFDSetUp(interp_p));
-      PetscCall(FlucaFDCompositionCreate(interp_p, face_div_p, &td_p));
-      PetscCall(FlucaFDSetUp(td_p));
-      PetscCall(FlucaFDCompositionCreate(cell_grad_p, td_p, &wide_d));
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, d, DMSTAG_ELEMENT, dim, &cell_div_p));
+      PetscCall(FlucaFDSetUp(cell_div_p));
+      PetscCall(FlucaFDCompositionCreate(cell_grad_p, cell_div_p, &wide_d));
       PetscCall(FlucaFDSetUp(wide_d));
 
-      /* S_d(p) = D(G(p))_d - L_d(p) */
+      /* d^2p/dx_d^2: compact second derivative */
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 2, 2, DMSTAG_ELEMENT, dim, DMSTAG_ELEMENT, dim, &compact_d));
+      PetscCall(FlucaFDSetUp(compact_d));
+
+      /* S_d(p) = d(dp/dx_d)/dx_d - d^2p/dx_d^2 */
       PetscCall(FlucaFDScaleCreateConstant(compact_d, -1., &neg_compact));
       PetscCall(FlucaFDSetUp(neg_compact));
       diff_ops[0] = wide_d;
@@ -199,12 +192,9 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
 
       PetscCall(FlucaFDDestroy(&neg_compact));
       PetscCall(FlucaFDDestroy(&wide_d));
-      PetscCall(FlucaFDDestroy(&td_p));
-      PetscCall(FlucaFDDestroy(&interp_p));
-      PetscCall(FlucaFDDestroy(&cell_grad_p));
       PetscCall(FlucaFDDestroy(&compact_d));
-      PetscCall(FlucaFDDestroy(&face_div_p));
-      PetscCall(FlucaFDDestroy(&face_grad_p));
+      PetscCall(FlucaFDDestroy(&cell_div_p));
+      PetscCall(FlucaFDDestroy(&cell_grad_p));
     }
 
     /* sigma_0 * sum_d S_d(p); sigma_0 initially 0, updated to dt by TSPreStep */
@@ -368,24 +358,19 @@ PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
     PetscCall(VecRestoreSubVector(F, ins->is_vel, &F_vel));
   }
 
-  /* F_continuity = alpha * [D(u) + sigma_0 * S(p)] + [D_dot(du/dt) + sigma_0 * S_dot(dp/dt)]
-     D and S share the same output DOF (ELEMENT, dim). FlucaFDApply uses INSERT_VALUES,
-     so each operator must be applied and accumulated separately. */
-
-  /* alpha * D(u) */
+  /* F_continuity = alpha * [D(u) + sigma_0 * S(p)] + [D(du/dt) + sigma_0 * S(dp/dt)]
+     with alpha = 1 (not 1/dt) so that alpha * sigma_0 = dt, avoiding the O(1) pressure error
+     from the alpha * sigma_0 = 1 cancellation. */
   PetscCall(VecZeroEntries(temp));
   PetscCall(FlucaFDApply(ins->fd_div, t, sol_dm, sol_dm, U, temp));
   PetscCall(VecAXPY(F, ins->alpha, temp));
-  /* alpha * sigma_0 * S(p) */
   PetscCall(VecZeroEntries(temp));
   PetscCall(FlucaFDApply(ins->fd_pstab, t, sol_dm, sol_dm, U, temp));
   PetscCall(VecAXPY(F, ins->alpha, temp));
 
-  /* D_dot(du/dt) */
   PetscCall(VecZeroEntries(temp));
   PetscCall(FlucaFDApplyDot(ins->fd_div, t, sol_dm, sol_dm, U_t, temp));
   PetscCall(VecAXPY(F, 1., temp));
-  /* sigma_0 * S_dot(dp/dt) */
   PetscCall(VecZeroEntries(temp));
   PetscCall(FlucaFDApplyDot(ins->fd_pstab, t, sol_dm, sol_dm, U_t, temp));
   PetscCall(VecAXPY(F, 1., temp));
@@ -410,7 +395,7 @@ PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
   }
 
   /* Continuity rows: fd_div + fd_pstab (output_c = dim, no overlap with velocity rows).
-     These are later scaled by (shift + alpha) via MatDiagonalScale. */
+     Scaled by (shift + alpha) from alpha*C(U) + dC/dt(U_t) linearization. */
   PetscCall(FlucaFDGetOperator(ins->fd_div, sol_dm, sol_dm, Pmat));
   PetscCall(FlucaFDGetOperator(ins->fd_pstab, sol_dm, sol_dm, Pmat));
 
@@ -622,6 +607,19 @@ PetscErrorCode PhysINSCreateSolverData_Internal(Phys phys)
     PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, 1, &nullvec, &ins->nullspace));
     PetscCall(VecDestroy(&nullvec));
     PetscCall(MatSetNullSpace(ins->J, ins->nullspace));
+
+    /* Compose pressure-only null space onto is_p so that PCFieldSplit
+       auto-propagates it to the Schur complement diagonal sub-block.
+       "nullspace": KSP projects it out from the Schur complement RHS.
+       "nearnullspace": GAMG uses it for multigrid coarsening. */
+    {
+      MatNullSpace p_nullspace;
+
+      PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &p_nullspace));
+      PetscCall(PetscObjectCompose((PetscObject)ins->is_p, "nullspace", (PetscObject)p_nullspace));
+      PetscCall(PetscObjectCompose((PetscObject)ins->is_p, "nearnullspace", (PetscObject)p_nullspace));
+      PetscCall(MatNullSpaceDestroy(&p_nullspace));
+    }
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -645,44 +643,29 @@ PetscErrorCode PhysSetUpTS_INS(Phys phys, TS ts)
   PetscCall(TSSetType(ts, TSARKIMEX));
 
   /* Default solver: KSPONLY + nested fieldsplit.
-     Outer: velocity (u,v,[w]) vs pressure (p) — supports Schur complement.
+     Outer: velocity (u,v,[w]) vs pressure (p).
      Inner: additive fieldsplit on velocity — u, v, [w] independently
      (the implicit operator has no cross terms between velocity components). */
   {
-    SNES          snes;
-    KSP           ksp, *outer_sub;
-    PC            pc, vel_pc;
-    IS            is_vel, is_p;
-    PetscInt      dim = phys->dim, n_splits, n_vel, n_cells;
-    DMStagStencil vel_stencils[3], p_stencil;
-    const char   *comp_names[] = {"u", "v", "w"};
-
-    /* Outer split: velocity vs pressure */
-    for (PetscInt d = 0; d < dim; d++) {
-      vel_stencils[d].i   = 0;
-      vel_stencils[d].j   = 0;
-      vel_stencils[d].k   = 0;
-      vel_stencils[d].loc = DMSTAG_ELEMENT;
-      vel_stencils[d].c   = d;
-    }
-    p_stencil = (DMStagStencil){.loc = DMSTAG_ELEMENT, .c = dim};
-
-    PetscCall(DMStagCreateISFromStencils(phys->sol_dm, dim, vel_stencils, &is_vel));
-    PetscCall(DMStagCreateISFromStencils(phys->sol_dm, 1, &p_stencil, &is_p));
+    SNES        snes;
+    KSP         ksp, *outer_sub;
+    PC          pc, vel_pc;
+    PetscInt    dim          = phys->dim, n_splits, n_vel, n_cells;
+    const char *comp_names[] = {"u", "v", "w"};
 
     PetscCall(TSGetSNES(ts, &snes));
     PetscCall(SNESSetType(snes, SNESKSPONLY));
     PetscCall(SNESGetKSP(snes, &ksp));
     PetscCall(KSPGetPC(ksp, &pc));
     PetscCall(PCSetType(pc, PCFIELDSPLIT));
-    PetscCall(PCFieldSplitSetIS(pc, "velocity", is_vel));
-    PetscCall(PCFieldSplitSetIS(pc, "pressure", is_p));
+    PetscCall(PCFieldSplitSetIS(pc, "velocity", ins->is_vel));
+    PetscCall(PCFieldSplitSetIS(pc, "pressure", ins->is_p));
 
     /* Inner split: u, v, [w] within the velocity sub-block.
        DMStagCreateISFromStencils orders indices by (location, component) per cell,
        so the velocity sub-block interleaves components: [u0,v0, u1,v1, ...].
        Each component d occupies stride positions: start=d, step=dim, count=n_cells. */
-    PetscCall(ISGetLocalSize(is_vel, &n_vel));
+    PetscCall(ISGetLocalSize(ins->is_vel, &n_vel));
     n_cells = n_vel / dim;
 
     PetscCall(PCFieldSplitGetSubKSP(pc, &n_splits, &outer_sub));
@@ -715,9 +698,6 @@ PetscErrorCode PhysSetUpTS_INS(Phys phys, TS ts)
       PetscCall(PCSetType(sub_pc, PCJACOBI));
     }
     PetscCall(PetscFree(outer_sub));
-
-    PetscCall(ISDestroy(&is_vel));
-    PetscCall(ISDestroy(&is_p));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
