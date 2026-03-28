@@ -8,7 +8,7 @@ static const char help[] = "Test FlucaFD function-based boundary condition value
                            "  -right_val <real> : BC value on the right boundary\n";
 
 /* BC function: returns constant value from ctx */
-static PetscErrorCode ConstValBCFn(PetscInt dim, const PetscReal x[], void *ctx, PetscScalar *value)
+static PetscErrorCode ConstValBCFn(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
 {
   PetscFunctionBeginUser;
   *value = *(PetscScalar *)ctx;
@@ -90,8 +90,10 @@ int main(int argc, char **argv)
 
   PetscCall(DMCreateGlobalVector(dm, &y_const));
   PetscCall(DMCreateGlobalVector(dm, &y_fn));
-  PetscCall(FlucaFDApply(fd_const, dm, dm, u, y_const));
-  PetscCall(FlucaFDApply(fd_fn, dm, dm, u, y_fn));
+  PetscCall(VecZeroEntries(y_const));
+  PetscCall(FlucaFDApply(fd_const, 0., dm, dm, u, y_const));
+  PetscCall(VecZeroEntries(y_fn));
+  PetscCall(FlucaFDApply(fd_fn, 0., dm, dm, u, y_fn));
 
   PetscCall(VecAXPY(y_fn, -1.0, y_const));
   PetscCall(VecNorm(y_fn, NORM_INFINITY, &norm_diff));

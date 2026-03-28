@@ -41,19 +41,19 @@ PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
+PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscReal t, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFDStencilPoint merged[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt            merged_npoints, c;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscAssertPointer(npoints, 5);
-  PetscAssertPointer(points, 6);
+  PetscAssertPointer(npoints, 6);
+  PetscAssertPointer(points, 7);
   PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, npoints, points));
   PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, npoints, points));
   PetscCall(FlucaFDResolveScaleRefs_Internal(*npoints, points));
-  PetscCall(FlucaFDResolveTVDRefs_Internal(*npoints, points));
+  PetscCall(FlucaFDResolveTVDRefs_Internal(t, *npoints, points));
   /* Re-merge points that are now identical after ref resolution */
   merged_npoints = 0;
   for (c = 0; c < *npoints; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&points[c], &merged_npoints, merged));
@@ -63,7 +63,7 @@ PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k,
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
+static PetscErrorCode FlucaFDApply_Private(FlucaFD fd, PetscReal t, DM input_dm, DM output_dm, Vec x, Vec y, PetscBool use_dot_bc)
 {
   Vec                 x_local, y_local;
   const PetscScalar  *x_arr;
@@ -77,13 +77,6 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
   PetscScalar         result, bc_val;
 
   PetscFunctionBegin;
-  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 2, DMSTAG);
-  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 3, DMSTAG);
-  PetscValidHeaderSpecific(x, VEC_CLASSID, 4);
-  PetscValidHeaderSpecific(y, VEC_CLASSID, 5);
-  PetscCheck(fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "FlucaFD not setup");
-
   /* Scatter input to local vector (fills ghost values) */
   PetscCall(DMGetLocalVector(input_dm, &x_local));
   PetscCall(DMGlobalToLocal(input_dm, x, INSERT_VALUES, x_local));
@@ -106,7 +99,7 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
         row.k   = k;
         row.c   = fd->output_c;
         row.loc = fd->output_loc;
-        PetscCall(FlucaFDGetStencil(fd, i, j, k, &npoints, points));
+        PetscCall(FlucaFDGetStencil(fd, t, i, j, k, &npoints, points));
 
         for (c = 0; c < npoints; ++c) {
           switch (points[c].type) {
@@ -119,7 +112,11 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
             result += points[c].v;
             break;
           case FLUCAFD_STENCIL_BOUNDARY:
-            PetscCall(FlucaFDEvaluateBCValue_Internal(fd, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
+            if (use_dot_bc) {
+              PetscCall(FlucaFDEvaluateBCValueDot_Internal(fd, t, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
+            } else {
+              PetscCall(FlucaFDEvaluateBCValue_Internal(fd, t, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
+            }
             result += points[c].v * bc_val;
             break;
           }
@@ -133,9 +130,35 @@ PetscErrorCode FlucaFDApply(FlucaFD fd, DM input_dm, DM output_dm, Vec x, Vec y)
 
   PetscCall(VecRestoreArray(y_local, &y_arr));
   PetscCall(VecRestoreArrayRead(x_local, &x_arr));
-  PetscCall(DMLocalToGlobal(output_dm, y_local, INSERT_VALUES, y));
+  PetscCall(DMLocalToGlobal(output_dm, y_local, ADD_VALUES, y));
   PetscCall(DMRestoreLocalVector(output_dm, &y_local));
   PetscCall(DMRestoreLocalVector(input_dm, &x_local));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDApply(FlucaFD fd, PetscReal t, DM input_dm, DM output_dm, Vec x, Vec y)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 3, DMSTAG);
+  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 4, DMSTAG);
+  PetscValidHeaderSpecific(x, VEC_CLASSID, 5);
+  PetscValidHeaderSpecific(y, VEC_CLASSID, 6);
+  PetscCheck(fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "FlucaFD not setup");
+  PetscCall(FlucaFDApply_Private(fd, t, input_dm, output_dm, x, y, PETSC_FALSE));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDApplyDot(FlucaFD fd, PetscReal t, DM input_dm, DM output_dm, Vec x, Vec y)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 3, DMSTAG);
+  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 4, DMSTAG);
+  PetscValidHeaderSpecific(x, VEC_CLASSID, 5);
+  PetscValidHeaderSpecific(y, VEC_CLASSID, 6);
+  PetscCheck(fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "FlucaFD not setup");
+  PetscCall(FlucaFDApply_Private(fd, t, input_dm, output_dm, x, y, PETSC_TRUE));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -168,7 +191,7 @@ PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
         row.k   = k;
         row.c   = fd->output_c;
         row.loc = fd->output_loc;
-        PetscCall(FlucaFDGetStencil(fd, i, j, k, &npoints, points));
+        PetscCall(FlucaFDGetStencil(fd, 0., i, j, k, &npoints, points));
 
         /* Collect only grid stencil points (skip boundary and constant terms) */
         mat_ncols = 0;

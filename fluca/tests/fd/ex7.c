@@ -111,7 +111,7 @@ int main(int argc, char **argv)
   idx = M / 2;
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-i", &idx, NULL));
 
-  PetscCall(FlucaFDGetStencil(fd_tvd, idx, 0, 0, &npoints, points));
+  PetscCall(FlucaFDGetStencil(fd_tvd, 0., idx, 0, 0, &npoints, points));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Stencil at i=%" PetscInt_FMT ":\n", idx));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  npoints = %" PetscInt_FMT "\n", npoints));
   PetscCall(PrintStencil(1, npoints, points));
