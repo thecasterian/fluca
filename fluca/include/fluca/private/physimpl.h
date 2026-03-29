@@ -16,6 +16,7 @@ struct _PhysOps {
   PetscErrorCode (*view)(Phys, PetscViewer);
   PetscErrorCode (*createsolutiondm)(Phys);
   PetscErrorCode (*setupts)(Phys, TS);
+  PetscErrorCode (*setupseg)(Phys, Seg);
   PetscErrorCode (*computeifunction)(Phys, PetscReal, Vec, Vec, Vec);
   PetscErrorCode (*computeijacobian)(Phys, PetscReal, Vec, Vec, PetscReal, Mat, Mat);
   PetscErrorCode (*computerhsfunction)(Phys, PetscReal, Vec, Vec);

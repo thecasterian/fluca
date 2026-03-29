@@ -162,6 +162,16 @@ PetscErrorCode PhysSetUpTS(Phys phys, TS ts)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode PhysSetUpSeg(Phys phys, Seg seg)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscValidHeaderSpecific(seg, SEG_CLASSID, 2);
+  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysSetUpSeg()");
+  PetscUseTypeMethod(phys, setupseg, seg);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode PhysComputeIFunction(Phys phys, PetscReal t, Vec y, Vec y_dot, Vec F)
 {
   PetscFunctionBegin;
