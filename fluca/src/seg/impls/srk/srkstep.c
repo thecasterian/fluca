@@ -21,7 +21,7 @@ PetscErrorCode SegStep_SRK(Seg seg)
   PetscInt   s = tab->s, dim = srk->dim;
   PetscInt   i, j, d;
   PetscReal  gamma, tau_check, helm_shift, shift, alpha;
-  PetscReal  stage_time, at_ij, a_ij;
+  PetscReal  stage_time, a_ij, at_ij;
   Vec        rhs_comp, sol_comp, rhs_p, sol_p;
   Vec        Z_d, sub, w_p, up_p, w_vel, up_vel;
   Vec        p_tilde; /* pressure prediction, aliases srk->mu_work */
@@ -29,7 +29,7 @@ PetscErrorCode SegStep_SRK(Seg seg)
   PetscFunctionBegin;
   PetscCheck(h > 0., PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "Time step size must be positive");
 
-  gamma      = tab->At[(s - 1) * s + (s - 1)]; /* a_ss */
+  gamma      = tab->A[(s - 1) * s + (s - 1)]; /* a_ss */
   tau_check  = gamma * h;
   helm_shift = srk->rho / tau_check;
   shift      = 1. / tau_check;
@@ -59,9 +59,9 @@ PetscErrorCode SegStep_SRK(Seg seg)
 
   /* === Stage loop === */
   for (i = 0; i < s; i++) {
-    stage_time = seg->t + tab->ct[i] * h;
+    stage_time = seg->t + tab->c[i] * h;
 
-    if (tab->At[i * s + i] == 0.) {
+    if (tab->A[i * s + i] == 0.) {
       /* --- Explicit stage (a_ii = 0, must be stage 0 only) --- */
       PetscCheck(i == 0, PetscObjectComm((PetscObject)seg), PETSC_ERR_SUP, "Only the first stage may be explicit; stage %" PetscInt_FMT " has a_ii = 0", i);
       PetscCall(VecCopy(srk->U_prev, srk->Y[i]));
@@ -87,10 +87,10 @@ PetscErrorCode SegStep_SRK(Seg seg)
       /* Step 1: Accumulate u_{i,*} in Z */
       PetscCall(VecCopy(srk->U_prev, srk->Z));
       for (j = 0; j < i; j++) {
-        at_ij = tab->At[i * s + j];
         a_ij  = tab->A[i * s + j];
-        if (at_ij != 0.) PetscCall(VecAXPY(srk->Z, h * at_ij, srk->K_u[j]));
-        if (a_ij != 0.) PetscCall(VecAXPY(srk->Z, h * a_ij, srk->K_hat_u[j]));
+        at_ij = tab->At[i * s + j];
+        if (a_ij != 0.) PetscCall(VecAXPY(srk->Z, h * a_ij, srk->K_u[j]));
+        if (at_ij != 0.) PetscCall(VecAXPY(srk->Z, h * at_ij, srk->K_hat_u[j]));
       }
 
       /* Step 2: Helmholtz solve -- purely viscous, NO pressure gradient */
@@ -118,17 +118,17 @@ PetscErrorCode SegStep_SRK(Seg seg)
       PetscCall(seg->rhsfn(stage_time, srk->Y[i], srk->K_hat_u[i], seg->rhsfn_ctx));
 
       /* Step 5: General mu/mu_tilde pressure prediction (Section 5.3)
-         mu_j = p_prev + (1/gamma) * sum_{k<j} At[j][k] * mu_tilde[k]
+         mu_j = p_prev + (1/gamma) * sum_{k<j} A[j][k] * mu_tilde[k]
          p_tilde_j = mu_j - alpha * tau_check * p_prev = mu_j - gamma * p_prev */
       p_tilde = srk->mu_work; /* reuse as p_tilde storage */
 
       /* mu_j = p_prev */
       PetscCall(VecGetSubVector(srk->U_prev, srk->is_p, &up_p));
       PetscCall(VecCopy(up_p, srk->mu_work));
-      /* mu_j += (1/gamma) * sum_{k<j} At[j][k] * mu_tilde[k] */
+      /* mu_j += (1/gamma) * sum_{k<j} A[j][k] * mu_tilde[k] */
       for (j = 0; j < i; j++) {
-        at_ij = tab->At[i * s + j];
-        if (at_ij != 0.) PetscCall(VecAXPY(srk->mu_work, at_ij / gamma, srk->mu_tilde[j]));
+        a_ij = tab->A[i * s + j];
+        if (a_ij != 0.) PetscCall(VecAXPY(srk->mu_work, a_ij / gamma, srk->mu_tilde[j]));
       }
       /* p_tilde = mu_j - gamma * p_prev */
       PetscCall(VecAXPY(p_tilde, -gamma, up_p));
@@ -193,16 +193,16 @@ PetscErrorCode SegStep_SRK(Seg seg)
   }
 
   /* Solution update:
-     y^n = y^{n-1} + h * sum_k bt[k]*K_u[k] + h * sum_k b[k]*K_hat_u[k]
-     For combined stiffly accurate (At last row = bt, A last row = b), this equals Y[s-1]. */
+     y^n = y^{n-1} + h * sum_k b[k]*K_u[k] + h * sum_k bt[k]*K_hat_u[k]
+     For combined stiffly accurate (A last row = b, At last row = bt), this equals Y[s-1]. */
   if (tab->stiffly_accurate && tab->explicit_stiffly_accurate) {
     PetscCall(VecCopy(srk->Y[s - 1], seg->sol));
   } else {
     /* General weighted update */
     PetscCall(VecCopy(srk->U_prev, seg->sol));
     for (i = 0; i < s; i++) {
-      if (tab->bt[i] != 0.) PetscCall(VecAXPY(seg->sol, h * tab->bt[i], srk->K_u[i]));
-      if (tab->b[i] != 0.) PetscCall(VecAXPY(seg->sol, h * tab->b[i], srk->K_hat_u[i]));
+      if (tab->b[i] != 0.) PetscCall(VecAXPY(seg->sol, h * tab->b[i], srk->K_u[i]));
+      if (tab->bt[i] != 0.) PetscCall(VecAXPY(seg->sol, h * tab->bt[i], srk->K_hat_u[i]));
     }
     /* Pressure: the weighted velocity update above only affects velocity DOFs
        (K_u and K_hat_u have zero pressure DOFs). Reconstruct pressure from the

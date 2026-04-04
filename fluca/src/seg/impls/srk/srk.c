@@ -113,7 +113,7 @@ PetscErrorCode SegSRKAssembleHelmholtz(Seg seg)
 
   PetscFunctionBegin;
   PetscCheck(seg->dt > 0., PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "Time step size must be positive for Helmholtz assembly");
-  gamma_diag = tab->At[(s - 1) * s + (s - 1)]; /* a_ss */
+  gamma_diag = tab->A[(s - 1) * s + (s - 1)]; /* a_ss */
   helm_shift = srk->rho / (gamma_diag * seg->dt);
 
   for (d = 0; d < srk->dim; d++) {
@@ -144,10 +144,10 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
   PetscCheck(tab->explicit_first_stage, comm, PETSC_ERR_SUP, "SRK tableau \"%s\" does not have an explicit first stage", tab->name);
   /* SRK uses a single Helmholtz shift for all implicit stages — require SDIRK (constant diagonal) */
   {
-    PetscReal gamma_diag = tab->At[(s - 1) * s + (s - 1)];
+    PetscReal gamma_diag = tab->A[(s - 1) * s + (s - 1)];
 
     for (i = 1; i < s; i++) {
-      PetscCheck(tab->At[i * s + i] == gamma_diag, comm, PETSC_ERR_SUP, "SRK tableau \"%s\" is not SDIRK: At[%" PetscInt_FMT "][%" PetscInt_FMT "] = %g differs from gamma = %g", tab->name, i, i, (double)tab->At[i * s + i], (double)gamma_diag);
+      PetscCheck(tab->A[i * s + i] == gamma_diag, comm, PETSC_ERR_SUP, "SRK tableau \"%s\" is not SDIRK: A[%" PetscInt_FMT "][%" PetscInt_FMT "] = %g differs from gamma = %g", tab->name, i, i, (double)tab->A[i * s + i], (double)gamma_diag);
     }
   }
   PetscCheck(srk->dim > 0, comm, PETSC_ERR_ARG_WRONGSTATE, "Field IS not set. Call SegSRKSetFieldIS() first");

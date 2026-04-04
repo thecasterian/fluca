@@ -9,14 +9,14 @@ struct _SRKTableau {
   char      *name;
   PetscInt   order;                     /* temporal order of accuracy */
   PetscInt   s;                         /* number of stages */
-  PetscReal *At;                        /* implicit Butcher matrix (s*s, row-major) */
-  PetscReal *A;                         /* explicit Butcher matrix (s*s, row-major) */
-  PetscReal *bt;                        /* implicit weights [s] */
-  PetscReal *b;                         /* explicit weights [s] */
-  PetscReal *ct;                        /* implicit abscissae [s] */
-  PetscReal *c;                         /* explicit abscissae [s] */
-  PetscBool  stiffly_accurate;          /* implicit: last row of At == bt */
-  PetscBool  explicit_stiffly_accurate; /* explicit: last row of A == b */
+  PetscReal *A;                         /* implicit Butcher matrix (s*s, row-major) */
+  PetscReal *At;                        /* explicit Butcher matrix (s*s, row-major) */
+  PetscReal *b;                         /* implicit weights [s] */
+  PetscReal *bt;                        /* explicit weights [s] */
+  PetscReal *c;                         /* implicit abscissae [s] */
+  PetscReal *ct;                        /* explicit abscissae [s] */
+  PetscBool  stiffly_accurate;          /* implicit: last row of A == b */
+  PetscBool  explicit_stiffly_accurate; /* explicit: last row of At == bt */
   PetscBool  fsal;
   PetscBool  explicit_first_stage;
 };
