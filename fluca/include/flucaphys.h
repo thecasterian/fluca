@@ -2,7 +2,6 @@
 
 #include <flucasys.h>
 #include <flucaseg.h>
-#include <petscts.h>
 #include <petscdmstag.h>
 
 /* Phys - Physical Model */
@@ -60,7 +59,6 @@ FLUCA_EXTERN PetscErrorCode PhysGetOptionsPrefix(Phys, const char *[]);
 FLUCA_EXTERN PetscErrorCode PhysSetBodyForce(Phys, PhysBodyForceFn *, void *);
 
 /* Solver setup */
-FLUCA_EXTERN PetscErrorCode PhysSetUpTS(Phys, TS);
 FLUCA_EXTERN PetscErrorCode PhysSetUpSeg(Phys, Seg);
 
 /* Direct residual/Jacobian access (for testing) */

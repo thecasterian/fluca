@@ -58,7 +58,6 @@ FLUCA_INTERN PetscErrorCode PhysINSDestroyOperators_Internal(Phys);
 FLUCA_INTERN PetscErrorCode PhysINSCreateSolverData_Internal(Phys);
 
 /* Ops defined in insops.c, wired from ins.c */
-FLUCA_INTERN PetscErrorCode PhysSetUpTS_INS(Phys, TS);
 FLUCA_INTERN PetscErrorCode PhysSetUpSeg_INS(Phys, Seg);
 FLUCA_INTERN PetscErrorCode PhysComputeIFunction_INS(Phys, PetscReal, Vec, Vec, Vec);
 FLUCA_INTERN PetscErrorCode PhysComputeIJacobian_INS(Phys, PetscReal, Vec, Vec, PetscReal, Mat, Mat);

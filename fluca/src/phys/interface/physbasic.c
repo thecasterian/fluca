@@ -152,16 +152,6 @@ PetscErrorCode PhysViewFromOptions(Phys phys, PetscObject obj, const char name[]
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PhysSetUpTS(Phys phys, TS ts)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscValidHeaderSpecific(ts, TS_CLASSID, 2);
-  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysSetUpTS()");
-  PetscUseTypeMethod(phys, setupts, ts);
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 PetscErrorCode PhysSetUpSeg(Phys phys, Seg seg)
 {
   PetscFunctionBegin;

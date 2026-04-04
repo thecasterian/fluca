@@ -126,7 +126,6 @@ PetscErrorCode PhysCreate_INS(Phys phys)
   phys->ops->setup              = PhysSetUp_INS;
   phys->ops->destroy            = PhysDestroy_INS;
   phys->ops->view               = PhysView_INS;
-  phys->ops->setupts            = PhysSetUpTS_INS;
   phys->ops->setupseg           = PhysSetUpSeg_INS;
   phys->ops->computeifunction   = PhysComputeIFunction_INS;
   phys->ops->computeijacobian   = PhysComputeIJacobian_INS;
