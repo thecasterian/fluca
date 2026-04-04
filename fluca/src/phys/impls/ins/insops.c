@@ -1,5 +1,4 @@
 #include <fluca/private/physinsimpl.h>
-#include <petscts.h>
 
 /* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
 static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
@@ -505,53 +504,6 @@ PetscErrorCode PhysComputeRHSFunction_INS(Phys phys, PetscReal t, Vec U, Vec G)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* --- TS callbacks --------------------------------------------------------- */
-
-static PetscErrorCode UpdatePressureStabilizationDt_Internal(TS ts, Phys_INS *ins)
-{
-  PetscReal dt;
-
-  PetscFunctionBegin;
-  PetscCall(TSGetTimeStep(ts, &dt));
-  if (dt != ins->dt_current) {
-    PetscCall(FlucaFDScaleSetConstant(ins->fd_pstab, dt));
-    ins->alpha      = 1. / dt;
-    ins->dt_current = dt;
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode IFunction_INS(TS ts, PetscReal t, Vec U, Vec U_t, Vec F, void *ctx)
-{
-  Phys      phys = (Phys)ctx;
-  Phys_INS *ins  = (Phys_INS *)phys->data;
-
-  PetscFunctionBegin;
-  PetscCall(UpdatePressureStabilizationDt_Internal(ts, ins));
-  PetscCall(PhysComputeIFunction_INS(phys, t, U, U_t, F));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode IJacobian_INS(TS ts, PetscReal t, Vec U, Vec U_t, PetscReal shift, Mat Amat, Mat Pmat, void *ctx)
-{
-  Phys      phys = (Phys)ctx;
-  Phys_INS *ins  = (Phys_INS *)phys->data;
-
-  PetscFunctionBegin;
-  PetscCall(UpdatePressureStabilizationDt_Internal(ts, ins));
-  PetscCall(PhysComputeIJacobian_INS(phys, t, U, U_t, shift, Amat, Pmat));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode RHSFunction_INS(TS ts, PetscReal t, Vec U, Vec G, void *ctx)
-{
-  Phys phys = (Phys)ctx;
-
-  PetscFunctionBegin;
-  PetscCall(PhysComputeRHSFunction_INS(phys, t, U, G));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 /* --- Solver data creation ------------------------------------------------- */
 
 PetscErrorCode PhysINSCreateSolverData_Internal(Phys phys)
@@ -590,6 +542,18 @@ PetscErrorCode PhysINSCreateSolverData_Internal(Phys phys)
 
     PetscCall(DMStagCreateISFromStencils(sol_dm, dim, vel_stencils, &ins->is_vel));
     PetscCall(DMStagCreateISFromStencils(sol_dm, 1, p_stencil, &ins->is_p));
+
+    /* Per-component velocity IS */
+    for (d = 0; d < dim; d++) {
+      DMStagStencil comp_stencil;
+
+      comp_stencil.i   = 0;
+      comp_stencil.j   = 0;
+      comp_stencil.k   = 0;
+      comp_stencil.loc = DMSTAG_ELEMENT;
+      comp_stencil.c   = d;
+      PetscCall(DMStagCreateISFromStencils(sol_dm, 1, &comp_stencil, &ins->is_comp[d]));
+    }
   }
 
   /* Null space for pressure (when all-velocity Dirichlet) */
@@ -624,80 +588,101 @@ PetscErrorCode PhysINSCreateSolverData_Internal(Phys phys)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* --- PhysSetUpTS_INS ------------------------------------------------------ */
+/* --- PhysSetUpSeg_INS: wire FlucaFD operators into Seg ------------------- */
 
-PetscErrorCode PhysSetUpTS_INS(Phys phys, TS ts)
+/* SRK explicit RHS callback: -(conv(u) + G(p) - source) / rho */
+static PetscErrorCode SRKExplicitRHS(PetscReal t, Vec Y, Vec F, void *ctx)
 {
-  Phys_INS *ins = (Phys_INS *)phys->data;
+  Phys      phys = (Phys)ctx;
+  Phys_INS *ins  = (Phys_INS *)phys->data;
+  DM        dm   = phys->sol_dm;
+  PetscInt  dim  = phys->dim, d;
 
   PetscFunctionBegin;
-  /* Wire DM */
-  PetscCall(TSSetDM(ts, phys->sol_dm));
+  PetscCheck(ins->rho > 0.0, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "Density must be positive");
+  PetscCall(VecZeroEntries(F));
 
-  /* Wire IMEX callbacks */
-  PetscCall(TSSetIFunction(ts, NULL, IFunction_INS, phys));
-  PetscCall(TSSetIJacobian(ts, ins->J, ins->J, IJacobian_INS, phys));
-  PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_INS, phys));
+  /* Update convection operators with stage velocity */
+  PetscCall(UpdateConvectionVelocity_Internal(phys, t, Y));
 
-  /* Default to TSARKIMEX */
-  PetscCall(TSSetType(ts, TSARKIMEX));
-
-  /* Default solver: KSPONLY + nested fieldsplit.
-     Outer: velocity (u,v,[w]) vs pressure (p).
-     Inner: additive fieldsplit on velocity — u, v, [w] independently
-     (the implicit operator has no cross terms between velocity components). */
-  {
-    SNES        snes;
-    KSP         ksp, *outer_sub;
-    PC          pc, vel_pc;
-    PetscInt    dim          = phys->dim, n_splits, n_vel, n_cells;
-    const char *comp_names[] = {"u", "v", "w"};
-
-    PetscCall(TSGetSNES(ts, &snes));
-    PetscCall(SNESSetType(snes, SNESKSPONLY));
-    PetscCall(SNESGetKSP(snes, &ksp));
-    PetscCall(KSPGetPC(ksp, &pc));
-    PetscCall(PCSetType(pc, PCFIELDSPLIT));
-    PetscCall(PCFieldSplitSetIS(pc, "velocity", ins->is_vel));
-    PetscCall(PCFieldSplitSetIS(pc, "pressure", ins->is_p));
-
-    /* Inner split: u, v, [w] within the velocity sub-block.
-       DMStagCreateISFromStencils orders indices by (location, component) per cell,
-       so the velocity sub-block interleaves components: [u0,v0, u1,v1, ...].
-       Each component d occupies stride positions: start=d, step=dim, count=n_cells. */
-    PetscCall(ISGetLocalSize(ins->is_vel, &n_vel));
-    n_cells = n_vel / dim;
-
-    PetscCall(PCFieldSplitGetSubKSP(pc, &n_splits, &outer_sub));
-
-    /* Velocity sub-PC: additive fieldsplit over u, v, [w] */
-    PetscCall(KSPGetPC(outer_sub[0], &vel_pc));
-    PetscCall(PCSetType(vel_pc, PCFIELDSPLIT));
-    for (PetscInt d = 0; d < dim; d++) {
-      IS is_d;
-
-      PetscCall(ISCreateStride(PetscObjectComm((PetscObject)phys), n_cells, d, dim, &is_d));
-      PetscCall(PCFieldSplitSetIS(vel_pc, comp_names[d], is_d));
-      PetscCall(ISDestroy(&is_d));
-    }
-
-    /* Default leaf-level sub-PCs to Jacobi (ILU fails on periodic grids) */
-    {
-      PetscInt n_vel_splits;
-      KSP     *vel_sub;
-      PC       sub_pc;
-
-      PetscCall(PCFieldSplitGetSubKSP(vel_pc, &n_vel_splits, &vel_sub));
-      for (PetscInt d = 0; d < n_vel_splits; d++) {
-        PetscCall(KSPGetPC(vel_sub[d], &sub_pc));
-        PetscCall(PCSetType(sub_pc, PCJACOBI));
-      }
-      PetscCall(PetscFree(vel_sub));
-
-      PetscCall(KSPGetPC(outer_sub[1], &sub_pc));
-      PetscCall(PCSetType(sub_pc, PCJACOBI));
-    }
-    PetscCall(PetscFree(outer_sub));
+  /* F_vel -= conv(u) / rho */
+  for (d = 0; d < dim; d++) {
+    PetscCall(VecZeroEntries(ins->temp));
+    PetscCall(FlucaFDApply(ins->fd_conv[d], t, dm, dm, Y, ins->temp));
+    PetscCall(VecAXPY(F, -1.0 / ins->rho, ins->temp));
   }
+
+  /* Note: pressure gradient G(p) is NOT included here — it is handled inside the
+     SRK stage as a constraint force in the Helmholtz and pressure solves. */
+
+  /* F_vel += source / rho */
+  if (phys->bodyforce) {
+    const PetscScalar **arrc[3] = {NULL, NULL, NULL};
+    PetscInt            xs, ys, zs, xm, ym, zm, slot_elem;
+    PetscInt            i, j, k;
+
+    PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &slot_elem));
+    PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrc[0], &arrc[1], &arrc[2]));
+    PetscCall(DMStagGetCorners(dm, &xs, &ys, &zs, &xm, &ym, &zm, NULL, NULL, NULL));
+
+    for (k = zs; k < zs + zm; k++) {
+      for (j = ys; j < ys + ym; j++) {
+        for (i = xs; i < xs + xm; i++) {
+          PetscReal     coords[3] = {0};
+          PetscScalar   force[3];
+          DMStagStencil row_s;
+
+          coords[0] = PetscRealPart(arrc[0][i][slot_elem]);
+          coords[1] = PetscRealPart(arrc[1][j][slot_elem]);
+          if (dim == 3) coords[2] = PetscRealPart(arrc[2][k][slot_elem]);
+          PetscCall(phys->bodyforce(dim, t, coords, force, phys->bodyforce_ctx));
+
+          row_s.j   = j;
+          row_s.k   = k;
+          row_s.loc = DMSTAG_ELEMENT;
+          for (d = 0; d < dim; d++) {
+            PetscScalar val = force[d] / ins->rho;
+
+            row_s.i = i;
+            row_s.c = d;
+            PetscCall(DMStagVecSetValuesStencil(dm, F, 1, &row_s, &val, ADD_VALUES));
+          }
+        }
+      }
+    }
+
+    PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &arrc[0], &arrc[1], &arrc[2]));
+    PetscCall(VecAssemblyBegin(F));
+    PetscCall(VecAssemblyEnd(F));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysSetUpSeg_INS(Phys phys, Seg seg)
+{
+  Phys_INS *ins = (Phys_INS *)phys->data;
+  PetscInt  dim = phys->dim, d;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(seg, SEG_CLASSID, 2);
+  /* Wire DM and solution data */
+  PetscCall(SegSetDM(seg, phys->sol_dm));
+
+  /* Wire density */
+  PetscCall(SegSRKSetDensity(seg, ins->rho));
+
+  /* Wire FlucaFD operators */
+  for (d = 0; d < dim; d++) {
+    PetscCall(SegSRKSetLaplacian(seg, d, ins->fd_laplacian[d]));
+    PetscCall(SegSRKSetGradient(seg, d, ins->fd_grad_p[d]));
+  }
+  PetscCall(SegSRKSetDivergence(seg, ins->fd_div));
+  PetscCall(SegSRKSetStabilization(seg, ins->fd_pstab));
+
+  /* Wire field IS */
+  PetscCall(SegSRKSetFieldIS(seg, dim, ins->is_vel, ins->is_p, ins->is_comp));
+
+  /* Wire explicit RHS callback */
+  PetscCall(SegSetRHSFunction(seg, SRKExplicitRHS, phys));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
