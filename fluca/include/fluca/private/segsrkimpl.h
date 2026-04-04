@@ -3,21 +3,14 @@
 #include <fluca/private/segimpl.h>
 #include <petscksp.h>
 
+/* Forward declaration — full definition in srktab.h (internal to srk/) */
+typedef struct _SRKTableau *SRKTableau;
+
 #define SEG_SRK_MAX_DIM 3
 
 typedef struct {
-  /* Tableau (ARKIMEX L2 initially) */
-  PetscInt   s;     /* number of stages */
-  PetscInt   order; /* temporal order */
-  PetscReal *At;    /* implicit tableau (s x s, row-major) */
-  PetscReal *A;     /* explicit tableau (s x s, row-major) */
-  PetscReal *bt;    /* implicit weights [s] */
-  PetscReal *b;     /* explicit weights [s] */
-  PetscReal *ct;    /* implicit abscissae [s] */
-  PetscReal *c;     /* explicit abscissae [s] */
-  PetscBool  stiffly_accurate;
-  PetscBool  fsal;
-  PetscBool  explicit_first_stage;
+  /* Tableau (pointer into global registry, not owned) */
+  SRKTableau tableau;
 
   /* Stage vectors (full solution-sized, owned) */
   Vec *Y;          /* stage solutions [s]: (u_j, p_j) */
@@ -30,11 +23,15 @@ typedef struct {
   Vec  work2;      /* work vector (full size) */
   Vec  work3;      /* work vector (full size) */
 
+  /* mu/mu_tilde recurrence for pressure prediction (Section 5.3) */
+  Vec *mu_tilde; /* per-stage pressure vectors [s] (pressure-sized, owned) */
+  Vec  mu_work;  /* pressure-sized work vector for mu_j computation */
+
   /* FlucaFD operators (borrowed, not owned) */
   FlucaFD fd_laplacian[SEG_SRK_MAX_DIM]; /* viscous Laplacian per velocity component */
   FlucaFD fd_grad_p[SEG_SRK_MAX_DIM];    /* pressure gradient per direction */
   FlucaFD fd_div;                        /* divergence (includes rho) */
-  FlucaFD fd_pstab;                      /* pressure stabilization σ₀·S(p) */
+  FlucaFD fd_pstab;                      /* pressure stabilization sigma_0 S(p) */
 
   /* Physical parameters */
   PetscReal rho;

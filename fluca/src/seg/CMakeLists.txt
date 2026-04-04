@@ -7,6 +7,7 @@ add_library(fluca_seg SHARED
     interface/segpkg.c
     interface/segsol.c
     impls/srk/srk.c
+    impls/srk/srktab.c
     impls/srk/srkstep.c
 )
 target_include_directories(fluca_seg PUBLIC

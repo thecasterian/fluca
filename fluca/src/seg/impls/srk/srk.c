@@ -1,52 +1,44 @@
 #include <fluca/private/segsrkimpl.h>
+#include "srktab.h"
 
-/* --- ARKIMEX L2 tableau -------------------------------------------------- */
+/* --- SegSRKSetType / GetType --------------------------------------------- */
 
-static PetscErrorCode SegSRKSetTableau_L2(Seg_SRK *srk)
+PetscErrorCode SegSRKSetType(Seg seg, SegSRKType srktype)
 {
-  /* ARKIMEX L2: s=2, 2nd order, L-stable, stiffly accurate, FSAL
-     gamma = 1 - 1/sqrt(2)
-     Implicit At:  [[0,       0    ],     Explicit A:  [[0, 0],
-                    [1-gamma, gamma]]                   [1, 0]]
-     bt = [1-gamma, gamma],  b = [1-gamma, gamma]
-     ct = [0, 1],            c = [0, 1]                            */
-  const PetscReal gamma = 1. - 1. / PetscSqrtReal(2.);
+  Seg_SRK   *srk = (Seg_SRK *)seg->data;
+  SRKTableau tab;
+  PetscBool  match;
 
   PetscFunctionBegin;
-  srk->s     = 2;
-  srk->order = 2;
+  PetscValidHeaderSpecificType(seg, SEG_CLASSID, 1, SEGSRK);
+  PetscAssertPointer(srktype, 2);
 
-  PetscCall(PetscMalloc1(4, &srk->At));
-  PetscCall(PetscMalloc1(4, &srk->A));
-  PetscCall(PetscMalloc1(2, &srk->bt));
-  PetscCall(PetscMalloc1(2, &srk->b));
-  PetscCall(PetscMalloc1(2, &srk->ct));
-  PetscCall(PetscMalloc1(2, &srk->c));
+  /* Quick exit if already set to this type */
+  if (srk->tableau) {
+    PetscCall(PetscStrcmp(srk->tableau->name, srktype, &match));
+    if (match) PetscFunctionReturn(PETSC_SUCCESS);
+  }
 
-  /* Implicit tableau */
-  srk->At[0] = 0.;
-  srk->At[1] = 0.;
-  srk->At[2] = 1. - gamma;
-  srk->At[3] = gamma;
+  PetscCall(SegSRKInitializePackage());
+  PetscCall(SegSRKLookupTableau_Internal(srktype, &tab));
 
-  /* Explicit tableau */
-  srk->A[0] = 0.;
-  srk->A[1] = 0.;
-  srk->A[2] = 1.;
-  srk->A[3] = 0.;
+  /* Reset stage vectors if already set up (stage count may change) */
+  if (seg->setupcalled) PetscCall(seg->ops->reset(seg));
 
-  srk->bt[0] = 1. - gamma;
-  srk->bt[1] = gamma;
-  srk->b[0]  = 1. - gamma;
-  srk->b[1]  = gamma;
-  srk->ct[0] = 0.;
-  srk->ct[1] = 1.;
-  srk->c[0]  = 0.;
-  srk->c[1]  = 1.;
+  srk->tableau = tab;
 
-  srk->stiffly_accurate     = PETSC_TRUE;
-  srk->fsal                 = PETSC_TRUE;
-  srk->explicit_first_stage = PETSC_TRUE;
+  if (seg->setupcalled) PetscCall(seg->ops->setup(seg));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode SegSRKGetType(Seg seg, SegSRKType *srktype)
+{
+  Seg_SRK *srk = (Seg_SRK *)seg->data;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(seg, SEG_CLASSID, 1, SEGSRK);
+  PetscAssertPointer(srktype, 2);
+  *srktype = srk->tableau ? srk->tableau->name : NULL;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -78,21 +70,18 @@ static PetscErrorCode AssemblePressureMatrix_SRK(Seg seg)
   Seg_SRK *srk = (Seg_SRK *)seg->data;
   DM       dm  = seg->dm;
   Mat      M_full;
+  FlucaFD  compact_dir[SEG_SRK_MAX_DIM];
   PetscInt d;
 
   PetscFunctionBegin;
   /* Build compact Laplacian: sum_d d^2p/dx_d^2 */
-  {
-    FlucaFD compact_dir[SEG_SRK_MAX_DIM];
-
-    for (d = 0; d < srk->dim; d++) {
-      PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)d, 2, 2, DMSTAG_ELEMENT, srk->dim, DMSTAG_ELEMENT, srk->dim, &compact_dir[d]));
-      PetscCall(FlucaFDSetUp(compact_dir[d]));
-    }
-    PetscCall(FlucaFDSumCreate(srk->dim, compact_dir, &srk->fd_pres_lap));
-    PetscCall(FlucaFDSetUp(srk->fd_pres_lap));
-    for (d = 0; d < srk->dim; d++) PetscCall(FlucaFDDestroy(&compact_dir[d]));
+  for (d = 0; d < srk->dim; d++) {
+    PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)d, 2, 2, DMSTAG_ELEMENT, srk->dim, DMSTAG_ELEMENT, srk->dim, &compact_dir[d]));
+    PetscCall(FlucaFDSetUp(compact_dir[d]));
   }
+  PetscCall(FlucaFDSumCreate(srk->dim, compact_dir, &srk->fd_pres_lap));
+  PetscCall(FlucaFDSetUp(srk->fd_pres_lap));
+  for (d = 0; d < srk->dim; d++) PetscCall(FlucaFDDestroy(&compact_dir[d]));
 
   /* Assemble into full matrix and extract pressure block */
   PetscCall(DMCreateMatrix(dm, &M_full));
@@ -117,13 +106,14 @@ static PetscErrorCode AssemblePressureMatrix_SRK(Seg seg)
 
 PetscErrorCode SegSRKAssembleHelmholtz(Seg seg)
 {
-  Seg_SRK  *srk = (Seg_SRK *)seg->data;
-  PetscInt  s   = srk->s, d;
-  PetscReal gamma_diag, helm_shift;
+  Seg_SRK   *srk = (Seg_SRK *)seg->data;
+  SRKTableau tab = srk->tableau;
+  PetscInt   s   = tab->s, d;
+  PetscReal  gamma_diag, helm_shift;
 
   PetscFunctionBegin;
   PetscCheck(seg->dt > 0., PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "Time step size must be positive for Helmholtz assembly");
-  gamma_diag = srk->At[(s - 1) * s + (s - 1)]; /* At[s-1][s-1] */
+  gamma_diag = tab->At[(s - 1) * s + (s - 1)]; /* a_ss */
   helm_shift = srk->rho / (gamma_diag * seg->dt);
 
   for (d = 0; d < srk->dim; d++) {
@@ -139,14 +129,27 @@ PetscErrorCode SegSRKAssembleHelmholtz(Seg seg)
 static PetscErrorCode SegSetUp_SRK(Seg seg)
 {
   Seg_SRK    *srk = (Seg_SRK *)seg->data;
-  PetscInt    d, i;
+  SRKTableau  tab = srk->tableau;
+  PetscInt    s   = tab->s, d, i;
   MPI_Comm    comm;
   const char *prefix;
+  Vec         tmp_p;
+  PC          pc;
 
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)seg, &comm));
 
   /* Validate required inputs */
+  PetscCheck(srk->tableau, comm, PETSC_ERR_ARG_WRONGSTATE, "SRK tableau not set. Call SegSRKSetType() first");
+  PetscCheck(tab->explicit_first_stage, comm, PETSC_ERR_SUP, "SRK tableau \"%s\" does not have an explicit first stage", tab->name);
+  /* SRK uses a single Helmholtz shift for all implicit stages — require SDIRK (constant diagonal) */
+  {
+    PetscReal gamma_diag = tab->At[(s - 1) * s + (s - 1)];
+
+    for (i = 1; i < s; i++) {
+      PetscCheck(tab->At[i * s + i] == gamma_diag, comm, PETSC_ERR_SUP, "SRK tableau \"%s\" is not SDIRK: At[%" PetscInt_FMT "][%" PetscInt_FMT "] = %g differs from gamma = %g", tab->name, i, i, (double)tab->At[i * s + i], (double)gamma_diag);
+    }
+  }
   PetscCheck(srk->dim > 0, comm, PETSC_ERR_ARG_WRONGSTATE, "Field IS not set. Call SegSRKSetFieldIS() first");
   PetscCheck(srk->rho > 0., comm, PETSC_ERR_ARG_WRONGSTATE, "Density not set. Call SegSRKSetDensity() first");
   PetscCheck(srk->fd_div, comm, PETSC_ERR_ARG_WRONGSTATE, "Divergence operator not set. Call SegSRKSetDivergence() first");
@@ -157,10 +160,10 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
   }
 
   /* Allocate stage vectors */
-  PetscCall(PetscMalloc1(srk->s, &srk->Y));
-  PetscCall(PetscMalloc1(srk->s, &srk->K_u));
-  PetscCall(PetscMalloc1(srk->s, &srk->K_hat_u));
-  for (i = 0; i < srk->s; i++) {
+  PetscCall(PetscMalloc1(s, &srk->Y));
+  PetscCall(PetscMalloc1(s, &srk->K_u));
+  PetscCall(PetscMalloc1(s, &srk->K_hat_u));
+  for (i = 0; i < s; i++) {
     PetscCall(VecDuplicate(seg->sol, &srk->Y[i]));
     PetscCall(VecDuplicate(seg->sol, &srk->K_u[i]));
     PetscCall(VecDuplicate(seg->sol, &srk->K_hat_u[i]));
@@ -176,6 +179,13 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
   PetscCall(AssembleLaplacianSubMatrices_SRK(seg));
   PetscCall(AssemblePressureMatrix_SRK(seg));
 
+  /* Allocate mu/mu_tilde pressure vectors */
+  PetscCall(MatCreateVecs(srk->A_pres, NULL, &tmp_p));
+  PetscCall(PetscMalloc1(s, &srk->mu_tilde));
+  for (i = 0; i < s; i++) PetscCall(VecDuplicate(tmp_p, &srk->mu_tilde[i]));
+  PetscCall(VecDuplicate(tmp_p, &srk->mu_work));
+  PetscCall(VecDestroy(&tmp_p));
+
   /* Create KSPs */
   PetscCall(PetscObjectGetOptionsPrefix((PetscObject)seg, &prefix));
 
@@ -186,11 +196,8 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
     PetscCall(KSPAppendOptionsPrefix(srk->ksp_helm[d], "seg_helm_"));
     PetscCall(KSPSetType(srk->ksp_helm[d], KSPCG));
     PetscCall(KSPSetTolerances(srk->ksp_helm[d], 1.e-10, PETSC_DETERMINE, PETSC_DETERMINE, PETSC_DETERMINE));
-    {
-      PC pc;
-      PetscCall(KSPGetPC(srk->ksp_helm[d], &pc));
-      PetscCall(PCSetType(pc, PCJACOBI));
-    }
+    PetscCall(KSPGetPC(srk->ksp_helm[d], &pc));
+    PetscCall(PCSetType(pc, PCJACOBI));
   }
 
   PetscCall(KSPCreate(comm, &srk->ksp_pres));
@@ -200,11 +207,8 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
   PetscCall(KSPSetType(srk->ksp_pres, KSPCG));
   PetscCall(KSPSetTolerances(srk->ksp_pres, 1.e-10, PETSC_DETERMINE, PETSC_DETERMINE, PETSC_DETERMINE));
   PetscCall(KSPSetOperators(srk->ksp_pres, srk->A_pres, srk->A_pres));
-  {
-    PC pc;
-    PetscCall(KSPGetPC(srk->ksp_pres, &pc));
-    PetscCall(PCSetType(pc, PCJACOBI));
-  }
+  PetscCall(KSPGetPC(srk->ksp_pres, &pc));
+  PetscCall(PCSetType(pc, PCJACOBI));
 
   srk->first_step   = PETSC_TRUE;
   srk->dt_assembled = -1.;
@@ -215,8 +219,31 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
 
 static PetscErrorCode SegSetFromOptions_SRK(Seg seg, PetscOptionItems PetscOptionsObject)
 {
+  Seg_SRK       *srk = (Seg_SRK *)seg->data;
+  SRKTableauLink link, l;
+  PetscInt       count, choice;
+  const char   **namelist;
+  const char    *default_name;
+  PetscBool      flg;
+
   PetscFunctionBegin;
   PetscOptionsHeadBegin(PetscOptionsObject, "Seg SRK options");
+
+  /* Build dynamic list of registered schemes */
+  PetscCall(SegSRKInitializePackage());
+  PetscCall(SegSRKGetTableauList_Internal(&link));
+  count = 0;
+  for (l = link; l; l = l->next) count++;
+
+  PetscCall(PetscMalloc1(count, &namelist));
+  count = 0;
+  for (l = link; l; l = l->next) namelist[count++] = l->tab.name;
+
+  default_name = srk->tableau ? srk->tableau->name : namelist[0];
+  PetscCall(PetscOptionsEList("-seg_srk_type", "SRK tableau type", "SegSRKSetType", namelist, count, default_name, &choice, &flg));
+  if (flg) PetscCall(SegSRKSetType(seg, namelist[choice]));
+
+  PetscCall(PetscFree(namelist));
   PetscOptionsHeadEnd();
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -225,12 +252,15 @@ static PetscErrorCode SegSetFromOptions_SRK(Seg seg, PetscOptionItems PetscOptio
 
 static PetscErrorCode SegReset_SRK(Seg seg)
 {
-  Seg_SRK *srk = (Seg_SRK *)seg->data;
-  PetscInt d, i;
+  Seg_SRK   *srk = (Seg_SRK *)seg->data;
+  SRKTableau tab = srk->tableau;
+  PetscInt   s, d, i;
 
   PetscFunctionBegin;
+  s = tab ? tab->s : 0;
+
   if (srk->Y) {
-    for (i = 0; i < srk->s; i++) {
+    for (i = 0; i < s; i++) {
       PetscCall(VecDestroy(&srk->Y[i]));
       PetscCall(VecDestroy(&srk->K_u[i]));
       PetscCall(VecDestroy(&srk->K_hat_u[i]));
@@ -245,6 +275,12 @@ static PetscErrorCode SegReset_SRK(Seg seg)
   PetscCall(VecDestroy(&srk->work1));
   PetscCall(VecDestroy(&srk->work2));
   PetscCall(VecDestroy(&srk->work3));
+
+  if (srk->mu_tilde) {
+    for (i = 0; i < s; i++) PetscCall(VecDestroy(&srk->mu_tilde[i]));
+    PetscCall(PetscFree(srk->mu_tilde));
+  }
+  PetscCall(VecDestroy(&srk->mu_work));
 
   for (d = 0; d < srk->dim; d++) {
     PetscCall(MatDestroy(&srk->L_helm[d]));
@@ -262,16 +298,10 @@ static PetscErrorCode SegReset_SRK(Seg seg)
 
 static PetscErrorCode SegDestroy_SRK(Seg seg)
 {
-  Seg_SRK *srk = (Seg_SRK *)seg->data;
-
   PetscFunctionBegin;
-  PetscCall(PetscFree(srk->At));
-  PetscCall(PetscFree(srk->A));
-  PetscCall(PetscFree(srk->bt));
-  PetscCall(PetscFree(srk->b));
-  PetscCall(PetscFree(srk->ct));
-  PetscCall(PetscFree(srk->c));
-  PetscCall(PetscFree(srk));
+  PetscCall(SegReset_SRK(seg));
+  /* Tableau is owned by the registry, not by us */
+  PetscCall(PetscFree(seg->data));
   seg->data = NULL;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -280,17 +310,19 @@ static PetscErrorCode SegDestroy_SRK(Seg seg)
 
 static PetscErrorCode SegView_SRK(Seg seg, PetscViewer viewer)
 {
-  Seg_SRK  *srk = (Seg_SRK *)seg->data;
-  PetscBool isascii;
+  Seg_SRK   *srk = (Seg_SRK *)seg->data;
+  SRKTableau tab = srk->tableau;
+  PetscBool  isascii;
 
   PetscFunctionBegin;
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &isascii));
-  if (isascii) {
+  if (isascii && tab) {
     PetscCall(PetscViewerASCIIPushTab(viewer));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "Stages: %" PetscInt_FMT "\n", srk->s));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "Order: %" PetscInt_FMT "\n", srk->order));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "Stiffly accurate: %s\n", srk->stiffly_accurate ? "yes" : "no"));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "FSAL: %s\n", srk->fsal ? "yes" : "no"));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Tableau: %s\n", tab->name));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Stages: %" PetscInt_FMT "\n", tab->s));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Order: %" PetscInt_FMT "\n", tab->order));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Stiffly accurate: %s\n", tab->stiffly_accurate ? "yes" : "no"));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "FSAL: %s\n", tab->fsal ? "yes" : "no"));
     PetscCall(PetscViewerASCIIPrintf(viewer, "Density: %g\n", (double)srk->rho));
     PetscCall(PetscViewerASCIIPrintf(viewer, "Dimension: %" PetscInt_FMT "\n", srk->dim));
     PetscCall(PetscViewerASCIIPopTab(viewer));
@@ -373,51 +405,13 @@ PetscErrorCode SegSRKSetDensity(Seg seg, PetscReal rho)
 PetscErrorCode SegCreate_SRK(Seg seg)
 {
   Seg_SRK *srk;
-  PetscInt d;
 
   PetscFunctionBegin;
-  PetscCall(PetscNew(&srk));
+  PetscCall(PetscNew(&srk)); /* zero-initialized by PetscNew */
 
-  /* Initialize tableau pointers before loading (safe on partial allocation failure) */
-  srk->At = NULL;
-  srk->A  = NULL;
-  srk->bt = NULL;
-  srk->b  = NULL;
-  srk->ct = NULL;
-  srk->c  = NULL;
-  PetscCall(SegSRKSetTableau_L2(srk));
-
-  /* Initialize all pointers to NULL */
-  srk->Y              = NULL;
-  srk->K_u            = NULL;
-  srk->K_hat_u        = NULL;
-  srk->K_hat_prev     = NULL;
-  srk->Z              = NULL;
-  srk->U_prev         = NULL;
-  srk->work1          = NULL;
-  srk->work2          = NULL;
-  srk->work3          = NULL;
-  srk->fd_div         = NULL;
-  srk->fd_pstab       = NULL;
-  srk->fd_pres_lap    = NULL;
-  srk->is_vel         = NULL;
-  srk->is_p           = NULL;
-  srk->ksp_pres       = NULL;
-  srk->A_pres         = NULL;
-  srk->pres_nullspace = NULL;
-  srk->rho            = 0.;
-  srk->dim            = 0;
-  srk->dt_assembled   = -1.;
-  srk->first_step     = PETSC_TRUE;
-
-  for (d = 0; d < SEG_SRK_MAX_DIM; d++) {
-    srk->fd_laplacian[d] = NULL;
-    srk->fd_grad_p[d]    = NULL;
-    srk->is_comp[d]      = NULL;
-    srk->L_helm[d]       = NULL;
-    srk->A_helm[d]       = NULL;
-    srk->ksp_helm[d]     = NULL;
-  }
+  /* Non-zero defaults only */
+  srk->dt_assembled = -1.;
+  srk->first_step   = PETSC_TRUE;
 
   seg->data = srk;
 
@@ -427,5 +421,8 @@ PetscErrorCode SegCreate_SRK(Seg seg)
   seg->ops->reset          = SegReset_SRK;
   seg->ops->destroy        = SegDestroy_SRK;
   seg->ops->view           = SegView_SRK;
+
+  /* Set default tableau */
+  PetscCall(SegSRKSetType(seg, SEGSRKARS343));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

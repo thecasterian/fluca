@@ -11,25 +11,26 @@ static const char help[] = "Verify Seg SRK lifecycle: create, setup, step, destr
 static PetscErrorCode FillIC(DM dm, Vec Y)
 {
   const PetscScalar **arrc[3] = {NULL, NULL, NULL};
-  PetscInt            xs, ys, xm, ym, slot_elem;
+  PetscInt            xs, ys, xm, ym, slot_elem, i, j, c;
+  PetscReal           x, y;
+  PetscScalar         vals[3];
+  DMStagStencil       stencils[3];
 
   PetscFunctionBegin;
   PetscCall(DMStagGetCorners(dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &slot_elem));
   PetscCall(DMStagGetProductCoordinateArraysRead(dm, &arrc[0], &arrc[1], &arrc[2]));
 
-  for (PetscInt j = ys; j < ys + ym; j++) {
-    for (PetscInt i = xs; i < xs + xm; i++) {
-      PetscReal     x = PetscRealPart(arrc[0][i][slot_elem]);
-      PetscReal     y = PetscRealPart(arrc[1][j][slot_elem]);
-      PetscScalar   vals[3];
-      DMStagStencil stencils[3];
+  for (j = ys; j < ys + ym; j++) {
+    for (i = xs; i < xs + xm; i++) {
+      x = PetscRealPart(arrc[0][i][slot_elem]);
+      y = PetscRealPart(arrc[1][j][slot_elem]);
 
       vals[0] = -PetscCosReal(x) * PetscSinReal(y);
       vals[1] = PetscSinReal(x) * PetscCosReal(y);
       vals[2] = -0.25 * (PetscCosReal(2. * x) + PetscCosReal(2. * y));
 
-      for (PetscInt c = 0; c < 3; c++) {
+      for (c = 0; c < 3; c++) {
         stencils[c].i   = i;
         stencils[c].j   = j;
         stencils[c].k   = 0;
@@ -109,8 +110,75 @@ int main(int argc, char **argv)
 /*TEST
 
   test:
-    suffix: lifecycle
+    suffix: ars111
     nsize: 1
+    args: -seg_srk_type ars111
+    output_file: output/empty.out
+
+  test:
+    suffix: ars121
+    nsize: 1
+    args: -seg_srk_type ars121
+    output_file: output/empty.out
+
+  test:
+    suffix: ars222
+    nsize: 1
+    args: -seg_srk_type ars222
+    output_file: output/empty.out
+
+  test:
+    suffix: ars232
+    nsize: 1
+    args: -seg_srk_type ars232
+    output_file: output/empty.out
+
+  test:
+    suffix: ars343
+    nsize: 1
+    args: -seg_srk_type ars343
+    output_file: output/empty.out
+
+  test:
+    suffix: ars443
+    nsize: 1
+    args: -seg_srk_type ars443
+    output_file: output/empty.out
+
+  test:
+    suffix: ark324l2sa
+    nsize: 1
+    args: -seg_srk_type ark324l2sa
+    output_file: output/empty.out
+
+  test:
+    suffix: ark436l2sa
+    nsize: 1
+    args: -seg_srk_type ark436l2sa
+    output_file: output/empty.out
+
+  test:
+    suffix: ark548l2sa
+    nsize: 1
+    args: -seg_srk_type ark548l2sa
+    output_file: output/empty.out
+
+  test:
+    suffix: mark324l2sa
+    nsize: 1
+    args: -seg_srk_type mark324l2sa
+    output_file: output/empty.out
+
+  test:
+    suffix: mars343
+    nsize: 1
+    args: -seg_srk_type mars343
+    output_file: output/empty.out
+
+  test:
+    suffix: bhr553
+    nsize: 1
+    args: -seg_srk_type bhr553
     output_file: output/empty.out
 
 TEST*/

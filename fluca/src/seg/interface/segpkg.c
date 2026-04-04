@@ -21,6 +21,9 @@ PetscErrorCode SegInitializePackage(void)
   if (SegPackageInitialized) PetscFunctionReturn(PETSC_SUCCESS);
   SegPackageInitialized = PETSC_TRUE;
 
+  /* Initialize subpackages */
+  PetscCall(SegSRKInitializePackage());
+
   /* Register class */
   PetscCall(PetscClassIdRegister("Segregated Time Integrator", &SEG_CLASSID));
   /* Register constructors */

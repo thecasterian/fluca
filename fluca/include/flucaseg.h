@@ -67,6 +67,27 @@ FLUCA_EXTERN PetscFunctionList SegList;
 FLUCA_EXTERN PetscErrorCode    SegRegister(const char[], PetscErrorCode (*)(Seg));
 
 /* SEGSRK specific */
+typedef const char *SegSRKType;
+#define SEGSRKARS111      "ars111"      /* ARS(1,1,1) */
+#define SEGSRKARS121      "ars121"      /* ARS(1,2,1) */
+#define SEGSRKARS222      "ars222"      /* ARS(2,2,2) */
+#define SEGSRKARS232      "ars232"      /* ARS(2,3,2) */
+#define SEGSRKARS343      "ars343"      /* ARS(3,4,3) */
+#define SEGSRKARS443      "ars443"      /* ARS(4,4,3) */
+#define SEGSRKARK324L2SA  "ark324l2sa"  /* ARK3(2)4L[2]SA */
+#define SEGSRKARK436L2SA  "ark436l2sa"  /* ARK4(3)6L[2]SA */
+#define SEGSRKARK548L2SA  "ark548l2sa"  /* ARK5(4)8L[2]SA */
+#define SEGSRKMARK324L2SA "mark324l2sa" /* MARK3(2)4L[2]SA */
+#define SEGSRKMARS343     "mars343"     /* MARS(3,4,3) */
+#define SEGSRKBHR553      "bhr553"      /* BHR(5,5,3) */
+
+FLUCA_EXTERN PetscErrorCode SegSRKInitializePackage(void);
+FLUCA_EXTERN PetscErrorCode SegSRKFinalizePackage(void);
+FLUCA_EXTERN PetscErrorCode SegSRKRegister(const char[], PetscInt, PetscInt, const PetscReal[], const PetscReal[], const PetscReal[], const PetscReal[], const PetscReal[], const PetscReal[]);
+FLUCA_EXTERN PetscErrorCode SegSRKRegisterAll(void);
+FLUCA_EXTERN PetscErrorCode SegSRKRegisterDestroy(void);
+FLUCA_EXTERN PetscErrorCode SegSRKSetType(Seg, SegSRKType);
+FLUCA_EXTERN PetscErrorCode SegSRKGetType(Seg, SegSRKType *);
 FLUCA_EXTERN PetscErrorCode SegSRKSetLaplacian(Seg, PetscInt, FlucaFD);
 FLUCA_EXTERN PetscErrorCode SegSRKSetGradient(Seg, PetscInt, FlucaFD);
 FLUCA_EXTERN PetscErrorCode SegSRKSetDivergence(Seg, FlucaFD);
