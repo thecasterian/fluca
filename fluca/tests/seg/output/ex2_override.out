@@ -1,0 +1,5 @@
+Type: srk
+SRK type: ark436l2sa
+dt: 0.025
+max_time: 5.
+max_steps: 500

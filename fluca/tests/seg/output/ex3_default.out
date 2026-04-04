@@ -1,0 +1,23 @@
+Default SRK type: ars343
+Set/get: ars111
+Set/get: ars121
+Set/get: ars222
+Set/get: ars232
+Set/get: ars343
+Set/get: ars443
+Set/get: ark324l2sa
+Set/get: ark436l2sa
+Set/get: ark548l2sa
+Set/get: mark324l2sa
+Set/get: mars343
+Set/get: bhr553
+From options SRK type: ars343
+Seg Object: 1 MPI process
+  type: srk
+  Tableau: ars343
+  Stages: 4
+  Order: 3
+  Stiffly accurate: yes
+  FSAL: yes
+  Density: 0.
+  Dimension: 0
