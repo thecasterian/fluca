@@ -134,7 +134,6 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
 
   /* Validate required inputs */
   PetscCheck(srk->tableau, comm, PETSC_ERR_ARG_WRONGSTATE, "SRK tableau not set. Call SegSRKSetType() first");
-  PetscCheck(tab->explicit_first_stage, comm, PETSC_ERR_SUP, "SRK tableau \"%s\" does not have an explicit first stage", tab->name);
   /* SRK uses a single Helmholtz shift for all implicit stages — require SDIRK (constant diagonal) */
   {
     PetscReal gamma_diag = tab->A[(s - 1) * s + (s - 1)];

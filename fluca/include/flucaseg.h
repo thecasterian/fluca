@@ -83,7 +83,7 @@ typedef const char *SegSRKType;
 
 FLUCA_EXTERN PetscErrorCode SegSRKInitializePackage(void);
 FLUCA_EXTERN PetscErrorCode SegSRKFinalizePackage(void);
-FLUCA_EXTERN PetscErrorCode SegSRKRegister(const char[], PetscInt, PetscInt, const PetscReal[], const PetscReal[], const PetscReal[], const PetscReal[], const PetscReal[], const PetscReal[], PetscReal);
+FLUCA_EXTERN PetscErrorCode SegSRKRegister(const char[], PetscInt, PetscInt, const PetscReal[], const PetscReal[], const PetscReal[], const PetscReal[], PetscReal);
 FLUCA_EXTERN PetscErrorCode SegSRKRegisterAll(void);
 FLUCA_EXTERN PetscErrorCode SegSRKRegisterDestroy(void);
 FLUCA_EXTERN PetscErrorCode SegSRKSetType(Seg, SegSRKType);
