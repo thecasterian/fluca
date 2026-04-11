@@ -316,6 +316,8 @@ static PetscErrorCode SegView_SRK(Seg seg, PetscViewer viewer)
     PetscCall(PetscViewerASCIIPrintf(viewer, "Order: %" PetscInt_FMT "\n", tab->order));
     PetscCall(PetscViewerASCIIPrintf(viewer, "Stiffly accurate: %s\n", tab->stiffly_accurate ? "yes" : "no"));
     PetscCall(PetscViewerASCIIPrintf(viewer, "FSAL: %s\n", tab->fsal ? "yes" : "no"));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "ARS type: %s\n", tab->ars_type ? "yes" : "no"));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "(alpha*tau)_max: %g\n", (double)tab->alpha_tau_max));
     PetscCall(PetscViewerASCIIPrintf(viewer, "Density: %g\n", (double)srk->rho));
     PetscCall(PetscViewerASCIIPrintf(viewer, "Dimension: %" PetscInt_FMT "\n", srk->dim));
     PetscCall(PetscViewerASCIIPopTab(viewer));

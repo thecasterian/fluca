@@ -19,5 +19,7 @@ Seg Object: 1 MPI process
   Order: 3
   Stiffly accurate: yes
   FSAL: yes
+  ARS type: yes
+  (alpha*tau)_max: 2.
   Density: 0.
   Dimension: 0

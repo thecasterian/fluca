@@ -15,10 +15,12 @@ struct _SRKTableau {
   PetscReal *bt;                        /* explicit weights [s] */
   PetscReal *c;                         /* implicit abscissae [s] */
   PetscReal *ct;                        /* explicit abscissae [s] */
+  PetscReal  alpha_tau_max;             /* maximum stable alpha*tau for this scheme */
   PetscBool  stiffly_accurate;          /* implicit: last row of A == b */
   PetscBool  explicit_stiffly_accurate; /* explicit: last row of At == bt */
   PetscBool  fsal;
   PetscBool  explicit_first_stage;
+  PetscBool  ars_type; /* true if first column of A is all zeros (ARS type) */
 };
 
 /* Linked list node for the global tableau registry */

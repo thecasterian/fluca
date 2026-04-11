@@ -8,7 +8,7 @@ static PetscBool      SRKPackageInitialized = PETSC_FALSE;
 
 /* --- Registration -------------------------------------------------------- */
 
-PetscErrorCode SegSRKRegister(const char name[], PetscInt order, PetscInt s, const PetscReal A[], const PetscReal At[], const PetscReal b[], const PetscReal bt[], const PetscReal c[], const PetscReal ct[])
+PetscErrorCode SegSRKRegister(const char name[], PetscInt order, PetscInt s, const PetscReal A[], const PetscReal At[], const PetscReal b[], const PetscReal bt[], const PetscReal c[], const PetscReal ct[], PetscReal alpha_tau_max)
 {
   SRKTableauLink link;
   SRKTableau     t;
@@ -92,6 +92,17 @@ PetscErrorCode SegSRKRegister(const char name[], PetscInt order, PetscInt s, con
 
   t->fsal = t->explicit_first_stage && t->stiffly_accurate;
 
+  t->alpha_tau_max = alpha_tau_max;
+
+  /* ARS type: first column of A is entirely zero (excluding A[0][0] which is always 0) */
+  t->ars_type = PETSC_TRUE;
+  for (i = 1; i < s; i++) {
+    if (A[i * s] != 0.) {
+      t->ars_type = PETSC_FALSE;
+      break;
+    }
+  }
+
   /* Prepend to list */
   link->next     = SRKTableauList;
   SRKTableauList = link;
@@ -143,7 +154,7 @@ PetscErrorCode SegSRKRegisterAll(void)
       {1., 0.}
     };
 
-    PetscCall(SegSRKRegister(SEGSRKARS111, 1, 2, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKARS111, 1, 2, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL, 1.));
   }
 
   /* ARS(1,2,1): 1st order, s=2
@@ -160,7 +171,7 @@ PetscErrorCode SegSRKRegisterAll(void)
     };
     const PetscReal bt[2] = {0., 1.};
 
-    PetscCall(SegSRKRegister(SEGSRKARS121, 1, 2, &A[0][0], &At[0][0], NULL, bt, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKARS121, 1, 2, &A[0][0], &At[0][0], NULL, bt, NULL, NULL, 2.));
   }
 
   /* ARS(2,2,2): 2nd order, s=3
@@ -180,7 +191,7 @@ PetscErrorCode SegSRKRegisterAll(void)
       {delta, 1. - delta, 0.}
     };
 
-    PetscCall(SegSRKRegister(SEGSRKARS222, 2, 3, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKARS222, 2, 3, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL, 0.82));
   }
 
   /* ARS(2,3,2): 2nd order, s=3
@@ -201,7 +212,7 @@ PetscErrorCode SegSRKRegisterAll(void)
     };
     const PetscReal bt[3] = {0, 1. - gamma, gamma};
 
-    PetscCall(SegSRKRegister(SEGSRKARS232, 2, 3, &A[0][0], &At[0][0], NULL, bt, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKARS232, 2, 3, &A[0][0], &At[0][0], NULL, bt, NULL, NULL, 2.));
   }
 
   /* ARS(3,4,3): 3rd order, s=4, L-stable SDIRK
@@ -225,7 +236,7 @@ PetscErrorCode SegSRKRegisterAll(void)
     };
     const PetscReal bt[4] = {0., b1, b2, gamma};
 
-    PetscCall(SegSRKRegister(SEGSRKARS343, 3, 4, &A[0][0], &At[0][0], NULL, bt, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKARS343, 3, 4, &A[0][0], &At[0][0], NULL, bt, NULL, NULL, 2.));
   }
 
   /* ARS(4,4,3): 3rd order, s=5, L-stable SDIRK, gamma = 1/2
@@ -246,7 +257,7 @@ PetscErrorCode SegSRKRegisterAll(void)
       {1. / 4.,   7. / 4.,  3. / 4., -7. / 4., 0.}
     };
 
-    PetscCall(SegSRKRegister(SEGSRKARS443, 3, 5, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKARS443, 3, 5, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL, 2.));
   }
 
   /* MARS(3,4,3): 3rd order, s=4
@@ -270,7 +281,7 @@ PetscErrorCode SegSRKRegisterAll(void)
     };
     const PetscReal bt[4] = {0., b2, b3, gamma};
 
-    PetscCall(SegSRKRegister(SEGSRKMARS343, 3, 4, &A[0][0], &At[0][0], NULL, bt, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKMARS343, 3, 4, &A[0][0], &At[0][0], NULL, bt, NULL, NULL, 2.));
   }
 
   /* MARK3(2)4L[2]SA: 3rd order, s=4
@@ -294,7 +305,7 @@ PetscErrorCode SegSRKRegisterAll(void)
     };
     const PetscReal bt[4] = {b1, 0., b3, gamma};
 
-    PetscCall(SegSRKRegister(SEGSRKMARK324L2SA, 3, 4, &A[0][0], &At[0][0], NULL, bt, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKMARK324L2SA, 3, 4, &A[0][0], &At[0][0], NULL, bt, NULL, NULL, 2.));
   }
 
   /* ARK3(2)4L[2]SA: 3rd order, s=4
@@ -314,7 +325,7 @@ PetscErrorCode SegSRKRegisterAll(void)
       {6485989280629. / 16251701735622., -4246266847089. / 9704473918619., 10755448449292. / 10357097424841., 0.}
     };
 
-    PetscCall(SegSRKRegister(SEGSRKARK324L2SA, 3, 4, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKARK324L2SA, 3, 4, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL, 2.));
   }
 
   /* ARK4(3)6L[2]SA: 4th order, s=6
@@ -338,7 +349,7 @@ PetscErrorCode SegSRKRegisterAll(void)
       {647845179188. / 3216320057751.,  73281519250. / 8382639484533.,     552539513391. / 3454668386233.,    3354512671639. / 8306763924573.,  4040. / 17871., 0.}
     };
 
-    PetscCall(SegSRKRegister(SEGSRKARK436L2SA, 4, 6, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKARK436L2SA, 4, 6, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL, 2.));
   }
 
   /* ARK5(4)8L[2]SA: 5th order, s=8
@@ -366,7 +377,7 @@ PetscErrorCode SegSRKRegisterAll(void)
       {-19977161125411. / 11928030595625., 0.,                             -40795976796054. / 6384907823539., 177454434618887. / 12078138498510., 782672205425. / 8267701900261.,  -69563011059811. / 9646580694205., 7356628210526. / 4942186776405., 0.}
     };
 
-    PetscCall(SegSRKRegister(SEGSRKARK548L2SA, 5, 8, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKARK548L2SA, 5, 8, &A[0][0], &At[0][0], NULL, NULL, NULL, NULL, 2.));
   }
 
   /* BHR(5,5,3): 3rd order, s=5
@@ -403,7 +414,7 @@ PetscErrorCode SegSRKRegisterAll(void)
     };
     const PetscReal bt[5] = {b1, 0., b3, b4, gamma};
 
-    PetscCall(SegSRKRegister(SEGSRKBHR553, 3, 5, &A[0][0], &At[0][0], NULL, bt, NULL, NULL));
+    PetscCall(SegSRKRegister(SEGSRKBHR553, 3, 5, &A[0][0], &At[0][0], NULL, bt, NULL, NULL, 2.));
   }
 
   PetscFunctionReturn(PETSC_SUCCESS);
