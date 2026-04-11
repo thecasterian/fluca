@@ -163,54 +163,6 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     for (d = 0; d < dim; d++) PetscCall(FlucaFDDestroy(&compact_dir[d]));
   }
 
-  /* --- fd_pstab = sigma_0 * S(p), S(p) = sum_d [d(dp/dx_d)/dx_d - d^2p/dx_d^2] --- */
-  {
-    FlucaFD pstab_dir[PHYS_INS_MAX_DIM];
-    FlucaFD pstab_sum;
-
-    for (d = 0; d < dim; d++) {
-      FlucaFD cell_grad_p, cell_div_p, wide_d;
-      FlucaFD compact_d, neg_compact;
-      FlucaFD diff_ops[2];
-
-      /* d(dp/dx_d)/dx_d: wide second derivative via two cell-centered first derivatives */
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, dim, DMSTAG_ELEMENT, d, &cell_grad_p));
-      PetscCall(FlucaFDSetUp(cell_grad_p));
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, d, DMSTAG_ELEMENT, dim, &cell_div_p));
-      PetscCall(FlucaFDSetUp(cell_div_p));
-      PetscCall(FlucaFDCompositionCreate(cell_grad_p, cell_div_p, &wide_d));
-      PetscCall(FlucaFDSetUp(wide_d));
-
-      /* d^2p/dx_d^2: compact second derivative */
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 2, 2, DMSTAG_ELEMENT, dim, DMSTAG_ELEMENT, dim, &compact_d));
-      PetscCall(FlucaFDSetUp(compact_d));
-
-      /* S_d(p) = d(dp/dx_d)/dx_d - d^2p/dx_d^2 */
-      PetscCall(FlucaFDScaleCreateConstant(compact_d, -1., &neg_compact));
-      PetscCall(FlucaFDSetUp(neg_compact));
-      diff_ops[0] = wide_d;
-      diff_ops[1] = neg_compact;
-      PetscCall(FlucaFDSumCreate(2, diff_ops, &pstab_dir[d]));
-      PetscCall(FlucaFDSetUp(pstab_dir[d]));
-
-      PetscCall(FlucaFDDestroy(&neg_compact));
-      PetscCall(FlucaFDDestroy(&wide_d));
-      PetscCall(FlucaFDDestroy(&compact_d));
-      PetscCall(FlucaFDDestroy(&cell_div_p));
-      PetscCall(FlucaFDDestroy(&cell_grad_p));
-    }
-
-    /* sigma_0 * sum_d S_d(p); sigma_0 initially 0, updated to dt */
-    PetscCall(FlucaFDSumCreate(dim, pstab_dir, &pstab_sum));
-    PetscCall(FlucaFDSetUp(pstab_sum));
-    PetscCall(FlucaFDScaleCreateConstant(pstab_sum, 0., &ins->fd_pstab));
-    PetscCall(SetPressureNeumannBCs(phys, ins->fd_pstab, dim));
-    PetscCall(FlucaFDSetUp(ins->fd_pstab));
-
-    PetscCall(FlucaFDDestroy(&pstab_sum));
-    for (d = 0; d < dim; d++) PetscCall(FlucaFDDestroy(&pstab_dir[d]));
-  }
-
   /* --- dm_face (single), mass_flux = F_d = rho * interp_d(u_d), fd_interp[d] --- */
   {
     DM cdm;
@@ -296,7 +248,6 @@ PetscErrorCode PhysINSDestroyOperators_Internal(Phys phys)
   }
   PetscCall(FlucaFDDestroy(&ins->fd_div));
   PetscCall(FlucaFDDestroy(&ins->fd_pres_lap));
-  PetscCall(FlucaFDDestroy(&ins->fd_pstab));
   PetscCall(VecDestroy(&ins->mass_flux));
   PetscCall(DMDestroy(&ins->dm_face));
   PetscCall(VecDestroy(&ins->temp));
@@ -329,207 +280,14 @@ static PetscErrorCode UpdateConvectionVelocity_Internal(Phys phys, PetscReal t, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* --- IFunction: implicit part (viscous + pressure + ODE-transformed continuity) --- */
-
-PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, Vec F)
-{
-  Phys_INS *ins    = (Phys_INS *)phys->data;
-  DM        sol_dm = phys->sol_dm;
-  PetscInt  dim    = phys->dim, d;
-  Vec       temp   = ins->temp;
-
-  PetscFunctionBegin;
-  PetscCall(VecZeroEntries(F));
-
-  /* F_momentum_d = -F_diff_d(u) + G_d(p)  (per unit mass: F_diff = +nu*nabla^2, G includes 1/rho) */
-  for (d = 0; d < dim; d++) {
-    PetscCall(VecZeroEntries(temp));
-    PetscCall(FlucaFDApply(ins->fd_diff[d], t, sol_dm, sol_dm, U, temp));
-    PetscCall(VecAXPY(F, -1., temp));
-    PetscCall(VecZeroEntries(temp));
-    PetscCall(FlucaFDApply(ins->fd_grad_p[d], t, sol_dm, sol_dm, U, temp));
-    PetscCall(VecAXPY(F, 1., temp));
-  }
-
-  /* F_momentum_d += du_d/dt */
-  {
-    Vec F_vel, Ut_vel;
-
-    PetscCall(VecGetSubVector(F, ins->is_vel, &F_vel));
-    PetscCall(VecGetSubVector(U_t, ins->is_vel, &Ut_vel));
-    PetscCall(VecAXPY(F_vel, 1., Ut_vel));
-    PetscCall(VecRestoreSubVector(U_t, ins->is_vel, &Ut_vel));
-    PetscCall(VecRestoreSubVector(F, ins->is_vel, &F_vel));
-  }
-
-  /* F_continuity = alpha * [D(u) + sigma_0 * S(p)] + [D(du/dt) + sigma_0 * S(dp/dt)]
-     with D including rho, sigma_0 = dt, and alpha = 1. */
-  PetscCall(VecZeroEntries(temp));
-  PetscCall(FlucaFDApply(ins->fd_div, t, sol_dm, sol_dm, U, temp));
-  PetscCall(VecAXPY(F, ins->alpha, temp));
-  PetscCall(VecZeroEntries(temp));
-  PetscCall(FlucaFDApply(ins->fd_pstab, t, sol_dm, sol_dm, U, temp));
-  PetscCall(VecAXPY(F, ins->alpha, temp));
-
-  PetscCall(VecZeroEntries(temp));
-  PetscCall(FlucaFDApplyDot(ins->fd_div, t, sol_dm, sol_dm, U_t, temp));
-  PetscCall(VecAXPY(F, 1., temp));
-  PetscCall(VecZeroEntries(temp));
-  PetscCall(FlucaFDApplyDot(ins->fd_pstab, t, sol_dm, sol_dm, U_t, temp));
-  PetscCall(VecAXPY(F, 1., temp));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* --- IJacobian ------------------------------------------------------------ */
-
-PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, PetscReal shift, Mat Amat, Mat Pmat)
-{
-  Phys_INS *ins    = (Phys_INS *)phys->data;
-  DM        sol_dm = phys->sol_dm;
-  PetscInt  dim    = phys->dim, d;
-
-  PetscFunctionBegin;
-  PetscCall(MatZeroEntries(Pmat));
-
-  /* Velocity rows: -F_diff + G (F_diff = +nu*nabla^2, so negate for residual Jacobian).
-     fd_diff only writes to velocity rows, so pressure rows are zero at this point;
-     the MatScale(-1) safely negates only the diffusion entries. */
-  for (d = 0; d < dim; d++) PetscCall(FlucaFDGetOperator(ins->fd_diff[d], sol_dm, sol_dm, Pmat));
-  PetscCall(MatAssemblyBegin(Pmat, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(Pmat, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatScale(Pmat, -1.));
-
-  for (d = 0; d < dim; d++) PetscCall(FlucaFDGetOperator(ins->fd_grad_p[d], sol_dm, sol_dm, Pmat));
-
-  /* Continuity rows: fd_div + fd_pstab (output_c = dim, no overlap with velocity rows).
-     fd_div includes rho, fd_pstab uses sigma_0 = dt. */
-  PetscCall(FlucaFDGetOperator(ins->fd_div, sol_dm, sol_dm, Pmat));
-  PetscCall(FlucaFDGetOperator(ins->fd_pstab, sol_dm, sol_dm, Pmat));
-
-  PetscCall(MatAssemblyBegin(Pmat, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(Pmat, MAT_FINAL_ASSEMBLY));
-
-  /* Velocity diagonal: + shift (from du_d/dt) */
-  {
-    Vec diag_shift;
-
-    PetscCall(MatCreateVecs(Pmat, NULL, &diag_shift));
-    PetscCall(VecZeroEntries(diag_shift));
-    {
-      Vec vel_sub;
-
-      PetscCall(VecGetSubVector(diag_shift, ins->is_vel, &vel_sub));
-      PetscCall(VecSet(vel_sub, shift));
-      PetscCall(VecRestoreSubVector(diag_shift, ins->is_vel, &vel_sub));
-    }
-    PetscCall(MatDiagonalSet(Pmat, diag_shift, ADD_VALUES));
-    PetscCall(VecDestroy(&diag_shift));
-  }
-
-  /* Continuity rows *= (shift + alpha) */
-  {
-    Vec diag_scale;
-    PetscCall(MatCreateVecs(Pmat, NULL, &diag_scale));
-    PetscCall(VecSet(diag_scale, 1.));
-    {
-      Vec subvec;
-      PetscCall(VecGetSubVector(diag_scale, ins->is_p, &subvec));
-      PetscCall(VecSet(subvec, shift + ins->alpha));
-      PetscCall(VecRestoreSubVector(diag_scale, ins->is_p, &subvec));
-    }
-    PetscCall(MatDiagonalScale(Pmat, diag_scale, NULL));
-    PetscCall(VecDestroy(&diag_scale));
-  }
-  if (Amat != Pmat) {
-    PetscCall(MatAssemblyBegin(Amat, MAT_FINAL_ASSEMBLY));
-    PetscCall(MatAssemblyEnd(Amat, MAT_FINAL_ASSEMBLY));
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* --- RHSFunction: explicit part (convection + body force) ----------------- */
-
-PetscErrorCode PhysComputeRHSFunction_INS(Phys phys, PetscReal t, Vec U, Vec G)
-{
-  Phys_INS *ins    = (Phys_INS *)phys->data;
-  DM        sol_dm = phys->sol_dm;
-  PetscInt  dim    = phys->dim, d;
-  Vec       temp   = ins->temp;
-
-  PetscFunctionBegin;
-  PetscCall(VecZeroEntries(G));
-
-  /* Update convection operators with current velocity */
-  PetscCall(UpdateConvectionVelocity_Internal(phys, t, U));
-
-  /* G_momentum_d = -fd_conv[d](u) */
-  for (d = 0; d < dim; d++) {
-    PetscCall(VecZeroEntries(temp));
-    PetscCall(FlucaFDApply(ins->fd_conv[d], t, sol_dm, sol_dm, U, temp));
-    PetscCall(VecAXPY(G, -1., temp));
-  }
-
-  /* G_momentum_d += f_d(t) */
-  if (phys->bodyforce) {
-    const PetscScalar **arrc[3] = {NULL, NULL, NULL};
-    PetscInt            xs, ys, zs, xm, ym, zm, slot_elem;
-    PetscInt            i, j, k;
-
-    PetscCall(DMStagGetProductCoordinateLocationSlot(sol_dm, DMSTAG_ELEMENT, &slot_elem));
-    PetscCall(DMStagGetProductCoordinateArraysRead(sol_dm, &arrc[0], &arrc[1], &arrc[2]));
-    PetscCall(DMStagGetCorners(sol_dm, &xs, &ys, &zs, &xm, &ym, &zm, NULL, NULL, NULL));
-
-    for (k = zs; k < zs + zm; k++) {
-      for (j = ys; j < ys + ym; j++) {
-        for (i = xs; i < xs + xm; i++) {
-          PetscReal     coords[3] = {0};
-          PetscScalar   force[3];
-          DMStagStencil row_s;
-
-          coords[0] = PetscRealPart(arrc[0][i][slot_elem]);
-          coords[1] = PetscRealPart(arrc[1][j][slot_elem]);
-          if (dim == 3) coords[2] = PetscRealPart(arrc[2][k][slot_elem]);
-          PetscCall(phys->bodyforce(dim, t, coords, force, phys->bodyforce_ctx));
-
-          row_s.j   = j;
-          row_s.k   = k;
-          row_s.loc = DMSTAG_ELEMENT;
-          for (d = 0; d < dim; d++) {
-            row_s.i = i;
-            row_s.c = d;
-            PetscCall(DMStagVecSetValuesStencil(sol_dm, G, 1, &row_s, &force[d], ADD_VALUES));
-          }
-        }
-      }
-    }
-
-    PetscCall(DMStagRestoreProductCoordinateArraysRead(sol_dm, &arrc[0], &arrc[1], &arrc[2]));
-    PetscCall(VecAssemblyBegin(G));
-    PetscCall(VecAssemblyEnd(G));
-  }
-
-  /* G_continuity = 0 */
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* --- Solver data creation ------------------------------------------------- */
-
 PetscErrorCode PhysINSCreateSolverData_Internal(Phys phys)
 {
   Phys_INS *ins    = (Phys_INS *)phys->data;
   DM        sol_dm = phys->sol_dm;
   PetscInt  dim    = phys->dim, d;
-  MPI_Comm  comm;
 
   PetscFunctionBegin;
-  if (ins->J) PetscFunctionReturn(PETSC_SUCCESS);
-  PetscCall(PetscObjectGetComm((PetscObject)phys, &comm));
-
-  /* Create Jacobian matrices */
-  PetscCall(DMCreateMatrix(sol_dm, &ins->J));
-  PetscCall(MatSetOption(ins->J, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
-  PetscCall(DMCreateMatrix(sol_dm, &ins->J_rhs));
-  PetscCall(MatSetOption(ins->J_rhs, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  if (ins->is_vel) PetscFunctionReturn(PETSC_SUCCESS);
 
   /* Create IS for field decomposition */
   {
@@ -551,7 +309,6 @@ PetscErrorCode PhysINSCreateSolverData_Internal(Phys phys)
     PetscCall(DMStagCreateISFromStencils(sol_dm, dim, vel_stencils, &ins->is_vel));
     PetscCall(DMStagCreateISFromStencils(sol_dm, 1, p_stencil, &ins->is_p));
 
-    /* Per-component velocity IS */
     for (d = 0; d < dim; d++) {
       DMStagStencil comp_stencil;
 
@@ -561,36 +318,6 @@ PetscErrorCode PhysINSCreateSolverData_Internal(Phys phys)
       comp_stencil.loc = DMSTAG_ELEMENT;
       comp_stencil.c   = d;
       PetscCall(DMStagCreateISFromStencils(sol_dm, 1, &comp_stencil, &ins->is_comp[d]));
-    }
-  }
-
-  /* Null space for pressure (when all-velocity Dirichlet) */
-  ins->has_pressure_outlet = PETSC_FALSE;
-  if (!ins->has_pressure_outlet) {
-    Vec      nullvec, subvec;
-    PetscInt np;
-
-    PetscCall(DMCreateGlobalVector(sol_dm, &nullvec));
-    PetscCall(VecZeroEntries(nullvec));
-    PetscCall(VecGetSubVector(nullvec, ins->is_p, &subvec));
-    PetscCall(VecGetSize(subvec, &np));
-    PetscCall(VecSet(subvec, 1. / PetscSqrtReal((PetscReal)np)));
-    PetscCall(VecRestoreSubVector(nullvec, ins->is_p, &subvec));
-    PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, 1, &nullvec, &ins->nullspace));
-    PetscCall(VecDestroy(&nullvec));
-    PetscCall(MatSetNullSpace(ins->J, ins->nullspace));
-
-    /* Compose pressure-only null space onto is_p so that PCFieldSplit
-       auto-propagates it to the Schur complement diagonal sub-block.
-       "nullspace": KSP projects it out from the Schur complement RHS.
-       "nearnullspace": GAMG uses it for multigrid coarsening. */
-    {
-      MatNullSpace p_nullspace;
-
-      PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &p_nullspace));
-      PetscCall(PetscObjectCompose((PetscObject)ins->is_p, "nullspace", (PetscObject)p_nullspace));
-      PetscCall(PetscObjectCompose((PetscObject)ins->is_p, "nearnullspace", (PetscObject)p_nullspace));
-      PetscCall(MatNullSpaceDestroy(&p_nullspace));
     }
   }
   PetscFunctionReturn(PETSC_SUCCESS);

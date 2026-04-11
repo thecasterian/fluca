@@ -16,9 +16,8 @@ typedef struct {
 } PhysINS_BCAdapter;
 
 typedef struct {
-  PetscReal rho;   /* density */
-  PetscReal mu;    /* dynamic viscosity */
-  PetscReal alpha; /* constraint feedback parameter = 1/dt */
+  PetscReal rho; /* density */
+  PetscReal mu;  /* dynamic viscosity */
 
   /* Boundary conditions (one per face: left, right, down, up, back, front) */
   PhysINSBC bcs[PHYS_INS_MAX_FACES];
@@ -31,7 +30,6 @@ typedef struct {
   FlucaFD fd_grad_p[PHYS_INS_MAX_DIM]; /* G_d = (1/rho) * dp/dx_d */
   FlucaFD fd_div;                      /* D = rho * sum_d d(u_d)/dx_d */
   FlucaFD fd_pres_lap;                 /* L = sum_d d^2p/dx_d^2 (compact pressure Laplacian) */
-  FlucaFD fd_pstab;                    /* sigma_0 * S(p) (internal, for coupled solver only) */
 
   /* Explicit operators */
   FlucaFD fd_conv[PHYS_INS_MAX_DIM];                            /* sum_e d/dx_e(F_e * TVD_e(u_d)) */
@@ -42,15 +40,10 @@ typedef struct {
   Vec     mass_flux;                                            /* F_d = rho * interp_d(u_d) on dm_face for all d */
 
   /* Solver data */
-  Mat          J;     /* IJacobian matrix */
-  Mat          J_rhs; /* RHSJacobian matrix (Picard convection) */
-  IS           is_vel;
-  IS           is_p;
-  IS           is_comp[PHYS_INS_MAX_DIM]; /* per-component velocity IS (for SRK) */
-  MatNullSpace nullspace;
-  Vec          temp;       /* work vector for IFunction computation */
-  PetscReal    dt_current; /* current dt for sigma_0 update detection */
-  PetscBool    has_pressure_outlet;
+  IS  is_vel;
+  IS  is_p;
+  IS  is_comp[PHYS_INS_MAX_DIM]; /* per-component velocity IS (for SRK) */
+  Vec temp;                      /* work vector */
 } Phys_INS;
 
 /* Internal functions defined in insops.c */
@@ -60,6 +53,3 @@ FLUCA_INTERN PetscErrorCode PhysINSCreateSolverData_Internal(Phys);
 
 /* Ops defined in insops.c, wired from ins.c */
 FLUCA_INTERN PetscErrorCode PhysSetUpSeg_INS(Phys, Seg);
-FLUCA_INTERN PetscErrorCode PhysComputeIFunction_INS(Phys, PetscReal, Vec, Vec, Vec);
-FLUCA_INTERN PetscErrorCode PhysComputeIJacobian_INS(Phys, PetscReal, Vec, Vec, PetscReal, Mat, Mat);
-FLUCA_INTERN PetscErrorCode PhysComputeRHSFunction_INS(Phys, PetscReal, Vec, Vec);

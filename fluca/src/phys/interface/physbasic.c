@@ -161,30 +161,3 @@ PetscErrorCode PhysSetUpSeg(Phys phys, Seg seg)
   PetscUseTypeMethod(phys, setupseg, seg);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
-
-PetscErrorCode PhysComputeIFunction(Phys phys, PetscReal t, Vec y, Vec y_dot, Vec F)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysComputeIFunction()");
-  PetscUseTypeMethod(phys, computeifunction, t, y, y_dot, F);
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode PhysComputeIJacobian(Phys phys, PetscReal t, Vec y, Vec y_dot, PetscReal shift, Mat J, Mat Jpre)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysComputeIJacobian()");
-  PetscUseTypeMethod(phys, computeijacobian, t, y, y_dot, shift, J, Jpre);
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode PhysComputeRHSFunction(Phys phys, PetscReal t, Vec y, Vec G)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysComputeRHSFunction()");
-  PetscUseTypeMethod(phys, computerhsfunction, t, y, G);
-  PetscFunctionReturn(PETSC_SUCCESS);
-}

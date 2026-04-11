@@ -50,12 +50,9 @@ static PetscErrorCode PhysDestroy_INS(Phys phys)
 
   PetscFunctionBegin;
   PetscCall(PhysINSDestroyOperators_Internal(phys));
-  PetscCall(MatDestroy(&ins->J));
-  PetscCall(MatDestroy(&ins->J_rhs));
   PetscCall(ISDestroy(&ins->is_vel));
   PetscCall(ISDestroy(&ins->is_p));
   for (d = 0; d < PHYS_INS_MAX_DIM; d++) PetscCall(ISDestroy(&ins->is_comp[d]));
-  PetscCall(MatNullSpaceDestroy(&ins->nullspace));
   PetscCall(PetscFree(phys->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -83,10 +80,8 @@ PetscErrorCode PhysCreate_INS(Phys phys)
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&ins));
-  ins->rho        = 1.;
-  ins->mu         = 1.;
-  ins->alpha      = 0.;
-  ins->dt_current = 0.;
+  ins->rho = 1.;
+  ins->mu  = 1.;
 
   /* Initialize BCs to NONE */
   for (f = 0; f < PHYS_INS_MAX_FACES; f++) {
@@ -108,28 +103,20 @@ PetscErrorCode PhysCreate_INS(Phys phys)
       ins->fd_momentum_flux[f][g] = NULL;
     }
   }
-  ins->fd_div              = NULL;
-  ins->fd_pstab            = NULL;
-  ins->dm_face             = NULL;
-  ins->mass_flux           = NULL;
-  ins->J                   = NULL;
-  ins->J_rhs               = NULL;
-  ins->is_vel              = NULL;
-  ins->is_p                = NULL;
-  ins->nullspace           = NULL;
-  ins->temp                = NULL;
-  ins->has_pressure_outlet = PETSC_FALSE;
+  ins->fd_div    = NULL;
+  ins->dm_face   = NULL;
+  ins->mass_flux = NULL;
+  ins->is_vel    = NULL;
+  ins->is_p      = NULL;
+  ins->temp      = NULL;
 
-  phys->data                    = ins;
-  phys->ops->createsolutiondm   = PhysCreateSolutionDM_INS;
-  phys->ops->setfromoptions     = PhysSetFromOptions_INS;
-  phys->ops->setup              = PhysSetUp_INS;
-  phys->ops->destroy            = PhysDestroy_INS;
-  phys->ops->view               = PhysView_INS;
-  phys->ops->setupseg           = PhysSetUpSeg_INS;
-  phys->ops->computeifunction   = PhysComputeIFunction_INS;
-  phys->ops->computeijacobian   = PhysComputeIJacobian_INS;
-  phys->ops->computerhsfunction = PhysComputeRHSFunction_INS;
+  phys->data                  = ins;
+  phys->ops->createsolutiondm = PhysCreateSolutionDM_INS;
+  phys->ops->setfromoptions   = PhysSetFromOptions_INS;
+  phys->ops->setup            = PhysSetUp_INS;
+  phys->ops->destroy          = PhysDestroy_INS;
+  phys->ops->view             = PhysView_INS;
+  phys->ops->setupseg         = PhysSetUpSeg_INS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
