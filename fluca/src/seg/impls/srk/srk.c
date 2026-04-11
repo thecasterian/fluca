@@ -123,7 +123,8 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
 {
   Seg_SRK    *srk = (Seg_SRK *)seg->data;
   SRKTableau  tab = srk->tableau;
-  PetscInt    s   = tab->s, d, i;
+  PetscInt    s   = tab->s, d, i, k;
+  PetscReal   gamma_diag;
   MPI_Comm    comm;
   const char *prefix;
   Vec         tmp_p;
@@ -135,12 +136,9 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
   /* Validate required inputs */
   PetscCheck(srk->tableau, comm, PETSC_ERR_ARG_WRONGSTATE, "SRK tableau not set. Call SegSRKSetType() first");
   /* SRK uses a single Helmholtz shift for all implicit stages — require SDIRK (constant diagonal) */
-  {
-    PetscReal gamma_diag = tab->A[(s - 1) * s + (s - 1)];
-
-    for (i = 1; i < s; i++) {
-      PetscCheck(tab->A[i * s + i] == gamma_diag, comm, PETSC_ERR_SUP, "SRK tableau \"%s\" is not SDIRK: A[%" PetscInt_FMT "][%" PetscInt_FMT "] = %g differs from gamma = %g", tab->name, i, i, (double)tab->A[i * s + i], (double)gamma_diag);
-    }
+  gamma_diag = tab->A[(s - 1) * s + (s - 1)];
+  for (i = 1; i < s; i++) {
+    PetscCheck(tab->A[i * s + i] == gamma_diag, comm, PETSC_ERR_SUP, "SRK tableau \"%s\" is not SDIRK: A[%" PetscInt_FMT "][%" PetscInt_FMT "] = %g differs from gamma = %g", tab->name, i, i, (double)tab->A[i * s + i], (double)gamma_diag);
   }
   PetscCheck(srk->dim > 0, comm, PETSC_ERR_ARG_WRONGSTATE, "Field IS not set. Call SegSRKSetFieldIS() first");
   PetscCheck(srk->rho > 0., comm, PETSC_ERR_ARG_WRONGSTATE, "Density not set. Call SegSRKSetDensity() first");
@@ -180,9 +178,6 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
 
   /* CK-type correction: precompute d_j and allocate nu_tilde_1 */
   if (!tab->ars_type) {
-    PetscReal gamma_diag = tab->A[(s - 1) * s + (s - 1)];
-    PetscInt  k;
-
     PetscCall(VecDuplicate(tmp_p, &srk->nu_tilde_1));
     PetscCall(PetscMalloc1(s, &srk->d_j));
     srk->d_j[0] = 1.;

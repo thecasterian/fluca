@@ -14,8 +14,8 @@ typedef struct {
 
   /* Stage vectors (full solution-sized, owned) */
   Vec *Y;          /* stage solutions [s]: (u_j, p_j) */
-  Vec *K_u;        /* implicit velocity slopes [s]: K_j^u = F_diff(u_j) */
-  Vec *K_hat_u;    /* explicit velocity slopes [s]: K_hat_j^u = C_j^u - G(p_j)/rho */
+  Vec *K_u;        /* implicit velocity slopes [s] */
+  Vec *K_hat_u;    /* explicit velocity slopes [s]: K_hat_j^u = C_j^u - G(p_j) */
   Vec  K_hat_prev; /* FSAL: K_hat_u from previous step's last stage */
   Vec  Z;          /* accumulation vector (u_{j,*}) */
   Vec  U_prev;     /* u^{n-1} saved at step start (for Baumgarte) */
@@ -28,7 +28,7 @@ typedef struct {
   Vec  mu_work;  /* pressure-sized work vector for mu_j computation */
 
   /* CK-type correction (non-ARS schemes only) */
-  Vec        nu_tilde_1; /* D(K_1^u + K_hat_1^u) + alpha*D*u_1 (pressure-sized, owned) */
+  Vec        nu_tilde_1; /* D(K_1^u + K_hat_1^u + alpha*u^{n-1}) (pressure-sized, owned) */
   PetscReal *d_j;        /* d_j recurrence coefficients [s] (owned) */
 
   /* FlucaFD operators (borrowed, not owned) */

@@ -156,9 +156,9 @@ PetscErrorCode SegStep_SRK(Seg seg)
       PetscCall(VecAXPY(p_tilde, -alpha_hat_tau, up_p));
       PetscCall(VecRestoreSubVector(srk->U_prev, srk->is_p, &up_p));
 
-      /* Step 6: Pressure Poisson solve
-         A_pres * delta_p = -(1/rho) * fd_div(R_vel + alpha * U_prev_vel)
-         where R_vel = K_u[i] + C^u[i] - G(p_tilde), fd_div includes rho */
+      /* Step 6: Pressure Poisson solve (equation 10)
+         A_pres * delta_p = -D(K_u + C^u - G(p_tilde) + alpha * u^{n-1})
+         where D = fd_div (includes rho), A_pres = -L */
 
       /* work2 = K_u[i] + C^u[i] */
       PetscCall(VecCopy(srk->K_u[i], srk->work2));
@@ -189,7 +189,8 @@ PetscErrorCode SegStep_SRK(Seg seg)
       PetscCall(VecRestoreSubVector(srk->work1, srk->is_p, &w_p));
       PetscCall(VecScale(rhs_p, -1.));
 
-      /* CK non-ARS: subtract nu_j = d_j * nu_tilde_1 from pressure Poisson RHS */
+      /* CK non-ARS: add nu_j = d_j * nu_tilde_1 (equation 10, -nu_j on LHS becomes +nu_j on RHS
+         since A_pres = -L; see theory guide Section "Stage Algorithm", stages j >= 2) */
       if (!tab->ars_type) PetscCall(VecAXPY(rhs_p, srk->d_j[i], srk->nu_tilde_1));
 
       PetscCall(KSPSolve(srk->ksp_pres, rhs_p, sol_p));
@@ -210,7 +211,7 @@ PetscErrorCode SegStep_SRK(Seg seg)
       PetscCall(VecAXPY(srk->mu_tilde[i], -alpha_hat_tau, up_p));
       PetscCall(VecRestoreSubVector(srk->U_prev, srk->is_p, &up_p));
 
-      /* Step 8: K_hat_u[i] = C^u[i] - G(p[i])/rho */
+      /* Step 8: K_hat_u[i] = C^u[i] - G(p[i]) */
       PetscCall(VecZeroEntries(srk->work1));
       PetscCall(ApplyGradP_Private(seg, srk->Y[i], srk->work1));
       PetscCall(VecAXPY(srk->K_hat_u[i], -1., srk->work1));

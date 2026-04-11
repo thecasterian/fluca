@@ -391,7 +391,9 @@ PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
   PetscFunctionBegin;
   PetscCall(MatZeroEntries(Pmat));
 
-  /* Velocity rows: -F_diff + G (F_diff = +nu*nabla^2, so negate for residual Jacobian) */
+  /* Velocity rows: -F_diff + G (F_diff = +nu*nabla^2, so negate for residual Jacobian).
+     fd_diff only writes to velocity rows, so pressure rows are zero at this point;
+     the MatScale(-1) safely negates only the diffusion entries. */
   for (d = 0; d < dim; d++) PetscCall(FlucaFDGetOperator(ins->fd_diff[d], sol_dm, sol_dm, Pmat));
   PetscCall(MatAssemblyBegin(Pmat, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(Pmat, MAT_FINAL_ASSEMBLY));
