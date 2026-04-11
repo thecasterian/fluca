@@ -208,7 +208,7 @@ PetscErrorCode SegSRKRegisterAll(void)
      Ascher, Ruuth, Spiteri (1997) Section 2.7
      gamma = middle root of 6x^3 - 18x^2 + 9x - 1; explicit weights bt differ from last row of At */
   {
-    const PetscReal gamma   = .43586652150845967;
+    const PetscReal gamma   = 0.43586652150845967;
     const PetscReal b1      = -1.5 * gamma * gamma + 4. * gamma - .25;
     const PetscReal b2      = 1.5 * gamma * gamma - 5. * gamma + 1.25;
     const PetscReal A[4][4] = {
@@ -371,41 +371,39 @@ PetscErrorCode SegSRKRegisterAll(void)
 
   /* BHR(5,5,3): 3rd order, s=5
      Boscarino, Pareschi, Russo (2009) Appendix method 1
-     gamma ≈ same as ARS(3,4,3) */
+     gamma ≈ same as ARS(3,4,3); this simplifies tableaus much */
   {
-    const PetscReal gamma   = 0.435866521508482;
-    const PetscReal a41_hat = -0.800998453065628668;
-    const PetscReal a43_hat = 3.14121102817430886;
-    const PetscReal a51_hat = 0.356753207779639536;
-    const PetscReal a52_hat = -0.197339890378869204;
-    const PetscReal a53_hat = 0.881948841393790817;
-    const PetscReal a54_hat = -0.0413621587946242306;
-    const PetscReal a32     = -6.96350842146658475e-14;
-    const PetscReal a41     = -0.0667586870195837623;
-    const PetscReal a42     = -6.12965965941748233e-13;
-    const PetscReal a43     = 1.97110474062039498;
-    const PetscReal b1      = 0.412898042812474275;
-    const PetscReal b3      = 0.197339890378869204;
-    const PetscReal b4      = -0.0461044546998256796;
+    const PetscReal gamma   = 0.43586652150845967;
+    const PetscReal c2      = 2. * gamma;
+    const PetscReal c3      = 2. * gamma;
+    const PetscReal c4      = 2.3402125751086804; /* Free parameter */
+    const PetscReal b3      = (1. / 3. - c4 / 2. - gamma * (1. - c4)) / (c3 * (c3 - c4));
+    const PetscReal b4      = (1. / 3. - c3 / 2. - gamma * (1. - c3)) / (c4 * (c4 - c3));
+    const PetscReal b1      = 1. - b3 - b4 - gamma;
+    const PetscReal a41     = 1.5 * c4 - (c4 * c4) / (4. * gamma) - gamma;
+    const PetscReal a43     = (c4 * c4) / (4. * gamma) - c4 / 2.;
+    const PetscReal at41    = c4 - (c4 * c4) / (4. * gamma);
+    const PetscReal at43    = (c4 * c4) / (4. * gamma);
+    const PetscReal at54    = (1. / (12. * gamma) - c4 * c4 * b4 - gamma - 4. * gamma * gamma * b3) / (c4 * (c4 - 2. * gamma));
+    const PetscReal at53    = 1. / (4. * gamma) + b3 - c4 / (2. * gamma) * at54;
+    const PetscReal at51    = 1. + b3 - at53 - at54;
     const PetscReal A[5][5] = {
       {0.,    0.,    0.,    0.,    0.   },
       {gamma, gamma, 0.,    0.,    0.   },
-      {gamma, a32,   gamma, 0.,    0.   },
-      {a41,   a42,   a43,   gamma, 0.   },
-      {b1,    0.,    0.,    b3,    gamma}
+      {gamma, 0.,    gamma, 0.,    0.   },
+      {a41,   0.,    a43,   gamma, 0.   },
+      {b1,    0.,    b3,    b4,    gamma}
     };
     const PetscReal At[5][5] = {
-      {0.,         0.,      0.,      0.,      0.},
-      {2. * gamma, 0.,      0.,      0.,      0.},
-      {gamma,      gamma,   0.,      0.,      0.},
-      {a41_hat,    0.,      a43_hat, 0.,      0.},
-      {a51_hat,    a52_hat, a53_hat, a54_hat, 0.}
+      {0.,         0.,    0.,   0.,   0.},
+      {2. * gamma, 0.,    0.,   0.,   0.},
+      {gamma,      gamma, 0.,   0.,   0.},
+      {at41,       0.,    at43, 0.,   0.},
+      {at51,       -b3,   at53, at54, 0.}
     };
-    const PetscReal b[5]  = {b1, 0., b3, b4, gamma};
-    const PetscReal bt[5] = {b1, 0., 0., b3, gamma};
-    const PetscReal c[5]  = {0., 2. * gamma, 902905985686. / 1035759735069., 2684624. / 1147171., 1.};
+    const PetscReal bt[5] = {b1, 0., b3, b4, gamma};
 
-    PetscCall(SegSRKRegister(SEGSRKBHR553, 3, 5, &A[0][0], &At[0][0], b, bt, c, c));
+    PetscCall(SegSRKRegister(SEGSRKBHR553, 3, 5, &A[0][0], &At[0][0], NULL, bt, NULL, NULL));
   }
 
   PetscFunctionReturn(PETSC_SUCCESS);

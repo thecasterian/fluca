@@ -31,7 +31,7 @@ PetscErrorCode SegStep_SRK(Seg seg)
 
   gamma      = tab->A[(s - 1) * s + (s - 1)]; /* a_ss */
   tau_check  = gamma * h;
-  helm_shift = srk->rho / tau_check;
+  helm_shift = 1. / tau_check;
   shift      = 1. / tau_check;
   alpha      = 1. / h; /* Baumgarte parameter alpha = 1/tau (Section 5.1) */
 
@@ -73,7 +73,7 @@ PetscErrorCode SegStep_SRK(Seg seg)
         PetscCall(seg->rhsfn(stage_time, srk->Y[i], srk->K_hat_u[i], seg->rhsfn_ctx));
         PetscCall(VecZeroEntries(srk->work1));
         PetscCall(ApplyGradP_Private(seg, srk->Y[i], srk->work1));
-        PetscCall(VecAXPY(srk->K_hat_u[i], -1. / srk->rho, srk->work1));
+        PetscCall(VecAXPY(srk->K_hat_u[i], -1., srk->work1));
       }
 
       /* mu_tilde[0] = -gamma * p_prev (Section 5.3, explicit first stage) */
@@ -136,13 +136,13 @@ PetscErrorCode SegStep_SRK(Seg seg)
 
       /* Step 6: Pressure Poisson solve
          A_pres * delta_p = -(1/rho) * fd_div(R_vel + alpha * U_prev_vel)
-         where R_vel = K_u[i] + C^u[i] - G(p_tilde)/rho */
+         where R_vel = K_u[i] + C^u[i] - G(p_tilde), fd_div includes rho */
 
       /* work2 = K_u[i] + C^u[i] */
       PetscCall(VecCopy(srk->K_u[i], srk->work2));
       PetscCall(VecAXPY(srk->work2, 1., srk->K_hat_u[i]));
 
-      /* Subtract G(p_tilde)/rho: place p_tilde into full-size pressure DOFs */
+      /* Subtract G(p_tilde): place p_tilde into full-size pressure DOFs */
       PetscCall(VecZeroEntries(srk->work3));
       PetscCall(VecGetSubVector(srk->work3, srk->is_p, &w_p));
       PetscCall(VecCopy(p_tilde, w_p));
@@ -150,7 +150,7 @@ PetscErrorCode SegStep_SRK(Seg seg)
 
       PetscCall(VecZeroEntries(srk->work1));
       PetscCall(ApplyGradP_Private(seg, srk->work3, srk->work1));
-      PetscCall(VecAXPY(srk->work2, -1. / srk->rho, srk->work1));
+      PetscCall(VecAXPY(srk->work2, -1., srk->work1));
 
       /* Baumgarte: add alpha * u_prev to R_vel so fd_div captures alpha * D * u^{n-1} */
       PetscCall(VecGetSubVector(srk->work2, srk->is_vel, &w_vel));
@@ -165,7 +165,7 @@ PetscErrorCode SegStep_SRK(Seg seg)
       PetscCall(VecGetSubVector(srk->work1, srk->is_p, &w_p));
       PetscCall(VecCopy(w_p, rhs_p));
       PetscCall(VecRestoreSubVector(srk->work1, srk->is_p, &w_p));
-      PetscCall(VecScale(rhs_p, -1. / srk->rho));
+      PetscCall(VecScale(rhs_p, -1.));
 
       PetscCall(KSPSolve(srk->ksp_pres, rhs_p, sol_p));
 
@@ -188,7 +188,7 @@ PetscErrorCode SegStep_SRK(Seg seg)
       /* Step 8: K_hat_u[i] = C^u[i] - G(p[i])/rho */
       PetscCall(VecZeroEntries(srk->work1));
       PetscCall(ApplyGradP_Private(seg, srk->Y[i], srk->work1));
-      PetscCall(VecAXPY(srk->K_hat_u[i], -1. / srk->rho, srk->work1));
+      PetscCall(VecAXPY(srk->K_hat_u[i], -1., srk->work1));
     }
   }
 

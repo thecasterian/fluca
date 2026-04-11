@@ -99,10 +99,10 @@ PetscErrorCode PhysCreate_INS(Phys phys)
 
   /* Initialize operators to NULL */
   for (f = 0; f < PHYS_INS_MAX_DIM; f++) {
-    ins->fd_laplacian[f] = NULL;
-    ins->fd_grad_p[f]    = NULL;
-    ins->fd_conv[f]      = NULL;
-    ins->fd_interp[f]    = NULL;
+    ins->fd_diff[f]   = NULL;
+    ins->fd_grad_p[f] = NULL;
+    ins->fd_conv[f]   = NULL;
+    ins->fd_interp[f] = NULL;
     for (g = 0; g < PHYS_INS_MAX_DIM; g++) {
       ins->fd_tvd[f][g]           = NULL;
       ins->fd_momentum_flux[f][g] = NULL;

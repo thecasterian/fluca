@@ -28,10 +28,10 @@ typedef struct {
   Vec  mu_work;  /* pressure-sized work vector for mu_j computation */
 
   /* FlucaFD operators (borrowed, not owned) */
-  FlucaFD fd_laplacian[SEG_SRK_MAX_DIM]; /* viscous Laplacian per velocity component */
-  FlucaFD fd_grad_p[SEG_SRK_MAX_DIM];    /* pressure gradient per direction */
-  FlucaFD fd_div;                        /* divergence (includes rho) */
-  FlucaFD fd_pstab;                      /* pressure stabilization sigma_0 S(p) */
+  FlucaFD fd_diff[SEG_SRK_MAX_DIM];   /* viscous diffusion F_diff per velocity component */
+  FlucaFD fd_grad_p[SEG_SRK_MAX_DIM]; /* pressure gradient per direction */
+  FlucaFD fd_div;                     /* divergence (includes rho) */
+  FlucaFD fd_pres_lap;                /* compact pressure Laplacian L */
 
   /* Physical parameters */
   PetscReal rho;
@@ -52,9 +52,6 @@ typedef struct {
   KSP ksp_pres;                  /* Pressure KSP */
   Mat A_helm[SEG_SRK_MAX_DIM];   /* Helmholtz matrices (L_helm + shift*I) */
   Mat A_pres;                    /* Pressure matrix (-L, SPD compact Laplacian) */
-
-  /* Pressure Laplacian FlucaFD (owned, built in setup) */
-  FlucaFD fd_pres_lap;
 
   /* Null space for pressure (owned) */
   MatNullSpace pres_nullspace;

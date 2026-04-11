@@ -56,11 +56,15 @@ static PetscErrorCode AssembleLaplacianSubMatrices_SRK(Seg seg)
   PetscCall(MatSetOption(M_full, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
   PetscCall(MatZeroEntries(M_full));
 
-  for (d = 0; d < srk->dim; d++) PetscCall(FlucaFDGetOperator(srk->fd_laplacian[d], dm, dm, M_full));
+  for (d = 0; d < srk->dim; d++) PetscCall(FlucaFDGetOperator(srk->fd_diff[d], dm, dm, M_full));
   PetscCall(MatAssemblyBegin(M_full, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(M_full, MAT_FINAL_ASSEMBLY));
 
-  for (d = 0; d < srk->dim; d++) PetscCall(MatCreateSubMatrix(M_full, srk->is_comp[d], srk->is_comp[d], MAT_INITIAL_MATRIX, &srk->L_helm[d]));
+  /* fd_diff = +nu*nabla^2 (negative semi-definite); negate to get L_helm = -F_diff (positive semi-definite) */
+  for (d = 0; d < srk->dim; d++) {
+    PetscCall(MatCreateSubMatrix(M_full, srk->is_comp[d], srk->is_comp[d], MAT_INITIAL_MATRIX, &srk->L_helm[d]));
+    PetscCall(MatScale(srk->L_helm[d], -1.));
+  }
   PetscCall(MatDestroy(&M_full));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -70,20 +74,9 @@ static PetscErrorCode AssemblePressureMatrix_SRK(Seg seg)
   Seg_SRK *srk = (Seg_SRK *)seg->data;
   DM       dm  = seg->dm;
   Mat      M_full;
-  FlucaFD  compact_dir[SEG_SRK_MAX_DIM];
-  PetscInt d;
 
   PetscFunctionBegin;
-  /* Build compact Laplacian: sum_d d^2p/dx_d^2 */
-  for (d = 0; d < srk->dim; d++) {
-    PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)d, 2, 2, DMSTAG_ELEMENT, srk->dim, DMSTAG_ELEMENT, srk->dim, &compact_dir[d]));
-    PetscCall(FlucaFDSetUp(compact_dir[d]));
-  }
-  PetscCall(FlucaFDSumCreate(srk->dim, compact_dir, &srk->fd_pres_lap));
-  PetscCall(FlucaFDSetUp(srk->fd_pres_lap));
-  for (d = 0; d < srk->dim; d++) PetscCall(FlucaFDDestroy(&compact_dir[d]));
-
-  /* Assemble into full matrix and extract pressure block */
+  /* Assemble compact Laplacian (provided by PhysINS) into full matrix and extract pressure block */
   PetscCall(DMCreateMatrix(dm, &M_full));
   PetscCall(MatSetOption(M_full, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
   PetscCall(MatZeroEntries(M_full));
@@ -114,7 +107,7 @@ PetscErrorCode SegSRKAssembleHelmholtz(Seg seg)
   PetscFunctionBegin;
   PetscCheck(seg->dt > 0., PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "Time step size must be positive for Helmholtz assembly");
   gamma_diag = tab->A[(s - 1) * s + (s - 1)]; /* a_ss */
-  helm_shift = srk->rho / (gamma_diag * seg->dt);
+  helm_shift = 1. / (gamma_diag * seg->dt);
 
   for (d = 0; d < srk->dim; d++) {
     if (srk->A_helm[d]) PetscCall(MatDestroy(&srk->A_helm[d]));
@@ -154,8 +147,9 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
   PetscCheck(srk->rho > 0., comm, PETSC_ERR_ARG_WRONGSTATE, "Density not set. Call SegSRKSetDensity() first");
   PetscCheck(srk->fd_div, comm, PETSC_ERR_ARG_WRONGSTATE, "Divergence operator not set. Call SegSRKSetDivergence() first");
   PetscCheck(seg->rhsfn, comm, PETSC_ERR_ARG_WRONGSTATE, "RHS function not set. Call SegSetRHSFunction() first");
+  PetscCheck(srk->fd_pres_lap, comm, PETSC_ERR_ARG_WRONGSTATE, "Pressure Laplacian not set. Call SegSRKSetPressureLaplacian() first");
   for (d = 0; d < srk->dim; d++) {
-    PetscCheck(srk->fd_laplacian[d], comm, PETSC_ERR_ARG_WRONGSTATE, "Laplacian operator [%" PetscInt_FMT "] not set", d);
+    PetscCheck(srk->fd_diff[d], comm, PETSC_ERR_ARG_WRONGSTATE, "Diffusion operator [%" PetscInt_FMT "] not set", d);
     PetscCheck(srk->fd_grad_p[d], comm, PETSC_ERR_ARG_WRONGSTATE, "Gradient operator [%" PetscInt_FMT "] not set", d);
   }
 
@@ -289,7 +283,6 @@ static PetscErrorCode SegReset_SRK(Seg seg)
   }
   PetscCall(MatDestroy(&srk->A_pres));
   PetscCall(KSPDestroy(&srk->ksp_pres));
-  PetscCall(FlucaFDDestroy(&srk->fd_pres_lap));
   PetscCall(MatNullSpaceDestroy(&srk->pres_nullspace));
 
   srk->dt_assembled = -1.;
@@ -332,14 +325,14 @@ static PetscErrorCode SegView_SRK(Seg seg, PetscViewer viewer)
 
 /* --- Operator setters ---------------------------------------------------- */
 
-PetscErrorCode SegSRKSetLaplacian(Seg seg, PetscInt d, FlucaFD fd)
+PetscErrorCode SegSRKSetDiffusion(Seg seg, PetscInt d, FlucaFD fd)
 {
   Seg_SRK *srk = (Seg_SRK *)seg->data;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(seg, SEG_CLASSID, 1, SEGSRK);
   PetscCheck(d >= 0 && d < SEG_SRK_MAX_DIM, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_OUTOFRANGE, "Component %" PetscInt_FMT " out of range [0, %d)", d, SEG_SRK_MAX_DIM);
-  srk->fd_laplacian[d] = fd;
+  srk->fd_diff[d] = fd;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -379,13 +372,13 @@ PetscErrorCode SegSRKSetFieldIS(Seg seg, PetscInt dim, IS is_vel, IS is_p, IS is
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode SegSRKSetStabilization(Seg seg, FlucaFD fd)
+PetscErrorCode SegSRKSetPressureLaplacian(Seg seg, FlucaFD fd)
 {
   Seg_SRK *srk = (Seg_SRK *)seg->data;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(seg, SEG_CLASSID, 1, SEGSRK);
-  srk->fd_pstab = fd;
+  srk->fd_pres_lap = fd;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
