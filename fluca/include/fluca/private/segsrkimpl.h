@@ -27,6 +27,10 @@ typedef struct {
   Vec *mu_tilde; /* per-stage pressure vectors [s] (pressure-sized, owned) */
   Vec  mu_work;  /* pressure-sized work vector for mu_j computation */
 
+  /* CK-type correction (non-ARS schemes only) */
+  Vec        nu_tilde_1; /* D(K_1^u + K_hat_1^u) + alpha*D*u_1 (pressure-sized, owned) */
+  PetscReal *d_j;        /* d_j recurrence coefficients [s] (owned) */
+
   /* FlucaFD operators (borrowed, not owned) */
   FlucaFD fd_diff[SEG_SRK_MAX_DIM];   /* viscous diffusion F_diff per velocity component */
   FlucaFD fd_grad_p[SEG_SRK_MAX_DIM]; /* pressure gradient per direction */

@@ -178,6 +178,22 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
   PetscCall(PetscMalloc1(s, &srk->mu_tilde));
   for (i = 0; i < s; i++) PetscCall(VecDuplicate(tmp_p, &srk->mu_tilde[i]));
   PetscCall(VecDuplicate(tmp_p, &srk->mu_work));
+
+  /* CK-type correction: precompute d_j and allocate nu_tilde_1 */
+  if (!tab->ars_type) {
+    PetscReal gamma_diag = tab->A[(s - 1) * s + (s - 1)];
+    PetscInt  k;
+
+    PetscCall(VecDuplicate(tmp_p, &srk->nu_tilde_1));
+    PetscCall(PetscMalloc1(s, &srk->d_j));
+    srk->d_j[0] = 1.;
+    for (i = 1; i < s; i++) {
+      srk->d_j[i] = 0.;
+      for (k = 0; k < i; k++) srk->d_j[i] -= tab->A[i * s + k] * srk->d_j[k];
+      srk->d_j[i] /= gamma_diag;
+    }
+  }
+
   PetscCall(VecDestroy(&tmp_p));
 
   /* Create KSPs */
@@ -275,6 +291,8 @@ static PetscErrorCode SegReset_SRK(Seg seg)
     PetscCall(PetscFree(srk->mu_tilde));
   }
   PetscCall(VecDestroy(&srk->mu_work));
+  PetscCall(VecDestroy(&srk->nu_tilde_1));
+  PetscCall(PetscFree(srk->d_j));
 
   for (d = 0; d < srk->dim; d++) {
     PetscCall(MatDestroy(&srk->L_helm[d]));

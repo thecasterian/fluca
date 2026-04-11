@@ -82,6 +82,27 @@ PetscErrorCode SegStep_SRK(Seg seg)
       PetscCall(VecCopy(up_p, srk->mu_tilde[i]));
       PetscCall(VecRestoreSubVector(srk->U_prev, srk->is_p, &up_p));
       PetscCall(VecScale(srk->mu_tilde[i], -alpha_hat_tau));
+
+      /* CK non-ARS: compute K_u[0] = F_diff(u_1) and nu_tilde_1 */
+      if (!tab->ars_type) {
+        /* K_u[0] = F_diff(u_1) */
+        PetscCall(VecZeroEntries(srk->K_u[i]));
+        for (d = 0; d < dim; d++) PetscCall(FlucaFDApply(srk->fd_diff[d], 0, seg->dm, seg->dm, srk->Y[i], srk->K_u[i]));
+
+        /* nu_tilde_1 = D(K_1^u + K_hat_1^u + alpha * u^{n-1}) */
+        PetscCall(VecCopy(srk->K_u[i], srk->work2));
+        PetscCall(VecAXPY(srk->work2, 1., srk->K_hat_u[i]));
+        PetscCall(VecGetSubVector(srk->work2, srk->is_vel, &w_vel));
+        PetscCall(VecGetSubVector(srk->U_prev, srk->is_vel, &up_vel));
+        PetscCall(VecAXPY(w_vel, alpha, up_vel));
+        PetscCall(VecRestoreSubVector(srk->U_prev, srk->is_vel, &up_vel));
+        PetscCall(VecRestoreSubVector(srk->work2, srk->is_vel, &w_vel));
+        PetscCall(VecZeroEntries(srk->work1));
+        PetscCall(FlucaFDApply(srk->fd_div, 0, seg->dm, seg->dm, srk->work2, srk->work1));
+        PetscCall(VecGetSubVector(srk->work1, srk->is_p, &w_p));
+        PetscCall(VecCopy(w_p, srk->nu_tilde_1));
+        PetscCall(VecRestoreSubVector(srk->work1, srk->is_p, &w_p));
+      }
     } else {
       /* --- Implicit stage (a_ii = gamma) --- */
 
@@ -167,6 +188,9 @@ PetscErrorCode SegStep_SRK(Seg seg)
       PetscCall(VecCopy(w_p, rhs_p));
       PetscCall(VecRestoreSubVector(srk->work1, srk->is_p, &w_p));
       PetscCall(VecScale(rhs_p, -1.));
+
+      /* CK non-ARS: subtract nu_j = d_j * nu_tilde_1 from pressure Poisson RHS */
+      if (!tab->ars_type) PetscCall(VecAXPY(rhs_p, srk->d_j[i], srk->nu_tilde_1));
 
       PetscCall(KSPSolve(srk->ksp_pres, rhs_p, sol_p));
 
