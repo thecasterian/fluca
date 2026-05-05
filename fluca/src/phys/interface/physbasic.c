@@ -18,10 +18,12 @@ PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
 
   PetscCall(PhysInitializePackage());
   PetscCall(FlucaHeaderCreate(p, PHYS_CLASSID, "Phys", "Physical Model", "Phys", comm, PhysDestroy, PhysView));
-  p->base_dm       = NULL;
+  p->ib            = NULL;
   p->bodyforce     = NULL;
   p->bodyforce_ctx = NULL;
+  p->dm            = NULL;
   p->sol_dm        = NULL;
+  p->sol_ib        = NULL;
   p->dim           = PETSC_DETERMINE;
   p->data          = NULL;
   p->setupcalled   = PETSC_FALSE;
@@ -80,8 +82,9 @@ PetscErrorCode PhysDestroy(Phys *phys)
   /* Call type-specific destroy */
   PetscTryTypeMethod((*phys), destroy);
 
+  PetscCall(FlucaIBDestroy(&(*phys)->sol_ib));
   PetscCall(DMDestroy(&(*phys)->sol_dm));
-  PetscCall(DMDestroy(&(*phys)->base_dm));
+  PetscCall(FlucaIBDestroy(&(*phys)->ib));
 
   PetscCall(PetscHeaderDestroy(phys));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -97,17 +100,24 @@ PetscErrorCode PhysSetUp(Phys phys)
 
   PetscCall(PetscLogEventBegin(PHYS_SetUp, (PetscObject)phys, 0, 0, 0));
 
-  /* Validate base DM */
-  PetscCheck(phys->base_dm, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Base DM not set. Call PhysSetBaseDM() first");
-  PetscCall(PetscObjectTypeCompare((PetscObject)phys->base_dm, DMSTAG, &isdmstag));
+  /* Validate IB and base DM */
+  PetscCheck(phys->ib, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "IB not set. Call PhysSetIB() first");
+  PetscCall(FlucaIBSetUp(phys->ib));
+  PetscCall(FlucaIBGetDM(phys->ib, &phys->dm));
+  PetscCheck(phys->dm, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "IB has no DM. Call FlucaIBSetDM() first");
+  PetscCall(PetscObjectTypeCompare((PetscObject)phys->dm, DMSTAG, &isdmstag));
   PetscCheck(isdmstag, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONG, "Base DM must be DMStag");
 
   /* Extract dimension */
-  PetscCall(DMGetDimension(phys->base_dm, &phys->dim));
+  PetscCall(DMGetDimension(phys->dm, &phys->dim));
 
   /* Call subtype createsolutiondm */
   PetscCheck(phys->ops->createsolutiondm, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Phys type not set or subtype does not implement createsolutiondm");
   PetscCall((*phys->ops->createsolutiondm)(phys));
+
+  /* Wrap solution DM in a FlucaIBNone for downstream Seg consumption.
+   * Future IB-aware subtypes may instead transfer geometry to a matching IB type. */
+  PetscCall(FlucaIBCreateNone(PetscObjectComm((PetscObject)phys), phys->sol_dm, &phys->sol_ib));
 
   /* Call subtype setup */
   PetscTryTypeMethod(phys, setup);

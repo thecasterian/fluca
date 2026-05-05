@@ -13,5 +13,5 @@ add_library(fluca_seg SHARED
 target_include_directories(fluca_seg PUBLIC
     ${CMAKE_SOURCE_DIR}/fluca/include
 )
-target_link_libraries(fluca_seg PUBLIC fluca::fd)
+target_link_libraries(fluca_seg PUBLIC fluca::fd fluca::ib)
 add_library(fluca::seg ALIAS fluca_seg)

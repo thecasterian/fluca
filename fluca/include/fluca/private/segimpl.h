@@ -22,8 +22,9 @@ struct _p_Seg {
   PETSCHEADER(struct _SegOps);
 
   /* Solution */
-  Vec sol; /* solution vector (borrowed, not owned) */
-  DM  dm;  /* solution DM (borrowed, not owned) */
+  Vec     sol; /* solution vector (borrowed, not owned) */
+  FlucaIB ib;  /* IB wrapping the solution DM (referenced) */
+  DM      dm;  /* solution DM, borrowed from ib (cached for fast access) */
 
   /* Time state */
   PetscReal t;           /* current time */

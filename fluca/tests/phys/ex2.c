@@ -94,6 +94,7 @@ static PetscErrorCode FillExactYDot(DM sol_dm, PetscInt dim, PetscReal nu, Vec Y
 int main(int argc, char **argv)
 {
   DM        dm, sol_dm;
+  FlucaIB   ib;
   Phys      phys;
   Vec       Y, Ydot, F, G;
   PetscInt  N   = 8;
@@ -111,9 +112,11 @@ int main(int argc, char **argv)
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 2 * PETSC_PI, 0., 2 * PETSC_PI, 0., 0.));
 
   /* Create Phys INS (periodic — no explicit BCs needed) */
+  PetscCall(FlucaIBCreateNone(PETSC_COMM_WORLD, dm, &ib));
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
   PetscCall(PhysSetType(phys, PHYSINS));
-  PetscCall(PhysSetBaseDM(phys, dm));
+  PetscCall(PhysSetIB(phys, ib));
+  PetscCall(FlucaIBDestroy(&ib));
   PetscCall(PhysINSSetDensity(phys, rho));
   PetscCall(PhysINSSetViscosity(phys, mu));
   PetscCall(PhysSetFromOptions(phys));

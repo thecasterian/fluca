@@ -1,15 +1,24 @@
 #include <fluca/private/physimpl.h>
 
-PetscErrorCode PhysSetBaseDM(Phys phys, DM dm)
+PetscErrorCode PhysSetIB(Phys phys, FlucaIB ib)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscValidHeaderSpecificType(dm, DM_CLASSID, 2, DMSTAG);
-  PetscCheckSameComm(phys, 1, dm, 2);
-  PetscCheck(!phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Cannot change base DM after PhysSetUp()");
-  PetscCall(DMDestroy(&phys->base_dm));
-  phys->base_dm = dm;
-  PetscCall(PetscObjectReference((PetscObject)dm));
+  PetscValidHeaderSpecific(ib, FLUCAIB_CLASSID, 2);
+  PetscCheckSameComm(phys, 1, ib, 2);
+  PetscCheck(!phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Cannot change IB after PhysSetUp()");
+  PetscCall(FlucaIBDestroy(&phys->ib));
+  phys->ib = ib;
+  PetscCall(PetscObjectReference((PetscObject)ib));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysGetIB(Phys phys, FlucaIB *ib)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscAssertPointer(ib, 2);
+  *ib = phys->ib;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -18,7 +27,7 @@ PetscErrorCode PhysGetBaseDM(Phys phys, DM *dm)
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscAssertPointer(dm, 2);
-  *dm = phys->base_dm;
+  *dm = phys->dm;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

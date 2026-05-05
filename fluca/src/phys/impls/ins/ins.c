@@ -8,17 +8,17 @@ static PetscErrorCode PhysCreateSolutionDM_INS(Phys phys)
   /* Create cell-centered DMStag: dim+1 element DOFs (velocity components + pressure) */
   switch (phys->dim) {
   case 2:
-    PetscCall(DMStagCreateCompatibleDMStag(phys->base_dm, 0, 0, phys->dim + 1, 0, &phys->sol_dm));
+    PetscCall(DMStagCreateCompatibleDMStag(phys->dm, 0, 0, phys->dim + 1, 0, &phys->sol_dm));
     break;
   case 3:
-    PetscCall(DMStagCreateCompatibleDMStag(phys->base_dm, 0, 0, 0, phys->dim + 1, &phys->sol_dm));
+    PetscCall(DMStagCreateCompatibleDMStag(phys->dm, 0, 0, 0, phys->dim + 1, &phys->sol_dm));
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)phys), PETSC_ERR_SUP, "Unsupported dimension %" PetscInt_FMT, phys->dim);
   }
   /* Share coordinates from base DM */
   PetscCall(DMStagSetCoordinateDMType(phys->sol_dm, DMPRODUCT));
-  PetscCall(DMGetCoordinateDM(phys->base_dm, &cdm));
+  PetscCall(DMGetCoordinateDM(phys->dm, &cdm));
   PetscCall(DMSetCoordinateDM(phys->sol_dm, cdm));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -26,13 +26,15 @@ struct _p_Phys {
   PETSCHEADER(struct _PhysOps);
 
   /* Parameters */
-  DM               base_dm; /* user-provided DMStag (grid topology + coordinates) */
+  FlucaIB          ib; /* user-provided IB wrapping the base DMStag (referenced) */
   PhysBodyForceFn *bodyforce;
   void            *bodyforce_ctx;
 
   /* Data */
+  DM       dm;     /* base DMStag, borrowed from ib (cached for fast access) */
   DM       sol_dm; /* solution DMStag (created by subtype during setup) */
-  PetscInt dim;    /* spatial dimension (extracted from base_dm) */
+  FlucaIB  sol_ib; /* IB wrapping sol_dm (created during setup, owned) */
+  PetscInt dim;    /* spatial dimension (extracted from dm) */
   void    *data;   /* subtype-specific */
 
   /* State */

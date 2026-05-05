@@ -1,3 +1,4 @@
+#include <flucaib.h>
 #include <flucaphys.h>
 #include <flucasys.h>
 #include <petscdmstag.h>
@@ -14,6 +15,7 @@ static PetscErrorCode BCVelocityZero(PetscInt dim, PetscReal t, const PetscReal 
 int main(int argc, char **argv)
 {
   DM        dm, sol_dm;
+  FlucaIB   ib;
   Phys      phys;
   PetscInt  f;
   PhysINSBC bc;
@@ -28,9 +30,11 @@ int main(int argc, char **argv)
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
 
   /* Create Phys INS, set zero velocity BCs on all faces */
+  PetscCall(FlucaIBCreateNone(PETSC_COMM_WORLD, dm, &ib));
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
   PetscCall(PhysSetType(phys, PHYSINS));
-  PetscCall(PhysSetBaseDM(phys, dm));
+  PetscCall(PhysSetIB(phys, ib));
+  PetscCall(FlucaIBDestroy(&ib));
 
   bc.type       = PHYS_INS_BC_VELOCITY;
   bc.fn         = BCVelocityZero;

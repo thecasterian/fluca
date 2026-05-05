@@ -19,6 +19,7 @@ PetscErrorCode SegCreate(MPI_Comm comm, Seg *seg)
   PetscCall(SegInitializePackage());
   PetscCall(FlucaHeaderCreate(s, SEG_CLASSID, "Seg", "Segregated Time Integrator", "Seg", comm, SegDestroy, SegView));
   s->sol         = NULL;
+  s->ib          = NULL;
   s->dm          = NULL;
   s->t           = 0.;
   s->dt          = PETSC_DECIDE;
@@ -116,6 +117,7 @@ PetscErrorCode SegDestroy(Seg *seg)
 
   PetscCall(SegReset(*seg));
   PetscTryTypeMethod((*seg), destroy);
+  PetscCall(FlucaIBDestroy(&(*seg)->ib));
 
   PetscCall(PetscHeaderDestroy(seg));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -155,13 +157,25 @@ PetscErrorCode SegViewFromOptions(Seg seg, PetscObject obj, const char name[])
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode SegSetDM(Seg seg, DM dm)
+PetscErrorCode SegSetIB(Seg seg, FlucaIB ib)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(seg, SEG_CLASSID, 1);
-  PetscValidHeaderSpecific(dm, DM_CLASSID, 2);
-  PetscCheckSameComm(seg, 1, dm, 2);
-  seg->dm = dm;
+  PetscValidHeaderSpecific(ib, FLUCAIB_CLASSID, 2);
+  PetscCheckSameComm(seg, 1, ib, 2);
+  PetscCall(FlucaIBDestroy(&seg->ib));
+  seg->ib = ib;
+  PetscCall(PetscObjectReference((PetscObject)ib));
+  PetscCall(FlucaIBGetDM(ib, &seg->dm));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode SegGetIB(Seg seg, FlucaIB *ib)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(seg, SEG_CLASSID, 1);
+  PetscAssertPointer(ib, 2);
+  *ib = seg->ib;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

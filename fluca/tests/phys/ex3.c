@@ -48,6 +48,7 @@ static PetscErrorCode FillExactSolution(DM sol_dm, Vec Y)
 int main(int argc, char **argv)
 {
   DM                 dm, sol_dm;
+  FlucaIB            ib;
   Phys               phys;
   Mat                J, Jfd;
   Vec                Y, Ydot, F0, F1, F2, e_k, y_pert, ydot_pert;
@@ -66,9 +67,11 @@ int main(int argc, char **argv)
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 2 * PETSC_PI, 0., 2 * PETSC_PI, 0., 0.));
 
   /* Create and set up Phys INS */
+  PetscCall(FlucaIBCreateNone(PETSC_COMM_WORLD, dm, &ib));
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
   PetscCall(PhysSetType(phys, PHYSINS));
-  PetscCall(PhysSetBaseDM(phys, dm));
+  PetscCall(PhysSetIB(phys, ib));
+  PetscCall(FlucaIBDestroy(&ib));
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));

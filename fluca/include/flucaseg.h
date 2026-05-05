@@ -2,6 +2,7 @@
 
 #include <flucasys.h>
 #include <flucafd.h>
+#include <flucaib.h>
 #include <petscdmstag.h>
 
 /* Seg - Segregated Time Integrator */
@@ -36,8 +37,9 @@ FLUCA_EXTERN PetscErrorCode SegSetOptionsPrefix(Seg, const char[]);
 FLUCA_EXTERN PetscErrorCode SegAppendOptionsPrefix(Seg, const char[]);
 FLUCA_EXTERN PetscErrorCode SegGetOptionsPrefix(Seg, const char *[]);
 
-/* DM */
-FLUCA_EXTERN PetscErrorCode SegSetDM(Seg, DM);
+/* IB / DM */
+FLUCA_EXTERN PetscErrorCode SegSetIB(Seg, FlucaIB);
+FLUCA_EXTERN PetscErrorCode SegGetIB(Seg, FlucaIB *);
 FLUCA_EXTERN PetscErrorCode SegGetDM(Seg, DM *);
 
 /* Solution */

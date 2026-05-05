@@ -1,6 +1,7 @@
 #pragma once
 
 #include <flucasys.h>
+#include <flucaib.h>
 #include <flucaseg.h>
 #include <petscdmstag.h>
 
@@ -41,7 +42,8 @@ typedef struct {
 FLUCA_EXTERN PetscErrorCode PhysCreate(MPI_Comm, Phys *);
 FLUCA_EXTERN PetscErrorCode PhysSetType(Phys, PhysType);
 FLUCA_EXTERN PetscErrorCode PhysGetType(Phys, PhysType *);
-FLUCA_EXTERN PetscErrorCode PhysSetBaseDM(Phys, DM);
+FLUCA_EXTERN PetscErrorCode PhysSetIB(Phys, FlucaIB);
+FLUCA_EXTERN PetscErrorCode PhysGetIB(Phys, FlucaIB *);
 FLUCA_EXTERN PetscErrorCode PhysGetBaseDM(Phys, DM *);
 FLUCA_EXTERN PetscErrorCode PhysGetSolutionDM(Phys, DM *);
 FLUCA_EXTERN PetscErrorCode PhysSetFromOptions(Phys);

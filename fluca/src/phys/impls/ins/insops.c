@@ -665,8 +665,8 @@ PetscErrorCode PhysSetUpSeg_INS(Phys phys, Seg seg)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(seg, SEG_CLASSID, 2);
-  /* Wire DM and solution data */
-  PetscCall(SegSetDM(seg, phys->sol_dm));
+  /* Wire IB (which carries the solution DM) and solution data */
+  PetscCall(SegSetIB(seg, phys->sol_ib));
 
   /* Wire density */
   PetscCall(SegSRKSetDensity(seg, ins->rho));
