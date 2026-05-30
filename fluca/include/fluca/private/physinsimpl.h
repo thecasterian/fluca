@@ -23,7 +23,7 @@ typedef struct {
   PhysINSBC bcs[PHYS_INS_MAX_FACES];
 
   /* BC adapters: [comp][face] — created during setup to bridge PhysINSBCFn to FlucaFDBCValueFn */
-  PhysINS_BCAdapter bc_adapters[PHYS_INS_MAX_DIM + 1][PHYS_INS_MAX_FACES];
+  PhysINS_BCAdapter bc_adapters[PHYS_INS_MAX_DIM][PHYS_INS_MAX_FACES];
 
   /* Implicit operators */
   FlucaFD fd_diff[PHYS_INS_MAX_DIM];   /* F_diff_d = sum_e d/dx_e(nu * d(u_d)/dx_e) */

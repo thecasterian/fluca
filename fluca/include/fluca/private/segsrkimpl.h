@@ -37,9 +37,6 @@ typedef struct {
   FlucaFD fd_div;                     /* divergence (includes rho) */
   FlucaFD fd_pres_lap;                /* compact pressure Laplacian L */
 
-  /* Physical parameters */
-  PetscReal rho;
-
   /* Spatial dimension */
   PetscInt dim;
 

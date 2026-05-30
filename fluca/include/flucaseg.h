@@ -93,4 +93,3 @@ FLUCA_EXTERN PetscErrorCode SegSRKSetGradient(Seg, PetscInt, FlucaFD);
 FLUCA_EXTERN PetscErrorCode SegSRKSetDivergence(Seg, FlucaFD);
 FLUCA_EXTERN PetscErrorCode SegSRKSetFieldIS(Seg, PetscInt, IS, IS, IS[]);
 FLUCA_EXTERN PetscErrorCode SegSRKSetPressureLaplacian(Seg, FlucaFD);
-FLUCA_EXTERN PetscErrorCode SegSRKSetDensity(Seg, PetscReal);

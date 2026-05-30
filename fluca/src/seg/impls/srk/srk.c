@@ -44,7 +44,7 @@ PetscErrorCode SegSRKGetType(Seg seg, SegSRKType *srktype)
 
 /* --- Setup: build matrices and KSPs -------------------------------------- */
 
-static PetscErrorCode AssembleLaplacianSubMatrices_SRK(Seg seg)
+static PetscErrorCode AssembleDiffusionSubMatrices_SRK(Seg seg)
 {
   Seg_SRK *srk = (Seg_SRK *)seg->data;
   DM       dm  = seg->dm;
@@ -141,7 +141,6 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
     PetscCheck(tab->A[i * s + i] == gamma_diag, comm, PETSC_ERR_SUP, "SRK tableau \"%s\" is not SDIRK: A[%" PetscInt_FMT "][%" PetscInt_FMT "] = %g differs from gamma = %g", tab->name, i, i, (double)tab->A[i * s + i], (double)gamma_diag);
   }
   PetscCheck(srk->dim > 0, comm, PETSC_ERR_ARG_WRONGSTATE, "Field IS not set. Call SegSRKSetFieldIS() first");
-  PetscCheck(srk->rho > 0., comm, PETSC_ERR_ARG_WRONGSTATE, "Density not set. Call SegSRKSetDensity() first");
   PetscCheck(srk->fd_div, comm, PETSC_ERR_ARG_WRONGSTATE, "Divergence operator not set. Call SegSRKSetDivergence() first");
   PetscCheck(seg->rhsfn, comm, PETSC_ERR_ARG_WRONGSTATE, "RHS function not set. Call SegSetRHSFunction() first");
   PetscCheck(srk->fd_pres_lap, comm, PETSC_ERR_ARG_WRONGSTATE, "Pressure Laplacian not set. Call SegSRKSetPressureLaplacian() first");
@@ -167,7 +166,7 @@ static PetscErrorCode SegSetUp_SRK(Seg seg)
   PetscCall(VecDuplicate(seg->sol, &srk->work3));
 
   /* Assemble operator sub-matrices */
-  PetscCall(AssembleLaplacianSubMatrices_SRK(seg));
+  PetscCall(AssembleDiffusionSubMatrices_SRK(seg));
   PetscCall(AssemblePressureMatrix_SRK(seg));
 
   /* Allocate mu/mu_tilde pressure vectors */
@@ -330,7 +329,6 @@ static PetscErrorCode SegView_SRK(Seg seg, PetscViewer viewer)
     PetscCall(PetscViewerASCIIPrintf(viewer, "FSAL: %s\n", tab->fsal ? "yes" : "no"));
     PetscCall(PetscViewerASCIIPrintf(viewer, "ARS type: %s\n", tab->ars_type ? "yes" : "no"));
     PetscCall(PetscViewerASCIIPrintf(viewer, "(alpha*tau)_max: %g\n", (double)tab->alpha_tau_max));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "Density: %g\n", (double)srk->rho));
     PetscCall(PetscViewerASCIIPrintf(viewer, "Dimension: %" PetscInt_FMT "\n", srk->dim));
     PetscCall(PetscViewerASCIIPopTab(viewer));
   }
@@ -393,17 +391,6 @@ PetscErrorCode SegSRKSetPressureLaplacian(Seg seg, FlucaFD fd)
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(seg, SEG_CLASSID, 1, SEGSRK);
   srk->fd_pres_lap = fd;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode SegSRKSetDensity(Seg seg, PetscReal rho)
-{
-  Seg_SRK *srk = (Seg_SRK *)seg->data;
-
-  PetscFunctionBegin;
-  PetscValidHeaderSpecificType(seg, SEG_CLASSID, 1, SEGSRK);
-  PetscCheck(rho > 0., PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_OUTOFRANGE, "Density must be positive, got %g", (double)rho);
-  srk->rho = rho;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

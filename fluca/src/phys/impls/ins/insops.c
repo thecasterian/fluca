@@ -325,7 +325,9 @@ PetscErrorCode PhysINSCreateSolverData_Internal(Phys phys)
 
 /* --- PhysSetUpSeg_INS: wire FlucaFD operators into Seg ------------------- */
 
-/* SRK explicit RHS callback: -(conv(u) + G(p) - source) / rho */
+/* SRK explicit RHS callback: -conv(u)/rho + source/rho.
+   The pressure gradient G(p) is NOT included here — it is applied inside the SRK
+   stage as a constraint force in the Helmholtz and pressure solves. */
 static PetscErrorCode SRKExplicitRHS(PetscReal t, Vec Y, Vec F, void *ctx)
 {
   Phys      phys = (Phys)ctx;
@@ -402,9 +404,6 @@ PetscErrorCode PhysSetUpSeg_INS(Phys phys, Seg seg)
   PetscValidHeaderSpecific(seg, SEG_CLASSID, 2);
   /* Wire DM and solution data */
   PetscCall(SegSetDM(seg, phys->sol_dm));
-
-  /* Wire density */
-  PetscCall(SegSRKSetDensity(seg, ins->rho));
 
   /* Wire FlucaFD operators */
   for (d = 0; d < dim; d++) {

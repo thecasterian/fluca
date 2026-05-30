@@ -76,7 +76,7 @@ static PetscErrorCode PhysView_INS(Phys phys, PetscViewer viewer)
 PetscErrorCode PhysCreate_INS(Phys phys)
 {
   Phys_INS *ins;
-  PetscInt  f, g;
+  PetscInt  f;
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&ins));
@@ -91,24 +91,7 @@ PetscErrorCode PhysCreate_INS(Phys phys)
     ins->bcs[f].fn_dot     = NULL;
     ins->bcs[f].fn_dot_ctx = NULL;
   }
-
-  /* Initialize operators to NULL */
-  for (f = 0; f < PHYS_INS_MAX_DIM; f++) {
-    ins->fd_diff[f]   = NULL;
-    ins->fd_grad_p[f] = NULL;
-    ins->fd_conv[f]   = NULL;
-    ins->fd_interp[f] = NULL;
-    for (g = 0; g < PHYS_INS_MAX_DIM; g++) {
-      ins->fd_tvd[f][g]           = NULL;
-      ins->fd_momentum_flux[f][g] = NULL;
-    }
-  }
-  ins->fd_div    = NULL;
-  ins->dm_face   = NULL;
-  ins->mass_flux = NULL;
-  ins->is_vel    = NULL;
-  ins->is_p      = NULL;
-  ins->temp      = NULL;
+  /* All operator/IS/Vec pointers are left NULL by PetscNew (zero-initialized). */
 
   phys->data                  = ins;
   phys->ops->createsolutiondm = PhysCreateSolutionDM_INS;
