@@ -1,4 +1,4 @@
 cmake_minimum_required(VERSION 3.20)
 
 add_subdirectory(fd)
-add_subdirectory(seg)
+add_subdirectory(phys)

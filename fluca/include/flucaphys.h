@@ -1,7 +1,7 @@
 #pragma once
 
 #include <flucasys.h>
-#include <flucaseg.h>
+#include <petscts.h>
 #include <petscdmstag.h>
 
 /* Phys - Physical Model */
@@ -58,8 +58,8 @@ FLUCA_EXTERN PetscErrorCode PhysGetOptionsPrefix(Phys, const char *[]);
 /* Body force (base class) */
 FLUCA_EXTERN PetscErrorCode PhysSetBodyForce(Phys, PhysBodyForceFn *, void *);
 
-/* Solver setup */
-FLUCA_EXTERN PetscErrorCode PhysSetUpSeg(Phys, Seg);
+/* Solver setup (TS only) */
+FLUCA_EXTERN PetscErrorCode PhysSetUpTS(Phys, TS);
 
 /* Direct residual/Jacobian access (for testing) */
 FLUCA_EXTERN PetscErrorCode PhysComputeIFunction(Phys, PetscReal, Vec, Vec, Vec);
