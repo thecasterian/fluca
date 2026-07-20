@@ -1,19 +1,20 @@
 # Fluca
 
-A computational fluid dynamics (CFD) framework for incompressible viscous flows on Cartesian grids, built on [PETSc](https://petsc.org/).
+A Computational Fluid Dynamics (CFD) framework based on the Immersed Boundary Method (IBM) and PETSc.
 
 ## Overview
 
-Fluca solves the incompressible Navier-Stokes equations using finite differences on collocated Cartesian grids with pressure stabilization. Time integration uses the Segregated Runge-Kutta (SRK) method, which decouples the velocity-pressure system into Helmholtz and Poisson solves at each stage.
+Fluca is a high-performance CFD solver designed for simulating incompressible viscous flows using the Immersed Boundary Method. Built on top of [PETSc](https://petsc.org/), it leverages parallel computing capabilities for efficient large-scale simulations.
 
 ### Features
 
-- **Collocated grid**: Cell-centered velocity and pressure with pressure stabilization
-- **FlucaFD operators**: Composable finite difference operators (derivatives, compositions, scaling, sums, TVD schemes)
-- **Segregated Runge-Kutta**: IMEX time integration with 12 selectable schemes (Bakhvalov, 2025)
-- **Physics models**: Modular `Phys` abstraction with incompressible Navier-Stokes (`PhysINS`) subtype
-- **Parallel computing**: MPI-based parallelization through PETSc
-- **CGNS I/O**: Standard file format support for solution data
+- **Immersed Boundary Method**: Handle complex geometries without body-fitted meshes
+- **Cartesian Grid Support**: Efficient structured mesh implementation
+- **Navier-Stokes Solver**: Unsteady incompressible viscous flow simulation
+- **Parallel Computing**: MPI-based parallelization through PETSc
+- **CGNS I/O**: Standard file format support for mesh and solution data
+- **Flexible Boundary Conditions**: Support for various boundary condition types
+- **Extensible Architecture**: Modular design for easy addition of new solvers and mesh types
 
 ## Build
 
@@ -27,16 +28,13 @@ Fluca solves the incompressible Navier-Stokes equations using finite differences
 
 ### Building
 
-```bash
-cmake -B build
-cmake --build build
-```
-
-### Running Tests
+Fluca uses CMake as its build system.
 
 ```bash
-ctest --test-dir build -R tests_       # Unit tests (fast)
-ctest --test-dir build -R tutorials_   # Tutorial tests (slow)
+mkdir build
+cd build
+cmake ..
+make
 ```
 
 ### CMake Options
@@ -48,23 +46,23 @@ ctest --test-dir build -R tutorials_   # Tutorial tests (slow)
 
 ## Getting Started
 
-See [QUICK_START.md](docs/QUICK_START.md) for a step-by-step guide to building simulations with Fluca.
+For a step-by-step guide to using Fluca, including brief API documentation and examples, see [QUICK_START.md](QUICK_START.md).
 
 ## Theory Guide
 
-See [THEORY_GUIDE.md](docs/THEORY_GUIDE.md) for the mathematical formulation and numerical methods.
+For detailed information on the theoretical foundations and numerical methods implemented in Fluca, see [THEORY_GUIDE.md](THEORY_GUIDE.md).
 
 ## Output
 
-Fluca uses the CGNS format for output files. You can visualize results using standard CFD post-processing tools such as ParaView or Tecplot.
+Fluca uses the CGNS format for output files. You can visualize it using standard CFD post-processing tools such as ParaView or Tecplot.
 
 ## Development
 
 ### Code Style
 
-The project uses `clang-format` for code formatting. The configuration file `.clang-format`, adopted from PETSc, is provided in the repository.
+The project uses `clang-format` for code formatting. The configuration file `.clang-format`, which is adopted from PETSc, is provided in the repository.
 
-For other style guidelines, such as naming conventions or formatting not covered by `clang-format`, refer to the [PETSc Style and Usage Guide](https://petsc.org/release/developers/style/).
+For other style guidelines, such as naming conventions or formatting not covered by `clang-format`, please refer to the [PETSc Style and Usage Guide](https://petsc.org/release/developers/style/).
 
 ### Pre-commit Hooks
 
@@ -83,4 +81,3 @@ This project is licensed under the BSD 3-Clause License. See the [LICENSE](LICEN
 
 - PETSc: [https://petsc.org/](https://petsc.org/)
 - CGNS: [https://cgns.github.io/](https://cgns.github.io/)
-- S. Bakhvalov, Segregated Runge-Kutta methods for the incompressible Navier-Stokes equations, [arXiv:2506.09519](https://arxiv.org/abs/2506.09519) (2025)

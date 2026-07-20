@@ -1,9 +1,0 @@
-Type: srk
-Default time: 0.
-Default step number: 0
-dt: 0.005
-t: 1.5
-max_time: 10.
-max_steps: 200
-Prefix: test_
-Prefix after append: test_sub_

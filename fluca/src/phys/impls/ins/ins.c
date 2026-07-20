@@ -46,7 +46,6 @@ static PetscErrorCode PhysSetUp_INS(Phys phys)
 static PetscErrorCode PhysDestroy_INS(Phys phys)
 {
   Phys_INS *ins = (Phys_INS *)phys->data;
-  PetscInt  d;
 
   PetscFunctionBegin;
   PetscCall(PhysINSDestroyOperators_Internal(phys));
@@ -54,7 +53,6 @@ static PetscErrorCode PhysDestroy_INS(Phys phys)
   PetscCall(MatDestroy(&ins->J_rhs));
   PetscCall(ISDestroy(&ins->is_vel));
   PetscCall(ISDestroy(&ins->is_p));
-  for (d = 0; d < PHYS_INS_MAX_DIM; d++) PetscCall(ISDestroy(&ins->is_comp[d]));
   PetscCall(MatNullSpaceDestroy(&ins->nullspace));
   PetscCall(PetscFree(phys->data));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -126,7 +124,7 @@ PetscErrorCode PhysCreate_INS(Phys phys)
   phys->ops->setup              = PhysSetUp_INS;
   phys->ops->destroy            = PhysDestroy_INS;
   phys->ops->view               = PhysView_INS;
-  phys->ops->setupseg           = PhysSetUpSeg_INS;
+  phys->ops->setupts            = PhysSetUpTS_INS;
   phys->ops->computeifunction   = PhysComputeIFunction_INS;
   phys->ops->computeijacobian   = PhysComputeIJacobian_INS;
   phys->ops->computerhsfunction = PhysComputeRHSFunction_INS;
