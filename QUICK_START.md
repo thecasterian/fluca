@@ -202,6 +202,36 @@ PetscCall(PetscViewerFlucaCGNSOpen(comm, filename, mode, &viewer));
 // mode: FILE_MODE_READ, FILE_MODE_WRITE
 ```
 
+### Phys (IMEX Navier-Stokes Solver)
+
+The `Phys` object is an alternative solver that advances the incompressible equations as a coupled differential-algebraic system with a PETSc `TS` IMEX integrator (see [Coupled IMEX Formulation](THEORY_GUIDE.md#coupled-imex-formulation)). Instead of managing time stepping internally, `Phys` supplies the residual and Jacobian callbacks and the user drives `TS` directly.
+
+```c
+Phys phys;
+DM   sol_dm;
+TS   ts;
+Vec  Y;
+
+PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
+PetscCall(PhysSetType(phys, PHYSINS));       // incompressible Navier-Stokes
+PetscCall(PhysSetBaseDM(phys, dm));          // DMStag with grid + coordinates
+PetscCall(PhysINSSetDensity(phys, rho));
+PetscCall(PhysINSSetViscosity(phys, mu));
+PetscCall(PhysSetFromOptions(phys));
+PetscCall(PhysSetUp(phys));                  // builds the solution DM (dim+1 DOFs/cell)
+PetscCall(PhysGetSolutionDM(phys, &sol_dm));
+
+PetscCall(TSCreate(PETSC_COMM_WORLD, &ts));
+PetscCall(PhysSetUpTS(phys, ts));            // wires IFunction/IJacobian/RHSFunction,
+                                             // defaults to TSARKIMEX + Schur fieldsplit
+PetscCall(TSSetFromOptions(ts));
+
+PetscCall(DMCreateGlobalVector(sol_dm, &Y)); // set initial condition, then:
+PetscCall(TSSolve(ts, Y));
+```
+
+Because the pressure is an algebraic variable, use a stiffly-accurate scheme (`-ts_arkimex_type 3`, the default) and a saddle-point solver. The default preconditioner is a fractional-step pressure-Poisson Schur complement; `-pc_fieldsplit_schur_precondition selfp` selects a SIMPLE-type preconditioner instead. A worked example is in `fluca/tutorials/phys/ex1.c` (2D Taylor-Green vortex).
+
 ## Basic Workflow
 
 A typical Fluca simulation follows this workflow:

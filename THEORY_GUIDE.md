@@ -10,6 +10,7 @@ This document presents the theoretical foundations and numerical methods impleme
 - [Spatial Discretization](#spatial-discretization)
 - [Immersed Boundary Method](#immersed-boundary-method)
 - [Segregated Solvers](#segregated-solvers)
+- [Coupled IMEX Formulation](#coupled-imex-formulation)
 
 ## Governing Equations
 
@@ -348,6 +349,78 @@ Comparing (18) with (16), the approximations to $\mathbf{A}$ are identified as:
 
 The continuity equation remains unperturbed.
 
+## Coupled IMEX Formulation
+
+The segregated approach above advances the flow by applying an approximate block factorization once per time step, so the splitting error enters the solution. Fluca's `Phys` module provides an alternative that removes this error: the semi-discretized equations are cast as a differential-algebraic system and advanced with an implicit-explicit (IMEX) Runge-Kutta integrator driving PETSc's `TS` directly. The velocity-pressure coupling is retained and solved to convergence at every step, and the pressure-velocity decoupling of the segregated methods reappears here as a *preconditioner* for the coupled system.
+
+### Pressure-Stabilized Semi-Discrete System
+
+Discretizing the momentum and continuity equations in space while leaving time continuous, and folding the Rhie-Chow correction into a cell-centered pressure-stabilization operator, yields for the cell-centered velocity $\mathbf{u}$ and pressure $p$:
+
+```math
+\rho \frac{d\mathbf{u}}{dt} + \mathbf{N}(\mathbf{u}) + \mathbf{G} p = \mu \mathbf{L} \mathbf{u} + \mathbf{f}(t) \tag{20}
+```
+
+```math
+\mathbf{D} \mathbf{u} + \sigma_0 \mathbf{S} p = 0 \tag{21}
+```
+
+where the discrete operators are
+
+- $\mathbf{N}$: convection, discretized with a second-order TVD scheme built on the face mass flux $\rho \overline{\mathbf{u}}$;
+- $\mathbf{G}$: cell-centered pressure gradient;
+- $\mathbf{L}$: viscous Laplacian;
+- $\mathbf{D} = \rho \, \delta \overline{\mathbf{u}} / \delta x_i$: divergence of the interpolated velocity (carrying the factor $\rho$);
+- $\mathbf{S} = \mathbf{L}^\text{wide} - \mathbf{L}^\text{compact}$: pressure stabilization, the difference between the wide (interpolated-gradient) and compact discrete Laplacians. This is the collocated Rhie-Chow correction $\mathbf{D}\mathbf{R}$ of Eq. (11) expressed as a cell-centered operator.
+
+The stabilization coefficient is $\sigma_0 = \Delta t$; since $\mathbf{D}$ already carries $\rho$, the effective coefficient relative to $\nabla \cdot \mathbf{u}$ is $\Delta t / \rho$, consistent with the Rhie-Chow coefficient of Eq. (7).
+
+Because the continuity equation (21) contains no time derivative, the system is a **differential-algebraic equation** (DAE). Written as $\mathbf{M}\, d\mathbf{y}/dt = \dots$ with $\mathbf{y} = (\mathbf{u}, p)$, the mass matrix
+
+```math
+\mathbf{M} = \begin{bmatrix} \rho \mathbf{I} & 0 \\ 0 & 0 \end{bmatrix}
+```
+
+is singular: the pressure is an algebraic variable that instantaneously enforces stabilized incompressibility. The stabilization $\sigma_0 \mathbf{S}$ is what makes this constraint solvable on the collocated grid, by suppressing the checkerboard pressure modes.
+
+### IMEX Runge-Kutta Advancement
+
+`TSARKIMEX` solves systems of the form $\mathbf{F}(t, \mathbf{y}, \dot{\mathbf{y}}) = \mathbf{G}(t, \mathbf{y})$, where $\mathbf{F}$ collects the stiff terms (advanced implicitly) and $\mathbf{G}$ the non-stiff terms (advanced explicitly) [6]. The terms of (20)-(21) are sorted by stiffness:
+
+```math
+\mathbf{F} = \begin{bmatrix} \rho \dot{\mathbf{u}} - \mu \mathbf{L}\mathbf{u} + \mathbf{G} p \\ \mathbf{D}\mathbf{u} + \sigma_0 \mathbf{S} p \end{bmatrix}, \qquad
+\mathbf{G} = \begin{bmatrix} -\mathbf{N}(\mathbf{u}) + \mathbf{f}(t) \\ 0 \end{bmatrix}
+```
+
+The viscous term (parabolic-stiff), pressure gradient, and the algebraic continuity constraint are integrated implicitly; convection (non-stiff) is integrated explicitly. Keeping convection explicit leaves the implicit residual **linear** in $(\mathbf{u}, p)$, so each implicit stage is a single linear solve with no Newton iteration, at the cost of a convective CFL restriction.
+
+For an $s$-stage scheme with a diagonally-implicit tableau $a^I$, stage $i$ requires an implicit solve whose Jacobian is $\mathbf{J} = \text{shift}\cdot\mathbf{M} + \partial\mathbf{F}/\partial\mathbf{y}$, with the stage shift $\text{shift} = 1/(a^I_{ii}\,\Delta t)$:
+
+```math
+\mathbf{J} = \begin{bmatrix} \text{shift}\,\rho \mathbf{I} - \mu \mathbf{L} & \mathbf{G} \\ \mathbf{D} & \sigma_0 \mathbf{S} \end{bmatrix} \tag{22}
+```
+
+The singular pressure block of $\mathbf{M}$ contributes nothing to $\mathbf{J}$; the corresponding diagonal is instead supplied by the stabilization $\sigma_0 \mathbf{S}$, so $\mathbf{J}$ is nonsingular apart from the constant-pressure null space (removed by a null-space projection). A **stiffly-accurate** scheme (e.g. `ARKIMEX3`) is required so that the algebraic pressure is advanced at the full order of the method.
+
+### Schur-Complement Preconditioning
+
+The stage matrix (22) is a saddle-point system of the same LDU form analyzed in the segregated section, now for the collocated two-field system in which the face-normal velocity has been eliminated and the Rhie-Chow correction absorbed into $\sigma_0 \mathbf{S}$. Writing $\mathbf{A} = \text{shift}\,\rho \mathbf{I} - \mu \mathbf{L}$ and $\mathbf{C} = \sigma_0 \mathbf{S}$, the block factorization is
+
+```math
+\mathbf{J} =
+\begin{bmatrix} \mathbf{I} & 0 \\ \mathbf{D}\mathbf{A}^{-1} & \mathbf{I} \end{bmatrix}
+\begin{bmatrix} \mathbf{A} & 0 \\ 0 & \widehat{\mathbf{S}} \end{bmatrix}
+\begin{bmatrix} \mathbf{I} & \mathbf{A}^{-1}\mathbf{G} \\ 0 & \mathbf{I} \end{bmatrix},
+\qquad \widehat{\mathbf{S}} = \mathbf{C} - \mathbf{D}\mathbf{A}^{-1}\mathbf{G} \tag{23}
+```
+
+Fluca applies this factorization as a preconditioner via `PCFIELDSPLIT` of type Schur with full factorization. The two triangular factors are the momentum **predictor** and velocity **corrector** (solves with $\mathbf{A}$), and the middle factor is the **pressure-Poisson** solve (with the Schur complement $\widehat{\mathbf{S}}$) — precisely the fractional-step sweep of Eq. (18), now used to precondition rather than to time-advance. The choice of the momentum-operator approximation $\widetilde{\mathbf{A}}^{-1}$ in $\widehat{\mathbf{S}}$ selects the classical method:
+
+- **Fractional step** (default): $\widetilde{\mathbf{A}}^{-1} \approx (\text{shift}\,\rho)^{-1}\mathbf{I}$ retains only the mass/time term, so $\widehat{\mathbf{S}}$ reduces to a scaled pressure Poisson operator. Fluca preconditions the Schur complement with an assembled compact pressure Laplacian, which is spectrally equivalent to $\widehat{\mathbf{S}}$ and covers all pressure modes.
+- **SIMPLE**: $\widetilde{\mathbf{A}}^{-1} \approx \operatorname{diag}(\mathbf{A})^{-1}$ gives an assembled approximate Schur complement (`-pc_fieldsplit_schur_precondition selfp`).
+
+The two approximations coincide as $\Delta t \to 0$, where the momentum diagonal is dominated by the mass term. Because the split preconditions an outer Krylov iteration, the fully coupled solution is recovered independently of the choice; only the iteration count differs. The default may be replaced from the options database, so `-pc_fieldsplit_schur_precondition selfp` selects the SIMPLE preconditioner and `-ksp_type preonly -pc_type lu` selects a monolithic direct solve.
+
 ## References
 
 1. D. Kim and H. Choi, A Second-Order Time-Accurate Finite Volume Method for Unsteady Incompressible Flow on Hybrid Unstructured Grids, _J. Comput. Phys._, 162, 411&ndash;428 (2000).
@@ -355,3 +428,4 @@ The continuity equation remains unperturbed.
 3. S. Armfield and R. Street, The pressure accuracy of fractional-step methods for the Navier-Stokes equations on staggered grids, _ANZIAM J._, 44, C20&ndash;C39 (2003).
 4. H. Elman, V. E. Howle, J. Shadid, R. Shuttleworth, and R. Tuminaro, A taxonomy and comparison of parallel block multi-level preconditioners for the incompressible Navier–Stokes equations, _J. Comput. Phys._, 227, 1790&ndash;1808 (2008)
 5. J. Perot, An analysis of the fractional step method, _J. Comput. Phys._, 108, 51&ndash;58 (1993).
+6. U. M. Ascher, S. J. Ruuth, and R. J. Spiteri, Implicit-explicit Runge-Kutta methods for time-dependent partial differential equations, _Appl. Numer. Math._, 25, 151&ndash;167 (1997).
