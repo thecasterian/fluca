@@ -83,7 +83,6 @@ PetscErrorCode PhysCreate_INS(Phys phys)
   PetscCall(PetscNew(&ins));
   ins->rho        = 1.;
   ins->mu         = 1.;
-  ins->alpha      = 0.;
   ins->dt_current = 0.;
 
   /* Initialize BCs to NONE */

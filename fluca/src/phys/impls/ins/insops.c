@@ -325,7 +325,7 @@ static PetscErrorCode UpdateConvectionVelocity_Internal(Phys phys, PetscReal t, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* --- IFunction: implicit part (viscous + pressure + ODE-transformed continuity) --- */
+/* --- IFunction: implicit part (viscous + pressure gradient + algebraic continuity) --- */
 
 PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, Vec F)
 {
@@ -337,7 +337,9 @@ PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
   PetscFunctionBegin;
   PetscCall(VecZeroEntries(F));
 
-  /* F_momentum_d = fd_laplacian[d](u) + fd_grad_p[d](p) */
+  /* F_momentum_d = fd_laplacian[d](u) + fd_grad_p[d](p).
+     Convection is treated explicitly (see RHSFunction), so the implicit residual is
+     linear in (U, U_t). */
   for (d = 0; d < dim; d++) {
     PetscCall(VecZeroEntries(temp));
     PetscCall(FlucaFDApply(ins->fd_laplacian[d], t, sol_dm, sol_dm, U, temp));
@@ -358,21 +360,14 @@ PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
     PetscCall(VecRestoreSubVector(F, ins->is_vel, &F_vel));
   }
 
-  /* F_continuity = alpha * [D(u) + sigma_0 * S(p)] + [D(du/dt) + sigma_0 * S(dp/dt)]
-     with alpha = 1 (not 1/dt) so that alpha * sigma_0 = dt, avoiding the O(1) pressure error
-     from the alpha * sigma_0 = 1 cancellation. */
+  /* F_continuity = D(u) + sigma_0 * S(p): algebraic (DAE) incompressibility constraint.
+     Enforced directly each stage (no d/dt transform) — this is the fractional-step
+     projection expressed as a DAE, matching PETSc's TS Navier-Stokes example (ts/ex46). */
   PetscCall(VecZeroEntries(temp));
   PetscCall(FlucaFDApply(ins->fd_div, t, sol_dm, sol_dm, U, temp));
-  PetscCall(VecAXPY(F, ins->alpha, temp));
-  PetscCall(VecZeroEntries(temp));
-  PetscCall(FlucaFDApply(ins->fd_pstab, t, sol_dm, sol_dm, U, temp));
-  PetscCall(VecAXPY(F, ins->alpha, temp));
-
-  PetscCall(VecZeroEntries(temp));
-  PetscCall(FlucaFDApplyDot(ins->fd_div, t, sol_dm, sol_dm, U_t, temp));
   PetscCall(VecAXPY(F, 1., temp));
   PetscCall(VecZeroEntries(temp));
-  PetscCall(FlucaFDApplyDot(ins->fd_pstab, t, sol_dm, sol_dm, U_t, temp));
+  PetscCall(FlucaFDApply(ins->fd_pstab, t, sol_dm, sol_dm, U, temp));
   PetscCall(VecAXPY(F, 1., temp));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -388,14 +383,14 @@ PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
   PetscFunctionBegin;
   PetscCall(MatZeroEntries(Pmat));
 
-  /* Velocity rows: fd_laplacian[d] + fd_grad_p[d] (output_c = d < dim) */
+  /* Velocity rows: fd_laplacian[d] + fd_grad_p[d] (convection is explicit, in RHSFunction) */
   for (d = 0; d < dim; d++) {
     PetscCall(FlucaFDGetOperator(ins->fd_laplacian[d], sol_dm, sol_dm, Pmat));
     PetscCall(FlucaFDGetOperator(ins->fd_grad_p[d], sol_dm, sol_dm, Pmat));
   }
 
   /* Continuity rows: fd_div + fd_pstab (output_c = dim, no overlap with velocity rows).
-     Scaled by (shift + alpha) from alpha*C(U) + dC/dt(U_t) linearization. */
+     Algebraic constraint: coefficient 1, no shift (pressure carries no time derivative). */
   PetscCall(FlucaFDGetOperator(ins->fd_div, sol_dm, sol_dm, Pmat));
   PetscCall(FlucaFDGetOperator(ins->fd_pstab, sol_dm, sol_dm, Pmat));
 
@@ -419,20 +414,6 @@ PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
     PetscCall(VecDestroy(&diag_shift));
   }
 
-  /* Continuity rows *= (shift + alpha) */
-  {
-    Vec diag_scale;
-    PetscCall(MatCreateVecs(Pmat, NULL, &diag_scale));
-    PetscCall(VecSet(diag_scale, 1.));
-    {
-      Vec subvec;
-      PetscCall(VecGetSubVector(diag_scale, ins->is_p, &subvec));
-      PetscCall(VecSet(subvec, shift + ins->alpha));
-      PetscCall(VecRestoreSubVector(diag_scale, ins->is_p, &subvec));
-    }
-    PetscCall(MatDiagonalScale(Pmat, diag_scale, NULL));
-    PetscCall(VecDestroy(&diag_scale));
-  }
   if (Amat != Pmat) {
     PetscCall(MatAssemblyBegin(Amat, MAT_FINAL_ASSEMBLY));
     PetscCall(MatAssemblyEnd(Amat, MAT_FINAL_ASSEMBLY));
@@ -452,17 +433,17 @@ PetscErrorCode PhysComputeRHSFunction_INS(Phys phys, PetscReal t, Vec U, Vec G)
   PetscFunctionBegin;
   PetscCall(VecZeroEntries(G));
 
-  /* Update convection operators with current velocity */
+  /* Update convection operators (mass flux + TVD) with the current velocity */
   PetscCall(UpdateConvectionVelocity_Internal(phys, t, U));
 
-  /* G_momentum_d = -fd_conv[d](u) */
+  /* G_momentum_d = -fd_conv[d](u) (convection treated explicitly) */
   for (d = 0; d < dim; d++) {
     PetscCall(VecZeroEntries(temp));
     PetscCall(FlucaFDApply(ins->fd_conv[d], t, sol_dm, sol_dm, U, temp));
     PetscCall(VecAXPY(G, -1., temp));
   }
 
-  /* G_momentum_d += f_d(t) */
+  /* G_momentum_d += f_d(t) (body force) */
   if (phys->bodyforce) {
     const PetscScalar **arrc[3] = {NULL, NULL, NULL};
     PetscInt            xs, ys, zs, xm, ym, zm, slot_elem;
@@ -514,8 +495,8 @@ static PetscErrorCode UpdatePressureStabilizationDt_Internal(TS ts, Phys_INS *in
   PetscFunctionBegin;
   PetscCall(TSGetTimeStep(ts, &dt));
   if (dt != ins->dt_current) {
+    /* sigma_0 = dt (classical Rhie-Chow pressure-stabilization coefficient) */
     PetscCall(FlucaFDScaleSetConstant(ins->fd_pstab, dt));
-    ins->alpha      = 1. / dt;
     ins->dt_current = dt;
   }
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -639,65 +620,35 @@ PetscErrorCode PhysSetUpTS_INS(Phys phys, TS ts)
   PetscCall(TSSetIJacobian(ts, ins->J, ins->J, IJacobian_INS, phys));
   PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_INS, phys));
 
-  /* Default to TSARKIMEX */
+  /* Default to TSARKIMEX (IMEX): convection is the explicit part, and the viscous +
+     pressure + algebraic-continuity terms are the implicit part. The default ARKIMEX
+     scheme is stiffly accurate, which integrates the algebraic pressure constraint of
+     the DAE cleanly. */
   PetscCall(TSSetType(ts, TSARKIMEX));
 
-  /* Default solver: KSPONLY + nested fieldsplit.
-     Outer: velocity (u,v,[w]) vs pressure (p).
-     Inner: additive fieldsplit on velocity — u, v, [w] independently
-     (the implicit operator has no cross terms between velocity components). */
+  /* The implicit residual is linear in (U, U_t), so each implicit stage is a single
+     linear solve — use KSPONLY (no Newton iteration needed). */
   {
-    SNES        snes;
-    KSP         ksp, *outer_sub;
-    PC          pc, vel_pc;
-    PetscInt    dim          = phys->dim, n_splits, n_vel, n_cells;
-    const char *comp_names[] = {"u", "v", "w"};
+    SNES snes;
+    KSP  ksp;
+    PC   pc;
 
     PetscCall(TSGetSNES(ts, &snes));
     PetscCall(SNESSetType(snes, SNESKSPONLY));
     PetscCall(SNESGetKSP(snes, &ksp));
     PetscCall(KSPGetPC(ksp, &pc));
+
+    /* Default linear solver: PCFIELDSPLIT with a Schur complement between velocity and
+       pressure. This is the fractional-step projection expressed as a preconditioner:
+       the velocity block solve is the momentum predictor/corrector and the pressure
+       Schur solve is the pressure-Poisson step. Sub-solver details are left to the
+       options database (see ts/ex46). The pressure null space composed onto is_p in
+       PhysINSCreateSolverData_Internal propagates to the Schur complement. */
     PetscCall(PCSetType(pc, PCFIELDSPLIT));
     PetscCall(PCFieldSplitSetIS(pc, "velocity", ins->is_vel));
     PetscCall(PCFieldSplitSetIS(pc, "pressure", ins->is_p));
-
-    /* Inner split: u, v, [w] within the velocity sub-block.
-       DMStagCreateISFromStencils orders indices by (location, component) per cell,
-       so the velocity sub-block interleaves components: [u0,v0, u1,v1, ...].
-       Each component d occupies stride positions: start=d, step=dim, count=n_cells. */
-    PetscCall(ISGetLocalSize(ins->is_vel, &n_vel));
-    n_cells = n_vel / dim;
-
-    PetscCall(PCFieldSplitGetSubKSP(pc, &n_splits, &outer_sub));
-
-    /* Velocity sub-PC: additive fieldsplit over u, v, [w] */
-    PetscCall(KSPGetPC(outer_sub[0], &vel_pc));
-    PetscCall(PCSetType(vel_pc, PCFIELDSPLIT));
-    for (PetscInt d = 0; d < dim; d++) {
-      IS is_d;
-
-      PetscCall(ISCreateStride(PetscObjectComm((PetscObject)phys), n_cells, d, dim, &is_d));
-      PetscCall(PCFieldSplitSetIS(vel_pc, comp_names[d], is_d));
-      PetscCall(ISDestroy(&is_d));
-    }
-
-    /* Default leaf-level sub-PCs to Jacobi (ILU fails on periodic grids) */
-    {
-      PetscInt n_vel_splits;
-      KSP     *vel_sub;
-      PC       sub_pc;
-
-      PetscCall(PCFieldSplitGetSubKSP(vel_pc, &n_vel_splits, &vel_sub));
-      for (PetscInt d = 0; d < n_vel_splits; d++) {
-        PetscCall(KSPGetPC(vel_sub[d], &sub_pc));
-        PetscCall(PCSetType(sub_pc, PCJACOBI));
-      }
-      PetscCall(PetscFree(vel_sub));
-
-      PetscCall(KSPGetPC(outer_sub[1], &sub_pc));
-      PetscCall(PCSetType(sub_pc, PCJACOBI));
-    }
-    PetscCall(PetscFree(outer_sub));
+    PetscCall(PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR));
+    PetscCall(PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_FULL));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

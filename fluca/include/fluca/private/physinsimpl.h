@@ -16,9 +16,8 @@ typedef struct {
 } PhysINS_BCAdapter;
 
 typedef struct {
-  PetscReal rho;   /* density */
-  PetscReal mu;    /* dynamic viscosity */
-  PetscReal alpha; /* constraint feedback parameter = 1/dt */
+  PetscReal rho; /* density */
+  PetscReal mu;  /* dynamic viscosity */
 
   /* Boundary conditions (one per face: left, right, down, up, back, front) */
   PhysINSBC bcs[PHYS_INS_MAX_FACES];
