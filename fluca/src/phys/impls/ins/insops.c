@@ -208,6 +208,21 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     for (d = 0; d < dim; d++) PetscCall(FlucaFDDestroy(&pstab_dir[d]));
   }
 
+  /* --- fd_ppoisson = sum_d d^2p/dx_d^2: compact pressure Laplacian used to build the
+     fractional-step (pressure-Poisson) Schur-complement preconditioner --- */
+  {
+    FlucaFD lap_dir[PHYS_INS_MAX_DIM];
+
+    for (d = 0; d < dim; d++) {
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 2, 2, DMSTAG_ELEMENT, dim, DMSTAG_ELEMENT, dim, &lap_dir[d]));
+      PetscCall(FlucaFDSetUp(lap_dir[d]));
+    }
+    PetscCall(FlucaFDSumCreate(dim, lap_dir, &ins->fd_ppoisson));
+    PetscCall(SetPressureNeumannBCs(phys, ins->fd_ppoisson, dim));
+    PetscCall(FlucaFDSetUp(ins->fd_ppoisson));
+    for (d = 0; d < dim; d++) PetscCall(FlucaFDDestroy(&lap_dir[d]));
+  }
+
   /* --- dm_face (single), mass_flux = F_d = rho * interp_d(u_d), fd_interp[d] --- */
   {
     DM cdm;
@@ -293,6 +308,7 @@ PetscErrorCode PhysINSDestroyOperators_Internal(Phys phys)
   }
   PetscCall(FlucaFDDestroy(&ins->fd_div));
   PetscCall(FlucaFDDestroy(&ins->fd_pstab));
+  PetscCall(FlucaFDDestroy(&ins->fd_ppoisson));
   PetscCall(VecDestroy(&ins->mass_flux));
   PetscCall(DMDestroy(&ins->dm_face));
   PetscCall(VecDestroy(&ins->temp));
@@ -602,6 +618,29 @@ PetscErrorCode PhysINSCreateSolverData_Internal(Phys phys)
       PetscCall(MatNullSpaceDestroy(&p_nullspace));
     }
   }
+
+  /* Assemble the pressure-Poisson matrix Ap = -sum_d d^2p/dx_d^2 on the pressure DOFs.
+     Used as the fractional-step Schur-complement preconditioner (PC_FIELDSPLIT_SCHUR_PRE_USER).
+     The compact Laplacian is spectrally equivalent to the true Schur S = sigma_0 S - D A^-1 G,
+     so it preconditions all pressure modes (unlike A11 = sigma_0 S, which only sees high
+     frequencies). Sign is flipped so Ap matches A11's positive-on-checkerboard convention;
+     the dt scale is irrelevant to a Krylov-accelerated preconditioner. */
+  {
+    Mat          M_full;
+    MatNullSpace ns;
+
+    PetscCall(DMCreateMatrix(sol_dm, &M_full));
+    PetscCall(MatSetOption(M_full, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+    PetscCall(FlucaFDGetOperator(ins->fd_ppoisson, sol_dm, sol_dm, M_full));
+    PetscCall(MatAssemblyBegin(M_full, MAT_FINAL_ASSEMBLY));
+    PetscCall(MatAssemblyEnd(M_full, MAT_FINAL_ASSEMBLY));
+    PetscCall(MatCreateSubMatrix(M_full, ins->is_p, ins->is_p, MAT_INITIAL_MATRIX, &ins->Ap));
+    PetscCall(MatScale(ins->Ap, -1.));
+    PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &ns));
+    PetscCall(MatSetNullSpace(ins->Ap, ns));
+    PetscCall(MatNullSpaceDestroy(&ns));
+    PetscCall(MatDestroy(&M_full));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -649,6 +688,11 @@ PetscErrorCode PhysSetUpTS_INS(Phys phys, TS ts)
     PetscCall(PCFieldSplitSetIS(pc, "pressure", ins->is_p));
     PetscCall(PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR));
     PetscCall(PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_FULL));
+
+    /* Default Schur-complement preconditioner: the fractional-step pressure-Poisson
+       operator Ap. This is set before TSSetFromOptions, so users can override it with
+       -pc_fieldsplit_schur_precondition (e.g. selfp for a SIMPLE-type preconditioner). */
+    PetscCall(PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_USER, ins->Ap));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
