@@ -106,6 +106,36 @@ Because the continuity equation (4) contains no time derivative, the system is a
 
 is singular: the pressure is an algebraic variable that instantaneously enforces stabilized incompressibility. The stabilization $\sigma_0 \mathbf{S}$ is what makes this constraint solvable on the collocated grid, by suppressing the checkerboard pressure modes.
 
+### Rhie-Chow Interpolation and Pressure Stabilization
+
+The stabilization operator $\mathbf{S}$ in Eq. (4) originates from the Rhie-Chow interpolation of the face-normal velocity. Interpolating the cell-centered velocity to the faces directly would leave each cell pressure decoupled from its own gradient and admit checkerboard modes; instead the face-normal velocity is constructed from a face-discretized momentum balance, which introduces a pressure-gradient correction:
+
+```math
+U = \overline{\mathbf{u}} \cdot \mathbf{n} + \frac{\Delta t}{\rho}\left( \overline{\nabla p} \cdot \mathbf{n} - \left. \frac{\partial p}{\partial n} \right|_\text{face} \right)
+```
+
+Here $\overline{(\cdot)}$ denotes linear interpolation from the two adjacent cell centers to the face. The first term is ordinary interpolation; the correction is the difference between the interpolated cell pressure gradient and the compact gradient evaluated directly at the face. Because the compact face gradient couples the two adjacent cell pressures, this correction removes the odd-even decoupling. Following Zang et al. [1], the coefficient is fixed at $\Delta t / \rho$ rather than taken from the momentum-equation diagonal as in the classical Rhie-Chow scheme.
+
+Introducing the interpolation operator $\mathbf{T}$ (cell velocity to face normal), the cell-centered pressure gradient $\mathbf{G}$, and the staggered face-normal pressure gradient $\mathbf{G}^\text{st}$, the face velocity becomes
+
+```math
+U = \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\left( \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st} \right) p = \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\,\mathbf{R}\, p, \qquad \mathbf{R} = \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st}
+```
+
+where $\mathbf{R}$ is the Rhie-Chow correction operator. The discrete continuity equation is the divergence of these face-normal velocities; writing $\mathbf{D}_0$ for that divergence operator ($\mathbf{D}_0 U = \sum_i \delta U_i / \delta x_i$),
+
+```math
+\mathbf{D}_0 \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\, \mathbf{D}_0 \mathbf{R}\, p = 0
+```
+
+The two products in $\mathbf{D}_0\mathbf{R} = \mathbf{D}_0\mathbf{T}\mathbf{G} - \mathbf{D}_0\mathbf{G}^\text{st}$ are two discrete Laplacians of the pressure: $\mathbf{D}_0\mathbf{T}\mathbf{G}$ interpolates the cell gradient before differencing, a **wide** ($2\Delta x$-stencil) Laplacian, whereas $\mathbf{D}_0\mathbf{G}^\text{st}$ differences the compact face gradient, a **compact** (nearest-neighbor) Laplacian. Their difference is the stabilization operator:
+
+```math
+\mathbf{S} = \mathbf{D}_0\mathbf{R} = \mathbf{L}^\text{wide} - \mathbf{L}^\text{compact}
+```
+
+Multiplying the continuity relation by $\rho$ and identifying the divergence of the interpolated velocity $\mathbf{D} = \rho\,\mathbf{D}_0\mathbf{T}$ and $\sigma_0 = \Delta t$ recovers the stabilized constraint (4), $\mathbf{D}\mathbf{u} + \sigma_0 \mathbf{S} p = 0$. The stabilization $\sigma_0 \mathbf{S}$ is therefore the divergence of the Rhie-Chow correction. It vanishes to the order of the truncation error for smooth pressure fields — where the wide and compact Laplacians agree — and acts only on the under-resolved checkerboard modes, which is precisely the coupling required by the collocated grid.
+
 ### IMEX Runge-Kutta Advancement
 
 `TSARKIMEX` solves systems of the form $\mathbf{F}(t, \mathbf{y}, \dot{\mathbf{y}}) = \mathbf{G}(t, \mathbf{y})$, where $\mathbf{F}$ collects the stiff terms (advanced implicitly) and $\mathbf{G}$ the non-stiff terms (advanced explicitly) [4]. The terms of (3)-(4) are sorted by stiffness:
