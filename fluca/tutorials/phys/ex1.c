@@ -15,10 +15,13 @@ static const char help[] = "2D Taylor-Green vortex with TSARKIMEX\n"
                            "\n"
                            "The pressure is an algebraic (DAE) variable, so use a stiffly-accurate\n"
                            "integrator (e.g. -ts_arkimex_type 3, the default) and a saddle-point solver.\n"
+                           "The default solver is a velocity/pressure PCFIELDSPLIT whose Schur complement\n"
+                           "is preconditioned by the fractional-step pressure-Poisson operator.\n"
                            "Recommended solvers:\n"
                            "  monolithic direct : -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero\n"
-                           "  Schur fieldsplit  : -fieldsplit_velocity_pc_type lu\n"
-                           "                      -fieldsplit_pressure_pc_type jacobi -fieldsplit_pressure_ksp_rtol 1e-10\n";
+                           "  fractional step   : -fieldsplit_velocity_pc_type lu\n"
+                           "                      -fieldsplit_pressure_pc_type jacobi -fieldsplit_pressure_ksp_rtol 1e-10\n"
+                           "  SIMPLE            : add -pc_fieldsplit_schur_precondition selfp\n";
 
 /* Fill solution vector with exact TGV at time t */
 static PetscErrorCode FillExactSolution(DM sol_dm, PetscReal nu, PetscReal t, Vec Y)
@@ -216,5 +219,12 @@ int main(int argc, char **argv)
     suffix: schur
     nsize: 1
     args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_type arkimex -ts_arkimex_type 3 -ts_adapt_type none -fieldsplit_velocity_ksp_type preonly -fieldsplit_velocity_pc_type lu -fieldsplit_pressure_ksp_type gmres -fieldsplit_pressure_ksp_rtol 1e-10 -fieldsplit_pressure_pc_type jacobi
+
+  # SIMPLE-type preconditioner: override the default fractional-step Schur with an
+  # assembled selfp (diagonal A00^-1) approximation.
+  test:
+    suffix: simple
+    nsize: 1
+    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_type arkimex -ts_arkimex_type 3 -ts_adapt_type none -pc_fieldsplit_schur_precondition selfp -fieldsplit_pressure_mat_schur_complement_ainv_type diag -fieldsplit_velocity_ksp_type preonly -fieldsplit_velocity_pc_type lu -fieldsplit_pressure_ksp_type gmres -fieldsplit_pressure_ksp_rtol 1e-10 -fieldsplit_pressure_pc_type jacobi
 
 TEST*/
