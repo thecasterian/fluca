@@ -49,15 +49,11 @@ static PetscErrorCode PhysDestroy_INS(Phys phys)
 
   PetscFunctionBegin;
   PetscCall(PhysINSDestroyOperators_Internal(phys));
-  PetscCall(KSPDestroy(&ins->ksp_fsm));
   PetscCall(MatDestroy(&ins->J));
   PetscCall(MatDestroy(&ins->J_rhs));
-  PetscCall(MatDestroy(&ins->Ap));
-  PetscCall(MatDestroy(&ins->Sp));
   PetscCall(ISDestroy(&ins->is_vel));
   PetscCall(ISDestroy(&ins->is_p));
   PetscCall(MatNullSpaceDestroy(&ins->nullspace));
-  PetscCall(PetscOptionsDestroy(&ins->fsm_options));
   PetscCall(PetscFree(phys->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -111,21 +107,14 @@ PetscErrorCode PhysCreate_INS(Phys phys)
   }
   ins->fd_div              = NULL;
   ins->fd_pstab            = NULL;
-  ins->fd_ppoisson         = NULL;
   ins->dm_face             = NULL;
   ins->mass_flux           = NULL;
   ins->J                   = NULL;
   ins->J_rhs               = NULL;
-  ins->Ap                  = NULL;
-  ins->Sp                  = NULL;
-  ins->ksp_fsm             = NULL;
-  ins->fsm_options         = NULL;
   ins->is_vel              = NULL;
   ins->is_p                = NULL;
   ins->nullspace           = NULL;
   ins->temp                = NULL;
-  ins->shift_current       = 0.;
-  ins->fsm_configured      = PETSC_FALSE;
   ins->has_pressure_outlet = PETSC_FALSE;
 
   phys->data                    = ins;

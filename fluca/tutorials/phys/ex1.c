@@ -15,20 +15,17 @@ static const char help[] = "2D Taylor-Green vortex with TSARKIMEX\n"
                            "\n"
                            "The pressure is an algebraic (DAE) variable, so use a stiffly-accurate\n"
                            "integrator (e.g. -ts_arkimex_type 3, the default) and a saddle-point solver.\n"
-                           "The default solver is a velocity/pressure PCFIELDSPLIT preconditioner configured as\n"
-                           "the fractional step method: A^-1 is approximated by the mass inverse 1/(shift*rho)\n"
-                           "both in the Schur complement (A1) and in the velocity correction (A2). A1 = A2 is\n"
-                           "what makes it mass preserving. See THEORY_GUIDE.md.\n"
-                           "Only the momentum predictor is left to the options database:\n"
-                           "  -fieldsplit_velocity_pc_type lu\n"
-                           "  -fieldsplit_pressure_pc_type jacobi -fieldsplit_pressure_ksp_rtol 1e-10\n"
-                           "Alternatives:\n"
+                           "Phys INS sets up a velocity/pressure PCFIELDSPLIT Schur complement with full\n"
+                           "factorization; every sub-solve is left to the options database.\n"
+                           "Recommended solvers:\n"
                            "  monolithic direct : -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero\n"
+                           "  Schur fieldsplit  : -fieldsplit_velocity_pc_type lu\n"
+                           "                      -fieldsplit_pressure_pc_type jacobi -fieldsplit_pressure_ksp_rtol 1e-10\n"
                            "  SIMPLE (A1 = A2 = diag A) : -pc_fieldsplit_schur_precondition selfp\n"
                            "                      -fieldsplit_pressure_mat_schur_complement_ainv_type diag\n"
                            "                      -fieldsplit_pressure_inner_ksp_type preonly -fieldsplit_pressure_inner_pc_type jacobi\n"
                            "                      -fieldsplit_pressure_upper_ksp_type preonly -fieldsplit_pressure_upper_pc_type jacobi\n"
-                           "Any -fieldsplit_pressure_{inner,upper}_ option disables the default for that factor.\n";
+                           "See THEORY_GUIDE.md.\n";
 
 /* Fill solution vector with exact TGV at time t */
 static PetscErrorCode FillExactSolution(DM sol_dm, PetscReal nu, PetscReal t, Vec Y)
@@ -184,9 +181,8 @@ int main(int argc, char **argv)
 
   /* Create TS and wire Phys callbacks.
      PhysSetUpTS sets DM, IFunction, IJacobian, RHSFunction, defaults to TSARKIMEX,
-     and configures a velocity/pressure PCFIELDSPLIT as the fractional-step
-     preconditioner. The momentum predictor and pressure solve come from the
-     options database. */
+     and configures a velocity/pressure PCFIELDSPLIT Schur complement. Every
+     sub-solve comes from the options database. */
   PetscCall(TSCreate(PETSC_COMM_WORLD, &ts));
   PetscCall(PhysSetUpTS(phys, ts));
   /* Defaults; override with -ts_max_time, -ts_dt, -ts_adapt_type */
@@ -223,18 +219,15 @@ int main(int argc, char **argv)
     nsize: 1
     args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_type arkimex -ts_arkimex_type 3 -ts_adapt_type none -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero
 
-  # Default fractional-step preconditioner: A1 = A2 = shift*rho*I is installed by Phys INS,
-  # so only the momentum predictor and the pressure solve come from the options database.
   test:
-    suffix: fsm
+    suffix: schur
     nsize: 1
     args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_type arkimex -ts_arkimex_type 3 -ts_adapt_type none -fieldsplit_velocity_ksp_type preonly -fieldsplit_velocity_pc_type lu -fieldsplit_pressure_ksp_type gmres -fieldsplit_pressure_ksp_rtol 1e-10 -fieldsplit_pressure_pc_type jacobi
 
   # SIMPLE preconditioner: diag(A00)^-1 must replace A00^-1 in BOTH the Schur complement
   # (A1: selfp/ainv_type diag for the preconditioner, inner jacobi for the operator) and
   # the velocity correction (A2: upper jacobi). A1 = A2 is what keeps SIMPLE mass
-  # preserving; approximating the Schur complement alone would leave A2 = A. Setting these
-  # options also switches off the fractional-step default for both factors.
+  # preserving; approximating the Schur complement alone would leave A2 = A.
   test:
     suffix: simple
     nsize: 1

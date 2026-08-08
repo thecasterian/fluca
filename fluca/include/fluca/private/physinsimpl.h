@@ -30,7 +30,6 @@ typedef struct {
   FlucaFD fd_grad_p[PHYS_INS_MAX_DIM];    /* dp/dx_d */
   FlucaFD fd_div;                         /* rho * sum_d d/dx_d(interp_d(u_d)) */
   FlucaFD fd_pstab;                       /* sigma_0 * S(p); sigma_0 = dt, S(p) = sum_d [d(dp/dx_d)/dx_d - d^2p/dx_d^2] */
-  FlucaFD fd_ppoisson;                    /* compact pressure Laplacian sum_d d^2p/dx_d^2 (fractional-step Schur preconditioner) */
 
   /* Explicit operators */
   FlucaFD fd_conv[PHYS_INS_MAX_DIM];                            /* sum_e d/dx_e(F_e * TVD_e(u_d)) */
@@ -41,19 +40,13 @@ typedef struct {
   Vec     mass_flux;                                            /* F_d = rho * interp_d(u_d) on dm_face for all d */
 
   /* Solver data */
-  Mat          J;           /* IJacobian matrix */
-  Mat          J_rhs;       /* RHSJacobian matrix (Picard convection) */
-  Mat          Ap;          /* compact pressure-Poisson matrix: unscaled, unpinned base for Sp */
-  Mat          Sp;          /* fractional-step Schur-complement preconditioner: Ap/shift */
-  KSP          ksp_fsm;     /* identity solve installed as the Schur-complement inner solve (A1 = shift*rho*I) */
-  PetscOptions fsm_options; /* private options database that triggers creation of the upper-factor solve */
+  Mat          J;     /* IJacobian matrix */
+  Mat          J_rhs; /* RHSJacobian matrix (Picard convection) */
   IS           is_vel;
   IS           is_p;
   MatNullSpace nullspace;
-  Vec          temp;          /* work vector for IFunction computation */
-  PetscReal    dt_current;    /* current dt for sigma_0 update detection */
-  PetscReal    shift_current; /* stage shift the mass inverse and Sp are built for */
-  PetscBool    fsm_configured;
+  Vec          temp;       /* work vector for IFunction computation */
+  PetscReal    dt_current; /* current dt for sigma_0 update detection */
   PetscBool    has_pressure_outlet;
 } Phys_INS;
 

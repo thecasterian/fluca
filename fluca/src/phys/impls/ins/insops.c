@@ -208,21 +208,6 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     for (d = 0; d < dim; d++) PetscCall(FlucaFDDestroy(&pstab_dir[d]));
   }
 
-  /* --- fd_ppoisson = sum_d d^2p/dx_d^2: compact pressure Laplacian used to build the
-     fractional-step (pressure-Poisson) Schur-complement preconditioner --- */
-  {
-    FlucaFD lap_dir[PHYS_INS_MAX_DIM];
-
-    for (d = 0; d < dim; d++) {
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 2, 2, DMSTAG_ELEMENT, dim, DMSTAG_ELEMENT, dim, &lap_dir[d]));
-      PetscCall(FlucaFDSetUp(lap_dir[d]));
-    }
-    PetscCall(FlucaFDSumCreate(dim, lap_dir, &ins->fd_ppoisson));
-    PetscCall(SetPressureNeumannBCs(phys, ins->fd_ppoisson, dim));
-    PetscCall(FlucaFDSetUp(ins->fd_ppoisson));
-    for (d = 0; d < dim; d++) PetscCall(FlucaFDDestroy(&lap_dir[d]));
-  }
-
   /* --- dm_face (single), mass_flux = F_d = rho * interp_d(u_d), fd_interp[d] --- */
   {
     DM cdm;
@@ -308,7 +293,6 @@ PetscErrorCode PhysINSDestroyOperators_Internal(Phys phys)
   }
   PetscCall(FlucaFDDestroy(&ins->fd_div));
   PetscCall(FlucaFDDestroy(&ins->fd_pstab));
-  PetscCall(FlucaFDDestroy(&ins->fd_ppoisson));
   PetscCall(VecDestroy(&ins->mass_flux));
   PetscCall(DMDestroy(&ins->dm_face));
   PetscCall(VecDestroy(&ins->temp));
@@ -377,8 +361,8 @@ PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
   }
 
   /* F_continuity = D(u) + sigma_0 * S(p): algebraic (DAE) incompressibility constraint.
-     Enforced directly each stage (no d/dt transform) — this is the fractional-step
-     projection expressed as a DAE, matching PETSc's TS Navier-Stokes example (ts/ex46). */
+     Enforced directly each stage (no d/dt transform), matching PETSc's TS Navier-Stokes
+     example (ts/ex46). */
   PetscCall(VecZeroEntries(temp));
   PetscCall(FlucaFDApply(ins->fd_div, t, sol_dm, sol_dm, U, temp));
   PetscCall(VecAXPY(F, 1., temp));
@@ -389,34 +373,6 @@ PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
 }
 
 /* --- IJacobian ------------------------------------------------------------ */
-
-/* With every boundary a velocity boundary the pressure is determined only up to a constant, so
-   the Schur-complement preconditioner Sp inherits that constant as an exact null vector. The
-   Krylov solve itself is unaffected — the null space is attached to the Schur operator and
-   projected out — but any preconditioner that factors Sp completely (lu, cholesky) hits a zero
-   pivot. Sp is therefore regularized by a uniform diagonal shift, which leaves every eigenvector
-   untouched and moves the constant's eigenvalue from 0 to eps.
-
-   eps is scaled to the smallest meaningful eigenvalue: for a 2D Laplacian the nonzero spectrum
-   starts around lambda_max/N, so eps = dmax/N puts the regularized constant at the bottom of the
-   spectrum without making it an outlier. Never applied to Ap, which is the unscaled base Sp is
-   rebuilt from whenever the stage shift changes. */
-static PetscErrorCode RegularizeSchurPreconditioner_Internal(Phys_INS *ins)
-{
-  Vec       diag;
-  PetscReal dmax;
-  PetscInt  N;
-
-  PetscFunctionBegin;
-  if (ins->has_pressure_outlet) PetscFunctionReturn(PETSC_SUCCESS);
-  PetscCall(MatCreateVecs(ins->Sp, NULL, &diag));
-  PetscCall(MatGetDiagonal(ins->Sp, diag));
-  PetscCall(VecNorm(diag, NORM_INFINITY, &dmax));
-  PetscCall(VecDestroy(&diag));
-  PetscCall(MatGetSize(ins->Sp, &N, NULL));
-  PetscCall(MatShift(ins->Sp, dmax / N));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
 
 PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, PetscReal shift, Mat Amat, Mat Pmat)
 {
@@ -456,16 +412,6 @@ PetscErrorCode PhysComputeIJacobian_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
     PetscCall(MatAssemblyEnd(Amat, MAT_FINAL_ASSEMBLY));
   }
 
-  /* The fractional-step approximation A1 = A2 = shift*rho*I follows the stage shift: the mass
-     inverse applied by MassInversePCApply_Internal reads shift_current, and the Schur-complement
-     preconditioner is the compact Laplacian scaled to match S~ = C - (1/shift) D_0 T G — the rho
-     of D cancels the rho of A, so the scale is 1/shift, not 1/(shift*rho). */
-  if (shift != ins->shift_current) {
-    ins->shift_current = shift;
-    PetscCall(MatCopy(ins->Ap, ins->Sp, SAME_NONZERO_PATTERN));
-    PetscCall(MatScale(ins->Sp, 1. / shift));
-    PetscCall(RegularizeSchurPreconditioner_Internal(ins));
-  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -561,158 +507,6 @@ static PetscErrorCode IFunction_INS(TS ts, PetscReal t, Vec U, Vec U_t, Vec F, v
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Return the fieldsplit PC of the stage solve, or NULL when the user selected another
-   preconditioner (in which case the fractional-step wiring below is skipped entirely). */
-static PetscErrorCode GetSchurFieldSplitPC_Internal(KSP ksp, PC *pc)
-{
-  PC              candidate;
-  PCCompositeType ctype;
-  PetscBool       isfs;
-
-  PetscFunctionBegin;
-  *pc = NULL;
-  PetscCall(KSPGetPC(ksp, &candidate));
-  PetscCall(PetscObjectTypeCompare((PetscObject)candidate, PCFIELDSPLIT, &isfs));
-  if (!isfs) PetscFunctionReturn(PETSC_SUCCESS);
-  PetscCall(PCFieldSplitGetType(candidate, &ctype));
-  if (ctype != PC_COMPOSITE_SCHUR) PetscFunctionReturn(PETSC_SUCCESS);
-  *pc = candidate;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* PCFIELDSPLIT builds a separate solve for the upper triangular factor only when an option with
-   the -fieldsplit_<pressure>_upper_ prefix is present in the PC's own options database; without
-   one it reuses the A00 solve, which would leave A2 = A. The trigger key is therefore placed in
-   a private database attached to the PC for the duration of PCSetUp alone — it is detached again
-   in ConfigureFractionalStep_Internal — so the global database is never written to and every
-   user-supplied option still wins. Called before the stage solve, hence before PCSetUp. */
-static PetscErrorCode ArmFractionalStep_Internal(Phys phys, TS ts)
-{
-  Phys_INS   *ins = (Phys_INS *)phys->data;
-  SNES        snes;
-  KSP         ksp;
-  PC          pc;
-  const char *prefix;
-  char        key[PETSC_MAX_PATH_LEN];
-
-  PetscFunctionBegin;
-  if (ins->fsm_configured || ins->fsm_options) PetscFunctionReturn(PETSC_SUCCESS);
-  PetscCall(TSGetSNES(ts, &snes));
-  PetscCall(SNESGetKSP(snes, &ksp));
-  PetscCall(GetSchurFieldSplitPC_Internal(ksp, &pc));
-  if (!pc) PetscFunctionReturn(PETSC_SUCCESS);
-
-  PetscCall(PCGetOptionsPrefix(pc, &prefix));
-  PetscCall(PetscSNPrintf(key, sizeof(key), "-%sfieldsplit_pressure_upper_ksp_type", prefix ? prefix : ""));
-  PetscCall(PetscOptionsCreate(&ins->fsm_options));
-  PetscCall(PetscOptionsSetValue(ins->fsm_options, key, "preonly"));
-  PetscCall(PetscObjectSetOptions((PetscObject)pc, ins->fsm_options));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* y = x/(shift*rho): the fractional-step approximation of A^-1, retaining only the mass/time
-   term of A = shift*rho*I - mu*L. No stock PC can supply this, because the stage shift is known
-   to the physics, not to the matrix. */
-static PetscErrorCode MassInversePCApply_Internal(PC pc, Vec x, Vec y)
-{
-  Phys_INS *ins;
-
-  PetscFunctionBegin;
-  PetscCall(PCShellGetContext(pc, &ins));
-  PetscCheck(ins->shift_current != 0., PetscObjectComm((PetscObject)pc), PETSC_ERR_ARG_WRONGSTATE, "Stage shift is unset; the IJacobian must be computed before the preconditioner is applied");
-  PetscCall(VecCopy(x, y));
-  PetscCall(VecScale(y, 1. / (ins->shift_current * ins->rho)));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* Whether the user set any option under prefix, in which case their choice of approximation is
-   left untouched. The armed trigger key lives in the PC's private database, not the global one,
-   so it is invisible here. */
-static PetscErrorCode UserSetOptions_Internal(const char prefix[], PetscBool *set)
-{
-  char *all, *found;
-
-  PetscFunctionBegin;
-  PetscCall(PetscOptionsGetAll(NULL, &all));
-  PetscCall(PetscStrstr(all, prefix, &found));
-  *set = found ? PETSC_TRUE : PETSC_FALSE;
-  PetscCall(PetscFree(all));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* Turn ksp into a single application of the mass inverse */
-static PetscErrorCode SetMassInverseSolve_Internal(KSP ksp, Phys_INS *ins)
-{
-  PC pc;
-
-  PetscFunctionBegin;
-  PetscCall(KSPSetType(ksp, KSPPREONLY));
-  PetscCall(KSPGetPC(ksp, &pc));
-  PetscCall(PCSetType(pc, PCSHELL));
-  PetscCall(PCShellSetContext(pc, ins));
-  PetscCall(PCShellSetApply(pc, MassInversePCApply_Internal));
-  PetscCall(PCShellSetName(pc, "fractional-step mass inverse 1/(shift*rho)"));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* Install the fractional-step approximations once the fieldsplit is set up. Both the upper
-   triangular factor (the velocity correction) and the inner solve of the matrix-free Schur
-   complement become applications of the mass inverse, i.e. A1 = A2 = shift*rho*I, so the
-   preconditioner is the fractional step method and is mass preserving. Whether the pre-solve
-   callback runs
-   before or after KSPSetUp() depends on the PETSc version, so KSPSetUp() is called explicitly
-   (a no-op when it has already run) to guarantee the sub-solvers exist here; either way they are
-   reconfigured before the first Krylov iteration. Subsequent PCSetUp() calls reuse them. */
-static PetscErrorCode ConfigureFractionalStep_Internal(KSP ksp, Vec rhs, Vec x, void *ctx)
-{
-  Phys        phys = (Phys)ctx;
-  Phys_INS   *ins  = (Phys_INS *)phys->data;
-  PC          pc;
-  KSP        *subksp = NULL;
-  Mat         S      = NULL;
-  const char *prefix;
-  char        key[PETSC_MAX_PATH_LEN];
-  PetscInt    nsub;
-  PetscBool   user_set;
-
-  PetscFunctionBegin;
-  if (ins->fsm_configured) PetscFunctionReturn(PETSC_SUCCESS);
-  PetscCall(GetSchurFieldSplitPC_Internal(ksp, &pc));
-  if (!pc) PetscFunctionReturn(PETSC_SUCCESS);
-  PetscCall(KSPSetUp(ksp));
-  PetscCall(PCGetOptionsPrefix(pc, &prefix));
-
-  /* A2: the velocity correction u = u* - (1/(shift*rho)) G p' */
-  PetscCall(PetscSNPrintf(key, sizeof(key), "-%sfieldsplit_pressure_upper_", prefix ? prefix : ""));
-  PetscCall(UserSetOptions_Internal(key, &user_set));
-  if (!user_set) {
-    PetscCall(PCFieldSplitSchurGetSubKSP(pc, &nsub, &subksp));
-    if (nsub == 3) PetscCall(SetMassInverseSolve_Internal(subksp[2], ins));
-    PetscCall(PetscFree(subksp));
-  }
-
-  /* A1: the Schur complement itself, so the pressure solve sees
-     S~ = C - (1/(shift*rho)) D G however tightly it is converged */
-  PetscCall(PetscSNPrintf(key, sizeof(key), "-%sfieldsplit_pressure_inner_", prefix ? prefix : ""));
-  PetscCall(UserSetOptions_Internal(key, &user_set));
-  if (!user_set) {
-    PetscCall(PCFieldSplitSchurGetS(pc, &S));
-    if (S) {
-      if (!ins->ksp_fsm) {
-        PetscCall(KSPCreate(PetscObjectComm((PetscObject)pc), &ins->ksp_fsm));
-        PetscCall(KSPSetOptionsPrefix(ins->ksp_fsm, "phys_ins_fsm_"));
-        PetscCall(SetMassInverseSolve_Internal(ins->ksp_fsm, ins));
-      }
-      PetscCall(MatSchurComplementSetKSP(S, ins->ksp_fsm));
-    }
-  }
-
-  /* The private database has served its purpose; detach it so nothing else reads it */
-  PetscCall(PetscObjectSetOptions((PetscObject)pc, NULL));
-  ins->fsm_configured = PETSC_TRUE;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode IJacobian_INS(TS ts, PetscReal t, Vec U, Vec U_t, PetscReal shift, Mat Amat, Mat Pmat, void *ctx)
 {
   Phys      phys = (Phys)ctx;
@@ -720,7 +514,6 @@ static PetscErrorCode IJacobian_INS(TS ts, PetscReal t, Vec U, Vec U_t, PetscRea
 
   PetscFunctionBegin;
   PetscCall(UpdatePressureStabilizationDt_Internal(ts, ins));
-  PetscCall(ArmFractionalStep_Internal(phys, ts));
   PetscCall(PhysComputeIJacobian_INS(phys, t, U, U_t, shift, Amat, Pmat));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -801,32 +594,6 @@ PetscErrorCode PhysINSCreateSolverData_Internal(Phys phys)
     }
   }
 
-  /* Assemble the pressure-Poisson matrix Ap = -sum_d d^2p/dx_d^2 on the pressure DOFs.
-     The compact Laplacian is spectrally equivalent to the fractional-step Schur complement
-     S~ = sigma_0 S - (1/shift) D_0 T G, so it preconditions all pressure modes (unlike
-     A11 = sigma_0 S, which only sees high frequencies). Sign is flipped so Ap matches A11's
-     positive-on-checkerboard convention. Sp holds the stage-scaled copy Ap/shift actually
-     handed to PCFIELDSPLIT; Ap itself stays unscaled and unpinned as the base Sp is built from. */
-  {
-    Mat          M_full;
-    MatNullSpace ns;
-
-    PetscCall(DMCreateMatrix(sol_dm, &M_full));
-    PetscCall(MatSetOption(M_full, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
-    PetscCall(FlucaFDGetOperator(ins->fd_ppoisson, sol_dm, sol_dm, M_full));
-    PetscCall(MatAssemblyBegin(M_full, MAT_FINAL_ASSEMBLY));
-    PetscCall(MatAssemblyEnd(M_full, MAT_FINAL_ASSEMBLY));
-    PetscCall(MatCreateSubMatrix(M_full, ins->is_p, ins->is_p, MAT_INITIAL_MATRIX, &ins->Ap));
-    PetscCall(MatScale(ins->Ap, -1.));
-    PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &ns));
-    PetscCall(MatSetNullSpace(ins->Ap, ns));
-    PetscCall(MatDuplicate(ins->Ap, MAT_COPY_VALUES, &ins->Sp));
-    PetscCall(MatSetNullSpace(ins->Sp, ns));
-    PetscCall(MatNullSpaceDestroy(&ns));
-    PetscCall(MatDestroy(&M_full));
-    PetscCall(RegularizeSchurPreconditioner_Internal(ins));
-  }
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -864,28 +631,14 @@ PetscErrorCode PhysSetUpTS_INS(Phys phys, TS ts)
     PetscCall(KSPGetPC(ksp, &pc));
 
     /* Default linear solver: PCFIELDSPLIT with a Schur complement between velocity and
-       pressure — the fractional-step sweep expressed as a preconditioner: the velocity
-       block solve is the momentum predictor/corrector and the pressure Schur solve is
-       the pressure-Poisson step. Sub-solver details are left to the options database
-       (see ts/ex46). The pressure null space composed onto is_p in
+       pressure. Both the velocity block solve and the pressure Schur solve are left to
+       the options database (see ts/ex46). The pressure null space composed onto is_p in
        PhysINSCreateSolverData_Internal propagates to the Schur complement. */
     PetscCall(PCSetType(pc, PCFIELDSPLIT));
     PetscCall(PCFieldSplitSetIS(pc, "velocity", ins->is_vel));
     PetscCall(PCFieldSplitSetIS(pc, "pressure", ins->is_p));
     PetscCall(PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR));
     PetscCall(PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_FULL));
-
-    /* Default Schur-complement preconditioner: the stage-scaled pressure-Poisson operator
-       Sp = Ap/shift. Set before TSSetFromOptions so the options database can override it. */
-    PetscCall(PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_USER, ins->Sp));
-
-    /* The default is the fractional step method, which requires the SAME approximation
-       A1 = A2 = shift*rho*I both in the Schur complement and in the upper triangular factor
-       (the velocity correction); that consistency, not the Schur approximation by itself, is
-       what makes it mass preserving (Elman et al., JCP 227, 1790-1808, 2008). The 1/(shift*rho)
-       lives in Pmat's pressure-gradient block, so both reduce to identity solves, installed
-       once the fieldsplit is set up. See THEORY_GUIDE.md. */
-    PetscCall(KSPSetPreSolve(ksp, ConfigureFractionalStep_Internal, phys));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
