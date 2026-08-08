@@ -225,6 +225,15 @@ int main(int argc, char **argv)
     nsize: 1
     args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_type arkimex -ts_arkimex_type 3 -ts_adapt_type none -fieldsplit_velocity_ksp_type preonly -fieldsplit_velocity_pc_type lu -fieldsplit_pressure_ksp_type gmres -fieldsplit_pressure_ksp_rtol 1e-10 -fieldsplit_pressure_pc_type jacobi
 
+  # Momentum-preserving Schur-only approximation. With the pressure KSP preonly, the default
+  # selfp preconditioner matrix — not the inner solve — is what defines A1, so A1 = diag(A)
+  # while A2 = A stays the exact velocity solve. Continuity is then the perturbed equation.
+  # This is NOT SIMPLE: that needs A2 = diag(A) too, via -fieldsplit_pressure_upper_.
+  test:
+    suffix: schur_preonly
+    nsize: 1
+    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_type arkimex -ts_arkimex_type 3 -ts_adapt_type none -fieldsplit_velocity_ksp_type preonly -fieldsplit_velocity_pc_type lu -fieldsplit_pressure_ksp_type preonly -fieldsplit_pressure_pc_type lu -fieldsplit_pressure_pc_factor_shift_type nonzero
+
   # SIMPLE preconditioner: diag(A00)^-1 must replace A00^-1 in BOTH the Schur complement
   # (A1: selfp/ainv_type diag for the preconditioner, inner jacobi for the operator) and
   # the velocity correction (A2: upper jacobi). A1 = A2 is what keeps SIMPLE mass
