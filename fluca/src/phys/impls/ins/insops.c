@@ -639,6 +639,14 @@ PetscErrorCode PhysSetUpTS_INS(Phys phys, TS ts)
     PetscCall(PCFieldSplitSetIS(pc, "pressure", ins->is_p));
     PetscCall(PCFieldSplitSetType(pc, PC_COMPOSITE_SCHUR));
     PetscCall(PCFieldSplitSetSchurFactType(pc, PC_FIELDSPLIT_SCHUR_FACT_FULL));
+
+    /* Schur-complement preconditioner matrix: the assembled Sp = sigma_0 S - D diag(A)^-1 G,
+       which covers all pressure modes, rather than PETSc's default A11 = sigma_0 S, which is
+       the stabilization operator alone and only sees the checkerboard modes. This selects the
+       preconditioner MATRIX only — A1 and A2 still default to the velocity solve — so the
+       split remains the exact block factorization whenever the pressure KSP is converged.
+       Set before TSSetFromOptions so the options database can override it. */
+    PetscCall(PCFieldSplitSetSchurPre(pc, PC_FIELDSPLIT_SCHUR_PRE_SELFP, NULL));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

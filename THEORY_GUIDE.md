@@ -221,7 +221,7 @@ The fractional-step and SIMPLE choices coincide as $\Delta t \to 0$, where $\ope
 | Role | Options prefix | Fluca default |
 | --- | --- | --- |
 | Solve with $\mathbf{A}$ (predictor, lower/diagonal factor) | `-fieldsplit_velocity_` | user-selected |
-| $\widetilde{\mathbf{A}}_1$ in $\widetilde{\mathbf{S}}$ | `-fieldsplit_pressure_inner_`, preconditioned via `-pc_fieldsplit_schur_precondition` | PETSc default: falls back to the velocity solve, preconditioned by $\mathbf{A}_{11} = \sigma_0\mathbf{S}$ |
+| $\widetilde{\mathbf{A}}_1$ in $\widetilde{\mathbf{S}}$ | `-fieldsplit_pressure_inner_`, preconditioned via `-pc_fieldsplit_schur_precondition` | falls back to the velocity solve, preconditioned by the assembled `selfp` matrix $\mathbf{S}_p$ |
 | $\widetilde{\mathbf{A}}_2$ in the velocity correction | `-fieldsplit_pressure_upper_` | PETSc default: reuses the velocity solve |
 
 Only one prefix appears for the lower and diagonal factors because `PCFIELDSPLIT`, although it documents the `full` factorization as the plain $\mathbf{L}\mathbf{D}\mathbf{U}$ product, applies it in the fused $(\mathbf{L}\mathbf{D})\mathbf{U}$ grouping of (7): a single solve with $\mathbf{A}$ produces both the predicted velocity and the argument of $\mathbf{D}\mathbf{u}^*$ that forms the Schur right-hand side. Each preconditioner application therefore costs **one** solve with $\mathbf{A}$ (the predictor) plus one application of $\widetilde{\mathbf{A}}_2^{-1}$, rather than the three solves a literal $\mathbf{L}\cdot\mathbf{D}\cdot\mathbf{U}$ application would require — and when $\widetilde{\mathbf{A}}_2$ is a cheap approximation rather than a solve with $\mathbf{A}$, only that single predictor solve remains. The cancellation is algebraic only for a fixed linear operator; if the velocity `KSP` is an inexact Krylov method, the two solves with $\mathbf{A}$ do not cancel exactly and the preconditioner is only approximately of the form (8), which is why an outer flexible Krylov method is advisable in that case.
@@ -230,9 +230,17 @@ The Schur block enters twice: as the **operator**, applied matrix-free as $\math
 
 #### Fluca's default
 
-Fluca installs the split itself — `PCFIELDSPLIT` of type Schur with `PC_FIELDSPLIT_SCHUR_FACT_FULL`, the velocity and pressure index sets, and the pressure null space — but approximates neither $\widetilde{\mathbf{A}}_1$ nor $\widetilde{\mathbf{A}}_2$. Both fall back to PETSc's default, the velocity solve, so the default sits in the **first** row of the table above: $\widetilde{\mathbf{A}}_1 = \widetilde{\mathbf{A}}_2 = \mathbf{A}$, perturbing neither momentum nor continuity. The Schur complement is preconditioned by $\mathbf{A}_{11} = \sigma_0\mathbf{S}$, PETSc's default. All three solves are left to the options database.
+Fluca installs the split itself — `PCFIELDSPLIT` of type Schur with `PC_FIELDSPLIT_SCHUR_FACT_FULL`, the velocity and pressure index sets, and the pressure null space — but approximates neither $\widetilde{\mathbf{A}}_1$ nor $\widetilde{\mathbf{A}}_2$. Both fall back to PETSc's default, the velocity solve, so the default sits in the **first** row of the table above: $\widetilde{\mathbf{A}}_1 = \widetilde{\mathbf{A}}_2 = \mathbf{A}$, perturbing neither momentum nor continuity. All three solves are left to the options database.
 
-Because $\mathbf{A}_{11} = \sigma_0\mathbf{S}$ is the stabilization operator, it acts mainly on the checkerboard modes and is a weak preconditioner for the smooth ones, so the pressure `KSP` generally needs a tight tolerance; a stronger Schur preconditioner can be supplied through `-pc_fieldsplit_schur_precondition`.
+What Fluca does set is the **preconditioner matrix** for the Schur block: `PC_FIELDSPLIT_SCHUR_PRE_SELFP`, the explicitly assembled
+
+```math
+\mathbf{S}_p = \sigma_0\mathbf{S} - \mathbf{D}\operatorname{diag}(\mathbf{A})^{-1}\mathbf{G}
+```
+
+in place of PETSc's default $\mathbf{A}_{11} = \sigma_0\mathbf{S}$. The latter is the stabilization operator alone, which acts on the checkerboard modes and is a weak preconditioner for the smooth ones; $\mathbf{S}_p$ carries the $\mathbf{D}\mathbf{A}^{-1}\mathbf{G}$ term as well and so covers all pressure modes.
+
+This is a choice of preconditioner, not of approximation, and it does **not** make the default SIMPLE. $\widetilde{\mathbf{A}}_1$ is still whatever the *inner* solve applies, so with the pressure `KSP` converged to a tight tolerance the classification above is unchanged and $\mathbf{S}_p$ only lowers the iteration count. Only under `-fieldsplit_pressure_ksp_type preonly` does the preconditioner matrix itself become $\widetilde{\mathbf{A}}_1$, giving $\widetilde{\mathbf{A}}_1 = \operatorname{diag}(\mathbf{A})$ against $\widetilde{\mathbf{A}}_2 = \mathbf{A}$ — the momentum-preserving last row, not SIMPLE. SIMPLE additionally requires $\widetilde{\mathbf{A}}_2 = \operatorname{diag}(\mathbf{A})$ through `-fieldsplit_pressure_upper_`.
 
 Because nothing is baked into the operators, the Jacobian is untouched: $\mathbf{P}_\text{mat} = \mathbf{A}_\text{mat} = \mathbf{J}$, and `-ksp_type preonly -pc_type lu` remains an exact monolithic reference solve. The cheaper members of the family are reachable entirely from the options database — for example SIMPLE:
 

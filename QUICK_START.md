@@ -230,7 +230,7 @@ PetscCall(DMCreateGlobalVector(sol_dm, &Y)); // set initial condition, then:
 PetscCall(TSSolve(ts, Y));
 ```
 
-Because the pressure is an algebraic variable, use a stiffly-accurate scheme (`-ts_arkimex_type 3`, the default) and a saddle-point solver. The default preconditioner is a velocity/pressure `PCFIELDSPLIT` Schur complement with full factorization, with every sub-solve left to the options database; `-pc_fieldsplit_schur_precondition selfp` selects a SIMPLE-type preconditioner instead. A worked example is in `fluca/tutorials/phys/ex1.c` (2D Taylor-Green vortex).
+Because the pressure is an algebraic variable, use a stiffly-accurate scheme (`-ts_arkimex_type 3`, the default) and a saddle-point solver. The default preconditioner is a velocity/pressure `PCFIELDSPLIT` Schur complement with full factorization, with the Schur block preconditioned by the assembled `selfp` matrix and every sub-solve left to the options database. A worked example is in `fluca/tutorials/phys/ex1.c` (2D Taylor-Green vortex).
 
 ## Basic Workflow
 

@@ -16,7 +16,8 @@ static const char help[] = "2D Taylor-Green vortex with TSARKIMEX\n"
                            "The pressure is an algebraic (DAE) variable, so use a stiffly-accurate\n"
                            "integrator (e.g. -ts_arkimex_type 3, the default) and a saddle-point solver.\n"
                            "Phys INS sets up a velocity/pressure PCFIELDSPLIT Schur complement with full\n"
-                           "factorization; every sub-solve is left to the options database.\n"
+                           "factorization, preconditioned by the assembled selfp matrix; every sub-solve\n"
+                           "is left to the options database.\n"
                            "Recommended solvers:\n"
                            "  monolithic direct : -ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero\n"
                            "  Schur fieldsplit  : -fieldsplit_velocity_pc_type lu\n"
@@ -227,7 +228,8 @@ int main(int argc, char **argv)
   # SIMPLE preconditioner: diag(A00)^-1 must replace A00^-1 in BOTH the Schur complement
   # (A1: selfp/ainv_type diag for the preconditioner, inner jacobi for the operator) and
   # the velocity correction (A2: upper jacobi). A1 = A2 is what keeps SIMPLE mass
-  # preserving; approximating the Schur complement alone would leave A2 = A.
+  # preserving; approximating the Schur complement alone would leave A2 = A. selfp is the
+  # Phys INS default and is repeated here only to keep this case self-documenting.
   test:
     suffix: simple
     nsize: 1
