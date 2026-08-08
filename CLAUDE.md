@@ -1,6 +1,6 @@
 # Fluca
 
-CFD framework for incompressible viscous flows on Cartesian grids, built on PETSc. Uses collocated grid with Rhie-Chow interpolation, fractional step method, and finite difference spatial discretization.
+CFD framework for incompressible viscous flows on Cartesian grids, built on PETSc. Uses collocated grid with Rhie-Chow interpolation and finite difference spatial discretization.
 
 ## Language and Build
 
@@ -48,5 +48,5 @@ fluca/
 
 - **FlucaFD**: Polymorphic finite difference operator on PETSc DMStag. Subtypes compute stencils for derivatives, compositions, scaling, sums, and TVD schemes.
 - **Mesh / MeshCart**: Cartesian grid with boundary types, coordinate setup, and DM access.
-- **NS**: Incompressible Navier-Stokes solver — Crank-Nicolson time integration, fractional step pressure-velocity coupling.
+- **NS**: Incompressible Navier-Stokes solver — Crank-Nicolson time integration, coupled velocity-pressure solve.
 - **Viewer**: CGNS file I/O for solution data.
