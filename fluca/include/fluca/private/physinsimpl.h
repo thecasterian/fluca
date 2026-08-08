@@ -41,14 +41,19 @@ typedef struct {
   Vec     mass_flux;                                            /* F_d = rho * interp_d(u_d) on dm_face for all d */
 
   /* Solver data */
-  Mat          J;     /* IJacobian matrix */
-  Mat          J_rhs; /* RHSJacobian matrix (Picard convection) */
-  Mat          Ap;    /* pressure-Poisson matrix: user Schur-complement preconditioner (fractional step) */
+  Mat          J;           /* IJacobian matrix */
+  Mat          J_rhs;       /* RHSJacobian matrix (Picard convection) */
+  Mat          Ap;          /* compact pressure-Poisson matrix: unscaled, unpinned base for Sp */
+  Mat          Sp;          /* fractional-step Schur-complement preconditioner: Ap/shift */
+  KSP          ksp_fsm;     /* identity solve installed as the Schur-complement inner solve (A1 = shift*rho*I) */
+  PetscOptions fsm_options; /* private options database that triggers creation of the upper-factor solve */
   IS           is_vel;
   IS           is_p;
   MatNullSpace nullspace;
-  Vec          temp;       /* work vector for IFunction computation */
-  PetscReal    dt_current; /* current dt for sigma_0 update detection */
+  Vec          temp;          /* work vector for IFunction computation */
+  PetscReal    dt_current;    /* current dt for sigma_0 update detection */
+  PetscReal    shift_current; /* stage shift the mass inverse and Sp are built for */
+  PetscBool    fsm_configured;
   PetscBool    has_pressure_outlet;
 } Phys_INS;
 
