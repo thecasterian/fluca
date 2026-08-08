@@ -167,12 +167,88 @@ The stage matrix (5) is a saddle-point system for the collocated two-field unkno
 \qquad \widehat{\mathbf{S}} = \mathbf{C} - \mathbf{D}\mathbf{A}^{-1}\mathbf{G} \tag{6}
 ```
 
-Fluca applies this factorization as a preconditioner via `PCFIELDSPLIT` of type Schur with full factorization. The two triangular factors are the momentum **predictor** and velocity **corrector** (solves with $\mathbf{A}$), and the middle factor is the **pressure-Poisson** solve (with the Schur complement $\widehat{\mathbf{S}}$) — the classical fractional-step sweep, now used to precondition rather than to time-advance. Perot [3] showed that the fractional step method is itself such an approximate block factorization, and Elman et al. [2] that SIMPLE is another; the choice of the momentum-operator approximation $\widetilde{\mathbf{A}}^{-1}$ in $\widehat{\mathbf{S}}$ selects between them:
+Fluca applies this factorization as a preconditioner via `PCFIELDSPLIT` of type Schur with full factorization. The two triangular factors are the momentum **predictor** and velocity **corrector**, and the middle factor is the **pressure-Poisson** solve (with the Schur complement $\widehat{\mathbf{S}}$) — the classical fractional-step sweep, now used to precondition rather than to time-advance. Perot [3] showed that the fractional step method is itself such an approximate block factorization, and Elman et al. [2] that SIMPLE is another.
 
-- **Fractional step** (default): $\widetilde{\mathbf{A}}^{-1} \approx (\text{shift}\,\rho)^{-1}\mathbf{I}$ retains only the mass/time term, so $\widehat{\mathbf{S}}$ reduces to a scaled pressure Poisson operator. Fluca preconditions the Schur complement with an assembled compact pressure Laplacian, which is spectrally equivalent to $\widehat{\mathbf{S}}$ and covers all pressure modes.
-- **SIMPLE**: $\widetilde{\mathbf{A}}^{-1} \approx \operatorname{diag}(\mathbf{A})^{-1}$ gives an assembled approximate Schur complement (`-pc_fieldsplit_schur_precondition selfp`).
+#### Two independent approximations
 
-The two approximations coincide as $\Delta t \to 0$, where the momentum diagonal is dominated by the mass term. Because the split preconditions an outer Krylov iteration, the fully coupled solution is recovered independently of the choice; only the iteration count differs. The default may be replaced from the options database, so `-pc_fieldsplit_schur_precondition selfp` selects the SIMPLE preconditioner and `-ksp_type preonly -pc_type lu` selects a monolithic direct solve.
+Following the nomenclature of Quarteroni et al. [5] as adopted by Elman et al. [2], group the lower and diagonal factors of (6) together, $(\mathbf{L}\mathbf{D})\mathbf{U}$:
+
+```math
+\mathbf{J} =
+\begin{bmatrix} \mathbf{A} & 0 \\ \mathbf{D} & \widehat{\mathbf{S}} \end{bmatrix}
+\begin{bmatrix} \mathbf{I} & \mathbf{A}^{-1}\mathbf{G} \\ 0 & \mathbf{I} \end{bmatrix} \tag{7}
+```
+
+The $\mathbf{A}^{-1}$ of the lower factor cancels against the diagonal block, so exactly **two** occurrences of $\mathbf{A}^{-1}$ survive, and they are approximated independently:
+
+- $\widetilde{\mathbf{A}}_1$ — the approximation in the **Schur complement**, $\widetilde{\mathbf{S}} = \mathbf{C} - \mathbf{D}\widetilde{\mathbf{A}}_1^{-1}\mathbf{G}$, i.e. in the pressure-Poisson operator;
+- $\widetilde{\mathbf{A}}_2$ — the approximation in the **upper triangular factor**, i.e. in the velocity correction $\mathbf{u}^{n+1} = \mathbf{u}^* - \widetilde{\mathbf{A}}_2^{-1}\mathbf{G}p'$.
+
+The resulting preconditioner and its error are
+
+```math
+\widetilde{\mathbf{M}} =
+\begin{bmatrix} \mathbf{A} & 0 \\ \mathbf{D} & \widetilde{\mathbf{S}} \end{bmatrix}
+\begin{bmatrix} \mathbf{I} & \widetilde{\mathbf{A}}_2^{-1}\mathbf{G} \\ 0 & \mathbf{I} \end{bmatrix},
+\qquad
+\mathbf{E} = \mathbf{J} - \widetilde{\mathbf{M}} =
+\begin{bmatrix}
+0 & (\mathbf{I} - \mathbf{A}\widetilde{\mathbf{A}}_2^{-1})\mathbf{G} \\
+0 & \mathbf{D}(\widetilde{\mathbf{A}}_1^{-1} - \widetilde{\mathbf{A}}_2^{-1})\mathbf{G}
+\end{bmatrix} \tag{8}
+```
+
+Reading off the two blocks of $\mathbf{E}$:
+
+1. The **momentum** equation is unperturbed iff $\widetilde{\mathbf{A}}_2 = \mathbf{A}$ (*momentum preserving*) — only the pressure gradient seen by the velocity is affected, never the velocity operator itself.
+2. The **continuity** equation is unperturbed iff $\widetilde{\mathbf{A}}_1 = \widetilde{\mathbf{A}}_2$ (*mass preserving*) — the two approximations need not be accurate, only **consistent with each other**.
+
+Approximating the Schur complement alone is therefore *not* what defines the fractional step method or SIMPLE. Both are mass-preserving schemes: they use the **same** cheap inverse in the Schur complement and in the velocity correction, and accept a perturbed momentum equation in exchange for an exactly satisfied discrete continuity equation. Keeping $\widetilde{\mathbf{A}}_2 = \mathbf{A}$ while approximating only $\widetilde{\mathbf{A}}_1$ gives a different — momentum-preserving — member of the same family, in which continuity is the perturbed equation.
+
+| Scheme | $\widetilde{\mathbf{A}}_1$ | $\widetilde{\mathbf{A}}_2$ | Unperturbed |
+| --- | --- | --- | --- |
+| Exact block factorization | $\mathbf{A}$ | $\mathbf{A}$ | both |
+| Fractional step [3] | $\text{shift}\,\rho\,\mathbf{I}$ | $\text{shift}\,\rho\,\mathbf{I}$ | continuity |
+| SIMPLE [2] | $\operatorname{diag}(\mathbf{A})$ | $\operatorname{diag}(\mathbf{A})$ | continuity |
+| Schur-only approximation | $\ne \mathbf{A}$ | $\mathbf{A}$ | momentum |
+
+The fractional-step and SIMPLE choices coincide as $\Delta t \to 0$, where $\operatorname{diag}(\mathbf{A})$ is dominated by the mass term $\text{shift}\,\rho$. Because the split preconditions an outer Krylov iteration, the fully coupled solution is recovered independently of the choice; only the iteration count differs.
+
+#### Mapping onto `PCFIELDSPLIT`
+
+`PCFIELDSPLIT` implements exactly this taxonomy — its internal solver for the upper factor is named after $H_2$ of [2]. The three solves are set independently from the options database:
+
+| Role | Options prefix | Fluca default |
+| --- | --- | --- |
+| Solve with $\mathbf{A}$ (predictor, lower/diagonal factor) | `-fieldsplit_velocity_` | user-selected |
+| $\widetilde{\mathbf{A}}_1$ in $\widetilde{\mathbf{S}}$ | `-fieldsplit_pressure_inner_`, preconditioned via `-pc_fieldsplit_schur_precondition` | mass inverse $(\text{shift}\,\rho)^{-1}\mathbf{I}$, preconditioned by $\mathbf{A}_p/\text{shift}$ |
+| $\widetilde{\mathbf{A}}_2$ in the velocity correction | `-fieldsplit_pressure_upper_` | mass inverse $(\text{shift}\,\rho)^{-1}\mathbf{I}$ |
+
+Only one prefix appears for the lower and diagonal factors because `PCFIELDSPLIT`, although it documents the `full` factorization as the plain $\mathbf{L}\mathbf{D}\mathbf{U}$ product, applies it in the fused $(\mathbf{L}\mathbf{D})\mathbf{U}$ grouping of (7): a single solve with $\mathbf{A}$ produces both the predicted velocity and the argument of $\mathbf{D}\mathbf{u}^*$ that forms the Schur right-hand side. Each preconditioner application therefore costs **one** solve with $\mathbf{A}$ (the predictor) plus one application of $\widetilde{\mathbf{A}}_2^{-1}$, rather than the three solves a literal $\mathbf{L}\cdot\mathbf{D}\cdot\mathbf{U}$ application would require — and when $\widetilde{\mathbf{A}}_2$ is a cheap approximation, as it is for the fractional step method, only that single predictor solve remains. The cancellation is algebraic only for a fixed linear operator; if the velocity `KSP` is an inexact Krylov method, the two solves with $\mathbf{A}$ do not cancel exactly and the preconditioner is only approximately of the form (8), which is why an outer flexible Krylov method is advisable in that case.
+
+The Schur block enters twice: as the **operator**, applied matrix-free as $\mathbf{C} - \mathbf{D}\mathbf{A}^{-1}\mathbf{G}$ with $\mathbf{A}^{-1}$ supplied by the inner solve (`-fieldsplit_pressure_inner_`, which in PETSc falls back to the velocity solve and which Fluca replaces — see below), and as the **preconditioner** for that operator (`-pc_fieldsplit_schur_precondition`: `user` for a supplied matrix, `selfp` for the assembled $\mathbf{C} - \mathbf{D}\operatorname{diag}(\mathbf{A})^{-1}\mathbf{G}$). If the pressure `KSP` is iterated to a tight tolerance, $\widetilde{\mathbf{A}}_1$ is whatever the *inner* solve applies and the preconditioner only affects the iteration count; if it is `preonly`, the preconditioner matrix alone defines $\widetilde{\mathbf{A}}_1$.
+
+#### Fluca's default: the fractional step method
+
+Fluca configures the fractional step method itself, so that $\widetilde{\mathbf{A}}_1 = \widetilde{\mathbf{A}}_2$ holds by construction and the discrete continuity equation is satisfied exactly. No stock `PC` can supply $(\text{shift}\,\rho)^{-1}\mathbf{I}$ — the stage shift is known to the physics, not to the matrix — so `Phys` INS installs a small shell `PC` that applies it, on **both** the upper triangular factor and the inner solve of the matrix-free Schur complement. Putting it on the inner solve rather than only on the Schur preconditioner means the pressure block sees $\widetilde{\mathbf{S}}$ itself as its operator, so the classification holds however tightly that solve is converged. The Schur complement is preconditioned by the compact pressure Laplacian scaled to match,
+
+```math
+\mathbf{S}_p = \frac{1}{\text{shift}}\mathbf{A}_p,
+\qquad \widetilde{\mathbf{S}} = \mathbf{C} - \frac{1}{\text{shift}}\mathbf{D}_0\mathbf{T}\mathbf{G}
+```
+
+(the $\rho$ of $\mathbf{D} = \rho\mathbf{D}_0\mathbf{T}$ cancels the $\rho$ of $\mathbf{A}$, so the scale is $1/\text{shift}$). $\mathbf{A}_p$ is spectrally equivalent to $\widetilde{\mathbf{S}}$ and, unlike $\mathbf{A}_{11} = \sigma_0\mathbf{S}$, covers all pressure modes. Only the momentum predictor and the pressure solve are left to the options database.
+
+With every boundary a velocity boundary, the pressure is determined only up to a constant and $\mathbf{S}_p$ inherits that constant as an exact null vector. This is harmless for the Krylov iteration — the null space is attached to the Schur operator and projected out — but it is fatal to any preconditioner that factors $\mathbf{S}_p$ *completely*: `lu` and `cholesky` hit a zero pivot. Incomplete factorizations (`ilu`, `icc`) and `jacobi` are unaffected. Fluca therefore regularizes $\mathbf{S}_p$ **in the preconditioner only** with a uniform diagonal shift $\varepsilon = \lambda_\max/N$, moving the constant's eigenvalue from $0$ to $\varepsilon$ while leaving every eigenvector untouched. $\mathbf{A}_p$ itself is left singular and unshifted, since it is the base $\mathbf{S}_p$ is rebuilt from whenever the stage shift changes. The shift changes no solution: $\mathbf{S}_p$ only preconditions, and the outer iteration still solves the true system.
+
+Because the two approximations are installed on solver objects rather than baked into the operators, the Jacobian is untouched: $\mathbf{P}_\text{mat} = \mathbf{A}_\text{mat} = \mathbf{J}$, and `-ksp_type preonly -pc_type lu` remains an exact monolithic reference solve. Any option under `-fieldsplit_pressure_upper_` or `-fieldsplit_pressure_inner_` suppresses the corresponding default, so the other members of the family remain reachable — for example SIMPLE:
+
+```
+-pc_fieldsplit_schur_precondition selfp
+-fieldsplit_pressure_mat_schur_complement_ainv_type diag   # A1 = diag(A) in the assembled S
+-fieldsplit_pressure_inner_ksp_type preonly -fieldsplit_pressure_inner_pc_type jacobi
+-fieldsplit_pressure_upper_ksp_type preonly -fieldsplit_pressure_upper_pc_type jacobi   # A2 = diag(A)
+```
 
 ## References
 
@@ -180,3 +256,4 @@ The two approximations coincide as $\Delta t \to 0$, where the momentum diagonal
 2. H. Elman, V. E. Howle, J. Shadid, R. Shuttleworth, and R. Tuminaro, A taxonomy and comparison of parallel block multi-level preconditioners for the incompressible Navier–Stokes equations, _J. Comput. Phys._, 227, 1790&ndash;1808 (2008).
 3. J. Perot, An analysis of the fractional step method, _J. Comput. Phys._, 108, 51&ndash;58 (1993).
 4. U. M. Ascher, S. J. Ruuth, and R. J. Spiteri, Implicit-explicit Runge-Kutta methods for time-dependent partial differential equations, _Appl. Numer. Math._, 25, 151&ndash;167 (1997).
+5. A. Quarteroni, F. Saleri, and A. Veneziani, Factorization methods for the numerical approximation of Navier&ndash;Stokes equations, _Comput. Methods Appl. Mech. Engrg._, 188, 505&ndash;526 (2000).
