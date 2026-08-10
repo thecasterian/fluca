@@ -9,7 +9,7 @@ This document presents the theoretical foundations and numerical methods impleme
 - [Temporal Discretization](#temporal-discretization)
 - [Spatial Discretization](#spatial-discretization)
 - [Immersed Boundary Method](#immersed-boundary-method)
-- [Segregated Solvers](#segregated-solvers)
+- [Matrix Form of the Discrete System](#matrix-form-of-the-discrete-system)
 - [Coupled IMEX Formulation](#coupled-imex-formulation)
 
 ## Governing Equations
@@ -132,256 +132,85 @@ For a two-dimensional Cartesian grid, the discrete divergence of velocity at cel
 
 <!-- TODO: -->
 
-## Segregated Solvers
+## Matrix Form of the Discrete System
 
-### Matrix Form of the Discretized Governing Equations
+The discretized governing equations are expressed in matrix form using discrete operators. This representation exposes the saddle-point structure of the coupled system and is the basis for the preconditioner analysis that follows. All operators are defined **unscaled** — no $\Delta t$ or $\rho$ factor is folded into them — and this single operator set is used throughout the remainder of the guide.
 
-To facilitate the development and analysis of solution algorithms, the discretized governing equations are expressed in matrix form using discrete operators. This representation elucidates the structure of the coupled system and enables rigorous analysis of solution methods.
+The spatial operators are:
 
-The following discrete operators are defined. The operator $\mathbf{A}$ represents the implicit part of the momentum equation, comprising the identity (from the time derivative), the convective terms, and the viscous terms:
+- $\mathbf{N}(\mathbf{u})$: convection, discretized with a second-order TVD scheme built on the face mass flux $\rho\overline{\mathbf{u}}$;
+- $\mathbf{L}$: viscous Laplacian, $(\mathbf{L}\mathbf{u})_i = \delta^2 u_i / \delta x_j \delta x_j$;
+- $\mathbf{G}$: cell-centered pressure gradient, $(\mathbf{G}p)_i = \delta p / \delta x_i$;
+- $\mathbf{T}$: interpolation of a cell-centered vector to the face normal, $\mathbf{T}\mathbf{v} = \overline{\mathbf{v}} \cdot \mathbf{n}$, where $\overline{(\cdot)}$ denotes linear interpolation from the two adjacent cell centers;
+- $\mathbf{G}^\text{st}$: staggered face-normal pressure gradient, evaluated compactly at the face, $\mathbf{G}^\text{st}p = \left. \delta p / \delta n \right|_\text{face}$;
+- $\mathbf{D}_0$: divergence of a face-normal field, $\mathbf{D}_0 U = \sum_i \delta U_i / \delta x_i$;
+- $\mathbf{D} = \rho\,\mathbf{D}_0\mathbf{T}$: divergence of the interpolated velocity, carrying the factor $\rho$.
 
-```math
-(\mathbf{A}\mathbf{u}^{n+1})_i = u_i^{n+1} + \frac{\Delta t}{2} \frac{\delta}{\delta x_j} (\overline{u}_i^{n+1} U^n + \overline{u}_i^n \overline{u}_j^{n+1})  - \frac{\Delta t}{2} \frac{\delta}{\delta x_j} \left( \nu^{n+1} \frac{\delta u_i^{n+1}}{\delta x_j} \right)
-```
+### Momentum Equation
 
-The operator $\mathbf{G}$ represents the (scaled) cell-centered pressure gradient:
-
-```math
-(\mathbf{G}p)_i = \frac{\Delta t}{\rho} \frac{\delta p}{\delta x_i}
-```
-
-The operator $\mathbf{D}$ represents the discrete divergence operator applied to the face-normal velocities:
+Discretizing the momentum equation (2) in space while leaving time continuous gives, for the cell-centered velocity $\mathbf{u}$ and pressure $p$:
 
 ```math
-\mathbf{D}U^{n+1} = \sum_i \frac{\delta U^{n+1}}{\delta x_i}
+\rho \frac{d\mathbf{u}}{dt} + \mathbf{N}(\mathbf{u}) + \mathbf{G} p = \mu \mathbf{L} \mathbf{u} + \mathbf{f}(t) \tag{9}
 ```
 
-Using these operators, the discretized momentum equation (6) takes the compact form:
+where $\mathbf{f}$ collects body forces and the boundary-condition contributions of the viscous and pressure operators.
+
+### Rhie-Chow Interpolation and Pressure Stabilization
+
+The face-normal velocity is not an independent unknown: it is the derived quantity supplied by the Rhie-Chow interpolation (7). Interpolating the cell-centered velocity to the faces directly would leave each cell pressure decoupled from its own gradient and admit checkerboard modes; the interpolation therefore carries a pressure-gradient correction. In operator form,
 
 ```math
-\mathbf{A}\mathbf{u}^{n+1} + \mathbf{G}p' = u_i^n + \frac{\Delta t}{2} \frac{\delta}{\delta x_j} \left( \nu^n \frac{\delta u_i^n}{\delta x_j} \right) - \frac{\Delta t}{\rho} \frac{\delta q}{\delta x_i} \equiv \mathbf{r} \tag{9}
+U = \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\left( \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st} \right) p = \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\,\mathbf{R}\, p, \qquad \mathbf{R} = \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st} \tag{10}
 ```
 
-where $\mathbf{r}$ represents the right-hand side consisting of known quantities from the previous time step. The discretized continuity equation (8) becomes:
+where $\mathbf{R}$ is the Rhie-Chow correction operator: the difference between the interpolated cell pressure gradient and the compact gradient evaluated directly at the face. Because the compact face gradient couples the two adjacent cell pressures, this correction removes the odd-even decoupling. Following Zang et al. [2], the coefficient is fixed at $\Delta t / \rho$ rather than taken from the momentum-equation diagonal as in the classical Rhie-Chow scheme.
+
+The discrete continuity equation is the vanishing divergence of these face-normal velocities, $\mathbf{D}_0 U = 0$, which on substituting (10) becomes
 
 ```math
-\mathbf{D}U^{n+1} = 0 \tag{10}
+\mathbf{D}_0 \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\, \mathbf{D}_0 \mathbf{R}\, p = 0
 ```
 
-To complete the operator notation, the Rhie-Chow interpolation is expressed using two additional operators. Let $\mathbf{T}$ denote the operator that linearly interpolates a cell-centered vector to the faces and extracts its normal component:
+The two products in $\mathbf{D}_0\mathbf{R} = \mathbf{D}_0\mathbf{T}\mathbf{G} - \mathbf{D}_0\mathbf{G}^\text{st}$ are two discrete Laplacians of the pressure: $\mathbf{D}_0\mathbf{T}\mathbf{G}$ interpolates the cell gradient before differencing, a **wide** ($2\Delta x$-stencil) Laplacian, whereas $\mathbf{D}_0\mathbf{G}^\text{st}$ differences the compact face gradient, a **compact** (nearest-neighbor) Laplacian. Their difference defines the pressure-stabilization operator:
 
 ```math
-\mathbf{T}\mathbf{v} = \overline{\mathbf{v}} \cdot \mathbf{n}
+\mathbf{S} = \mathbf{D}_0\mathbf{R} = \mathbf{L}^\text{wide} - \mathbf{L}^\text{compact} \tag{11}
 ```
 
-Let $\mathbf{G}^\text{st}$ denote the operator that computes the scaled face-normal pressure gradient directly at the face (the staggered gradient):
+Multiplying through by $\rho$ and identifying $\mathbf{D} = \rho\,\mathbf{D}_0\mathbf{T}$ and the stabilization coefficient $\sigma_0 = \Delta t$ gives the stabilized continuity constraint in cell-centered form:
 
 ```math
-\mathbf{G}^\text{st}p = \frac{\Delta t}{\rho} \left. \frac{\delta p}{\delta n} \right|_\text{face}
+\mathbf{D} \mathbf{u} + \sigma_0 \mathbf{S} p = 0 \tag{12}
 ```
 
-The Rhie-Chow interpolation (7) then takes the form:
+Since $\mathbf{D}$ already carries $\rho$, the effective coefficient relative to $\nabla \cdot \mathbf{u}$ is $\Delta t / \rho$, the classical Rhie-Chow coefficient [2]. The stabilization $\sigma_0 \mathbf{S}$ is therefore nothing but the divergence of the Rhie-Chow correction, written as a cell-centered pressure operator. It vanishes to the order of the truncation error for smooth pressure fields — where the wide and compact Laplacians agree — and acts only on the under-resolved checkerboard modes, which is precisely the coupling the collocated grid requires. Because $U$ has been eliminated, the discrete system carries only the two cell-centered fields $(\mathbf{u}, p)$.
+
+### Saddle-Point Structure
+
+Any implicit time discretization of (9) turns the velocity terms into a single velocity block $\mathbf{A}$ acting on the new-time velocity, leaving the pressure gradient, the constraint (12), and known right-hand-side data. The result is the two-field saddle-point system
 
 ```math
-U^{n+1} = \mathbf{T}\mathbf{u}^{n+1} + \mathbf{T}\mathbf{G}p' - \mathbf{G}^\text{st}p' = \mathbf{T}\mathbf{u}^{n+1} + \mathbf{R}p' \tag{11}
+\begin{bmatrix} \mathbf{A} & \mathbf{G} \\ \mathbf{D} & \sigma_0 \mathbf{S} \end{bmatrix}
+\begin{bmatrix} \mathbf{u} \\ p \end{bmatrix} =
+\begin{bmatrix} \mathbf{r} + \mathbf{b}_\text{mom} \\ b_\text{cont} \end{bmatrix} \tag{13}
 ```
 
-where $\mathbf{R} = \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st}$ represents the Rhie-Chow correction operator. Combining equations (9), (10), and (11) yields a fully coupled matrix system for the unknowns $\mathbf{u}^{n+1}$, $U^{n+1}$, and $p'$:
+where $\mathbf{r}$ holds the known terms from previous time levels and $\mathbf{b}_\text{mom}$, $b_\text{cont}$ the constant contributions of the boundary conditions. Only $\mathbf{A}$ depends on the time discretization; the off-diagonal blocks and the stabilized $(2,2)$ block are the same for every scheme. The Crank-Nicolson advancement of the Temporal Discretization chapter gives one such $\mathbf{A}$ — its equations are the momentum balance (9) multiplied through by $\Delta t / \rho$, which is why $\Delta t / \rho$ appears there on the pressure gradient and not here — and the IMEX Runge-Kutta stage operator of the next chapter gives another.
 
-```math
-\begin{bmatrix} \mathbf{A} & 0 & \mathbf{G} \\ -\mathbf{T} & \mathbf{I} & -\mathbf{R} \\ 0 & \mathbf{D} & 0 \end{bmatrix} \begin{bmatrix} \mathbf{u}^{n+1} \\ U^{n+1} \\ p' \end{bmatrix} = \begin{bmatrix} \mathbf{r} \\ 0 \\ 0 \end{bmatrix} \tag{12}
-```
+For non-constant viscosity — an eddy viscosity depending on the velocity field, for instance — $\mathbf{A}$ depends on the unknowns and the system must be solved iteratively; with constant viscosity and an explicitly treated convection term it is linear.
 
-In practice, boundary conditions introduce additional constant terms in the right-hand side vector:
-
-```math
-\begin{bmatrix} \mathbf{A} & 0 & \mathbf{G} \\ -\mathbf{T} & \mathbf{I} & -\mathbf{R} \\ 0 & \mathbf{D} & 0 \end{bmatrix} \begin{bmatrix} \mathbf{u}^{n+1} \\ U^{n+1} \\ p' \end{bmatrix} = \begin{bmatrix} \mathbf{r} + \mathbf{b}_\text{mom} \\ b_\text{interp} \\ b_\text{cont} \end{bmatrix} \tag{13}
-```
-
-For non-constant viscosity, such as eddy viscosity dependent on the velocity field from a turbulence model, the matrix depends on the unknowns, necessitating iterative solution. Some formulations treat the Rhie-Chow correction term via _deferred correction_:
-
-```math
-\begin{bmatrix} \mathbf{A} & 0 & \mathbf{G} \\ -\mathbf{T} & \mathbf{I} & 0 \\ 0 & \mathbf{D} & 0 \end{bmatrix} \begin{bmatrix} \mathbf{u}^{n+1} \\ U^{n+1} \\ p' \end{bmatrix} = \begin{bmatrix} \mathbf{r} + \mathbf{b}_\text{mom} \\ \mathbf{R}p' + b_\text{interp} \\ b_\text{cont} \end{bmatrix}
-```
-
-This form requires iteration even for constant viscosity, but yields a simpler matrix structure.
-
-The resulting systems are large, sparse, and possess saddle-point structure. Direct solution is computationally expensive. Fluca employs solution strategies based on approximate block factorization preconditioners.
-
-### Approximate Block Factorization Preconditioners
-
-Elman et al. [4] demonstrated that several classical solvers, including SIMPLE, can be formulated as stationary iterations:
-
-```math
-\mathbf{x}^{k+1} = \mathbf{x}^k + (\widetilde{\mathbf{M}}^k)^{-1} (\mathbf{f}^k - \mathbf{M}^k \mathbf{x}^k) \tag{14}
-```
-
-where $\widetilde{\mathbf{M}}$ is an approximation to the matrix $\mathbf{M}$. This is equivalent to one step of preconditioned Richardson iteration, with $\widetilde{\mathbf{M}}^{-1}$ serving as the preconditioner. For rapid convergence, $\widetilde{\mathbf{M}}$ must satisfy two conditions:
-
-1. The approximation error $\mathbf{M} - \widetilde{\mathbf{M}}$ should be small.
-2. The system $\widetilde{\mathbf{M}} \mathbf{y} = \mathbf{r}$ should be efficiently solvable.
-
-Block factorizations of the original matrix provide natural candidates for such approximations.
-
-Fluca employs the following decomposition to construct the approximation:
-
-```math
-\mathbf{M} =
-\begin{bmatrix}
-\mathbf{I} & 0 & 0 \\ 0 & \mathbf{I} & 0 \\ \mathbf{D}\mathbf{T}\mathbf{A}^{-1} & \mathbf{D} & \mathbf{I}
-\end{bmatrix}
-\begin{bmatrix}
-\mathbf{A} & 0 & 0 \\ -\mathbf{T} & \mathbf{I} & 0 \\ 0 & 0 & \mathbf{S}
-\end{bmatrix}
-\begin{bmatrix}
-\mathbf{I} & 0 & \mathbf{A}^{-1}\mathbf{G} \\ 0 & \mathbf{I} & \mathbf{T}\mathbf{A}^{-1}\mathbf{G} - \mathbf{R} \\ 0 & 0 & \mathbf{I}
-\end{bmatrix} \tag{15}
-```
-
-This decomposition is derived from the LDU decomposition of $\mathbf{M}$ viewed as a $2 \times 2$ block matrix:
-
-```math
-\mathbf{M} =
-\begin{bmatrix}
-\mathbf{M}_{11} & \mathbf{M}_{12} \\ \mathbf{M}_{21} & \mathbf{M}_{22}
-\end{bmatrix}
-```
-
-```math
-\mathbf{M}_{11} =
-\begin{bmatrix}
-\mathbf{A} & 0 \\ -\mathbf{T} & \mathbf{I}
-\end{bmatrix}
-, \quad
-\mathbf{M}_{12} =
-\begin{bmatrix}
-\mathbf{G} \\ -\mathbf{R}
-\end{bmatrix}
-, \quad
-\mathbf{M}_{21} =
-\begin{bmatrix}
-0 & \mathbf{D}
-\end{bmatrix}
-, \quad
-\mathbf{M}_{22} =
-\begin{bmatrix}
-0
-\end{bmatrix}
-```
-
-where $\mathbf{S} = -\mathbf{D}\mathbf{T}\mathbf{A}^{-1}\mathbf{G}+\mathbf{D}\mathbf{R}$ denotes the Schur complement.
-
-Fluca groups the lower triangular matrix and the diagonal matrix to form the following (LD)U decomposition:
-
-```math
-\mathbf{M} =
-\begin{bmatrix}
-\mathbf{A} & 0 & 0 \\ -\mathbf{T} & \mathbf{I} & 0 \\ 0 & \mathbf{D} & \mathbf{S}
-\end{bmatrix}
-\begin{bmatrix}
-\mathbf{I} & 0 & \mathbf{A}^{-1}\mathbf{G} \\ 0 & \mathbf{I} & \mathbf{T}\mathbf{A}^{-1}\mathbf{G} - \mathbf{R} \\ 0 & 0 & \mathbf{I}
-\end{bmatrix}
-```
-
-Let $\widetilde{\mathbf{A}}_1$ denote the approximation to $\mathbf{A}$ appearing in the Schur complement, and $\widetilde{\mathbf{A}}_2$ denote the approximation to $\mathbf{A}$ appearing in the upper triangular matrix. The approximate matrix $\widetilde{\mathbf{M}}$ is then:
-
-```math
-\widetilde{\mathbf{M}} =
-\begin{bmatrix}
-\mathbf{A} & 0 & 0 \\ -\mathbf{T} & \mathbf{I} & 0 \\ 0 & \mathbf{D} & \widetilde{\mathbf{S}}
-\end{bmatrix}
-\begin{bmatrix}
-\mathbf{I} & 0 & \widetilde{\mathbf{A}}_2^{-1}\mathbf{G} \\ 0 & \mathbf{I} & \mathbf{T}\widetilde{\mathbf{A}}_2^{-1}\mathbf{G} - \mathbf{R} \\ 0 & 0 & \mathbf{I}
-\end{bmatrix} \tag{16}
-```
-
-with the approximate Schur complement $\widetilde{\mathbf{S}}=-\mathbf{D}\mathbf{T}\widetilde{\mathbf{A}}_1^{-1}\mathbf{G}+\mathbf{D}\mathbf{R}$.
-
-The error of this approximation is:
-
-```math
-\mathbf{E} = \mathbf{M} - \widetilde{\mathbf{M}} =
-\begin{bmatrix}
-0 & 0 & (\mathbf{I}-\mathbf{A}\widetilde{\mathbf{A}}_2^{-1})\mathbf{G} \\
-0 & 0 & 0 \\
-0 & 0 & \mathbf{D}\mathbf{T}(\widetilde{\mathbf{A}}_1^{-1}-\widetilde{\mathbf{A}}_2^{-1})\mathbf{G}
-\end{bmatrix} \tag{17}
-```
-
-From this expression, it can be concluded that:
-
-1. The momentum equation is unperturbed if $\widetilde{\mathbf{A}}_2 = \mathbf{A}$.
-2. The Rhie-Chow interpolation is always unperturbed.
-3. The continuity equation is unperturbed if $\widetilde{\mathbf{A}}_1 = \widetilde{\mathbf{A}}_2$.
-
-The following sections describe how specific solvers construct the matrix decomposition and select $\widetilde{\mathbf{A}}_1$ and $\widetilde{\mathbf{A}}_2$ to satisfy these conditions.
-
-### Fractional Step Method
-
-Perot [5] demonstrated that the fractional step method (FSM) can be interpreted as an approximate block LU decomposition of the coupled matrix system. This perspective establishes the FSM as a member of the approximate block factorization preconditioner family.
-
-Zang et al. [2] presented the FSM for collocated grids. Applied to the matrix system (13), the solution procedure consists of the following steps:
-
-1. Solve $\mathbf{A}\mathbf{u}^* = \mathbf{r} + \mathbf{b}_\text{mom}$ for the intermediate velocity $\mathbf{u}^*$.
-2. Compute the face-normal intermediate velocity: $U^* = \mathbf{T}\mathbf{u}^* + b_\text{interp}$.
-3. Solve the pressure Poisson equation $\mathbf{D}\mathbf{G}^\text{st}p' = \mathbf{D}U^* + b_\text{cont}$ for $p'$.
-4. Correct the velocity: $\mathbf{u}^{n+1} = \mathbf{u}^* - \mathbf{G}p'$.
-5. Correct the face-normal velocity: $U^{n+1} = U^* - \mathbf{G}^\text{st}p'$.
-
-The corresponding matrix decomposition is:
-
-```math
-\widetilde{\mathbf{M}} =
-\begin{bmatrix}
-\mathbf{A} & 0 & 0 \\ \mathbf{T} & -\mathbf{I} & 0 \\ 0 & \mathbf{D} & -\mathbf{D}\mathbf{G}^\text{st}
-\end{bmatrix}
-\begin{bmatrix} \mathbf{I} & 0 & \mathbf{G} \\ 0 & \mathbf{I} & \mathbf{G}^\text{st} \\ 0 & 0 & \mathbf{I}
-\end{bmatrix} \tag{18}
-```
-
-This decomposition is easily invertible due to its simple approximate Schur complement $\widetilde{\mathbf{S}} = -\mathbf{D}\mathbf{G}^\text{st}$, which corresponds to a discrete Laplacian operator.
-
-Comparing (18) with (16), the approximations to $\mathbf{A}$ are identified as:
-
-```math
-\widetilde{\mathbf{A}}_1 = \widetilde{\mathbf{A}}_2 = \mathbf{I} \tag{19}
-```
-
-The continuity equation remains unperturbed.
+The matrix in (13) is large, sparse, and indefinite: the $(2,2)$ block is not the zero block of a classical saddle-point problem, but neither is it definite enough to make the system easy. Direct factorization is prohibitive beyond small grids, so Fluca solves it with a Krylov method preconditioned by an approximate block factorization, developed in the next chapter.
 
 ## Coupled IMEX Formulation
 
-Fluca's `Phys` module solves the incompressible equations as a fully coupled system in time. The semi-discretized equations are cast as a differential-algebraic system and advanced with an implicit-explicit (IMEX) Runge-Kutta integrator driving PETSc's `TS` directly. Unlike the segregated solvers above, the velocity-pressure coupling is retained and solved to convergence at every step; the classical pressure-velocity decoupling reappears here only as a family of _preconditioners_ for the coupled system, never as the time advancement itself.
+Fluca's `Phys` module solves the incompressible equations as a fully coupled system in time. The semi-discrete system (9), (12) is cast as a differential-algebraic system and advanced with an implicit-explicit (IMEX) Runge-Kutta integrator driving PETSc's `TS` directly. The velocity-pressure coupling is retained and solved to convergence at every step; the classical pressure-velocity decoupling reappears here only as a family of _preconditioners_ for the coupled system, never as the time advancement itself.
 
-Three differences from the segregated notation should be noted, since several symbols are reused with new meanings.
+The discrete operators of the previous chapter are used unchanged, and the stage matrix is the saddle-point system (13). The only new symbols are the Schur complement $\widehat{\mathbf{S}}$ and its approximation $\widetilde{\mathbf{S}}$, both distinct from the pressure-stabilization operator $\mathbf{S}$ of (11).
 
-1. This formulation carries no separate face-normal unknown $U$: the Rhie-Chow interpolation is eliminated analytically and reappears as a cell-centered pressure-stabilization term, leaving a two-field system in $(\mathbf{u}, p)$.
-2. The pressure-gradient operators $\mathbf{G}$, $\mathbf{G}^\text{st}$ and the Rhie-Chow correction $\mathbf{R}$ are _unscaled_ here; the $\Delta t / \rho$ factor folded into them in the segregated chapter is written out explicitly below. The divergence $\mathbf{D}$ also changes meaning: it acts on the cell-centered velocity and carries a factor $\rho$, whereas the segregated $\mathbf{D}$ acts on the face-normal velocity $U$ and carries no $\rho$. Consequently $\sigma_0 = \Delta t$ alone, the $\rho$ having been absorbed into $\mathbf{D}$.
-3. $\mathbf{S}$ denotes the **pressure-stabilization** operator here, not the Schur complement it denotes in the segregated chapter. The Schur complement of this chapter is written $\widehat{\mathbf{S}}$, and its approximation $\widetilde{\mathbf{S}}$.
+### Differential-Algebraic Structure
 
-### Pressure-Stabilized Semi-Discrete System
-
-Discretizing the momentum and continuity equations in space while leaving time continuous, and folding the Rhie-Chow correction into a cell-centered pressure-stabilization operator, yields for the cell-centered velocity $\mathbf{u}$ and pressure $p$:
-
-```math
-\rho \frac{d\mathbf{u}}{dt} + \mathbf{N}(\mathbf{u}) + \mathbf{G} p = \mu \mathbf{L} \mathbf{u} + \mathbf{f}(t) \tag{20}
-```
-
-```math
-\mathbf{D} \mathbf{u} + \sigma_0 \mathbf{S} p = 0 \tag{21}
-```
-
-where the discrete operators are
-
-- $\mathbf{N}$: convection, discretized with a second-order TVD scheme built on the face mass flux $\rho \overline{\mathbf{u}}$;
-- $\mathbf{G}$: cell-centered pressure gradient (unscaled);
-- $\mathbf{L}$: viscous Laplacian;
-- $\mathbf{D} = \rho \, \delta \overline{\mathbf{u}} / \delta x_i$: divergence of the interpolated velocity (carrying the factor $\rho$);
-- $\mathbf{S} = \mathbf{L}^\text{wide} - \mathbf{L}^\text{compact}$: pressure stabilization, the difference between the wide (interpolated-gradient) and compact discrete Laplacians. It is the cell-centered form of the collocated Rhie-Chow correction [2], coupling pressure and velocity to suppress the checkerboard modes.
-
-The stabilization coefficient is $\sigma_0 = \Delta t$; since $\mathbf{D}$ already carries $\rho$, the effective coefficient relative to $\nabla \cdot \mathbf{u}$ is $\Delta t / \rho$, the classical Rhie-Chow coefficient [2].
-
-Because the continuity equation (21) contains no time derivative, the system is a **differential-algebraic equation** (DAE). Written as $\mathbf{M}\, d\mathbf{y}/dt = \dots$ with $\mathbf{y} = (\mathbf{u}, p)$, the mass matrix
+Because the stabilized continuity constraint (12) contains no time derivative, the pair (9), (12) is a **differential-algebraic equation** (DAE). Written as $\mathbf{M}\, d\mathbf{y}/dt = \dots$ with $\mathbf{y} = (\mathbf{u}, p)$, the mass matrix
 
 ```math
 \mathbf{M} = \begin{bmatrix} \rho \mathbf{I} & 0 \\ 0 & 0 \end{bmatrix}
@@ -389,39 +218,9 @@ Because the continuity equation (21) contains no time derivative, the system is 
 
 is singular: the pressure is an algebraic variable that instantaneously enforces stabilized incompressibility. The stabilization $\sigma_0 \mathbf{S}$ is what makes this constraint solvable on the collocated grid, by suppressing the checkerboard pressure modes.
 
-### Rhie-Chow Interpolation and Pressure Stabilization
-
-The stabilization operator $\mathbf{S}$ in Eq. (21) originates from the Rhie-Chow interpolation of the face-normal velocity, Eq. (7). Interpolating the cell-centered velocity to the faces directly would leave each cell pressure decoupled from its own gradient and admit checkerboard modes; instead the face-normal velocity carries a pressure-gradient correction:
-
-```math
-U = \overline{\mathbf{u}} \cdot \mathbf{n} + \frac{\Delta t}{\rho}\left( \overline{\nabla p} \cdot \mathbf{n} - \left. \frac{\partial p}{\partial n} \right|_\text{face} \right)
-```
-
-Here $\overline{(\cdot)}$ denotes linear interpolation from the two adjacent cell centers to the face. The first term is ordinary interpolation; the correction is the difference between the interpolated cell pressure gradient and the compact gradient evaluated directly at the face. Because the compact face gradient couples the two adjacent cell pressures, this correction removes the odd-even decoupling. Following Zang et al. [2], the coefficient is fixed at $\Delta t / \rho$ rather than taken from the momentum-equation diagonal as in the classical Rhie-Chow scheme.
-
-Reusing the interpolation operator $\mathbf{T}$ (cell velocity to face normal), and writing $\mathbf{G}$ and $\mathbf{G}^\text{st}$ for the _unscaled_ cell-centered and staggered face-normal pressure gradients — that is, $\mathbf{G}p = \delta p / \delta x_i$ and $\mathbf{G}^\text{st}p = \delta p / \delta n |_\text{face}$, without the $\Delta t / \rho$ carried by their segregated-chapter counterparts — the face velocity becomes
-
-```math
-U = \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\left( \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st} \right) p = \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\,\mathbf{R}\, p, \qquad \mathbf{R} = \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st}
-```
-
-which is Eq. (11) with the $\Delta t / \rho$ scaling written out. The discrete continuity equation is the divergence of these face-normal velocities; writing $\mathbf{D}_0$ for that divergence operator ($\mathbf{D}_0 U = \sum_i \delta U_i / \delta x_i$),
-
-```math
-\mathbf{D}_0 \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\, \mathbf{D}_0 \mathbf{R}\, p = 0
-```
-
-The two products in $\mathbf{D}_0\mathbf{R} = \mathbf{D}_0\mathbf{T}\mathbf{G} - \mathbf{D}_0\mathbf{G}^\text{st}$ are two discrete Laplacians of the pressure: $\mathbf{D}_0\mathbf{T}\mathbf{G}$ interpolates the cell gradient before differencing, a **wide** ($2\Delta x$-stencil) Laplacian, whereas $\mathbf{D}_0\mathbf{G}^\text{st}$ differences the compact face gradient, a **compact** (nearest-neighbor) Laplacian. Their difference is the stabilization operator:
-
-```math
-\mathbf{S} = \mathbf{D}_0\mathbf{R} = \mathbf{L}^\text{wide} - \mathbf{L}^\text{compact}
-```
-
-Multiplying the continuity relation by $\rho$ and identifying the divergence of the interpolated velocity $\mathbf{D} = \rho\,\mathbf{D}_0\mathbf{T}$ and $\sigma_0 = \Delta t$ recovers the stabilized constraint (21), $\mathbf{D}\mathbf{u} + \sigma_0 \mathbf{S} p = 0$. The stabilization $\sigma_0 \mathbf{S}$ is therefore the divergence of the Rhie-Chow correction. It vanishes to the order of the truncation error for smooth pressure fields — where the wide and compact Laplacians agree — and acts only on the under-resolved checkerboard modes, which is precisely the coupling required by the collocated grid.
-
 ### IMEX Runge-Kutta Advancement
 
-`TSARKIMEX` solves systems of the form $\mathbf{F}(t, \mathbf{y}, \dot{\mathbf{y}}) = \mathbf{g}(t, \mathbf{y})$, where $\mathbf{F}$ collects the stiff terms (advanced implicitly) and $\mathbf{g}$ the non-stiff terms (advanced explicitly) [6]. PETSc's documentation calls the explicit part $\mathbf{G}$; it is renamed $\mathbf{g}$ here to avoid a collision with the pressure-gradient operator. The terms of (20)-(21) are sorted by stiffness:
+`TSARKIMEX` solves systems of the form $\mathbf{F}(t, \mathbf{y}, \dot{\mathbf{y}}) = \mathbf{g}(t, \mathbf{y})$, where $\mathbf{F}$ collects the stiff terms (advanced implicitly) and $\mathbf{g}$ the non-stiff terms (advanced explicitly) [6]. PETSc's documentation calls the explicit part $\mathbf{G}$; it is renamed $\mathbf{g}$ here to avoid a collision with the pressure-gradient operator. The terms of (9) and (12) are sorted by stiffness:
 
 ```math
 \mathbf{F} = \begin{bmatrix} \rho \dot{\mathbf{u}} - \mu \mathbf{L}\mathbf{u} + \mathbf{G} p \\ \mathbf{D}\mathbf{u} + \sigma_0 \mathbf{S} p \end{bmatrix}, \qquad
@@ -433,33 +232,33 @@ The viscous term (parabolic-stiff), pressure gradient, and the algebraic continu
 For an $s$-stage scheme with a diagonally-implicit tableau $a^I$, stage $i$ requires an implicit solve whose Jacobian is $\mathbf{J} = \text{shift}\cdot\mathbf{M} + \partial\mathbf{F}/\partial\mathbf{y}$, with the stage shift $\text{shift} = 1/(a^I_{ii}\,\Delta t)$:
 
 ```math
-\mathbf{J} = \begin{bmatrix} \text{shift}\,\rho \mathbf{I} - \mu \mathbf{L} & \mathbf{G} \\ \mathbf{D} & \sigma_0 \mathbf{S} \end{bmatrix} \tag{22}
+\mathbf{J} = \begin{bmatrix} \text{shift}\,\rho \mathbf{I} - \mu \mathbf{L} & \mathbf{G} \\ \mathbf{D} & \sigma_0 \mathbf{S} \end{bmatrix} \tag{14}
 ```
 
 The singular pressure block of $\mathbf{M}$ contributes nothing to $\mathbf{J}$; the corresponding diagonal is instead supplied by the stabilization $\sigma_0 \mathbf{S}$, so $\mathbf{J}$ is nonsingular apart from the constant-pressure null space (removed by a null-space projection). A **stiffly-accurate** scheme (e.g. `ARKIMEX3`) is required so that the algebraic pressure is advanced at the full order of the method.
 
 ### Schur-Complement Preconditioning
 
-The stage matrix (22) is a saddle-point system for the collocated two-field unknowns $(\mathbf{u}, p)$, in which the face-normal velocity has been eliminated and the Rhie-Chow correction absorbed into $\sigma_0 \mathbf{S}$. Writing $\mathbf{A} = \text{shift}\,\rho \mathbf{I} - \mu \mathbf{L}$ and $\mathbf{C} = \sigma_0 \mathbf{S}$, it admits the block LDU factorization
+The stage matrix (14) is the saddle-point system (13) with the velocity block $\mathbf{A} = \text{shift}\,\rho \mathbf{I} - \mu \mathbf{L}$ supplied by the IMEX stage. Abbreviating the stabilized $(2,2)$ block as $\mathbf{C} = \sigma_0 \mathbf{S}$, it admits the block LDU factorization
 
 ```math
 \mathbf{J} =
 \begin{bmatrix} \mathbf{I} & 0 \\ \mathbf{D}\mathbf{A}^{-1} & \mathbf{I} \end{bmatrix}
 \begin{bmatrix} \mathbf{A} & 0 \\ 0 & \widehat{\mathbf{S}} \end{bmatrix}
 \begin{bmatrix} \mathbf{I} & \mathbf{A}^{-1}\mathbf{G} \\ 0 & \mathbf{I} \end{bmatrix},
-\qquad \widehat{\mathbf{S}} = \mathbf{C} - \mathbf{D}\mathbf{A}^{-1}\mathbf{G} \tag{23}
+\qquad \widehat{\mathbf{S}} = \mathbf{C} - \mathbf{D}\mathbf{A}^{-1}\mathbf{G} \tag{15}
 ```
 
-Fluca applies this factorization as a preconditioner via `PCFIELDSPLIT` of type Schur with full factorization. The two triangular factors are the momentum **predictor** and velocity **corrector**, and the middle factor is the **pressure-Poisson** solve (with the Schur complement $\widehat{\mathbf{S}}$) — the classical fractional-step sweep, now used to precondition rather than to time-advance. Perot [5] showed that the fractional step method is itself such an approximate block factorization, and Elman et al. [4] that SIMPLE is another. This is the two-field counterpart of the three-block decomposition (15) of the segregated solvers.
+Fluca applies this factorization as a preconditioner via `PCFIELDSPLIT` of type Schur with full factorization. The two triangular factors are the momentum **predictor** and velocity **corrector**, and the middle factor is the **pressure-Poisson** solve (with the Schur complement $\widehat{\mathbf{S}}$) — the classical fractional-step sweep, now used to precondition rather than to time-advance. Perot [5] showed that the fractional step method is itself such an approximate block factorization, and Elman et al. [4] that SIMPLE is another.
 
 #### Two independent approximations
 
-Following the nomenclature of Quarteroni et al. [7] as adopted by Elman et al. [4], group the lower and diagonal factors of (23) together, (LD)U:
+Following the nomenclature of Quarteroni et al. [7] as adopted by Elman et al. [4], group the lower and diagonal factors of (15) together, (LD)U:
 
 ```math
 \mathbf{J} =
 \begin{bmatrix} \mathbf{A} & 0 \\ \mathbf{D} & \widehat{\mathbf{S}} \end{bmatrix}
-\begin{bmatrix} \mathbf{I} & \mathbf{A}^{-1}\mathbf{G} \\ 0 & \mathbf{I} \end{bmatrix} \tag{24}
+\begin{bmatrix} \mathbf{I} & \mathbf{A}^{-1}\mathbf{G} \\ 0 & \mathbf{I} \end{bmatrix} \tag{16}
 ```
 
 The $\mathbf{A}^{-1}$ of the lower factor cancels against the diagonal block, so exactly **two** occurrences of $\mathbf{A}^{-1}$ survive, and they are approximated independently:
@@ -467,7 +266,7 @@ The $\mathbf{A}^{-1}$ of the lower factor cancels against the diagonal block, so
 - $\widetilde{\mathbf{A}}_1$ — the approximation in the **Schur complement**, $\widetilde{\mathbf{S}} = \mathbf{C} - \mathbf{D}\widetilde{\mathbf{A}}_1^{-1}\mathbf{G}$, i.e. in the pressure-Poisson operator;
 - $\widetilde{\mathbf{A}}_2$ — the approximation in the **upper triangular factor**, i.e. in the velocity correction $\mathbf{u}^{n+1} = \mathbf{u}^* - \widetilde{\mathbf{A}}_2^{-1}\mathbf{G}p'$.
 
-These are the same two approximations identified in (16) for the segregated system. The resulting preconditioner — written $\widetilde{\mathbf{J}}$, since here it approximates the stage Jacobian $\mathbf{J}$ rather than the $\widetilde{\mathbf{M}}$ of the segregated chapter — and its error are
+The resulting preconditioner $\widetilde{\mathbf{J}}$ and its error are
 
 ```math
 \widetilde{\mathbf{J}} =
@@ -478,7 +277,7 @@ These are the same two approximations identified in (16) for the segregated syst
 \begin{bmatrix}
 0 & (\mathbf{I} - \mathbf{A}\widetilde{\mathbf{A}}_2^{-1})\mathbf{G} \\
 0 & \mathbf{D}(\widetilde{\mathbf{A}}_1^{-1} - \widetilde{\mathbf{A}}_2^{-1})\mathbf{G}
-\end{bmatrix} \tag{25}
+\end{bmatrix} \tag{17}
 ```
 
 Reading off the two blocks of $\mathbf{E}$:
@@ -508,11 +307,11 @@ The fractional-step and SIMPLE choices coincide as $\Delta t \to 0$, where $\ope
 | Preconditioner matrix for the Schur block | `-pc_fieldsplit_schur_precondition` | PETSc default: $\mathbf{A}_{11} = \sigma_0\mathbf{S}$ |
 | $\widetilde{\mathbf{A}}_2$ in the velocity correction | `-fieldsplit_pressure_upper_` | PETSc default: reuses the velocity solve |
 
-Only one prefix appears for the lower and diagonal factors because `PCFIELDSPLIT`, although it documents the `full` factorization as the plain LDU product, applies it in the fused (LD)U grouping of (24): a single solve with $\mathbf{A}$ produces both the predicted velocity and the argument of $\mathbf{D}\mathbf{u}^*$ that forms the Schur right-hand side. Each preconditioner application therefore costs **two** solves with $\mathbf{A}$ — the predictor and the velocity correction — rather than the three a literal L·D·U application would require.
+Only one prefix appears for the lower and diagonal factors because `PCFIELDSPLIT`, although it documents the `full` factorization as the plain LDU product, applies it in the fused (LD)U grouping of (16): a single solve with $\mathbf{A}$ produces both the predicted velocity and the argument of $\mathbf{D}\mathbf{u}^*$ that forms the Schur right-hand side. Each preconditioner application therefore costs **two** solves with $\mathbf{A}$ — the predictor and the velocity correction — rather than the three a literal L·D·U application would require.
 
 Note that the second solve does not disappear when $\widetilde{\mathbf{A}}_2$ is a cheap approximation. When a separate upper solver is configured (`kspUpper != kspA` in `PCApply_FieldSplit_Schur`), PETSc recomputes the predictor with $\mathbf{A}$ before applying $\widetilde{\mathbf{A}}_2^{-1}$, so the exact $\mathbf{A}$-solve count stays at two and only the *correction* becomes cheap. The saving from a cheap $\widetilde{\mathbf{A}}_2$ is in the correction, not in the predictor count.
 
-The cancellation that produces the fused grouping is algebraic only for a fixed linear operator; if the velocity `KSP` is an inexact Krylov method, the two solves with $\mathbf{A}$ do not cancel exactly and the preconditioner is only approximately of the form (25), which is why an outer flexible Krylov method is advisable in that case.
+The cancellation that produces the fused grouping is algebraic only for a fixed linear operator; if the velocity `KSP` is an inexact Krylov method, the two solves with $\mathbf{A}$ do not cancel exactly and the preconditioner is only approximately of the form (17), which is why an outer flexible Krylov method is advisable in that case.
 
 The Schur block enters twice: as the **operator**, applied matrix-free as $\mathbf{C} - \mathbf{D}\mathbf{A}^{-1}\mathbf{G}$ with $\mathbf{A}^{-1}$ supplied by the inner solve (`-fieldsplit_pressure_inner_`, which in PETSc falls back to the velocity solve), and as the **preconditioner** for that operator (`-pc_fieldsplit_schur_precondition`: `a11` for the $(1,1)$ block itself, `user` for a supplied matrix, `selfp` for the assembled $\mathbf{C} - \mathbf{D}\operatorname{diag}(\mathbf{A})^{-1}\mathbf{G}$). If the pressure `KSP` is iterated to a tight tolerance, $\widetilde{\mathbf{A}}_1$ is whatever the _inner_ solve applies and the preconditioner only affects the iteration count; if it is `preonly`, the preconditioner matrix alone defines $\widetilde{\mathbf{A}}_1$.
 
