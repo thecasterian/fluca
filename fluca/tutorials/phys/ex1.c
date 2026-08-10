@@ -217,4 +217,18 @@ int main(int argc, char **argv)
     nsize: 1
     args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_type arkimex -ts_arkimex_type 3 -ts_adapt_type none -fieldsplit_velocity_ksp_type preonly -fieldsplit_velocity_pc_type lu -fieldsplit_pressure_ksp_type gmres -fieldsplit_pressure_ksp_rtol 1e-10 -fieldsplit_pressure_pc_type jacobi
 
+  # SIMPLE preconditioner. diag(A)^-1 must replace A^-1 in BOTH the Schur complement
+  # (A1: -fieldsplit_pressure_inner_ jacobi, which is what applies A1^-1 in the operator)
+  # and the velocity correction (A2: -fieldsplit_pressure_upper_ jacobi). A1 = A2 is what
+  # makes SIMPLE mass preserving; approximating the Schur complement alone would leave
+  # A2 = A and perturb continuity instead of momentum.
+  # The pressure KSP is converged tightly here, so A1 is defined by the inner solve alone;
+  # selfp only supplies the matching preconditioner matrix Sp = C - D diag(A)^-1 G, which
+  # keeps that pressure solve cheap. ainv_type diag is PETSc's default, spelled out to
+  # keep this case self-documenting.
+  test:
+    suffix: simple
+    nsize: 1
+    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_type arkimex -ts_arkimex_type 3 -ts_adapt_type none -pc_fieldsplit_schur_precondition selfp -fieldsplit_pressure_mat_schur_complement_ainv_type diag -fieldsplit_pressure_inner_ksp_type preonly -fieldsplit_pressure_inner_pc_type jacobi -fieldsplit_pressure_upper_ksp_type preonly -fieldsplit_pressure_upper_pc_type jacobi -fieldsplit_velocity_ksp_type preonly -fieldsplit_velocity_pc_type lu -fieldsplit_pressure_ksp_type gmres -fieldsplit_pressure_ksp_rtol 1e-10 -fieldsplit_pressure_pc_type jacobi
+
 TEST*/
