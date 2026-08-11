@@ -140,18 +140,18 @@ The spatial operators are:
 
 - $\mathbf{N}(\mathbf{u})$: convection, discretized with a second-order TVD scheme built on the face mass flux $\rho\overline{\mathbf{u}}$;
 - $\mathbf{L}$: viscous Laplacian, $(\mathbf{L}\mathbf{u})_i = \delta^2 u_i / \delta x_j \delta x_j$;
-- $\mathbf{G}$: cell-centered pressure gradient, $(\mathbf{G}p)_i = \delta p / \delta x_i$;
+- $\mathbf{B}^\top$: cell-centered pressure gradient, $(\mathbf{B}^\top p)_i = \delta p / \delta x_i$. The symbol follows the saddle-point convention of Elman et al. [4] and Quarteroni et al. [7], in which $\mathbf{B}$ is the discrete divergence and $\mathbf{B}^\top$ the discrete gradient. The transpose is genuine here up to sign: the assembled blocks satisfy $\mathbf{D} = -\mathbf{B}$ exactly on every interior row, which is the discrete integration-by-parts identity $\langle \mathbf{B}^\top p, \mathbf{u}\rangle = -\langle p, \mathbf{B}\mathbf{u}\rangle$. It is not exact on boundary rows, where the velocity Dirichlet conditions imposed on $\mathbf{D}$ and the pressure Neumann conditions imposed on $\mathbf{B}^\top$ are not adjoint to one another; under periodic boundaries, which have no such rows, the identity holds everywhere;
 - $\mathbf{T}$: interpolation of a cell-centered vector to the face normal, $\mathbf{T}\mathbf{v} = \overline{\mathbf{v}} \cdot \mathbf{n}$, where $\overline{(\cdot)}$ denotes linear interpolation from the two adjacent cell centers;
-- $\mathbf{G}^\text{st}$: staggered face-normal pressure gradient, evaluated compactly at the face, $\mathbf{G}^\text{st}p = \left. \delta p / \delta n \right|_\text{face}$;
-- $\mathbf{D}_0$: divergence of a face-normal field, $\mathbf{D}_0 U = \sum_i \delta U_i / \delta x_i$;
-- $\mathbf{D} = \rho\,\mathbf{D}_0\mathbf{T}$: divergence of the interpolated velocity, carrying the factor $\rho$.
+- $\mathbf{B}^\top_\text{st}$: staggered face-normal pressure gradient, evaluated compactly at the face, $\mathbf{B}^\top_\text{st}\, p = \left. \delta p / \delta n \right|_\text{face}$;
+- $\mathbf{D}_\text{st}$: staggered divergence, acting on a face-normal field, $\mathbf{D}_\text{st} U = \sum_i \delta U_i / \delta x_i$;
+- $\mathbf{D} = \mathbf{D}_\text{st}\mathbf{T}$: divergence of the interpolated velocity.
 
 ### Momentum Equation
 
 Discretizing the momentum equation (2) in space while leaving time continuous gives, for the cell-centered velocity $\mathbf{u}$ and pressure $p$:
 
 ```math
-\rho \frac{d\mathbf{u}}{dt} + \mathbf{N}(\mathbf{u}) + \mathbf{G} p = \mu \mathbf{L} \mathbf{u} + \mathbf{f}(t) \tag{9}
+\rho \frac{d\mathbf{u}}{dt} + \mathbf{N}(\mathbf{u}) + \mathbf{B}^\top p = \mu \mathbf{L} \mathbf{u} + \mathbf{f}(t) \tag{9}
 ```
 
 where $\mathbf{f}$ collects body forces and the boundary-condition contributions of the viscous and pressure operators.
@@ -161,37 +161,37 @@ where $\mathbf{f}$ collects body forces and the boundary-condition contributions
 The face-normal velocity is not an independent unknown: it is the derived quantity supplied by the Rhie-Chow interpolation (7). Interpolating the cell-centered velocity to the faces directly would leave each cell pressure decoupled from its own gradient and admit checkerboard modes; the interpolation therefore carries a pressure-gradient correction. In operator form,
 
 ```math
-U = \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\left( \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st} \right) p = \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\,\mathbf{R}\, p, \qquad \mathbf{R} = \mathbf{T}\mathbf{G} - \mathbf{G}^\text{st} \tag{10}
+U = \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\left( \mathbf{T}\mathbf{B}^\top - \mathbf{B}^\top_\text{st} \right) p = \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\,\mathbf{R}\, p, \qquad \mathbf{R} = \mathbf{T}\mathbf{B}^\top - \mathbf{B}^\top_\text{st} \tag{10}
 ```
 
 where $\mathbf{R}$ is the Rhie-Chow correction operator: the difference between the interpolated cell pressure gradient and the compact gradient evaluated directly at the face. Because the compact face gradient couples the two adjacent cell pressures, this correction removes the odd-even decoupling. Following Zang et al. [2], the coefficient is fixed at $\Delta t / \rho$ rather than taken from the momentum-equation diagonal as in the classical Rhie-Chow scheme.
 
-The discrete continuity equation is the vanishing divergence of these face-normal velocities, $\mathbf{D}_0 U = 0$, which on substituting (10) becomes
+The discrete continuity equation is the vanishing divergence of these face-normal velocities, $\mathbf{D}_\text{st} U = 0$, which on substituting (10) becomes
 
 ```math
-\mathbf{D}_0 \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\, \mathbf{D}_0 \mathbf{R}\, p = 0
+\mathbf{D}_\text{st} \mathbf{T}\mathbf{u} + \frac{\Delta t}{\rho}\, \mathbf{D}_\text{st} \mathbf{R}\, p = 0
 ```
 
-The two products in $\mathbf{D}_0\mathbf{R} = \mathbf{D}_0\mathbf{T}\mathbf{G} - \mathbf{D}_0\mathbf{G}^\text{st}$ are two discrete Laplacians of the pressure: $\mathbf{D}_0\mathbf{T}\mathbf{G}$ interpolates the cell gradient before differencing, a **wide** ($2\Delta x$-stencil) Laplacian, whereas $\mathbf{D}_0\mathbf{G}^\text{st}$ differences the compact face gradient, a **compact** (nearest-neighbor) Laplacian. Their difference defines the pressure-stabilization operator:
+The two products in $\mathbf{D}_\text{st}\mathbf{R} = \mathbf{D}_\text{st}\mathbf{T}\mathbf{B}^\top - \mathbf{D}_\text{st}\mathbf{B}^\top_\text{st}$ are two discrete Laplacians of the pressure: $\mathbf{D}_\text{st}\mathbf{T}\mathbf{B}^\top$ interpolates the cell gradient before differencing, a **wide** ($2\Delta x$-stencil) Laplacian, whereas $\mathbf{D}_\text{st}\mathbf{B}^\top_\text{st}$ differences the compact face gradient, a **compact** (nearest-neighbor) Laplacian. Their difference is the pressure stabilization. Identifying $\mathbf{D} = \mathbf{D}_\text{st}\mathbf{T}$ and absorbing the factor $\Delta t / \rho$ into the operator gives the stabilization block
 
 ```math
-\mathbf{S} = \mathbf{D}_0\mathbf{R} = \mathbf{L}^\text{wide} - \mathbf{L}^\text{compact} \tag{11}
+\mathbf{C} = \frac{\Delta t}{\rho}\, \mathbf{D}_\text{st}\mathbf{R} = \frac{\Delta t}{\rho} \left( \mathbf{L}^\text{wide} - \mathbf{L}^\text{compact} \right) \tag{11}
 ```
 
-Multiplying through by $\rho$ and identifying $\mathbf{D} = \rho\,\mathbf{D}_0\mathbf{T}$ and the stabilization coefficient $\sigma_0 = \Delta t$ gives the stabilized continuity constraint in cell-centered form:
+and with it the stabilized continuity constraint in cell-centered form:
 
 ```math
-\mathbf{D} \mathbf{u} + \sigma_0 \mathbf{S} p = 0 \tag{12}
+\mathbf{D} \mathbf{u} + \mathbf{C} p = 0 \tag{12}
 ```
 
-Since $\mathbf{D}$ already carries $\rho$, the effective coefficient relative to $\nabla \cdot \mathbf{u}$ is $\Delta t / \rho$, the classical Rhie-Chow coefficient [2]. The stabilization $\sigma_0 \mathbf{S}$ is therefore nothing but the divergence of the Rhie-Chow correction, written as a cell-centered pressure operator. It vanishes to the order of the truncation error for smooth pressure fields — where the wide and compact Laplacians agree — and acts only on the under-resolved checkerboard modes, which is precisely the coupling the collocated grid requires. Because $U$ has been eliminated, the discrete system carries only the two cell-centered fields $(\mathbf{u}, p)$.
+The coefficient $\Delta t / \rho$ is not a free stabilization parameter: it is the classical Rhie-Chow coefficient [2], inherited unchanged from the interpolation (10). The stabilization $\mathbf{C}$ is therefore nothing but the divergence of the Rhie-Chow correction, written as a cell-centered pressure operator. It vanishes to the order of the truncation error for smooth pressure fields — where the wide and compact Laplacians agree — and acts only on the under-resolved checkerboard modes, which is precisely the coupling the collocated grid requires. Because $U$ has been eliminated, the discrete system carries only the two cell-centered fields $(\mathbf{u}, p)$.
 
 ### Saddle-Point Structure
 
 Any implicit time discretization of (9) turns the velocity terms into a single velocity block $\mathbf{A}$ acting on the new-time velocity, leaving the pressure gradient, the constraint (12), and known right-hand-side data. The result is the two-field saddle-point system
 
 ```math
-\begin{bmatrix} \mathbf{A} & \mathbf{G} \\ \mathbf{D} & \sigma_0 \mathbf{S} \end{bmatrix}
+\begin{bmatrix} \mathbf{A} & \mathbf{B}^\top \\ \mathbf{D} & \mathbf{C} \end{bmatrix}
 \begin{bmatrix} \mathbf{u} \\ p \end{bmatrix} =
 \begin{bmatrix} \mathbf{r} + \mathbf{b}_\text{mom} \\ b_\text{cont} \end{bmatrix} \tag{13}
 ```
@@ -206,7 +206,7 @@ The matrix in (13) is large, sparse, and indefinite: the $(2,2)$ block is not th
 
 Fluca's `Phys` module solves the incompressible equations as a fully coupled system in time. The semi-discrete system (9), (12) is cast as a differential-algebraic system and advanced with an implicit-explicit (IMEX) Runge-Kutta integrator driving PETSc's `TS` directly. The velocity-pressure coupling is retained and solved to convergence at every step; the classical pressure-velocity decoupling reappears here only as a family of _preconditioners_ for the coupled system, never as the time advancement itself.
 
-The discrete operators of the previous chapter are used unchanged, and the stage matrix is the saddle-point system (13). The only new symbols are the Schur complement $\widehat{\mathbf{S}}$ and its approximation $\widetilde{\mathbf{S}}$, both distinct from the pressure-stabilization operator $\mathbf{S}$ of (11).
+The discrete operators of the previous chapter are used unchanged, and the stage matrix is the saddle-point system (13). The only new symbols are the Schur complement $\mathbf{S}$ and its approximation $\widetilde{\mathbf{S}}$.
 
 ### Differential-Algebraic Structure
 
@@ -216,15 +216,15 @@ Because the stabilized continuity constraint (12) contains no time derivative, t
 \mathbf{M} = \begin{bmatrix} \rho \mathbf{I} & 0 \\ 0 & 0 \end{bmatrix}
 ```
 
-is singular: the pressure is an algebraic variable that instantaneously enforces stabilized incompressibility. The stabilization $\sigma_0 \mathbf{S}$ is what makes this constraint solvable on the collocated grid, by suppressing the checkerboard pressure modes.
+is singular: the pressure is an algebraic variable that instantaneously enforces stabilized incompressibility. The stabilization $\mathbf{C}$ is what makes this constraint solvable on the collocated grid, by suppressing the checkerboard pressure modes.
 
 ### IMEX Runge-Kutta Advancement
 
-`TSARKIMEX` solves systems of the form $\mathbf{F}(t, \mathbf{y}, \dot{\mathbf{y}}) = \mathbf{g}(t, \mathbf{y})$, where $\mathbf{F}$ collects the stiff terms (advanced implicitly) and $\mathbf{g}$ the non-stiff terms (advanced explicitly) [6]. PETSc's documentation calls the explicit part $\mathbf{G}$; it is renamed $\mathbf{g}$ here to avoid a collision with the pressure-gradient operator. The terms of (9) and (12) are sorted by stiffness:
+`TSARKIMEX` solves systems of the form $\mathbf{F}(t, \mathbf{y}, \dot{\mathbf{y}}) = \mathbf{G}(t, \mathbf{y})$, where $\mathbf{F}$ collects the stiff terms (advanced implicitly) and $\mathbf{G}$ the non-stiff terms (advanced explicitly) [6]. The terms of (9) and (12) are sorted by stiffness:
 
 ```math
-\mathbf{F} = \begin{bmatrix} \rho \dot{\mathbf{u}} - \mu \mathbf{L}\mathbf{u} + \mathbf{G} p \\ \mathbf{D}\mathbf{u} + \sigma_0 \mathbf{S} p \end{bmatrix}, \qquad
-\mathbf{g} = \begin{bmatrix} -\mathbf{N}(\mathbf{u}) + \mathbf{f}(t) \\ 0 \end{bmatrix}
+\mathbf{F} = \begin{bmatrix} \rho \dot{\mathbf{u}} - \mu \mathbf{L}\mathbf{u} + \mathbf{B}^\top p \\ \mathbf{D}\mathbf{u} + \mathbf{C} p \end{bmatrix}, \qquad
+\mathbf{G} = \begin{bmatrix} -\mathbf{N}(\mathbf{u}) + \mathbf{f}(t) \\ 0 \end{bmatrix}
 ```
 
 The viscous term (parabolic-stiff), pressure gradient, and the algebraic continuity constraint are integrated implicitly; convection (non-stiff) is integrated explicitly. Keeping convection explicit leaves the implicit residual **linear** in $(\mathbf{u}, p)$, so each implicit stage is a single linear solve with no Newton iteration, at the cost of a convective CFL restriction.
@@ -232,24 +232,24 @@ The viscous term (parabolic-stiff), pressure gradient, and the algebraic continu
 For an $s$-stage scheme with a diagonally-implicit tableau $a^I$, stage $i$ requires an implicit solve whose Jacobian is $\mathbf{J} = \text{shift}\cdot\mathbf{M} + \partial\mathbf{F}/\partial\mathbf{y}$, with the stage shift $\text{shift} = 1/(a^I_{ii}\,\Delta t)$:
 
 ```math
-\mathbf{J} = \begin{bmatrix} \text{shift}\,\rho \mathbf{I} - \mu \mathbf{L} & \mathbf{G} \\ \mathbf{D} & \sigma_0 \mathbf{S} \end{bmatrix} \tag{14}
+\mathbf{J} = \begin{bmatrix} \text{shift}\,\rho \mathbf{I} - \mu \mathbf{L} & \mathbf{B}^\top \\ \mathbf{D} & \mathbf{C} \end{bmatrix} \tag{14}
 ```
 
-The singular pressure block of $\mathbf{M}$ contributes nothing to $\mathbf{J}$; the corresponding diagonal is instead supplied by the stabilization $\sigma_0 \mathbf{S}$, so $\mathbf{J}$ is nonsingular apart from the constant-pressure null space (removed by a null-space projection). A **stiffly-accurate** scheme (e.g. `ARKIMEX3`) is required so that the algebraic pressure is advanced at the full order of the method.
+The singular pressure block of $\mathbf{M}$ contributes nothing to $\mathbf{J}$; the corresponding diagonal is instead supplied by the stabilization $\mathbf{C}$, so $\mathbf{J}$ is nonsingular apart from the constant-pressure null space (removed by a null-space projection). A **stiffly-accurate** scheme (e.g. `ARKIMEX3`) is required so that the algebraic pressure is advanced at the full order of the method.
 
 ### Schur-Complement Preconditioning
 
-The stage matrix (14) is the saddle-point system (13) with the velocity block $\mathbf{A} = \text{shift}\,\rho \mathbf{I} - \mu \mathbf{L}$ supplied by the IMEX stage. Abbreviating the stabilized $(2,2)$ block as $\mathbf{C} = \sigma_0 \mathbf{S}$, it admits the block LDU factorization
+The stage matrix (14) is the saddle-point system (13) with the velocity block $\mathbf{A} = \text{shift}\,\rho \mathbf{I} - \mu \mathbf{L}$ supplied by the IMEX stage. It admits the block LDU factorization
 
 ```math
 \mathbf{J} =
 \begin{bmatrix} \mathbf{I} & 0 \\ \mathbf{D}\mathbf{A}^{-1} & \mathbf{I} \end{bmatrix}
-\begin{bmatrix} \mathbf{A} & 0 \\ 0 & \widehat{\mathbf{S}} \end{bmatrix}
-\begin{bmatrix} \mathbf{I} & \mathbf{A}^{-1}\mathbf{G} \\ 0 & \mathbf{I} \end{bmatrix},
-\qquad \widehat{\mathbf{S}} = \mathbf{C} - \mathbf{D}\mathbf{A}^{-1}\mathbf{G} \tag{15}
+\begin{bmatrix} \mathbf{A} & 0 \\ 0 & \mathbf{S} \end{bmatrix}
+\begin{bmatrix} \mathbf{I} & \mathbf{A}^{-1}\mathbf{B}^\top \\ 0 & \mathbf{I} \end{bmatrix},
+\qquad \mathbf{S} = \mathbf{C} - \mathbf{D}\mathbf{A}^{-1}\mathbf{B}^\top \tag{15}
 ```
 
-Fluca applies this factorization as a preconditioner via `PCFIELDSPLIT` of type Schur with full factorization. The two triangular factors are the momentum **predictor** and velocity **corrector**, and the middle factor is the **pressure-Poisson** solve (with the Schur complement $\widehat{\mathbf{S}}$) — the classical fractional-step sweep, now used to precondition rather than to time-advance. Perot [5] showed that the fractional step method is itself such an approximate block factorization, and Elman et al. [4] that SIMPLE is another.
+Fluca applies this factorization as a preconditioner via `PCFIELDSPLIT` of type Schur with full factorization. The two triangular factors are the momentum **predictor** and velocity **corrector**, and the middle factor is the **pressure-Poisson** solve (with the Schur complement $\mathbf{S}$) — the classical fractional-step sweep, now used to precondition rather than to time-advance. Perot [5] showed that the fractional step method is itself such an approximate block factorization, and Elman et al. [4] that SIMPLE is another.
 
 #### Two independent approximations
 
@@ -257,26 +257,26 @@ Following the nomenclature of Quarteroni et al. [7] as adopted by Elman et al. [
 
 ```math
 \mathbf{J} =
-\begin{bmatrix} \mathbf{A} & 0 \\ \mathbf{D} & \widehat{\mathbf{S}} \end{bmatrix}
-\begin{bmatrix} \mathbf{I} & \mathbf{A}^{-1}\mathbf{G} \\ 0 & \mathbf{I} \end{bmatrix} \tag{16}
+\begin{bmatrix} \mathbf{A} & 0 \\ \mathbf{D} & \mathbf{S} \end{bmatrix}
+\begin{bmatrix} \mathbf{I} & \mathbf{A}^{-1}\mathbf{B}^\top \\ 0 & \mathbf{I} \end{bmatrix} \tag{16}
 ```
 
 The $\mathbf{A}^{-1}$ of the lower factor cancels against the diagonal block, so exactly **two** occurrences of $\mathbf{A}^{-1}$ survive, and they are approximated independently:
 
-- $\widetilde{\mathbf{A}}_1$ — the approximation in the **Schur complement**, $\widetilde{\mathbf{S}} = \mathbf{C} - \mathbf{D}\widetilde{\mathbf{A}}_1^{-1}\mathbf{G}$, i.e. in the pressure-Poisson operator;
-- $\widetilde{\mathbf{A}}_2$ — the approximation in the **upper triangular factor**, i.e. in the velocity correction $\mathbf{u}^{n+1} = \mathbf{u}^* - \widetilde{\mathbf{A}}_2^{-1}\mathbf{G}p'$.
+- $\widetilde{\mathbf{A}}_1$ — the approximation in the **Schur complement**, $\widetilde{\mathbf{S}} = \mathbf{C} - \mathbf{D}\widetilde{\mathbf{A}}_1^{-1}\mathbf{B}^\top$, i.e. in the pressure-Poisson operator;
+- $\widetilde{\mathbf{A}}_2$ — the approximation in the **upper triangular factor**, i.e. in the velocity correction $\mathbf{u}^{n+1} = \mathbf{u}^* - \widetilde{\mathbf{A}}_2^{-1}\mathbf{B}^\top p'$.
 
 The resulting preconditioner $\widetilde{\mathbf{J}}$ and its error are
 
 ```math
 \widetilde{\mathbf{J}} =
 \begin{bmatrix} \mathbf{A} & 0 \\ \mathbf{D} & \widetilde{\mathbf{S}} \end{bmatrix}
-\begin{bmatrix} \mathbf{I} & \widetilde{\mathbf{A}}_2^{-1}\mathbf{G} \\ 0 & \mathbf{I} \end{bmatrix},
+\begin{bmatrix} \mathbf{I} & \widetilde{\mathbf{A}}_2^{-1}\mathbf{B}^\top \\ 0 & \mathbf{I} \end{bmatrix},
 \qquad
 \mathbf{E} = \mathbf{J} - \widetilde{\mathbf{J}} =
 \begin{bmatrix}
-0 & (\mathbf{I} - \mathbf{A}\widetilde{\mathbf{A}}_2^{-1})\mathbf{G} \\
-0 & \mathbf{D}(\widetilde{\mathbf{A}}_1^{-1} - \widetilde{\mathbf{A}}_2^{-1})\mathbf{G}
+0 & (\mathbf{I} - \mathbf{A}\widetilde{\mathbf{A}}_2^{-1})\mathbf{B}^\top \\
+0 & \mathbf{D}(\widetilde{\mathbf{A}}_1^{-1} - \widetilde{\mathbf{A}}_2^{-1})\mathbf{B}^\top
 \end{bmatrix} \tag{17}
 ```
 
@@ -304,7 +304,7 @@ The fractional-step and SIMPLE choices coincide as $\Delta t \to 0$, where $\ope
 | --- | --- | --- |
 | Solve with $\mathbf{A}$ (predictor, lower/diagonal factor) | `-fieldsplit_velocity_` | user-selected |
 | $\widetilde{\mathbf{A}}_1$ in $\widetilde{\mathbf{S}}$ | `-fieldsplit_pressure_inner_` | PETSc default: falls back to the velocity solve |
-| Preconditioner matrix for the Schur block | `-pc_fieldsplit_schur_precondition` | PETSc default: $\mathbf{A}_{11} = \sigma_0\mathbf{S}$ |
+| Preconditioner matrix for the Schur block | `-pc_fieldsplit_schur_precondition` | PETSc default: $\mathbf{A}_{11} = \mathbf{C}$ |
 | $\widetilde{\mathbf{A}}_2$ in the velocity correction | `-fieldsplit_pressure_upper_` | PETSc default: reuses the velocity solve |
 
 Only one prefix appears for the lower and diagonal factors because `PCFIELDSPLIT`, although it documents the `full` factorization as the plain LDU product, applies it in the fused (LD)U grouping of (16): a single solve with $\mathbf{A}$ produces both the predicted velocity and the argument of $\mathbf{D}\mathbf{u}^*$ that forms the Schur right-hand side. Each preconditioner application therefore costs **two** solves with $\mathbf{A}$ — the predictor and the velocity correction — rather than the three a literal L·D·U application would require.
@@ -313,7 +313,7 @@ Note that the second solve does not disappear when $\widetilde{\mathbf{A}}_2$ is
 
 The cancellation that produces the fused grouping is algebraic only for a fixed linear operator; if the velocity `KSP` is an inexact Krylov method, the two solves with $\mathbf{A}$ do not cancel exactly and the preconditioner is only approximately of the form (17), which is why an outer flexible Krylov method is advisable in that case.
 
-The Schur block enters twice: as the **operator**, applied matrix-free as $\mathbf{C} - \mathbf{D}\mathbf{A}^{-1}\mathbf{G}$ with $\mathbf{A}^{-1}$ supplied by the inner solve (`-fieldsplit_pressure_inner_`, which in PETSc falls back to the velocity solve), and as the **preconditioner** for that operator (`-pc_fieldsplit_schur_precondition`: `a11` for the $(1,1)$ block itself, `user` for a supplied matrix, `selfp` for the assembled $\mathbf{C} - \mathbf{D}\operatorname{diag}(\mathbf{A})^{-1}\mathbf{G}$). If the pressure `KSP` is iterated to a tight tolerance, $\widetilde{\mathbf{A}}_1$ is whatever the _inner_ solve applies and the preconditioner only affects the iteration count; if it is `preonly`, the preconditioner matrix alone defines $\widetilde{\mathbf{A}}_1$.
+The Schur block enters twice: as the **operator**, applied matrix-free as $\mathbf{C} - \mathbf{D}\mathbf{A}^{-1}\mathbf{B}^\top$ with $\mathbf{A}^{-1}$ supplied by the inner solve (`-fieldsplit_pressure_inner_`, which in PETSc falls back to the velocity solve), and as the **preconditioner** for that operator (`-pc_fieldsplit_schur_precondition`: `a11` for the $(1,1)$ block itself, `user` for a supplied matrix, `selfp` for the assembled $\mathbf{C} - \mathbf{D}\operatorname{diag}(\mathbf{A})^{-1}\mathbf{B}^\top$). If the pressure `KSP` is iterated to a tight tolerance, $\widetilde{\mathbf{A}}_1$ is whatever the _inner_ solve applies and the preconditioner only affects the iteration count; if it is `preonly`, the preconditioner matrix alone defines $\widetilde{\mathbf{A}}_1$.
 
 One PETSc behavior is worth knowing when relying on the fallback: if no separate inner solver is configured, `PCFIELDSPLIT` sets the velocity `KSP` type to `gmres`, overriding the `preonly` that `PCFieldSplitSetIS` installs, so that the $\mathbf{A}^{-1}$ inside the matrix-free Schur complement is an accurate solve rather than a single preconditioner application. This happens before the velocity `KSP` reads its own options, so `-fieldsplit_velocity_ksp_type` still takes precedence — but leaving it unset does not give a `preonly` velocity solve.
 
@@ -323,17 +323,17 @@ Fluca installs the split itself — `PCFIELDSPLIT` of type Schur with `PC_FIELDS
 
 Because the split is installed before `TSSetFromOptions` runs, `PCFIELDSPLIT` already has its composite type set to Schur when `PCSetFromOptions` executes, so the `-pc_fieldsplit_schur_*` options are read normally and no special replay is needed.
 
-The Schur preconditioner matrix is therefore PETSc's default, $\mathbf{A}_{11} = \sigma_0\mathbf{S}$. This is the stabilization operator alone, which acts on the checkerboard modes and is a weak preconditioner for the smooth ones. The `selfp` alternative, the explicitly assembled
+The Schur preconditioner matrix is therefore PETSc's default, $\mathbf{A}_{11} = \mathbf{C}$. This is the stabilization operator alone, which acts on the checkerboard modes and is a weak preconditioner for the smooth ones. The `selfp` alternative, the explicitly assembled
 
 ```math
-\mathbf{S}_p = \sigma_0\mathbf{S} - \mathbf{D}\operatorname{diag}(\mathbf{A})^{-1}\mathbf{G}
+\mathbf{S}_p = \mathbf{C} - \mathbf{D}\operatorname{diag}(\mathbf{A})^{-1}\mathbf{B}^\top
 ```
 
-carries the $\mathbf{D}\mathbf{A}^{-1}\mathbf{G}$ term as well and so covers all pressure modes; it is selected with `-pc_fieldsplit_schur_precondition selfp`.
+carries the $\mathbf{D}\mathbf{A}^{-1}\mathbf{B}^\top$ term as well and so covers all pressure modes; it is selected with `-pc_fieldsplit_schur_precondition selfp`.
 
 Note that `selfp` is a choice of preconditioner, not of approximation, and it does **not** by itself make the solver SIMPLE. $\widetilde{\mathbf{A}}_1$ is still whatever the _inner_ solve applies, so with the pressure `KSP` converged to a tight tolerance the classification above is unchanged and $\mathbf{S}_p$ only lowers the iteration count. Only under `-fieldsplit_pressure_ksp_type preonly` does the preconditioner matrix itself become $\widetilde{\mathbf{A}}_1$, giving $\widetilde{\mathbf{A}}_1 = \operatorname{diag}(\mathbf{A})$ against $\widetilde{\mathbf{A}}_2 = \mathbf{A}$ — the momentum-preserving last row, not SIMPLE. SIMPLE additionally requires $\widetilde{\mathbf{A}}_2 = \operatorname{diag}(\mathbf{A})$ through `-fieldsplit_pressure_upper_`.
 
-Because nothing is baked into the operators, the Jacobian is untouched: $\mathbf{P}_\text{mat} = \mathbf{A}_\text{mat} = \mathbf{J}$, and `-ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero` remains an exact monolithic reference solve. The shift is required: the $(2,2)$ block is $\sigma_0\mathbf{S}$, which is singular on the constant-pressure mode, so an unshifted `LU` hits a zero pivot and the step fails. The cheaper members of the family are reachable entirely from the options database — for example SIMPLE:
+Because nothing is baked into the operators, the Jacobian is untouched: $\mathbf{P}_\text{mat} = \mathbf{A}_\text{mat} = \mathbf{J}$, and `-ksp_type preonly -pc_type lu -pc_factor_shift_type nonzero` remains an exact monolithic reference solve. The shift is required: the $(2,2)$ block is $\mathbf{C}$, which is singular on the constant-pressure mode, so an unshifted `LU` hits a zero pivot and the step fails. The cheaper members of the family are reachable entirely from the options database — for example SIMPLE:
 
 ```
 -pc_fieldsplit_schur_precondition selfp
