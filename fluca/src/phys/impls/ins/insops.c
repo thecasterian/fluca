@@ -80,7 +80,7 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
   Phys_INS *ins    = (Phys_INS *)phys->data;
   DM        sol_dm = phys->sol_dm;
   PetscInt  dim    = phys->dim, d, e;
-  PetscReal mu = ins->mu, rho = ins->rho;
+  PetscReal mu     = ins->mu;
 
   PetscFunctionBegin;
   /* --- fd_laplacian[d] = sum_e d/dx_e(-mu * d(u_d)/dx_e) --- */
@@ -125,12 +125,12 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     PetscCall(FlucaFDSetUp(ins->fd_grad_p[d]));
   }
 
-  /* --- fd_div = rho * sum_d d/dx_d(interp_d(u_d)) --- */
+  /* --- fd_div = D = D_st * T = sum_d d/dx_d(interp_d(u_d)); no rho factor --- */
   {
     FlucaFD div_comp[PHYS_INS_MAX_DIM];
 
     for (d = 0; d < dim; d++) {
-      FlucaFD interp, face_deriv, div_raw;
+      FlucaFD interp, face_deriv;
 
       /* interp_d(u_d) */
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 0, 2, DMSTAG_ELEMENT, d, face_loc[d], 0, &interp));
@@ -141,14 +141,9 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
       PetscCall(FlucaFDSetUp(face_deriv));
 
       /* d/dx_d(interp_d(u_d)) */
-      PetscCall(FlucaFDCompositionCreate(interp, face_deriv, &div_raw));
-      PetscCall(FlucaFDSetUp(div_raw));
-
-      /* rho * d/dx_d(interp_d(u_d)) */
-      PetscCall(FlucaFDScaleCreateConstant(div_raw, rho, &div_comp[d]));
+      PetscCall(FlucaFDCompositionCreate(interp, face_deriv, &div_comp[d]));
       PetscCall(FlucaFDSetUp(div_comp[d]));
 
-      PetscCall(FlucaFDDestroy(&div_raw));
       PetscCall(FlucaFDDestroy(&face_deriv));
       PetscCall(FlucaFDDestroy(&interp));
     }
@@ -160,7 +155,7 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
     for (d = 0; d < dim; d++) PetscCall(FlucaFDDestroy(&div_comp[d]));
   }
 
-  /* --- fd_pstab = sigma_0 * S(p), S(p) = sum_d [d(dp/dx_d)/dx_d - d^2p/dx_d^2] --- */
+  /* --- fd_pstab = C = (dt/rho) * S(p), S(p) = sum_d [d(dp/dx_d)/dx_d - d^2p/dx_d^2] --- */
   {
     FlucaFD pstab_dir[PHYS_INS_MAX_DIM];
     FlucaFD pstab_sum;
@@ -197,7 +192,7 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
       PetscCall(FlucaFDDestroy(&cell_grad_p));
     }
 
-    /* sigma_0 * sum_d S_d(p); sigma_0 initially 0, updated to dt by TSPreStep */
+    /* (dt/rho) * sum_d S_d(p); coefficient initially 0, updated by TSPreStep */
     PetscCall(FlucaFDSumCreate(dim, pstab_dir, &pstab_sum));
     PetscCall(FlucaFDSetUp(pstab_sum));
     PetscCall(FlucaFDScaleCreateConstant(pstab_sum, 0., &ins->fd_pstab));
@@ -360,7 +355,7 @@ PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
     PetscCall(VecRestoreSubVector(F, ins->is_vel, &F_vel));
   }
 
-  /* F_continuity = D(u) + sigma_0 * S(p): algebraic (DAE) incompressibility constraint.
+  /* F_continuity = D(u) + C(p): algebraic (DAE) incompressibility constraint.
      Enforced directly each stage (no d/dt transform) — this is the fractional-step
      projection expressed as a DAE, matching PETSc's TS Navier-Stokes example (ts/ex46). */
   PetscCall(VecZeroEntries(temp));
@@ -495,8 +490,10 @@ static PetscErrorCode UpdatePressureStabilizationDt_Internal(TS ts, Phys_INS *in
   PetscFunctionBegin;
   PetscCall(TSGetTimeStep(ts, &dt));
   if (dt != ins->dt_current) {
-    /* sigma_0 = dt (classical Rhie-Chow pressure-stabilization coefficient) */
-    PetscCall(FlucaFDScaleSetConstant(ins->fd_pstab, dt));
+    /* C = (dt/rho) * S, the classical Rhie-Chow coefficient. The density sits here
+       rather than in fd_div so that D is the plain divergence of the interpolated
+       velocity and D = -B holds on interior rows (see THEORY_GUIDE.md). */
+    PetscCall(FlucaFDScaleSetConstant(ins->fd_pstab, dt / ins->rho));
     ins->dt_current = dt;
   }
   PetscFunctionReturn(PETSC_SUCCESS);
