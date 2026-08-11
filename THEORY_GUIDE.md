@@ -140,7 +140,7 @@ The spatial operators are:
 
 - $\mathbf{N}(\mathbf{u})$: convection, discretized with a second-order TVD scheme built on the face mass flux $\rho\overline{\mathbf{u}}$;
 - $\mathbf{L}$: viscous Laplacian, $(\mathbf{L}\mathbf{u})_i = \delta^2 u_i / \delta x_j \delta x_j$;
-- $\mathbf{B}^\top$: cell-centered pressure gradient, $(\mathbf{B}^\top p)_i = \delta p / \delta x_i$. The symbol follows the saddle-point convention of Elman et al. [4] and Quarteroni et al. [7], in which $\mathbf{B}$ is the discrete divergence and $\mathbf{B}^\top$ the discrete gradient. The transpose is genuine here up to sign: the assembled blocks satisfy $\mathbf{D} = -\mathbf{B}$ exactly on every interior row, which is the discrete integration-by-parts identity $\langle \mathbf{B}^\top p, \mathbf{u}\rangle = -\langle p, \mathbf{B}\mathbf{u}\rangle$. It is not exact on boundary rows, where the velocity Dirichlet conditions imposed on $\mathbf{D}$ and the pressure Neumann conditions imposed on $\mathbf{B}^\top$ are not adjoint to one another; under periodic boundaries, which have no such rows, the identity holds everywhere;
+- $\mathbf{B}^\top$: cell-centered pressure gradient, $(\mathbf{B}^\top p)_i = \delta p / \delta x_i$. The symbol follows the saddle-point convention of Elman et al. [4] and Quarteroni et al. [6], in which $\mathbf{B}$ is the discrete divergence and $\mathbf{B}^\top$ the discrete gradient. The transpose is genuine here up to sign: the assembled blocks satisfy $\mathbf{D} = -\mathbf{B}$ exactly on every interior row, which is the discrete integration-by-parts identity $\langle \mathbf{B}^\top p, \mathbf{u}\rangle = -\langle p, \mathbf{B}\mathbf{u}\rangle$. It is not exact on boundary rows, where the velocity Dirichlet conditions imposed on $\mathbf{D}$ and the pressure Neumann conditions imposed on $\mathbf{B}^\top$ are not adjoint to one another; under periodic boundaries, which have no such rows, the identity holds everywhere;
 - $\mathbf{T}$: interpolation of a cell-centered vector to the face normal, $\mathbf{T}\mathbf{v} = \overline{\mathbf{v}} \cdot \mathbf{n}$, where $\overline{(\cdot)}$ denotes linear interpolation from the two adjacent cell centers;
 - $\mathbf{B}^\top_\text{st}$: staggered face-normal pressure gradient, evaluated compactly at the face, $\mathbf{B}^\top_\text{st}\, p = \left. \delta p / \delta n \right|_\text{face}$;
 - $\mathbf{D}_\text{st}$: staggered divergence, acting on a face-normal field, $\mathbf{D}_\text{st} U = \sum_i \delta U_i / \delta x_i$;
@@ -220,7 +220,7 @@ is singular: the pressure is an algebraic variable that instantaneously enforces
 
 ### IMEX Runge-Kutta Advancement
 
-`TSARKIMEX` solves systems of the form $\mathbf{F}(t, \mathbf{y}, \dot{\mathbf{y}}) = \mathbf{G}(t, \mathbf{y})$, where $\mathbf{F}$ collects the stiff terms (advanced implicitly) and $\mathbf{G}$ the non-stiff terms (advanced explicitly) [6]. The terms of (9) and (12) are sorted by stiffness:
+`TSARKIMEX` solves systems of the form $\mathbf{F}(t, \mathbf{y}, \dot{\mathbf{y}}) = \mathbf{G}(t, \mathbf{y})$, where $\mathbf{F}$ collects the stiff terms (advanced implicitly) and $\mathbf{G}$ the non-stiff terms (advanced explicitly) [5]. The terms of (9) and (12) are sorted by stiffness:
 
 ```math
 \mathbf{F} = \begin{bmatrix} \rho \dot{\mathbf{u}} - \mu \mathbf{L}\mathbf{u} + \mathbf{B}^\top p \\ \mathbf{D}\mathbf{u} + \mathbf{C} p \end{bmatrix}, \qquad
@@ -249,11 +249,11 @@ The stage matrix (14) is the saddle-point system (13) with the velocity block $\
 \qquad \mathbf{S} = \mathbf{C} - \mathbf{D}\mathbf{A}^{-1}\mathbf{B}^\top \tag{15}
 ```
 
-Fluca applies this factorization as a preconditioner via `PCFIELDSPLIT` of type Schur with full factorization. The two triangular factors are the momentum **predictor** and velocity **corrector**, and the middle factor is the **pressure-Poisson** solve (with the Schur complement $\mathbf{S}$) — the classical fractional-step sweep, now used to precondition rather than to time-advance. Perot [5] showed that the fractional step method is itself such an approximate block factorization, and Elman et al. [4] that SIMPLE is another.
+Fluca applies this factorization as a preconditioner via `PCFIELDSPLIT` of type Schur with full factorization. The two triangular factors are the momentum **predictor** and velocity **corrector**, and the middle factor is the **pressure-Poisson** solve (with the Schur complement $\mathbf{S}$) — the classical pressure-velocity decoupling sweep, now used to precondition rather than to time-advance. Elman et al. [4] showed that SIMPLE is exactly such an approximate block factorization.
 
 #### Two independent approximations
 
-Following the nomenclature of Quarteroni et al. [7] as adopted by Elman et al. [4], group the lower and diagonal factors of (15) together, (LD)U:
+Following the nomenclature of Quarteroni et al. [6] as adopted by Elman et al. [4], group the lower and diagonal factors of (15) together, (LD)U:
 
 ```math
 \mathbf{J} =
@@ -285,16 +285,15 @@ Reading off the two blocks of $\mathbf{E}$:
 1. The **momentum** equation is unperturbed iff $\widetilde{\mathbf{A}}_2 = \mathbf{A}$ (_momentum preserving_) — only the pressure gradient seen by the velocity is affected, never the velocity operator itself.
 2. The **continuity** equation is unperturbed iff $\widetilde{\mathbf{A}}_1 = \widetilde{\mathbf{A}}_2$ (_mass preserving_) — the two approximations need not be accurate, only **consistent with each other**.
 
-Approximating the Schur complement alone is therefore _not_ what defines the fractional step method or SIMPLE. Both are mass-preserving schemes: they use the **same** cheap inverse in the Schur complement and in the velocity correction, and accept a perturbed momentum equation in exchange for an exactly satisfied discrete continuity equation. Keeping $\widetilde{\mathbf{A}}_2 = \mathbf{A}$ while approximating only $\widetilde{\mathbf{A}}_1$ gives a different — momentum-preserving — member of the same family, in which continuity is the perturbed equation.
+Approximating the Schur complement alone is therefore _not_ what defines SIMPLE. It is a mass-preserving scheme: it uses the **same** cheap inverse in the Schur complement and in the velocity correction, and accepts a perturbed momentum equation in exchange for an exactly satisfied discrete continuity equation. Keeping $\widetilde{\mathbf{A}}_2 = \mathbf{A}$ while approximating only $\widetilde{\mathbf{A}}_1$ gives a different — momentum-preserving — member of the same family, in which continuity is the perturbed equation.
 
 | Scheme | $\widetilde{\mathbf{A}}_1$ | $\widetilde{\mathbf{A}}_2$ | Unperturbed |
 | --- | --- | --- | --- |
 | Exact block factorization | $\mathbf{A}$ | $\mathbf{A}$ | both |
-| Fractional step [5] | $\text{shift}\,\rho\,\mathbf{I}$ | $\text{shift}\,\rho\,\mathbf{I}$ | continuity |
 | SIMPLE [4] | $\operatorname{diag}(\mathbf{A})$ | $\operatorname{diag}(\mathbf{A})$ | continuity |
 | Schur-only approximation | $\ne \mathbf{A}$ | $\mathbf{A}$ | momentum |
 
-The fractional-step and SIMPLE choices coincide as $\Delta t \to 0$, where $\operatorname{diag}(\mathbf{A})$ is dominated by the mass term $\text{shift}\,\rho$. Because the split preconditions an outer Krylov iteration, the fully coupled solution is recovered independently of the choice; only the iteration count differs.
+Because the split preconditions an outer Krylov iteration, the fully coupled solution is recovered independently of the choice; only the iteration count differs.
 
 #### Mapping onto `PCFIELDSPLIT`
 
@@ -348,6 +347,5 @@ Because nothing is baked into the operators, the Jacobian is untouched: $\mathbf
 2. Y. Zang, R. L. Street, and J. R. Koseff, A non-staggered grid, fractional step method for time-dependent incompressible Navier–Stokes equations in curvilinear coordinates, _J. Comput. Phys._, 114, 18&ndash;33 (1994).
 3. S. Armfield and R. Street, The pressure accuracy of fractional-step methods for the Navier-Stokes equations on staggered grids, _ANZIAM J._, 44, C20&ndash;C39 (2003).
 4. H. Elman, V. E. Howle, J. Shadid, R. Shuttleworth, and R. Tuminaro, A taxonomy and comparison of parallel block multi-level preconditioners for the incompressible Navier–Stokes equations, _J. Comput. Phys._, 227, 1790&ndash;1808 (2008)
-5. J. Perot, An analysis of the fractional step method, _J. Comput. Phys._, 108, 51&ndash;58 (1993).
-6. U. M. Ascher, S. J. Ruuth, and R. J. Spiteri, Implicit-explicit Runge-Kutta methods for time-dependent partial differential equations, _Appl. Numer. Math._, 25, 151&ndash;167 (1997).
-7. A. Quarteroni, F. Saleri, and A. Veneziani, Factorization methods for the numerical approximation of Navier&ndash;Stokes equations, _Comput. Methods Appl. Mech. Engrg._, 188, 505&ndash;526 (2000).
+5. U. M. Ascher, S. J. Ruuth, and R. J. Spiteri, Implicit-explicit Runge-Kutta methods for time-dependent partial differential equations, _Appl. Numer. Math._, 25, 151&ndash;167 (1997).
+6. A. Quarteroni, F. Saleri, and A. Veneziani, Factorization methods for the numerical approximation of Navier&ndash;Stokes equations, _Comput. Methods Appl. Mech. Engrg._, 188, 505&ndash;526 (2000).

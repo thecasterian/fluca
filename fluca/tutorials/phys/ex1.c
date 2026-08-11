@@ -174,8 +174,8 @@ int main(int argc, char **argv)
 
   /* Create TS and wire Phys callbacks.
      PhysSetUpTS sets DM, IFunction, IJacobian, RHSFunction, defaults to TSARKIMEX,
-     and configures a velocity/pressure PCFIELDSPLIT with a Schur complement
-     (the fractional-step projection). Sub-solvers come from the options database. */
+     and configures a velocity/pressure PCFIELDSPLIT with a Schur complement.
+     Sub-solvers come from the options database. */
   PetscCall(TSCreate(PETSC_COMM_WORLD, &ts));
   PetscCall(PhysSetUpTS(phys, ts));
   /* Defaults; override with -ts_max_time, -ts_dt, -ts_adapt_type */

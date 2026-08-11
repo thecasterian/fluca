@@ -356,8 +356,8 @@ PetscErrorCode PhysComputeIFunction_INS(Phys phys, PetscReal t, Vec U, Vec U_t, 
   }
 
   /* F_continuity = D(u) + C(p): algebraic (DAE) incompressibility constraint.
-     Enforced directly each stage (no d/dt transform) — this is the fractional-step
-     projection expressed as a DAE, matching PETSc's TS Navier-Stokes example (ts/ex46). */
+     Enforced directly each stage (no d/dt transform), so the pressure is an algebraic
+     variable, matching PETSc's TS Navier-Stokes example (ts/ex46). */
   PetscCall(VecZeroEntries(temp));
   PetscCall(FlucaFDApply(ins->fd_div, t, sol_dm, sol_dm, U, temp));
   PetscCall(VecAXPY(F, 1., temp));
@@ -636,7 +636,7 @@ PetscErrorCode PhysSetUpTS_INS(Phys phys, TS ts)
     PetscCall(KSPGetPC(ksp, &pc));
 
     /* Default linear solver: PCFIELDSPLIT with a Schur complement between velocity and
-       pressure. This is the fractional-step projection expressed as a preconditioner:
+       pressure. This is the pressure-velocity decoupling expressed as a preconditioner:
        the velocity block solve is the momentum predictor/corrector and the pressure
        Schur solve is the pressure-Poisson step. Sub-solver details are left to the
        options database (see ts/ex46). The pressure null space composed onto is_p in
