@@ -111,14 +111,15 @@ PetscErrorCode PhysCreate_INS(Phys phys)
     ins->fd_grad_p[f]    = NULL;
   }
 
-  phys->data                = ins;
-  phys->ops->registerfields = PhysRegisterFields_INS;
-  phys->ops->getdensity     = PhysGetDensity_INS;
-  phys->ops->getviscosity   = PhysGetViscosity_INS;
-  phys->ops->setfromoptions = PhysSetFromOptions_INS;
-  phys->ops->setup          = PhysSetUp_INS;
-  phys->ops->destroy        = PhysDestroy_INS;
-  phys->ops->view           = PhysView_INS;
+  phys->data                       = ins;
+  phys->ops->registerfields        = PhysRegisterFields_INS;
+  phys->ops->getdensity            = PhysGetDensity_INS;
+  phys->ops->getviscosity          = PhysGetViscosity_INS;
+  phys->ops->setfromoptions        = PhysSetFromOptions_INS;
+  phys->ops->setup                 = PhysSetUp_INS;
+  phys->ops->destroy               = PhysDestroy_INS;
+  phys->ops->view                  = PhysView_INS;
+  phys->ops->computemomentumsystem = PhysComputeMomentumSystem_INS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

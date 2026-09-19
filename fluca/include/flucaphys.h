@@ -68,6 +68,9 @@ FLUCA_EXTERN PetscErrorCode PhysGetFieldIS(Phys, const char[], IS *);
 FLUCA_EXTERN PetscErrorCode PhysGetDensity(Phys, PetscReal *);
 FLUCA_EXTERN PetscErrorCode PhysGetViscosity(Phys, PetscReal *);
 
+/* Rows of the coupled system (13) of the theory guide, assembled on the solution DM */
+FLUCA_EXTERN PetscErrorCode PhysComputeMomentumSystem(Phys, PetscReal, PetscReal, Vec, Mat, Vec);
+
 /* Options prefix */
 FLUCA_EXTERN PetscErrorCode PhysSetOptionsPrefix(Phys, const char[]);
 FLUCA_EXTERN PetscErrorCode PhysAppendOptionsPrefix(Phys, const char[]);

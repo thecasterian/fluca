@@ -201,3 +201,25 @@ PetscErrorCode PhysGetViscosity(Phys phys, PetscReal *mu)
   PetscUseTypeMethod(phys, getviscosity, mu);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+/*
+  PhysComputeMomentumSystem - Add the momentum rows of the coupled system (13) of the theory guide.
+
+  Input: t = t^n, dt, X = state at t^n on the solution DM (velocity u^n, face velocity U^n, pressure q = p^{n-1/2}).
+  Adds A (velocity columns) and G (pressure columns) into the velocity rows of M with ADD_VALUES and
+  without assembling M, and adds r + b_mom into the velocity rows of f. Other rows are untouched.
+*/
+PetscErrorCode PhysComputeMomentumSystem(Phys phys, PetscReal t, PetscReal dt, Vec X, Mat M, Vec f)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscValidLogicalCollectiveReal(phys, t, 2);
+  PetscValidLogicalCollectiveReal(phys, dt, 3);
+  PetscValidHeaderSpecific(X, VEC_CLASSID, 4);
+  PetscValidHeaderSpecific(M, MAT_CLASSID, 5);
+  PetscValidHeaderSpecific(f, VEC_CLASSID, 6);
+  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysComputeMomentumSystem()");
+  PetscCheck(dt > 0., PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Time step must be positive, got %g", (double)dt);
+  PetscUseTypeMethod(phys, computemomentumsystem, t, dt, X, M, f);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}

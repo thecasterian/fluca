@@ -31,8 +31,23 @@ typedef struct {
 
   FlucaFD fd_laplacian[PHYS_INS_MAX_DIM]; /* sum_e d/dx_e(-mu * d(u_d)/dx_e) */
   FlucaFD fd_grad_p[PHYS_INS_MAX_DIM];    /* dp/dx_d */
+
+  /* Momentum rows of the coupled system (13) */
+  IS      is_vel;                                            /* velocity entries of the solution vector */
+  Vec     zero;                                              /* zero solution vector: evaluates boundary (affine) parts */
+  DM      dm_face;                                           /* one DOF per face */
+  Vec     ubar[PHYS_INS_MAX_DIM];                            /* ubar_d^n: u_d^n linearly interpolated to every face */
+  FlucaFD fd_interp_vel[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM]; /* [d][e]: u_d -> faces normal to e, onto dm_face */
+  FlucaFD fd_visc[PHYS_INS_MAX_DIM];                         /* (dt/(2 rho)) fd_laplacian[d] = -(dt/2) nu lap(u_d) */
+  FlucaFD fd_conv[PHYS_INS_MAX_DIM];                         /* (dt/2) sum_e d/dx_e(ubar_d U_e^n + ubar_d^n ubar_e) */
+  FlucaFD fd_conv_U[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM];     /* [d][e]: ubar_d on faces normal to e, times U_e^n */
+  FlucaFD fd_conv_ubar[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM];  /* [d][e]: ubar_e on faces normal to e, times ubar_d^n */
+  FlucaFD fd_grad[PHYS_INS_MAX_DIM];                         /* (dt/rho) fd_grad_p[d]: the operator G */
 } Phys_INS;
 
 /* Internal functions defined in insops.c */
 FLUCA_INTERN PetscErrorCode PhysINSBuildOperators_Internal(Phys);
 FLUCA_INTERN PetscErrorCode PhysINSDestroyOperators_Internal(Phys);
+
+/* Defined in inssystem.c */
+FLUCA_INTERN PetscErrorCode PhysComputeMomentumSystem_INS(Phys, PetscReal, PetscReal, Vec, Mat, Vec);
