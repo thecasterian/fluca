@@ -2,14 +2,15 @@
 #include <fluca/private/physimpl.h>
 
 typedef struct {
-  Phys         phys;
-  Mat          M;     /* coupled system (13) on the solution DM */
-  Mat          P;     /* MATNEST carrying the field index sets that PCABF reads */
-  IS           is[3]; /* velocity, face velocity, pressure */
-  MatNullSpace nullspace;
-  KSP          ksp;
-  Vec          f, x;
-  PetscBool    initialized; /* initial face velocity projected */
+  Phys             phys;
+  Mat              M;     /* coupled system (13) on the solution DM */
+  Mat              P;     /* MATNEST carrying the field index sets that PCABF reads */
+  IS               is[3]; /* velocity, face velocity, pressure */
+  MatNullSpace     nullspace;
+  KSP              ksp;
+  Vec              f, x;
+  PetscObjectId    projected_id;    /* id of the vec_sol whose face velocity was last projected */
+  PetscObjectState projected_state; /* its state right after that projection */
 } TS_FSM;
 
 /* M and f of eq. (13): momentum rows from the state at t^n, coupling rows with boundary data at t_coupling */
@@ -180,7 +181,8 @@ static PetscErrorCode TSSetUp_FSM(TS ts)
   PetscCall(KSPGetPC(kspS, &subpc));
   PetscCall(PCSetType(subpc, PCGAMG));
   PetscCall(KSPSetFromOptions(fsm->ksp));
-  fsm->initialized = PETSC_FALSE;
+  fsm->projected_id    = 0;
+  fsm->projected_state = 0;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -191,12 +193,17 @@ static PetscErrorCode TSStep_FSM(TS ts)
   PetscBool          accept;
   KSPConvergedReason reason;
   Vec                xs, Xs;
+  PetscObjectId      id;
   PetscInt           k;
 
   PetscFunctionBegin;
-  if (!fsm->initialized) {
+  /* Project once per distinct solution vector, identified by id; a state check alone would re-project every
+     step, since TSStep advances vec_sol's state itself */
+  PetscCall(PetscObjectGetId((PetscObject)ts->vec_sol, &id));
+  if (id != fsm->projected_id) {
     PetscCall(TSFSMProjectInitialFaceVelocity_Private(ts));
-    fsm->initialized = PETSC_TRUE;
+    fsm->projected_id = id;
+    PetscCall(PetscObjectStateGet((PetscObject)ts->vec_sol, &fsm->projected_state));
   }
 
   PetscCall(TSFSMAssembleSystem_Private(ts, ts->ptime + ts->time_step));
@@ -249,7 +256,8 @@ static PetscErrorCode TSReset_FSM(TS ts)
   PetscCall(VecDestroy(&fsm->x));
   PetscCall(VecDestroy(&fsm->f));
   for (k = 0; k < 3; ++k) PetscCall(ISDestroy(&fsm->is[k]));
-  fsm->initialized = PETSC_FALSE;
+  fsm->projected_id    = 0;
+  fsm->projected_state = 0;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

@@ -149,6 +149,9 @@ int main(int argc, char **argv)
   PetscCall(TSGetTimeStep(ts, &dt));
   PetscCall(ComputeL2Error(phys, nu, t_final, dt, Y, err));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "t = %.4f, L2 errors: u = %.4e, v = %.4e, p(t - dt/2) = %.4e\n", (double)t_final, (double)err[0], (double)err[1], (double)err[2]));
+  /* Velocity errors only: pressure error is spatial-discretization dominated. Measured values are ~8e-5 at
+     16x16, so this bound leaves three orders of margin and catches breakage without being a golden-value check. */
+  PetscCheck(err[0] < 1.e-3 && err[1] < 1.e-3, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Velocity L2 errors %g, %g exceed the expected bound for this grid", (double)err[0], (double)err[1]);
 
   PetscCall(VecDestroy(&Y));
   PetscCall(TSDestroy(&ts));
