@@ -16,7 +16,7 @@ PetscErrorCode NSInitializePackage(void)
   PetscCall(PetscClassIdRegister("NS", &NS_CLASSID));
   /* Register constructors */
   PetscCall(NSRegisterAll());
-  PetscCall(NSPCRegisterAll());
+  PetscCall(PhysInitializePackage());
   /* Register events */
   PetscCall(PetscLogEventRegister("NSSetUp", NS_CLASSID, &NS_SetUp));
   PetscCall(PetscLogEventRegister("NSStep", NS_CLASSID, &NS_Step));

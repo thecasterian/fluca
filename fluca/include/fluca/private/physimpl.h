@@ -7,6 +7,8 @@ FLUCA_EXTERN PetscBool      PhysRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode PhysRegisterAll(void);
 FLUCA_EXTERN PetscLogEvent  PHYS_SetUp;
 
+FLUCA_INTERN PetscErrorCode PCCreate_ABF(PC);
+
 typedef struct _PhysOps *PhysOps;
 
 struct _PhysOps {

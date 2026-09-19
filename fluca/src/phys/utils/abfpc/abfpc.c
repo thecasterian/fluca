@@ -1,5 +1,5 @@
 #include <petsc/private/pcimpl.h>
-#include <flucans.h>
+#include <flucaphys.h>
 
 const char *const PCABFAinvTypes[] = {"ID", "DIAG", "ROWSUM", "PCABFAinvType", "", NULL};
 

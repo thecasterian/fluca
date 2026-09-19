@@ -2,6 +2,7 @@
 
 #include <flucamesh.h>
 #include <flucansbc.h>
+#include <flucaphys.h>
 #include <petscis.h>
 #include <petscsnes.h>
 
@@ -90,18 +91,3 @@ FLUCA_EXTERN PetscErrorCode NSMonitorSolution(NS, PetscViewerAndFormat *);
 
 FLUCA_EXTERN PetscFunctionList NSList;
 FLUCA_EXTERN PetscErrorCode    NSRegister(const char[], PetscErrorCode (*)(NS));
-
-#define PCABF "abf"
-
-FLUCA_EXTERN PetscErrorCode PCABFSetFields(PC, PetscInt, PetscInt, PetscInt);
-FLUCA_EXTERN PetscErrorCode PCABFGetSubKSPs(PC, KSP *, KSP *);
-
-typedef enum {
-  PC_ABF_AINV_ID,
-  PC_ABF_AINV_DIAG,
-  PC_ABF_AINV_ROWSUM,
-} PCABFAinvType;
-FLUCA_EXTERN const char *const PCABFAinvTypes[];
-
-FLUCA_EXTERN PetscErrorCode PCABFSetSchurComplementAinvType(PC, PCABFAinvType);
-FLUCA_EXTERN PetscErrorCode PCABFSetUpperTriangularAinvType(PC, PCABFAinvType);

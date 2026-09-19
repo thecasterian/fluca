@@ -77,3 +77,19 @@ FLUCA_EXTERN PetscErrorCode PhysINSGetBoundaryCondition(Phys, PetscInt, PhysINSB
 /* Registration */
 FLUCA_EXTERN PetscFunctionList PhysList;
 FLUCA_EXTERN PetscErrorCode    PhysRegister(const char[], PetscErrorCode (*)(Phys));
+
+/* Approximate block factorization preconditioner for the coupled system (13) */
+#define PCABF "abf"
+
+FLUCA_EXTERN PetscErrorCode PCABFSetFields(PC, PetscInt, PetscInt, PetscInt);
+FLUCA_EXTERN PetscErrorCode PCABFGetSubKSPs(PC, KSP *, KSP *);
+
+typedef enum {
+  PC_ABF_AINV_ID,
+  PC_ABF_AINV_DIAG,
+  PC_ABF_AINV_ROWSUM,
+} PCABFAinvType;
+FLUCA_EXTERN const char *const PCABFAinvTypes[];
+
+FLUCA_EXTERN PetscErrorCode PCABFSetSchurComplementAinvType(PC, PCABFAinvType);
+FLUCA_EXTERN PetscErrorCode PCABFSetUpperTriangularAinvType(PC, PCABFAinvType);

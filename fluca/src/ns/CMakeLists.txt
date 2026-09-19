@@ -12,8 +12,6 @@ add_library(fluca_ns SHARED
     interface/nsreg.c
     interface/nssol.c
     utils/cartdiscret.c
-    utils/nspcreg.c
-    utils/abfpc/abfpc.c
 )
 
 target_include_directories(fluca_ns PUBLIC
@@ -21,5 +19,6 @@ target_include_directories(fluca_ns PUBLIC
 )
 target_link_libraries(fluca_ns PUBLIC
     fluca::mesh
+    fluca::phys
 )
 add_library(fluca::ns ALIAS fluca_ns)

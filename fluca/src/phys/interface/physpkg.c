@@ -25,6 +25,7 @@ PetscErrorCode PhysInitializePackage(void)
   PetscCall(PetscClassIdRegister("Physical Model", &PHYS_CLASSID));
   /* Register constructors */
   PetscCall(PhysRegisterAll());
+  PetscCall(PCRegister(PCABF, PCCreate_ABF));
   /* Register events */
   PetscCall(PetscLogEventRegister("PhysSetUp", PHYS_CLASSID, &PHYS_SetUp));
 
