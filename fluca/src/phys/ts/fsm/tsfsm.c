@@ -194,13 +194,17 @@ static PetscErrorCode TSStep_FSM(TS ts)
   KSPConvergedReason reason;
   Vec                xs, Xs;
   PetscObjectId      id;
+  PetscObjectState   state;
   PetscInt           k;
 
   PetscFunctionBegin;
-  /* Project once per distinct solution vector, identified by id; a state check alone would re-project every
-     step, since TSStep advances vec_sol's state itself */
+  /* fsm->projected_id/projected_state record vec_sol's id and state exactly as TSFSM last left them, either right
+     after projecting or at the end of a successful step. A mismatch means the caller swapped in a different Vec or
+     modified this one between solves, so re-project; within a solve TSStep is the only thing that touches vec_sol,
+     so the record and the live id/state always agree and nothing re-projects. */
   PetscCall(PetscObjectGetId((PetscObject)ts->vec_sol, &id));
-  if (id != fsm->projected_id) {
+  PetscCall(PetscObjectStateGet((PetscObject)ts->vec_sol, &state));
+  if (id != fsm->projected_id || state != fsm->projected_state) {
     PetscCall(TSFSMProjectInitialFaceVelocity_Private(ts));
     fsm->projected_id = id;
     PetscCall(PetscObjectStateGet((PetscObject)ts->vec_sol, &fsm->projected_state));
@@ -239,7 +243,9 @@ static PetscErrorCode TSStep_FSM(TS ts)
   PetscCall(VecRestoreSubVector(fsm->x, fsm->is[2], &xs));
 
   ts->ptime += ts->time_step;
-  ts->time_step = next_dt;
+  ts->time_step     = next_dt;
+  fsm->projected_id = id;
+  PetscCall(PetscObjectStateGet((PetscObject)ts->vec_sol, &fsm->projected_state));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
