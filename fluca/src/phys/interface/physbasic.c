@@ -69,6 +69,8 @@ PetscErrorCode PhysGetType(Phys phys, PhysType *type)
 
 PetscErrorCode PhysDestroy(Phys *phys)
 {
+  PetscInt f;
+
   PetscFunctionBegin;
   if (!*phys) PetscFunctionReturn(PETSC_SUCCESS);
   PetscValidHeaderSpecific((*phys), PHYS_CLASSID, 1);
@@ -81,7 +83,7 @@ PetscErrorCode PhysDestroy(Phys *phys)
   /* Call type-specific destroy */
   PetscTryTypeMethod((*phys), destroy);
 
-  for (PetscInt f = 0; f < (*phys)->nfields; ++f) PetscCall(PetscFree((*phys)->fields[f].name));
+  for (f = 0; f < (*phys)->nfields; ++f) PetscCall(PetscFree((*phys)->fields[f].name));
 
   PetscCall(DMDestroy(&(*phys)->sol_dm));
   PetscCall(DMDestroy(&(*phys)->base_dm));
