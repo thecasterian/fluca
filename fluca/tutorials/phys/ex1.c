@@ -12,7 +12,9 @@ static const char help[] = "2D Taylor-Green vortex with TSFSM\n"
                            "Options:\n"
                            "  -stag_grid_x <int>, -stag_grid_y <int> : Grid cells per direction (default: 32)\n"
                            "  -rho <real> : Density (default: 1.0)\n"
-                           "  -mu <real>  : Dynamic viscosity (default: 0.01)\n";
+                           "  -mu <real>  : Dynamic viscosity (default: 0.01)\n"
+                           "  -repeat_solve : Refill Y with the same initial condition and TSSolve again over the same\n"
+                           "                  interval, checking that the errors reproduce exactly (default: false)\n";
 
 /* Fill cell velocity at t_vel and cell pressure at t_p with the exact TGV; face velocity is left for TSFSM to project */
 static PetscErrorCode FillExactSolution(Phys phys, PetscReal nu, PetscReal t_vel, PetscReal t_p, Vec Y)
@@ -110,12 +112,15 @@ int main(int argc, char **argv)
   Phys      phys;
   TS        ts;
   Vec       Y;
-  PetscReal rho = 1., mu = 0.01, nu, t_final, dt, err[3];
+  PetscReal rho = 1., mu = 0.01, nu, t_final, dt, dt0, err[3], err_repeat[3];
+  PetscBool repeat_solve = PETSC_FALSE;
+  PetscInt  c;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-rho", &rho, NULL));
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-mu", &mu, NULL));
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-repeat_solve", &repeat_solve, NULL));
   nu = mu / rho;
 
   /* Base DM: grid topology and coordinates; stencil width 2 is required by PhysINS */
@@ -139,6 +144,7 @@ int main(int argc, char **argv)
   PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_MATCHSTEP));
   PetscCall(TSSetTimeStep(ts, 0.01));
   PetscCall(TSSetFromOptions(ts));
+  PetscCall(TSGetTimeStep(ts, &dt0));
 
   /* Initial condition: exact TGV at t = 0; the initial pressure is q at the first step */
   PetscCall(DMCreateGlobalVector(sol_dm, &Y));
@@ -152,6 +158,24 @@ int main(int argc, char **argv)
   /* Velocity errors only: pressure error is spatial-discretization dominated. Measured values are ~8e-5 at
      16x16, so this bound leaves roughly one order of margin and catches breakage without being a golden-value check. */
   PetscCheck(err[0] < 1.e-3 && err[1] < 1.e-3, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Velocity L2 errors %g, %g exceed the expected bound for this grid", (double)err[0], (double)err[1]);
+
+  if (repeat_solve) {
+    /* Reuse the same TS and the same Vec Y for a second, identical solve. If TSFSM fails to notice that Y was
+       refilled and skips re-projecting the face velocity, this run integrates against the stale face velocity
+       from the first solve and its errors diverge from the first solve's. */
+    PetscCall(TSSetTime(ts, 0.));
+    PetscCall(TSSetStepNumber(ts, 0));
+    PetscCall(TSSetTimeStep(ts, dt0));
+    PetscCall(TSSetConvergedReason(ts, TS_CONVERGED_ITERATING));
+    PetscCall(FillExactSolution(phys, nu, 0., 0., Y));
+
+    PetscCall(TSSolve(ts, Y));
+    PetscCall(TSGetTime(ts, &t_final));
+    PetscCall(TSGetTimeStep(ts, &dt));
+    PetscCall(ComputeL2Error(phys, nu, t_final, dt, Y, err_repeat));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "repeat: t = %.4f, L2 errors: u = %.4e, v = %.4e, p(t - dt/2) = %.4e\n", (double)t_final, (double)err_repeat[0], (double)err_repeat[1], (double)err_repeat[2]));
+    for (c = 0; c < 3; ++c) PetscCheck(PetscAbsReal(err_repeat[c] - err[c]) < 1.e-12, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Repeated solve error[%" PetscInt_FMT "] %g differs from the first solve's %g", c, (double)err_repeat[c], (double)err[c]);
+  }
 
   PetscCall(VecDestroy(&Y));
   PetscCall(TSDestroy(&ts));
@@ -167,6 +191,11 @@ int main(int argc, char **argv)
     suffix: fsm
     nsize: 1
     args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_fsm_ksp_max_it 1
+
+  test:
+    suffix: fsm_repeat
+    nsize: 1
+    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_fsm_ksp_max_it 1 -repeat_solve
 
   test:
     suffix: fsm_converged
