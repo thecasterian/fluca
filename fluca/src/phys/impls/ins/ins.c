@@ -39,21 +39,13 @@ static PetscErrorCode PhysSetUp_INS(Phys phys)
 {
   PetscFunctionBegin;
   PetscCall(PhysINSBuildOperators_Internal(phys));
-  PetscCall(PhysINSCreateSolverData_Internal(phys));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode PhysDestroy_INS(Phys phys)
 {
-  Phys_INS *ins = (Phys_INS *)phys->data;
-
   PetscFunctionBegin;
   PetscCall(PhysINSDestroyOperators_Internal(phys));
-  PetscCall(MatDestroy(&ins->J));
-  PetscCall(MatDestroy(&ins->J_rhs));
-  PetscCall(ISDestroy(&ins->is_vel));
-  PetscCall(ISDestroy(&ins->is_p));
-  PetscCall(MatNullSpaceDestroy(&ins->nullspace));
   PetscCall(PetscFree(phys->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -77,14 +69,12 @@ static PetscErrorCode PhysView_INS(Phys phys, PetscViewer viewer)
 PetscErrorCode PhysCreate_INS(Phys phys)
 {
   Phys_INS *ins;
-  PetscInt  f, g;
+  PetscInt  f;
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&ins));
-  ins->rho        = 1.;
-  ins->mu         = 1.;
-  ins->alpha      = 0.;
-  ins->dt_current = 0.;
+  ins->rho = 1.;
+  ins->mu  = 1.;
 
   /* Initialize BCs to NONE */
   for (f = 0; f < PHYS_INS_MAX_FACES; f++) {
@@ -99,35 +89,14 @@ PetscErrorCode PhysCreate_INS(Phys phys)
   for (f = 0; f < PHYS_INS_MAX_DIM; f++) {
     ins->fd_laplacian[f] = NULL;
     ins->fd_grad_p[f]    = NULL;
-    ins->fd_conv[f]      = NULL;
-    ins->fd_interp[f]    = NULL;
-    for (g = 0; g < PHYS_INS_MAX_DIM; g++) {
-      ins->fd_tvd[f][g]           = NULL;
-      ins->fd_momentum_flux[f][g] = NULL;
-    }
   }
-  ins->fd_div              = NULL;
-  ins->fd_pstab            = NULL;
-  ins->dm_face             = NULL;
-  ins->mass_flux           = NULL;
-  ins->J                   = NULL;
-  ins->J_rhs               = NULL;
-  ins->is_vel              = NULL;
-  ins->is_p                = NULL;
-  ins->nullspace           = NULL;
-  ins->temp                = NULL;
-  ins->has_pressure_outlet = PETSC_FALSE;
 
-  phys->data                    = ins;
-  phys->ops->createsolutiondm   = PhysCreateSolutionDM_INS;
-  phys->ops->setfromoptions     = PhysSetFromOptions_INS;
-  phys->ops->setup              = PhysSetUp_INS;
-  phys->ops->destroy            = PhysDestroy_INS;
-  phys->ops->view               = PhysView_INS;
-  phys->ops->setupts            = PhysSetUpTS_INS;
-  phys->ops->computeifunction   = PhysComputeIFunction_INS;
-  phys->ops->computeijacobian   = PhysComputeIJacobian_INS;
-  phys->ops->computerhsfunction = PhysComputeRHSFunction_INS;
+  phys->data                  = ins;
+  phys->ops->createsolutiondm = PhysCreateSolutionDM_INS;
+  phys->ops->setfromoptions   = PhysSetFromOptions_INS;
+  phys->ops->setup            = PhysSetUp_INS;
+  phys->ops->destroy          = PhysDestroy_INS;
+  phys->ops->view             = PhysView_INS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

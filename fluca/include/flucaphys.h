@@ -58,14 +58,6 @@ FLUCA_EXTERN PetscErrorCode PhysGetOptionsPrefix(Phys, const char *[]);
 /* Body force (base class) */
 FLUCA_EXTERN PetscErrorCode PhysSetBodyForce(Phys, PhysBodyForceFn *, void *);
 
-/* Solver setup (TS only) */
-FLUCA_EXTERN PetscErrorCode PhysSetUpTS(Phys, TS);
-
-/* Direct residual/Jacobian access (for testing) */
-FLUCA_EXTERN PetscErrorCode PhysComputeIFunction(Phys, PetscReal, Vec, Vec, Vec);
-FLUCA_EXTERN PetscErrorCode PhysComputeIJacobian(Phys, PetscReal, Vec, Vec, PetscReal, Mat, Mat);
-FLUCA_EXTERN PetscErrorCode PhysComputeRHSFunction(Phys, PetscReal, Vec, Vec);
-
 /* PHYSINS specific */
 FLUCA_EXTERN PetscErrorCode PhysINSSetDensity(Phys, PetscReal);
 FLUCA_EXTERN PetscErrorCode PhysINSGetDensity(Phys, PetscReal *);
