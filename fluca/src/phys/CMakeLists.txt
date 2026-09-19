@@ -9,6 +9,7 @@ add_library(fluca_phys SHARED
     interface/physopts.c
     interface/physpkg.c
     interface/physreg.c
+    ts/fsm/tsfsm.c
     utils/abfpc/abfpc.c
 )
 target_include_directories(fluca_phys PUBLIC

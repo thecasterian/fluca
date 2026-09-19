@@ -26,6 +26,7 @@ PetscErrorCode PhysInitializePackage(void)
   /* Register constructors */
   PetscCall(PhysRegisterAll());
   PetscCall(PCRegister(PCABF, PCCreate_ABF));
+  PetscCall(TSRegister(TSFSM, TSCreate_FSM));
   /* Register events */
   PetscCall(PetscLogEventRegister("PhysSetUp", PHYS_CLASSID, &PHYS_SetUp));
 

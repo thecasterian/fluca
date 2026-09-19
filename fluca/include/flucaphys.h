@@ -72,6 +72,14 @@ FLUCA_EXTERN PetscErrorCode PhysGetViscosity(Phys, PetscReal *);
 FLUCA_EXTERN PetscErrorCode PhysComputeMomentumSystem(Phys, PetscReal, PetscReal, Vec, Mat, Vec);
 FLUCA_EXTERN PetscErrorCode PhysComputeCouplingSystem(Phys, PetscReal, PetscReal, Mat, Vec);
 
+/* Time integration: fractional step method on the coupled system (13).
+   The pressure field of the solution holds p^{n+1/2} after each step. */
+#define TSFSM "fsm"
+
+FLUCA_EXTERN PetscErrorCode PhysSetUpTS(Phys, TS);
+FLUCA_EXTERN PetscErrorCode TSFSMSetPhys(TS, Phys);
+FLUCA_EXTERN PetscErrorCode TSFSMGetPhys(TS, Phys *);
+
 /* Options prefix */
 FLUCA_EXTERN PetscErrorCode PhysSetOptionsPrefix(Phys, const char[]);
 FLUCA_EXTERN PetscErrorCode PhysAppendOptionsPrefix(Phys, const char[]);
