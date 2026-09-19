@@ -24,6 +24,7 @@ PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
   p->sol_dm        = NULL;
   p->dim           = PETSC_DETERMINE;
   p->data          = NULL;
+  p->nfields       = 0;
   p->setupcalled   = PETSC_FALSE;
 
   *phys = p;
@@ -80,10 +81,38 @@ PetscErrorCode PhysDestroy(Phys *phys)
   /* Call type-specific destroy */
   PetscTryTypeMethod((*phys), destroy);
 
+  for (PetscInt f = 0; f < (*phys)->nfields; ++f) PetscCall(PetscFree((*phys)->fields[f].name));
+
   PetscCall(DMDestroy(&(*phys)->sol_dm));
   PetscCall(DMDestroy(&(*phys)->base_dm));
 
   PetscCall(PetscHeaderDestroy(phys));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Lay out the solution DMStag from the registered fields */
+static PetscErrorCode PhysCreateSolutionDM_Private(Phys phys)
+{
+  PetscInt dof[2] = {0, 0}; /* indexed by PhysFieldLocation */
+  PetscInt f;
+  DM       cdm;
+
+  PetscFunctionBegin;
+  for (f = 0; f < phys->nfields; ++f) dof[phys->fields[f].loc] += phys->fields[f].ncomp;
+  switch (phys->dim) {
+  case 2:
+    PetscCall(DMStagCreateCompatibleDMStag(phys->base_dm, 0, dof[PHYS_FIELD_FACE], dof[PHYS_FIELD_ELEMENT], 0, &phys->sol_dm));
+    break;
+  case 3:
+    PetscCall(DMStagCreateCompatibleDMStag(phys->base_dm, 0, 0, dof[PHYS_FIELD_FACE], dof[PHYS_FIELD_ELEMENT], &phys->sol_dm));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)phys), PETSC_ERR_SUP, "Unsupported dimension %" PetscInt_FMT, phys->dim);
+  }
+  /* Share coordinates from base DM */
+  PetscCall(DMStagSetCoordinateDMType(phys->sol_dm, DMPRODUCT));
+  PetscCall(DMGetCoordinateDM(phys->base_dm, &cdm));
+  PetscCall(DMSetCoordinateDM(phys->sol_dm, cdm));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -105,9 +134,10 @@ PetscErrorCode PhysSetUp(Phys phys)
   /* Extract dimension */
   PetscCall(DMGetDimension(phys->base_dm, &phys->dim));
 
-  /* Call subtype createsolutiondm */
-  PetscCheck(phys->ops->createsolutiondm, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Phys type not set or subtype does not implement createsolutiondm");
-  PetscCall((*phys->ops->createsolutiondm)(phys));
+  /* The subtype declares its fields; the solution DM is laid out from them */
+  PetscCheck(phys->ops->registerfields, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Phys type not set or subtype does not implement registerfields");
+  PetscCall((*phys->ops->registerfields)(phys));
+  PetscCall(PhysCreateSolutionDM_Private(phys));
 
   /* Call subtype setup */
   PetscTryTypeMethod(phys, setup);
@@ -149,5 +179,23 @@ PetscErrorCode PhysViewFromOptions(Phys phys, PetscObject obj, const char name[]
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscCall(FlucaObjectViewFromOptions((PetscObject)phys, obj, name));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysGetDensity(Phys phys, PetscReal *rho)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscAssertPointer(rho, 2);
+  PetscUseTypeMethod(phys, getdensity, rho);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysGetViscosity(Phys phys, PetscReal *mu)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscAssertPointer(mu, 2);
+  PetscUseTypeMethod(phys, getviscosity, mu);
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -2,7 +2,7 @@
 #include <flucasys.h>
 #include <petscdmstag.h>
 
-static const char help[] = "Test Phys INS subtype: verify solution DM DOF layout\n";
+static const char help[] = "Test Phys INS subtype: verify solution DM DOF layout and field registry\n";
 
 static PetscErrorCode BCVelocityZero(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx)
 {
@@ -13,16 +13,19 @@ static PetscErrorCode BCVelocityZero(PetscInt dim, PetscReal t, const PetscReal 
 
 int main(int argc, char **argv)
 {
-  DM        dm, sol_dm;
-  Phys      phys;
-  PetscInt  f;
-  PhysINSBC bc;
+  DM                dm, sol_dm;
+  Phys              phys;
+  PetscInt          f, c0, ncomp, n;
+  PhysINSBC         bc;
+  PhysFieldLocation loc;
+  IS                is;
+  const char       *names[] = {PHYS_FIELD_VELOCITY, PHYS_FIELD_PRESSURE, PHYS_FIELD_FACE_VELOCITY};
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
-  /* Create 2D base DMStag: 1 element DOF */
-  PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 4, 4, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 1, NULL, NULL, &dm));
+  /* Create 2D base DMStag: 1 element DOF, stencil width 2 as required by PhysINS */
+  PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 4, 4, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 2, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
@@ -45,6 +48,15 @@ int main(int argc, char **argv)
   /* View solution DM */
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(DMView(sol_dm, PETSC_VIEWER_STDOUT_WORLD));
+
+  /* Field registry */
+  for (f = 0; f < 3; f++) {
+    PetscCall(PhysGetField(phys, names[f], &loc, &c0, &ncomp));
+    PetscCall(PhysGetFieldIS(phys, names[f], &is));
+    PetscCall(ISGetSize(is, &n));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Field %s: location %s, first component %" PetscInt_FMT ", components %" PetscInt_FMT ", entries %" PetscInt_FMT "\n", names[f], PhysFieldLocations[loc], c0, ncomp, n));
+    PetscCall(ISDestroy(&is));
+  }
 
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));

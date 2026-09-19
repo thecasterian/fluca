@@ -4,6 +4,7 @@ add_library(fluca_phys SHARED
     impls/ins/ins.c
     impls/ins/insops.c
     interface/physbasic.c
+    interface/physfield.c
     interface/physopts.c
     interface/physpkg.c
     interface/physreg.c

@@ -50,6 +50,24 @@ FLUCA_EXTERN PetscErrorCode PhysDestroy(Phys *);
 FLUCA_EXTERN PetscErrorCode PhysView(Phys, PetscViewer);
 FLUCA_EXTERN PetscErrorCode PhysViewFromOptions(Phys, PetscObject, const char[]);
 
+/* Solution fields */
+typedef enum {
+  PHYS_FIELD_ELEMENT,
+  PHYS_FIELD_FACE,
+} PhysFieldLocation;
+FLUCA_EXTERN const char *PhysFieldLocations[];
+
+#define PHYS_FIELD_VELOCITY      "velocity"
+#define PHYS_FIELD_PRESSURE      "pressure"
+#define PHYS_FIELD_FACE_VELOCITY "face_velocity"
+
+FLUCA_EXTERN PetscErrorCode PhysGetField(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);
+FLUCA_EXTERN PetscErrorCode PhysGetFieldIS(Phys, const char[], IS *);
+
+/* Material properties */
+FLUCA_EXTERN PetscErrorCode PhysGetDensity(Phys, PetscReal *);
+FLUCA_EXTERN PetscErrorCode PhysGetViscosity(Phys, PetscReal *);
+
 /* Options prefix */
 FLUCA_EXTERN PetscErrorCode PhysSetOptionsPrefix(Phys, const char[]);
 FLUCA_EXTERN PetscErrorCode PhysAppendOptionsPrefix(Phys, const char[]);

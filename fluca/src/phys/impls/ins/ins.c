@@ -1,25 +1,29 @@
 #include <fluca/private/physinsimpl.h>
 
-static PetscErrorCode PhysCreateSolutionDM_INS(Phys phys)
+static PetscErrorCode PhysRegisterFields_INS(Phys phys)
 {
-  DM cdm;
+  PetscFunctionBegin;
+  PetscCall(PhysRegisterField_Internal(phys, PHYS_FIELD_VELOCITY, PHYS_FIELD_ELEMENT, phys->dim));
+  PetscCall(PhysRegisterField_Internal(phys, PHYS_FIELD_PRESSURE, PHYS_FIELD_ELEMENT, 1));
+  PetscCall(PhysRegisterField_Internal(phys, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PhysGetDensity_INS(Phys phys, PetscReal *rho)
+{
+  Phys_INS *ins = (Phys_INS *)phys->data;
 
   PetscFunctionBegin;
-  /* Create cell-centered DMStag: dim+1 element DOFs (velocity components + pressure) */
-  switch (phys->dim) {
-  case 2:
-    PetscCall(DMStagCreateCompatibleDMStag(phys->base_dm, 0, 0, phys->dim + 1, 0, &phys->sol_dm));
-    break;
-  case 3:
-    PetscCall(DMStagCreateCompatibleDMStag(phys->base_dm, 0, 0, 0, phys->dim + 1, &phys->sol_dm));
-    break;
-  default:
-    SETERRQ(PetscObjectComm((PetscObject)phys), PETSC_ERR_SUP, "Unsupported dimension %" PetscInt_FMT, phys->dim);
-  }
-  /* Share coordinates from base DM */
-  PetscCall(DMStagSetCoordinateDMType(phys->sol_dm, DMPRODUCT));
-  PetscCall(DMGetCoordinateDM(phys->base_dm, &cdm));
-  PetscCall(DMSetCoordinateDM(phys->sol_dm, cdm));
+  *rho = ins->rho;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PhysGetViscosity_INS(Phys phys, PetscReal *mu)
+{
+  Phys_INS *ins = (Phys_INS *)phys->data;
+
+  PetscFunctionBegin;
+  *mu = ins->mu;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -37,7 +41,23 @@ static PetscErrorCode PhysSetFromOptions_INS(Phys phys, PetscOptionItems PetscOp
 
 static PetscErrorCode PhysSetUp_INS(Phys phys)
 {
+  Phys_INS      *ins   = (Phys_INS *)phys->data;
+  DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
+  PetscInt       sw, d;
+
   PetscFunctionBegin;
+  /* Rhie-Chow face rows reach two cells away from the face */
+  PetscCall(DMStagGetStencilWidth(phys->sol_dm, &sw));
+  PetscCheck(sw >= 2, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "PhysINS requires a base DM stencil width of at least 2, got %" PetscInt_FMT, sw);
+  /* Only velocity boundary conditions are supported: every non-periodic boundary needs one */
+  PetscCall(DMStagGetBoundaryTypes(phys->sol_dm, &bt[0], &bt[1], &bt[2]));
+  for (d = 0; d < phys->dim; ++d) {
+    if (bt[d] == DM_BOUNDARY_PERIODIC) continue;
+    PetscCheck(ins->bcs[2 * d].type == PHYS_INS_BC_VELOCITY && ins->bcs[2 * d + 1].type == PHYS_INS_BC_VELOCITY, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "PhysINS requires a velocity boundary condition on both non-periodic boundaries in direction %" PetscInt_FMT, d);
+  }
+  PetscCall(PhysGetField_Internal(phys, PHYS_FIELD_VELOCITY, NULL, &ins->c_vel, NULL));
+  PetscCall(PhysGetField_Internal(phys, PHYS_FIELD_PRESSURE, NULL, &ins->c_p, NULL));
+  PetscCall(PhysGetField_Internal(phys, PHYS_FIELD_FACE_VELOCITY, NULL, &ins->c_U, NULL));
   PetscCall(PhysINSBuildOperators_Internal(phys));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -91,12 +111,14 @@ PetscErrorCode PhysCreate_INS(Phys phys)
     ins->fd_grad_p[f]    = NULL;
   }
 
-  phys->data                  = ins;
-  phys->ops->createsolutiondm = PhysCreateSolutionDM_INS;
-  phys->ops->setfromoptions   = PhysSetFromOptions_INS;
-  phys->ops->setup            = PhysSetUp_INS;
-  phys->ops->destroy          = PhysDestroy_INS;
-  phys->ops->view             = PhysView_INS;
+  phys->data                = ins;
+  phys->ops->registerfields = PhysRegisterFields_INS;
+  phys->ops->getdensity     = PhysGetDensity_INS;
+  phys->ops->getviscosity   = PhysGetViscosity_INS;
+  phys->ops->setfromoptions = PhysSetFromOptions_INS;
+  phys->ops->setup          = PhysSetUp_INS;
+  phys->ops->destroy        = PhysDestroy_INS;
+  phys->ops->view           = PhysView_INS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

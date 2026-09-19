@@ -19,6 +19,10 @@ typedef struct {
   PetscReal rho; /* density */
   PetscReal mu;  /* dynamic viscosity */
 
+  PetscInt c_vel; /* first velocity component (element) */
+  PetscInt c_p;   /* pressure component (element) */
+  PetscInt c_U;   /* face-normal velocity component (face) */
+
   /* Boundary conditions (one per face: left, right, down, up, back, front) */
   PhysINSBC bcs[PHYS_INS_MAX_FACES];
 

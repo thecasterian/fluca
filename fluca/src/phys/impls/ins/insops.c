@@ -23,9 +23,9 @@ static PetscErrorCode PhysINS_BCAdapterFnDot(PetscInt dim, PetscReal t, const Pe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Set velocity Dirichlet BCs on a FlucaFD operator for a specific velocity component.
+/* Set velocity Dirichlet BCs of velocity component d on a FlucaFD operator.
    Uses the BC adapter to bridge PhysINSBCFn (has comp) to FlucaFDBCValueFn (no comp). */
-static PetscErrorCode SetVelocityDirichletBCs(Phys phys, FlucaFD fd, PetscInt comp)
+static PetscErrorCode SetVelocityDirichletBCs(Phys phys, FlucaFD fd, PetscInt d)
 {
   Phys_INS                *ins                          = (Phys_INS *)phys->data;
   FlucaFDBoundaryCondition fd_bcs[2 * PHYS_INS_MAX_DIM] = {{0}};
@@ -34,28 +34,28 @@ static PetscErrorCode SetVelocityDirichletBCs(Phys phys, FlucaFD fd, PetscInt co
   PetscFunctionBegin;
   for (f = 0; f < 2 * phys->dim; f++) {
     if (ins->bcs[f].type == PHYS_INS_BC_VELOCITY && ins->bcs[f].fn) {
-      ins->bc_adapters[comp][f].fn         = ins->bcs[f].fn;
-      ins->bc_adapters[comp][f].fn_dot     = ins->bcs[f].fn_dot;
-      ins->bc_adapters[comp][f].fn_ctx     = ins->bcs[f].ctx;
-      ins->bc_adapters[comp][f].fn_dot_ctx = ins->bcs[f].fn_dot_ctx;
-      ins->bc_adapters[comp][f].comp       = comp;
-      fd_bcs[f].type                       = FLUCAFD_BC_DIRICHLET;
-      fd_bcs[f].fn                         = PhysINS_BCAdapterFn;
-      fd_bcs[f].fn_ctx                     = &ins->bc_adapters[comp][f];
-      fd_bcs[f].fn_dot                     = ins->bcs[f].fn_dot ? PhysINS_BCAdapterFnDot : NULL;
-      fd_bcs[f].fn_dot_ctx                 = &ins->bc_adapters[comp][f];
+      ins->bc_adapters[d][f].fn         = ins->bcs[f].fn;
+      ins->bc_adapters[d][f].fn_dot     = ins->bcs[f].fn_dot;
+      ins->bc_adapters[d][f].fn_ctx     = ins->bcs[f].ctx;
+      ins->bc_adapters[d][f].fn_dot_ctx = ins->bcs[f].fn_dot_ctx;
+      ins->bc_adapters[d][f].comp       = d;
+      fd_bcs[f].type                    = FLUCAFD_BC_DIRICHLET;
+      fd_bcs[f].fn                      = PhysINS_BCAdapterFn;
+      fd_bcs[f].fn_ctx                  = &ins->bc_adapters[d][f];
+      fd_bcs[f].fn_dot                  = ins->bcs[f].fn_dot ? PhysINS_BCAdapterFnDot : NULL;
+      fd_bcs[f].fn_dot_ctx              = &ins->bc_adapters[d][f];
     } else if (ins->bcs[f].type == PHYS_INS_BC_VELOCITY) {
       /* Constant zero velocity BC */
       fd_bcs[f].type  = FLUCAFD_BC_DIRICHLET;
       fd_bcs[f].value = 0.;
     }
   }
-  PetscCall(FlucaFDSetBoundaryConditions(fd, comp, fd_bcs));
+  PetscCall(FlucaFDSetBoundaryConditions(fd, ins->c_vel + d, fd_bcs));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 /* Set pressure Neumann (zero normal derivative) BCs on a FlucaFD operator */
-static PetscErrorCode SetPressureNeumannBCs(Phys phys, FlucaFD fd, PetscInt comp)
+static PetscErrorCode SetPressureNeumannBCs(Phys phys, FlucaFD fd)
 {
   Phys_INS                *ins                          = (Phys_INS *)phys->data;
   FlucaFDBoundaryCondition fd_bcs[2 * PHYS_INS_MAX_DIM] = {{0}};
@@ -68,7 +68,7 @@ static PetscErrorCode SetPressureNeumannBCs(Phys phys, FlucaFD fd, PetscInt comp
       fd_bcs[f].value = 0.;
     }
   }
-  PetscCall(FlucaFDSetBoundaryConditions(fd, comp, fd_bcs));
+  PetscCall(FlucaFDSetBoundaryConditions(fd, ins->c_p, fd_bcs));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -90,7 +90,7 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
       FlucaFD inner, scaled, outer;
 
       /* d(u_d)/dx_e */
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, d, face_loc[e], 0, &inner));
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, ins->c_vel + d, face_loc[e], ins->c_U, &inner));
       PetscCall(FlucaFDSetUp(inner));
 
       /* -mu * d(u_d)/dx_e */
@@ -98,7 +98,7 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
       PetscCall(FlucaFDSetUp(scaled));
 
       /* d/dx_e(...) back to element */
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, face_loc[e], 0, DMSTAG_ELEMENT, d, &outer));
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, face_loc[e], ins->c_U, DMSTAG_ELEMENT, ins->c_vel + d, &outer));
       PetscCall(FlucaFDSetUp(outer));
 
       /* d/dx_e(-mu * d(u_d)/dx_e) */
@@ -119,8 +119,8 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
 
   /* --- fd_grad_p[d] = dp/dx_d --- */
   for (d = 0; d < dim; d++) {
-    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, dim, DMSTAG_ELEMENT, d, &ins->fd_grad_p[d]));
-    PetscCall(SetPressureNeumannBCs(phys, ins->fd_grad_p[d], dim));
+    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, ins->c_p, DMSTAG_ELEMENT, ins->c_vel + d, &ins->fd_grad_p[d]));
+    PetscCall(SetPressureNeumannBCs(phys, ins->fd_grad_p[d]));
     PetscCall(FlucaFDSetUp(ins->fd_grad_p[d]));
   }
 
