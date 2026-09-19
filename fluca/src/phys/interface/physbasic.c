@@ -223,3 +223,24 @@ PetscErrorCode PhysComputeMomentumSystem(Phys phys, PetscReal t, PetscReal dt, V
   PetscUseTypeMethod(phys, computemomentumsystem, t, dt, X, M, f);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+/*
+  PhysComputeCouplingSystem - Add the Rhie-Chow and continuity rows of the coupled system (13) of the theory guide.
+
+  Input: t = time of the boundary data (t^{n+1} within a step), dt.
+  Adds -T, I, -R into the face-velocity rows and D into the pressure rows of M, and b_interp, b_cont into f.
+  M is assembled on return, with boundary-face rows replaced by unit rows.
+*/
+PetscErrorCode PhysComputeCouplingSystem(Phys phys, PetscReal t, PetscReal dt, Mat M, Vec f)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscValidLogicalCollectiveReal(phys, t, 2);
+  PetscValidLogicalCollectiveReal(phys, dt, 3);
+  PetscValidHeaderSpecific(M, MAT_CLASSID, 4);
+  PetscValidHeaderSpecific(f, VEC_CLASSID, 5);
+  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysComputeCouplingSystem()");
+  PetscCheck(dt > 0., PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Time step must be positive, got %g", (double)dt);
+  PetscUseTypeMethod(phys, computecouplingsystem, t, dt, M, f);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}

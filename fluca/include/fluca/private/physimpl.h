@@ -29,6 +29,7 @@ struct _PhysOps {
   PetscErrorCode (*getdensity)(Phys, PetscReal *);
   PetscErrorCode (*getviscosity)(Phys, PetscReal *);
   PetscErrorCode (*computemomentumsystem)(Phys, PetscReal, PetscReal, Vec, Mat, Vec);
+  PetscErrorCode (*computecouplingsystem)(Phys, PetscReal, PetscReal, Mat, Vec);
 };
 
 struct _p_Phys {

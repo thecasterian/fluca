@@ -158,6 +158,115 @@ static PetscErrorCode BuildMomentumOperators_Private(Phys phys)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Local indices of the locally owned face-velocity rows that lie on a non-periodic boundary */
+static PetscErrorCode CreateBoundaryFaceRows_Private(Phys phys)
+{
+  Phys_INS      *ins    = (Phys_INS *)phys->data;
+  DM             sol_dm = phys->sol_dm;
+  PetscInt       dim    = phys->dim;
+  DMBoundaryType bt[3]  = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
+  PetscInt       N[3] = {1, 1, 1}, s[3] = {0, 0, 0}, m[3] = {1, 1, 1}, extra[3] = {0, 0, 0};
+  PetscInt       pass, n, e, d, i, j, k, hi[3], idx[3];
+  DMStagStencil  st;
+
+  PetscFunctionBegin;
+  PetscCall(DMStagGetBoundaryTypes(sol_dm, &bt[0], &bt[1], &bt[2]));
+  PetscCall(DMStagGetGlobalSizes(sol_dm, &N[0], &N[1], &N[2]));
+  PetscCall(DMStagGetCorners(sol_dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], &extra[0], &extra[1], &extra[2]));
+  for (d = dim; d < 3; ++d) {
+    s[d]     = 0;
+    m[d]     = 1;
+    extra[d] = 0;
+  }
+  n = 0;
+  for (pass = 0; pass < 2; ++pass) {
+    if (pass == 1) {
+      PetscCall(PetscMalloc1(n, &ins->bface));
+      ins->nbface = n;
+      n           = 0;
+    }
+    for (e = 0; e < dim; ++e) {
+      if (bt[e] == DM_BOUNDARY_PERIODIC) continue;
+      for (d = 0; d < 3; ++d) hi[d] = s[d] + m[d] + (d == e ? extra[d] : 0);
+      for (k = s[2]; k < hi[2]; ++k) {
+        for (j = s[1]; j < hi[1]; ++j) {
+          for (i = s[0]; i < hi[0]; ++i) {
+            idx[0] = i;
+            idx[1] = j;
+            idx[2] = k;
+            if (idx[e] != 0 && idx[e] != N[e]) continue;
+            if (pass == 1) {
+              st.i   = i;
+              st.j   = j;
+              st.k   = k;
+              st.loc = face_loc[e];
+              st.c   = ins->c_U;
+              PetscCall(DMStagStencilToIndexLocal(sol_dm, dim, 1, &st, &ins->bface[n]));
+            }
+            ++n;
+          }
+        }
+      }
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Operators of the Rhie-Chow rows (guide eq. (11)) and continuity rows (guide eq. (10)) */
+static PetscErrorCode BuildCouplingOperators_Private(Phys phys)
+{
+  Phys_INS *ins    = (Phys_INS *)phys->data;
+  DM        sol_dm = phys->sol_dm;
+  PetscInt  dim    = phys->dim, e;
+  FlucaFD   div[PHYS_INS_MAX_DIM];
+
+  PetscFunctionBegin;
+  for (e = 0; e < dim; e++) {
+    FlucaFD grad_e, interp_e, Gst, R, R_terms[2];
+
+    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, ins->c_vel + e, face_loc[e], ins->c_U, &ins->fd_T[e]));
+    PetscCall(SetVelocityDirichletBCs(phys, ins->fd_T[e], e));
+    PetscCall(FlucaFDSetUp(ins->fd_T[e]));
+    PetscCall(FlucaFDScaleCreateConstant(ins->fd_T[e], -1., &ins->fd_negT[e]));
+    PetscCall(SetVelocityDirichletBCs(phys, ins->fd_negT[e], e));
+    PetscCall(FlucaFDSetUp(ins->fd_negT[e]));
+
+    /* R = T G_c - G^st on faces normal to e */
+    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, ins->c_p, DMSTAG_ELEMENT, ins->c_vel + e, &grad_e));
+    PetscCall(FlucaFDSetUp(grad_e));
+    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, ins->c_vel + e, face_loc[e], ins->c_U, &interp_e));
+    PetscCall(FlucaFDSetUp(interp_e));
+    PetscCall(FlucaFDCompositionCreate(grad_e, interp_e, &R_terms[0]));
+    PetscCall(FlucaFDSetUp(R_terms[0]));
+    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, ins->c_p, face_loc[e], ins->c_U, &Gst));
+    PetscCall(FlucaFDSetUp(Gst));
+    PetscCall(FlucaFDScaleCreateConstant(Gst, -1., &R_terms[1]));
+    PetscCall(FlucaFDSetUp(R_terms[1]));
+    PetscCall(FlucaFDSumCreate(2, R_terms, &R));
+    PetscCall(FlucaFDSetUp(R));
+    PetscCall(FlucaFDScaleCreateConstant(R, 0., &ins->fd_negR[e]));
+    PetscCall(SetPressureNeumannBCs(phys, ins->fd_negR[e]));
+    PetscCall(FlucaFDSetUp(ins->fd_negR[e]));
+    PetscCall(FlucaFDDestroy(&R));
+    PetscCall(FlucaFDDestroy(&R_terms[1]));
+    PetscCall(FlucaFDDestroy(&Gst));
+    PetscCall(FlucaFDDestroy(&R_terms[0]));
+    PetscCall(FlucaFDDestroy(&interp_e));
+    PetscCall(FlucaFDDestroy(&grad_e));
+  }
+
+  for (e = 0; e < dim; e++) {
+    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, face_loc[e], ins->c_U, DMSTAG_ELEMENT, ins->c_p, &div[e]));
+    PetscCall(FlucaFDSetUp(div[e]));
+  }
+  PetscCall(FlucaFDSumCreate(dim, div, &ins->fd_D));
+  PetscCall(FlucaFDSetUp(ins->fd_D));
+  for (e = 0; e < dim; e++) PetscCall(FlucaFDDestroy(&div[e]));
+
+  PetscCall(CreateBoundaryFaceRows_Private(phys));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
 {
   Phys_INS *ins    = (Phys_INS *)phys->data;
@@ -209,6 +318,7 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
   }
 
   PetscCall(BuildMomentumOperators_Private(phys));
+  PetscCall(BuildCouplingOperators_Private(phys));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -219,6 +329,9 @@ PetscErrorCode PhysINSDestroyOperators_Internal(Phys phys)
 
   PetscFunctionBegin;
   for (d = 0; d < PHYS_INS_MAX_DIM; d++) {
+    PetscCall(FlucaFDDestroy(&ins->fd_negR[d]));
+    PetscCall(FlucaFDDestroy(&ins->fd_negT[d]));
+    PetscCall(FlucaFDDestroy(&ins->fd_T[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_conv[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_grad[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_visc[d]));
@@ -231,6 +344,8 @@ PetscErrorCode PhysINSDestroyOperators_Internal(Phys phys)
     PetscCall(FlucaFDDestroy(&ins->fd_laplacian[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_grad_p[d]));
   }
+  PetscCall(FlucaFDDestroy(&ins->fd_D));
+  PetscCall(PetscFree(ins->bface));
   PetscCall(DMDestroy(&ins->dm_face));
   PetscCall(VecDestroy(&ins->zero));
   PetscCall(ISDestroy(&ins->is_vel));

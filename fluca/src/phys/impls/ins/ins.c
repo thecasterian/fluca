@@ -120,6 +120,7 @@ PetscErrorCode PhysCreate_INS(Phys phys)
   phys->ops->destroy               = PhysDestroy_INS;
   phys->ops->view                  = PhysView_INS;
   phys->ops->computemomentumsystem = PhysComputeMomentumSystem_INS;
+  phys->ops->computecouplingsystem = PhysComputeCouplingSystem_INS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

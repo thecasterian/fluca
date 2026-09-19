@@ -43,6 +43,14 @@ typedef struct {
   FlucaFD fd_conv_U[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM];     /* [d][e]: ubar_d on faces normal to e, times U_e^n */
   FlucaFD fd_conv_ubar[PHYS_INS_MAX_DIM][PHYS_INS_MAX_DIM];  /* [d][e]: ubar_e on faces normal to e, times ubar_d^n */
   FlucaFD fd_grad[PHYS_INS_MAX_DIM];                         /* (dt/rho) fd_grad_p[d]: the operator G */
+
+  /* Coupling rows of the coupled system (13) */
+  FlucaFD   fd_T[PHYS_INS_MAX_DIM];    /* T: u_e -> faces normal to e (linear interpolation, velocity BCs) */
+  FlucaFD   fd_negT[PHYS_INS_MAX_DIM]; /* -T */
+  FlucaFD   fd_negR[PHYS_INS_MAX_DIM]; /* -R = -(dt/rho)(interp_e(dp/dx_e) - dp/dx_e|face) */
+  FlucaFD   fd_D;                      /* D: sum_e d/dx_e(U_e) into the pressure rows */
+  PetscInt  nbface;                    /* locally owned boundary-face rows */
+  PetscInt *bface;                     /* their local indices on the solution DM */
 } Phys_INS;
 
 /* Internal functions defined in insops.c */
@@ -51,3 +59,4 @@ FLUCA_INTERN PetscErrorCode PhysINSDestroyOperators_Internal(Phys);
 
 /* Defined in inssystem.c */
 FLUCA_INTERN PetscErrorCode PhysComputeMomentumSystem_INS(Phys, PetscReal, PetscReal, Vec, Mat, Vec);
+FLUCA_INTERN PetscErrorCode PhysComputeCouplingSystem_INS(Phys, PetscReal, PetscReal, Mat, Vec);
