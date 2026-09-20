@@ -10,7 +10,7 @@ static const char help[] = "Test the coupling blocks of PhysComputeCouplingSyste
 
 static PetscScalar PressureValue(PetscInt i, PetscInt j)
 {
-  return (PetscScalar)((i + 1) * (i + 1) + 3 * (j + 1) * (i + 2));
+  return (PetscScalar)((i + 1) * (i + 1) + 3 * (j + 1) * (i + 2) + 2 * (j + 1) * (j + 1));
 }
 
 /* W = (-T) G - (-R) at x-direction face (fi, fj) must equal -(dt/rho) G^st exactly: G^st is the
@@ -128,7 +128,8 @@ int main(int argc, char **argv)
      pressure field that is quadratic in the face-normal direction, because the cell gradient G_c is
      exact on quadratics (one-sided next to a wall, central elsewhere), the interpolation T is exact
      on the resulting linear field, and G^st is the exact face derivative of a quadratic on a uniform
-     grid. P below is quadratic in i and linear in j, so -R P must vanish in every face row.
+     grid. P below is quadratic in both i and j, so -R P must vanish in every face row, whether the
+     row's face-normal direction is i (LEFT faces) or j (DOWN faces).
 
      Until the four-point interpolation replaced the two-point average in T, -R vanished *identically*
      at a wall-adjacent face: the average of the one-sided cell gradient at the wall cell and the

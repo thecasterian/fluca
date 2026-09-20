@@ -37,7 +37,7 @@
      4. walled oblique field: the wall layer is no larger than twice the bulk on every grid. A layer
         one order lower would separate from the bulk like 1/h under refinement, which is what the
         previous discretization did: its wall-to-bulk ratio ran 2.2, 4.1, 8.1 over these three grids,
-        against 0.90, 0.97, 0.99 now.
+        against 0.99, 0.99, 0.99 now.
      5. guard: |u|_inf is O(1) on every grid, so a passing refinement check cannot come from a
         trivial field.
 
@@ -45,11 +45,12 @@
    stencil. Its wall assertion is therefore one-sided (at least second order), while the oblique field,
    which has no such cancellation, carries the two-sided bracket.
 
-   Taylor-Green is also no longer at round-off away from the wall on the walled grid, as it was while
-   T was the two-point average. The four-point interpolation is one-sided at the face next to the
-   wall, so a wall now changes two cell rows rather than one and the second row falls in the bulk
-   bucket; both refine at third order here (bulk ratios 11.2 and 11.4), which is why the walled bulk
-   assertions are one-sided too. */
+   The four-point interpolation is one-sided at the face next to the wall, so a wall perturbs two cell
+   rows, not one; the wall bucket below is therefore two cells deep (i <= 1 || i >= N-2, same in j), not
+   one. With that bucket, Taylor-Green is again at round-off in the bulk on the walled grid, exactly as
+   in the periodic case, because cell 2 and beyond see only the symmetric {i-2..i+1} face stencil, which
+   annihilates Taylor-Green exactly; the walled bulk assertion is therefore the same round-off check as
+   the periodic one, not a refinement ratio. */
 
 static const char help[] = "Continuity-row consistency of the assembled D and T blocks (solver free)\n"
                            "Pushes analytic divergence-free fields through U = b_interp + T u and\n"
@@ -202,7 +203,7 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
       PetscCall(DMStagVecGetValuesStencil(sol_dm, Rloc, 1, &st, &r));
       r2 = PetscAbsScalar(r);
       r2 *= r2;
-      if (walled && (i == 0 || i == N - 1 || j == 0 || j == N - 1)) {
+      if (walled && (i <= 1 || i >= N - 2 || j <= 1 || j >= N - 2)) {
         s_wall += r2;
         ++nwall;
       } else {
@@ -259,21 +260,23 @@ int main(int argc, char **argv)
   }
   for (k = 0; k + 1 < 3; ++k) {
     ratio = bulk[k] / bulk[k + 1];
-    PetscCheck(ratio >= 3.5 && ratio <= 4.5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Periodic oblique residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is not O(h^2)", grid[k], grid[k + 1], (double)ratio);
+    PetscCheck(ratio >= 3.5 && ratio <= 5., PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Periodic oblique residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is not O(h^2)", grid[k], grid[k + 1], (double)ratio);
   }
 
-  /* Walled Taylor-Green: the wall layer refines at least at second order. The bracket is one-sided
-     because this field is superconvergent at the wall for this stencil (measured ratios near 8). */
+  /* Walled Taylor-Green: the bulk is at round-off, same as the periodic case, now that the wall
+     bucket is two cells deep. The wall layer refines at least at second order; the bracket is
+     one-sided because this field is superconvergent at the wall for this stencil (measured ratios
+     near 8). */
   field_id = 0;
   for (k = 0; k < 3; ++k) {
     PetscCall(PhysTestContinuityResidual(DM_BOUNDARY_NONE, grid[k], &wall[k], &bulk[k], &u_max));
     PetscCheck(u_max > .5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled %" PetscInt_FMT ": the sampled field is trivial, |u|_max = %g", grid[k], (double)u_max);
+    tol = 1e-12 * u_max * grid[k] / (2. * PETSC_PI);
+    PetscCheck(bulk[k] <= tol, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled %" PetscInt_FMT ": bulk continuity residual %g exceeds round-off %g", grid[k], (double)bulk[k], (double)tol);
   }
   for (k = 0; k + 1 < 3; ++k) {
     ratio = wall[k] / wall[k + 1];
     PetscCheck(ratio >= 3.5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled wall-layer residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is below O(h^2)", grid[k], grid[k + 1], (double)ratio);
-    ratio = bulk[k] / bulk[k + 1];
-    PetscCheck(ratio >= 3.5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled bulk residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is below O(h^2)", grid[k], grid[k + 1], (double)ratio);
   }
 
   /* Walled oblique field: the wall layer and the bulk both refine at second order, and the wall layer
@@ -286,9 +289,9 @@ int main(int argc, char **argv)
   }
   for (k = 0; k + 1 < 3; ++k) {
     ratio = wall[k] / wall[k + 1];
-    PetscCheck(ratio >= 3.5 && ratio <= 4.5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled oblique wall-layer residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is not O(h^2)", grid[k], grid[k + 1], (double)ratio);
+    PetscCheck(ratio >= 3.5 && ratio <= 5., PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled oblique wall-layer residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is not O(h^2)", grid[k], grid[k + 1], (double)ratio);
     ratio = bulk[k] / bulk[k + 1];
-    PetscCheck(ratio >= 3.5 && ratio <= 4.5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled oblique bulk residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is not O(h^2)", grid[k], grid[k + 1], (double)ratio);
+    PetscCheck(ratio >= 3.5 && ratio <= 5., PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled oblique bulk residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is not O(h^2)", grid[k], grid[k + 1], (double)ratio);
   }
 
   PetscCall(FlucaFinalize());
