@@ -4,13 +4,19 @@
 #include <petscmath.h>
 
 static const char help[] = "Temporal self-convergence of TSFSM on the 2D Taylor-Green vortex\n"
-                           "Solves to -ts_max_time with dt, dt/2, dt/4, ... and prints ||X_dt - X_{dt/2}|| for u and p.\n"
+                           "Solves to -ts_max_time with dt, dt/2, dt/4, ... and prints ||X_dt - X_{dt/2}|| for u and p,\n"
+                           "the L2 self-difference between each pair of consecutive levels, which is a proxy for the\n"
+                           "temporal error of TSFSM's Crank-Nicolson integration. On this code, at mu = 1 both the\n"
+                           "periodic and the walled case show second-order ratios (about 4x per halving) for u and p.\n"
+                           "At small mu the self-difference can fall below the spatial (grid) error floor once dt is\n"
+                           "small enough (observed at mu = 0.01), and the printed ratios stop being meaningful there.\n"
                            "The final pressure is extrapolated from the last two half-step values (Armfield & Street).\n"
                            "Options:\n"
-                           "  -walled        : Unit square with the exact time-dependent wall velocity (default: periodic [0, 2*pi]^2)\n"
-                           "  -mu <real>     : Dynamic viscosity with rho = 1 (default: 1.0)\n"
-                           "  -dt <real>     : Largest time step (default: 0.02)\n"
-                           "  -nlevels <int> : Number of time steps (default: 4)\n";
+                           "  -walled          : Unit square with the exact time-dependent wall velocity (default: periodic [0, 2*pi]^2)\n"
+                           "  -mu <real>       : Dynamic viscosity with rho = 1 (default: 1.0)\n"
+                           "  -dt <real>       : Largest time step (default: 0.02)\n"
+                           "  -nlevels <int>   : Number of refinement levels, i.e. dt, dt/2, ..., dt/2^(nlevels-1) (default: 4)\n"
+                           "  -ts_max_time <real> : Final integration time (default: 0.1)\n";
 
 typedef struct {
   PetscReal nu;
@@ -95,7 +101,7 @@ static PetscErrorCode Solve(Phys phys, AppCtx *user, PetscReal dt, PetscReal tma
   TS          ts;
   Vec         p;
   PetscScalar mean;
-  PetscInt    np;
+  PetscInt    np, nsteps;
 
   PetscFunctionBeginUser;
   PetscCall(FillInitialCondition(phys, user, Y));
@@ -105,9 +111,13 @@ static PetscErrorCode Solve(Phys phys, AppCtx *user, PetscReal dt, PetscReal tma
   PetscCall(TSSetPreStep(ts, SavePressure));
   PetscCall(TSSetMaxTime(ts, tmax));
   PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_MATCHSTEP));
-  PetscCall(TSSetTimeStep(ts, dt));
+  /* TSSetTimeStep must come after TSSetFromOptions: otherwise a stray -ts_dt on the command line
+     would silently override dt and collapse the whole refinement ladder to one step size. */
   PetscCall(TSSetFromOptions(ts));
+  PetscCall(TSSetTimeStep(ts, dt));
   PetscCall(TSSolve(ts, Y));
+  PetscCall(TSGetStepNumber(ts, &nsteps));
+  PetscCheck(nsteps >= 2, PetscObjectComm((PetscObject)ts), PETSC_ERR_PLIB, "This level took %" PetscInt_FMT " step(s); the Armfield & Street extrapolation needs at least 2 to have a valid p_prev", nsteps);
   PetscCall(TSDestroy(&ts));
 
   PetscCall(VecGetSubVector(Y, user->is_p, &p));
@@ -139,15 +149,16 @@ static PetscErrorCode FieldDifference(IS is, Vec a, Vec b, PetscReal h, PetscRea
 
 int main(int argc, char **argv)
 {
-  DM        dm, sol_dm;
-  Phys      phys;
-  PhysINSBC bc;
-  AppCtx    user;
-  IS        is_v;
-  Vec       Y[2], sub;
-  PetscBool walled = PETSC_FALSE;
-  PetscReal mu = 1., dt = 0.02, tmax = 0.1, L, h, e_u, e_p, e_u_prev = 0., e_p_prev = 0.;
-  PetscInt  nlevels = 4, N, l, f;
+  DM          dm, sol_dm;
+  Phys        phys;
+  PhysINSBC   bc;
+  AppCtx      user;
+  IS          is_v;
+  Vec         Y[2], sub;
+  const char *solver_mode;
+  PetscBool   walled = PETSC_FALSE, max_it_set;
+  PetscReal   mu = 1., dt = 0.02, tmax = 0.1, L, h, e_u, e_p, e_u_prev = 0., e_p_prev = 0.;
+  PetscInt    nlevels = 4, N, l, f, max_it = 0;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
@@ -156,8 +167,10 @@ int main(int argc, char **argv)
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-dt", &dt, NULL));
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-ts_max_time", &tmax, NULL));
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-nlevels", &nlevels, NULL));
-  user.nu = mu;
-  L       = walled ? 1. : 2. * PETSC_PI;
+  PetscCall(PetscOptionsGetInt(NULL, NULL, "-ts_fsm_ksp_max_it", &max_it, &max_it_set));
+  solver_mode = max_it_set && max_it <= 1 ? "classic FSM (single sweep)" : "coupled (iterative to -ts_fsm_ksp_rtol)";
+  user.nu     = mu;
+  L           = walled ? 1. : 2. * PETSC_PI;
 
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, walled ? DM_BOUNDARY_NONE : DM_BOUNDARY_PERIODIC, walled ? DM_BOUNDARY_NONE : DM_BOUNDARY_PERIODIC, 32, 32, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 4, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
@@ -191,6 +204,7 @@ int main(int argc, char **argv)
   PetscCall(VecDuplicate(sub, &user.p_prev));
   PetscCall(VecRestoreSubVector(Y[0], user.is_p, &sub));
 
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "# geometry=%s grid=%" PetscInt_FMT "x%" PetscInt_FMT " mu=%.4g tmax=%.4g solver=%s\n", walled ? "walled" : "periodic", N, N, (double)mu, (double)tmax, solver_mode));
   for (l = 0; l < nlevels; ++l) {
     PetscReal dtl = dt / PetscPowInt(2, l);
 
@@ -198,8 +212,10 @@ int main(int argc, char **argv)
     if (l == 0) continue;
     PetscCall(FieldDifference(is_v, Y[0], Y[1], h, &e_u));
     PetscCall(FieldDifference(user.is_p, Y[0], Y[1], h, &e_p));
-    if (l == 1) PetscCall(PetscPrintf(PETSC_COMM_WORLD, "dt = %.5f: |u_dt - u_dt/2| = %.4e, |p_dt - p_dt/2| = %.4e\n", (double)dtl, (double)e_u, (double)e_p));
-    else PetscCall(PetscPrintf(PETSC_COMM_WORLD, "dt = %.5f: |u_dt - u_dt/2| = %.4e (ratio %.2f), |p_dt - p_dt/2| = %.4e (ratio %.2f)\n", (double)dtl, (double)e_u, (double)(e_u_prev / e_u), (double)e_p, (double)(e_p_prev / e_p)));
+    /* This is the difference between the coarse step 2*dtl and the fine step dtl of the pair, so the
+       label prints the coarse step, not dtl. */
+    if (l == 1) PetscCall(PetscPrintf(PETSC_COMM_WORLD, "dt = %.5f: |u_dt - u_dt/2| = %.4e, |p_dt - p_dt/2| = %.4e\n", (double)(2. * dtl), (double)e_u, (double)e_p));
+    else PetscCall(PetscPrintf(PETSC_COMM_WORLD, "dt = %.5f: |u_dt - u_dt/2| = %.4e (ratio %.2f), |p_dt - p_dt/2| = %.4e (ratio %.2f)\n", (double)(2. * dtl), (double)e_u, (double)(e_u_prev / e_u), (double)e_p, (double)(e_p_prev / e_p)));
     e_u_prev = e_u;
     e_p_prev = e_p;
   }
