@@ -167,7 +167,7 @@ static PetscErrorCode TSSetUp_FSM(TS ts)
   PetscCall(KSPAppendOptionsPrefix(fsm->ksp, "ts_fsm_"));
   PetscCall(KSPSetOperators(fsm->ksp, fsm->M, fsm->P));
   PetscCall(KSPSetType(fsm->ksp, KSPRICHARDSON));
-  PetscCall(KSPSetTolerances(fsm->ksp, 1.e-8, PETSC_CURRENT, PETSC_CURRENT, 50));
+  PetscCall(KSPSetTolerances(fsm->ksp, 1.e-8, PETSC_CURRENT, PETSC_CURRENT, 1000));
   PetscCall(KSPGetPC(fsm->ksp, &pc));
   PetscCall(PCSetType(pc, PCABF));
   PetscCall(PCABFSetFields(pc, 0, 1, 2));
@@ -216,8 +216,14 @@ static PetscErrorCode TSStep_FSM(TS ts)
   PetscCall(VecZeroEntries(fsm->x));
   PetscCall(KSPSolve(fsm->ksp, fsm->f, fsm->x));
   PetscCall(KSPGetConvergedReason(fsm->ksp, &reason));
-  /* A fixed number of sweeps (e.g. -ts_fsm_ksp_max_it 1, the classic FSM) ends with KSP_DIVERGED_ITS */
-  if (reason < 0 && reason != KSP_DIVERGED_ITS) {
+  if (reason == KSP_DIVERGED_ITS) {
+    PetscInt max_it;
+
+    /* A fixed number of sweeps (e.g. -ts_fsm_ksp_max_it 1, the classic FSM) ends here by design;
+       any larger limit means the requested tolerance was not reached */
+    PetscCall(KSPGetTolerances(fsm->ksp, NULL, NULL, NULL, &max_it));
+    if (max_it > 1) PetscCall(PetscInfo(ts, "Step=%" PetscInt_FMT ", coupled solve stopped at the iteration limit %" PetscInt_FMT " before reaching the requested tolerance\n", ts->steps, max_it));
+  } else if (reason < 0) {
     PetscCall(PetscInfo(ts, "Step=%" PetscInt_FMT ", coupled solve failed: %s\n", ts->steps, KSPConvergedReasons[reason]));
     ts->reason = TS_DIVERGED_STEP_REJECTED;
     PetscFunctionReturn(PETSC_SUCCESS);
