@@ -54,25 +54,16 @@ static PetscErrorCode SetVelocityDirichletBCs(Phys phys, FlucaFD fd, PetscInt d)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Set pressure Neumann (zero normal derivative) BCs on a FlucaFD operator */
-static PetscErrorCode SetPressureNeumannBCs(Phys phys, FlucaFD fd)
-{
-  Phys_INS                *ins                          = (Phys_INS *)phys->data;
-  FlucaFDBoundaryCondition fd_bcs[2 * PHYS_INS_MAX_DIM] = {{0}};
-  PetscInt                 f;
+/* --- Operator construction ------------------------------------------------
 
-  PetscFunctionBegin;
-  for (f = 0; f < 2 * phys->dim; f++) {
-    if (ins->bcs[f].type == PHYS_INS_BC_VELOCITY) {
-      fd_bcs[f].type  = FLUCAFD_BC_NEUMANN;
-      fd_bcs[f].value = 0.;
-    }
-  }
-  PetscCall(FlucaFDSetBoundaryConditions(fd, ins->c_p, fd_bcs));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-/* --- Operator construction ------------------------------------------------ */
+   The cell-centered pressure gradient carries no boundary condition. At a wall cell FlucaFD
+   then resolves the off-grid pressure by quadratic extrapolation, which turns the central
+   difference into the second-order one-sided (-3 p_0 + 4 p_1 - p_2)/(2 h). A homogeneous
+   Neumann ghost p_{-1} = p_0 would instead leave the first-order (p_1 - p_0)/(2 h): dp/dn is
+   genuinely nonzero at a wall, so that ghost belongs to the Poisson problem of the pressure
+   increment, not to the pressure gradient of the momentum equation. Using the same gradient
+   inside R = T G_c - G^st makes R vanish at a wall-adjacent face, so the Rhie-Chow term
+   telescopes there exactly as it does in the interior. */
 
 /* Operators of the momentum rows: A = I + (dt/2) J - (dt/2) nu lap and G = (dt/rho) grad.
    Coefficients depending on dt and the linearization state are set per step. */
@@ -117,7 +108,6 @@ static PetscErrorCode BuildMomentumOperators_Private(Phys phys)
     PetscCall(SetVelocityDirichletBCs(phys, ins->fd_visc[d], d));
     PetscCall(FlucaFDSetUp(ins->fd_visc[d]));
     PetscCall(FlucaFDScaleCreateConstant(ins->fd_grad_p[d], 0., &ins->fd_grad[d]));
-    PetscCall(SetPressureNeumannBCs(phys, ins->fd_grad[d]));
     PetscCall(FlucaFDSetUp(ins->fd_grad[d]));
   }
 
@@ -245,7 +235,6 @@ static PetscErrorCode BuildCouplingOperators_Private(Phys phys)
     PetscCall(FlucaFDSumCreate(2, R_terms, &R));
     PetscCall(FlucaFDSetUp(R));
     PetscCall(FlucaFDScaleCreateConstant(R, 0., &ins->fd_negR[e]));
-    PetscCall(SetPressureNeumannBCs(phys, ins->fd_negR[e]));
     PetscCall(FlucaFDSetUp(ins->fd_negR[e]));
     PetscCall(FlucaFDDestroy(&R));
     PetscCall(FlucaFDDestroy(&R_terms[1]));
@@ -313,7 +302,6 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
   /* --- fd_grad_p[d] = dp/dx_d --- */
   for (d = 0; d < dim; d++) {
     PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, ins->c_p, DMSTAG_ELEMENT, ins->c_vel + d, &ins->fd_grad_p[d]));
-    PetscCall(SetPressureNeumannBCs(phys, ins->fd_grad_p[d]));
     PetscCall(FlucaFDSetUp(ins->fd_grad_p[d]));
   }
 
