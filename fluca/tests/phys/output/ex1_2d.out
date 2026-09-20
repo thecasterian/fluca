@@ -4,7 +4,7 @@ Dimension: 2
 Global sizes: 4 x 4
 Parallel decomposition: 1 x 1 ranks
 Boundary ghosting: NONE NONE
-Elementwise ghost stencil: STAR, width 2
+Elementwise ghost stencil: STAR, width 4
 0 DOF per vertex (0D)
 1 DOF per face (1D)
 3 DOF per element (2D)

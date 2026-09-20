@@ -54,6 +54,37 @@ static PetscErrorCode SetVelocityDirichletBCs(Phys phys, FlucaFD fd, PetscInt d)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Accuracy order of the cell-to-face interpolation T of the Rhie-Chow row, guide eq. (11).
+
+   The continuity row of a cell is the flux difference (U_{f+1} - U_f)/h (guide eq. (10)), so its
+   truncation error is the difference of the face errors of T, not the face errors themselves. The
+   two-point average leaves e_f = (h^2/8) d2u/dn2 at every interior face; that is a smooth field, its
+   difference across a cell is O(h^3), and the interior rows come out second order even though each
+   face is only second order. A prescribed-velocity boundary face breaks the argument: there U is the
+   boundary datum itself, e = 0 exactly, so the wall cell differences an O(h^2) face error against
+   zero and its row is only first order - a one-cell-thick O(h) layer in the truncation error of the
+   whole continuity operator, injected into the pressure Poisson right-hand side at every step.
+
+   Neither of the two invariants may be traded away to remove it: U must equal u_b . n exactly on a
+   prescribed-velocity face, and D must stay a flux difference so that the continuity rows still sum
+   to the net boundary flux. With e_0 = 0 fixed and the differences required to be O(h^3), the face
+   errors are forced to be O(h^3) at every face, which is what a fourth-order accurate interpolation
+   delivers: T is the four-point interpolation over cells i-2..i+1 for face i.
+
+   T deliberately carries no boundary condition, so next to a wall it is the cubic through the four
+   interior cells 0..3 rather than the cubic through the wall datum and cells 0..2. Both are O(h^4)
+   accurate at that face, but only the first keeps T a pure interior operator, and T has to be one:
+   the Rhie-Chow correction R = T G_c - G^st (guide eq. (11)) applies T to the cell pressure gradient,
+   for which no boundary datum exists, and a T whose weights no longer sum to one there would leave a
+   spurious O(1) part in R at a wall-adjacent face instead of the O(h^2 d3p/dn3) correction R is meant
+   to be. With T interior, R annihilates any pressure that is quadratic in the face-normal direction,
+   at every face. The boundary-face rows of the Rhie-Chow block are the boundary condition itself and
+   are overwritten with U = u_b . n, so T is never asked for a value there.
+
+   Every continuity row is then second order, on uniform and on smoothly stretched grids alike,
+   because FlucaFD builds the stencils from the actual coordinates by a Vandermonde solve. */
+static const PetscInt interp_accu_order = 4;
+
 /* --- Operator construction ------------------------------------------------
 
    The cell-centered pressure gradient carries no boundary condition. At a wall cell FlucaFD
@@ -61,9 +92,7 @@ static PetscErrorCode SetVelocityDirichletBCs(Phys phys, FlucaFD fd, PetscInt d)
    difference into the second-order one-sided (-3 p_0 + 4 p_1 - p_2)/(2 h). A homogeneous
    Neumann ghost p_{-1} = p_0 would instead leave the first-order (p_1 - p_0)/(2 h): dp/dn is
    genuinely nonzero at a wall, so that ghost belongs to the Poisson problem of the pressure
-   increment, not to the pressure gradient of the momentum equation. Using the same gradient
-   inside R = T G_c - G^st makes R vanish at a wall-adjacent face, so the Rhie-Chow term
-   telescopes there exactly as it does in the interior. */
+   increment, not to the pressure gradient of the momentum equation. */
 
 /* Operators of the momentum rows: A = I + (dt/2) J - (dt/2) nu lap and G = (dt/rho) grad.
    Coefficients depending on dt and the linearization state are set per step. */
@@ -202,47 +231,100 @@ static PetscErrorCode CreateBoundaryFaceRows_Private(Phys phys)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Operators of the Rhie-Chow rows (guide eq. (11)) and continuity rows (guide eq. (10)) */
+/* An empty matrix with the solution DM's parallel layout and index mapping, preallocated for the
+   widest block row of T, G_c, G^st or their product. Cheaper and much sparser than DMCreateMatrix(),
+   which lays the whole stencil out as explicit zeros; the product of two such matrices would then
+   reach the diagonal neighbours that the star preallocation of the system matrix has no room for. */
+static PetscErrorCode CreateBlockMatrix_Private(Phys phys, Mat *A)
+{
+  Phys_INS              *ins = (Phys_INS *)phys->data;
+  ISLocalToGlobalMapping ltog;
+  PetscInt               n, N;
+  const PetscInt         nz = 12;
+
+  PetscFunctionBegin;
+  PetscCall(DMGetLocalToGlobalMapping(phys->sol_dm, &ltog));
+  PetscCall(VecGetLocalSize(ins->zero, &n));
+  PetscCall(VecGetSize(ins->zero, &N));
+  PetscCall(MatCreate(PetscObjectComm((PetscObject)phys), A));
+  PetscCall(MatSetSizes(*A, n, n, N, N));
+  PetscCall(MatSetType(*A, MATAIJ));
+  PetscCall(MatSeqAIJSetPreallocation(*A, nz, NULL));
+  PetscCall(MatMPIAIJSetPreallocation(*A, nz, NULL, nz, NULL));
+  PetscCall(MatSetLocalToGlobalMapping(*A, ltog, ltog));
+  PetscCall(MatSetOption(*A, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Operators of the Rhie-Chow rows (guide eq. (11)) and continuity rows (guide eq. (10)).
+
+   R = T G_c - G^st is assembled as an explicit matrix product rather than as a stencil composition.
+   A FlucaFD composition expands the raw stencils of its operands and only then resolves the points
+   that fall off the grid: next to a wall it resolves off-grid *pressure* cells inside the composed
+   stencil, while the matrix T resolves its own off-grid *velocity* cell first and is only then
+   multiplied by the cell gradient. The two coincide only while T has no off-grid point there, which was
+   true of the two-point average and is not true of the four-point interpolation. Guide eq. (11) means
+   the T of the system matrix, so the product is the faithful reading, and only the product keeps
+   (-T) G - (-R) equal to -G^st in every row - the identity that makes the fractional step method
+   leave the continuity equation unperturbed (guide eq. (17), (19)). R does not depend on dt; the time
+   step only scales it by dt/rho, so it is built once here. */
 static PetscErrorCode BuildCouplingOperators_Private(Phys phys)
 {
   Phys_INS *ins    = (Phys_INS *)phys->data;
   DM        sol_dm = phys->sol_dm;
   PetscInt  dim    = phys->dim, e;
   FlucaFD   div[PHYS_INS_MAX_DIM];
+  Mat       Tmat, Gmat, Gstmat;
 
   PetscFunctionBegin;
+  PetscCall(CreateBoundaryFaceRows_Private(phys));
+  PetscCall(CreateBlockMatrix_Private(phys, &Tmat));
+  PetscCall(CreateBlockMatrix_Private(phys, &Gmat));
+  PetscCall(CreateBlockMatrix_Private(phys, &Gstmat));
   for (e = 0; e < dim; e++) {
-    FlucaFD grad_e, interp_e, Gst, R, R_terms[2];
+    FlucaFD Gst;
 
-    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, ins->c_vel + e, face_loc[e], ins->c_U, &ins->fd_T[e]));
-    PetscCall(SetVelocityDirichletBCs(phys, ins->fd_T[e], e));
+    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, interp_accu_order, DMSTAG_ELEMENT, ins->c_vel + e, face_loc[e], ins->c_U, &ins->fd_T[e]));
     PetscCall(FlucaFDSetUp(ins->fd_T[e]));
     PetscCall(FlucaFDScaleCreateConstant(ins->fd_T[e], -1., &ins->fd_negT[e]));
-    PetscCall(SetVelocityDirichletBCs(phys, ins->fd_negT[e], e));
     PetscCall(FlucaFDSetUp(ins->fd_negT[e]));
 
-    /* R = T G_c - G^st on faces normal to e */
-    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, ins->c_p, DMSTAG_ELEMENT, ins->c_vel + e, &grad_e));
-    PetscCall(FlucaFDSetUp(grad_e));
-    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, ins->c_vel + e, face_loc[e], ins->c_U, &interp_e));
-    PetscCall(FlucaFDSetUp(interp_e));
-    PetscCall(FlucaFDCompositionCreate(grad_e, interp_e, &R_terms[0]));
-    PetscCall(FlucaFDSetUp(R_terms[0]));
+    /* Boundary-face right-hand side. The two-point interpolation has no off-grid point at any
+       interior face, so applying it to the zero vector is zero there and exactly u_b . n on a
+       boundary face, where the Dirichlet datum carries the whole weight. */
+    PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, ins->c_vel + e, face_loc[e], ins->c_U, &ins->fd_bface[e]));
+    PetscCall(SetVelocityDirichletBCs(phys, ins->fd_bface[e], e));
+    PetscCall(FlucaFDSetUp(ins->fd_bface[e]));
+
+    /* Blocks of R = T G_c - G^st on faces normal to e */
+    PetscCall(FlucaFDGetOperator(ins->fd_T[e], sol_dm, sol_dm, Tmat));
+    PetscCall(FlucaFDGetOperator(ins->fd_grad_p[e], sol_dm, sol_dm, Gmat));
     PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, ins->c_p, face_loc[e], ins->c_U, &Gst));
     PetscCall(FlucaFDSetUp(Gst));
-    PetscCall(FlucaFDScaleCreateConstant(Gst, -1., &R_terms[1]));
-    PetscCall(FlucaFDSetUp(R_terms[1]));
-    PetscCall(FlucaFDSumCreate(2, R_terms, &R));
-    PetscCall(FlucaFDSetUp(R));
-    PetscCall(FlucaFDScaleCreateConstant(R, 0., &ins->fd_negR[e]));
-    PetscCall(FlucaFDSetUp(ins->fd_negR[e]));
-    PetscCall(FlucaFDDestroy(&R));
-    PetscCall(FlucaFDDestroy(&R_terms[1]));
+    PetscCall(FlucaFDGetOperator(Gst, sol_dm, sol_dm, Gstmat));
     PetscCall(FlucaFDDestroy(&Gst));
-    PetscCall(FlucaFDDestroy(&R_terms[0]));
-    PetscCall(FlucaFDDestroy(&interp_e));
-    PetscCall(FlucaFDDestroy(&grad_e));
   }
+  PetscCall(MatAssemblyBegin(Tmat, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(Tmat, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyBegin(Gmat, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(Gmat, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyBegin(Gstmat, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(Gstmat, MAT_FINAL_ASSEMBLY));
+
+  /* A boundary-face row is the boundary condition, not a Rhie-Chow row: PhysComputeCouplingSystem
+     replaces it by a unit row. Emptying it here keeps R off the cells that only the one-sided
+     interpolation at a boundary face reaches, which lie outside the star the system matrix is
+     preallocated for. */
+  PetscCall(MatZeroRowsLocal(Tmat, ins->nbface, ins->bface, 0., NULL, NULL));
+  PetscCall(MatZeroRowsLocal(Gstmat, ins->nbface, ins->bface, 0., NULL, NULL));
+
+  PetscCall(MatMatMult(Tmat, Gmat, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &ins->negR));
+  PetscCall(MatAXPY(ins->negR, -1., Gstmat, DIFFERENT_NONZERO_PATTERN));
+  PetscCall(MatScale(ins->negR, -1.));
+  PetscCall(MatEliminateZeros(ins->negR, PETSC_FALSE));
+  PetscCall(MatDestroy(&Gstmat));
+  PetscCall(MatDestroy(&Gmat));
+  PetscCall(MatDestroy(&Tmat));
 
   for (e = 0; e < dim; e++) {
     PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, face_loc[e], ins->c_U, DMSTAG_ELEMENT, ins->c_p, &div[e]));
@@ -251,8 +333,6 @@ static PetscErrorCode BuildCouplingOperators_Private(Phys phys)
   PetscCall(FlucaFDSumCreate(dim, div, &ins->fd_D));
   PetscCall(FlucaFDSetUp(ins->fd_D));
   for (e = 0; e < dim; e++) PetscCall(FlucaFDDestroy(&div[e]));
-
-  PetscCall(CreateBoundaryFaceRows_Private(phys));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -316,8 +396,9 @@ PetscErrorCode PhysINSDestroyOperators_Internal(Phys phys)
   PetscInt  d, e;
 
   PetscFunctionBegin;
+  PetscCall(MatDestroy(&ins->negR));
   for (d = 0; d < PHYS_INS_MAX_DIM; d++) {
-    PetscCall(FlucaFDDestroy(&ins->fd_negR[d]));
+    PetscCall(FlucaFDDestroy(&ins->fd_bface[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_negT[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_T[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_conv[d]));

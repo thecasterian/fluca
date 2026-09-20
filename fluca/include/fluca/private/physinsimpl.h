@@ -45,12 +45,13 @@ typedef struct {
   FlucaFD fd_grad[PHYS_INS_MAX_DIM];                         /* (dt/rho) fd_grad_p[d]: the operator G */
 
   /* Coupling rows of the coupled system (13) */
-  FlucaFD   fd_T[PHYS_INS_MAX_DIM];    /* T: u_e -> faces normal to e (linear interpolation, velocity BCs) */
-  FlucaFD   fd_negT[PHYS_INS_MAX_DIM]; /* -T */
-  FlucaFD   fd_negR[PHYS_INS_MAX_DIM]; /* -R = -(dt/rho)(interp_e(dp/dx_e) - dp/dx_e|face) */
-  FlucaFD   fd_D;                      /* D: sum_e d/dx_e(U_e) into the pressure rows */
-  PetscInt  nbface;                    /* locally owned boundary-face rows */
-  PetscInt *bface;                     /* their local indices on the solution DM */
+  FlucaFD   fd_T[PHYS_INS_MAX_DIM];     /* T: u_e -> faces normal to e, fourth-order, interior cells only */
+  FlucaFD   fd_negT[PHYS_INS_MAX_DIM];  /* -T */
+  FlucaFD   fd_bface[PHYS_INS_MAX_DIM]; /* boundary-face right-hand side: applied to zero it is u_b . n */
+  Mat       negR;                       /* -R = -(T G_c - G^st), unscaled; the step scales it by dt/rho */
+  FlucaFD   fd_D;                       /* D: sum_e d/dx_e(U_e) into the pressure rows */
+  PetscInt  nbface;                     /* locally owned boundary-face rows */
+  PetscInt *bface;                      /* their local indices on the solution DM */
 } Phys_INS;
 
 /* Internal functions defined in insops.c */

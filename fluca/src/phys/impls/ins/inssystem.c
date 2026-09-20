@@ -150,6 +150,34 @@ PetscErrorCode PhysComputeMomentumSystem_INS(Phys phys, PetscReal t, PetscReal d
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* M += scale * negR on the face-velocity rows. negR is assembled once, unscaled, in insops.c; only
+   the dt/rho factor of guide eq. (11) changes from step to step. */
+static PetscErrorCode AddNegR_Private(Mat M, Mat negR, PetscScalar scale)
+{
+  const PetscInt    *cols;
+  const PetscScalar *vals;
+  PetscScalar       *row;
+  PetscInt           rstart, rend, r, ncols, maxcols, c;
+
+  PetscFunctionBegin;
+  PetscCall(MatGetOwnershipRange(negR, &rstart, &rend));
+  maxcols = 0;
+  for (r = rstart; r < rend; ++r) {
+    PetscCall(MatGetRow(negR, r, &ncols, NULL, NULL));
+    maxcols = PetscMax(maxcols, ncols);
+    PetscCall(MatRestoreRow(negR, r, &ncols, NULL, NULL));
+  }
+  PetscCall(PetscMalloc1(maxcols, &row));
+  for (r = rstart; r < rend; ++r) {
+    PetscCall(MatGetRow(negR, r, &ncols, &cols, &vals));
+    for (c = 0; c < ncols; ++c) row[c] = scale * vals[c];
+    if (ncols > 0) PetscCall(MatSetValues(M, 1, &r, ncols, cols, row, ADD_VALUES));
+    PetscCall(MatRestoreRow(negR, r, &ncols, &cols, &vals));
+  }
+  PetscCall(PetscFree(row));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* Rhie-Chow rows (guide eq. (11)): -T u + U - R p' = b_interp, and continuity rows (guide eq. (10)): D U = b_cont.
    Boundary faces carry the prescribed normal velocity, U = u_b . n. */
 PetscErrorCode PhysComputeCouplingSystem_INS(Phys phys, PetscReal t, PetscReal dt, Mat M, Vec f)
@@ -159,18 +187,18 @@ PetscErrorCode PhysComputeCouplingSystem_INS(Phys phys, PetscReal t, PetscReal d
   PetscInt  dim    = phys->dim, e;
 
   PetscFunctionBegin;
-  for (e = 0; e < dim; e++) PetscCall(FlucaFDScaleSetConstant(ins->fd_negR[e], -dt / ins->rho));
   for (e = 0; e < dim; e++) {
     PetscCall(AddIdentity_Private(sol_dm, M, face_loc[e], ins->c_U));
     PetscCall(FlucaFDGetOperator(ins->fd_negT[e], sol_dm, sol_dm, M));
-    PetscCall(FlucaFDGetOperator(ins->fd_negR[e], sol_dm, sol_dm, M));
-    PetscCall(FlucaFDApply(ins->fd_T[e], t, sol_dm, sol_dm, ins->zero, f));
+    PetscCall(FlucaFDApply(ins->fd_bface[e], t, sol_dm, sol_dm, ins->zero, f));
   }
+  PetscCall(AddNegR_Private(M, ins->negR, dt / ins->rho));
   PetscCall(FlucaFDGetOperator(ins->fd_D, sol_dm, sol_dm, M));
   PetscCall(FlucaFDApply(ins->fd_D, t, sol_dm, sol_dm, ins->zero, f));
 
-  /* The composition inside R extrapolates past the wall on boundary faces; those rows are the
-     boundary condition itself, so replace them by unit rows (right-hand side is already u_b . n) */
+  /* A boundary-face row is the boundary condition itself, so replace it by a unit row; the right-hand
+     side already holds u_b . n, because the interpolation reproduces the Dirichlet datum there with a
+     unit weight and every interior weight zero. */
   PetscCall(MatAssemblyBegin(M, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(M, MAT_FINAL_ASSEMBLY));
   PetscCall(MatZeroRowsLocal(M, ins->nbface, ins->bface, 1., NULL, NULL));

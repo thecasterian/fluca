@@ -46,9 +46,11 @@ static PetscErrorCode PhysSetUp_INS(Phys phys)
   PetscInt       sw, d;
 
   PetscFunctionBegin;
-  /* Rhie-Chow face rows reach two cells away from the face */
+  /* The Rhie-Chow correction R = T G_c - G^st composes the four-point interpolation T with the
+     three-point cell gradient. Next to a wall the interpolation is folded onto four interior cells,
+     and a face row then reaches four elements away on the side the folding points into. */
   PetscCall(DMStagGetStencilWidth(phys->sol_dm, &sw));
-  PetscCheck(sw >= 2, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "PhysINS requires a base DM stencil width of at least 2, got %" PetscInt_FMT, sw);
+  PetscCheck(sw >= 4, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "PhysINS requires a base DM stencil width of at least 4, got %" PetscInt_FMT, sw);
   /* Only velocity boundary conditions are supported: every non-periodic boundary needs one */
   PetscCall(DMStagGetBoundaryTypes(phys->sol_dm, &bt[0], &bt[1], &bt[2]));
   for (d = 0; d < phys->dim; ++d) {

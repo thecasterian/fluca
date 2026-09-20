@@ -159,7 +159,7 @@ int main(int argc, char **argv)
   user.nu = mu;
   L       = walled ? 1. : 2. * PETSC_PI;
 
-  PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, walled ? DM_BOUNDARY_NONE : DM_BOUNDARY_PERIODIC, walled ? DM_BOUNDARY_NONE : DM_BOUNDARY_PERIODIC, 32, 32, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 2, NULL, NULL, &dm));
+  PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, walled ? DM_BOUNDARY_NONE : DM_BOUNDARY_PERIODIC, walled ? DM_BOUNDARY_NONE : DM_BOUNDARY_PERIODIC, 32, 32, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 4, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., L, 0., L, 0., 0.));

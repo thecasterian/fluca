@@ -1,59 +1,83 @@
 #include "phystest.h"
 
-/* CHARACTERIZATION TEST — part of what is asserted here is a known defect, not a desired property.
+/* Continuity-row consistency of the assembled D and T blocks, solver free.
 
-   Push the analytic, exactly divergence-free Taylor-Green field u = (-cos(x) sin(y), sin(x) cos(y))
-   on [0, 2 pi]^2 through the assembled coupling operators: form the face velocity U = b_interp + T u
-   and then the discrete continuity residual r = D U - b_cont, cell by cell. No solver is involved;
-   only the two assembled blocks and the affine boundary terms of the coupled system (13) are used.
+   Push an analytic, exactly divergence-free field through the assembled coupling operators: form the
+   face velocity U = b_interp + T u and then the discrete continuity residual r = D U - b_cont, cell by
+   cell. No solver is involved; only the two assembled blocks and the affine boundary terms of the
+   coupled system (13) are used. For a divergence-free field the exact answer is zero everywhere, so r
+   is the truncation error of the continuity operator itself.
 
-   Periodic geometry: every interior continuity row is the wide difference (u_{i+1} - u_{i-1})/2h in
-   each direction, and for this field the two directions cancel exactly, so r is round-off in every
-   cell. That is a genuine correctness property of D and T and is asserted as such.
+   The continuity row of a cell is the flux difference (U_{f+1} - U_f)/h, so its truncation error is
+   the difference of the face errors of T, not the face errors themselves. The interior rows are
+   therefore second order even though each face carries an O(h^2) interpolation error: that error is a
+   smooth field and its difference across a cell is O(h^3). A prescribed-velocity boundary face is
+   where the argument used to break, because U there is the boundary datum itself and carries no error
+   at all; differencing an O(h^2) face error against zero left the wall cell's row first order and the
+   whole continuity operator with a one-cell-thick O(h) truncation layer. The fourth-order accurate
+   interpolation T now used in the Rhie-Chow row (see fluca/src/phys/impls/ins/insops.c) makes every
+   face error O(h^3) instead, which removes the layer without touching either invariant: U is still
+   exactly u_b . n on a prescribed-velocity face, and D is still a flux difference.
 
-   Walled geometry: every cell that does not touch a wall is still at round-off, which is also a
-   correctness property. The single cell layer next to the wall is not: its continuity row is the
-   compact one-sided form ((u_0 + u_1)/2 - u_b)/h instead of the wide difference. Expanding that row
-   about the cell center gives u_x + v_y + (h/8) u_xx + O(h^2), and the first two terms vanish for a
-   divergence-free field, so the row leaves an O(h) residual behind wherever the prescribed boundary
-   velocity has a nonzero wall-normal component. That one-cell-thick layer is the source of the
-   accumulating walled pressure checkerboard (.superpowers/sdd/tsfsm/wall-source-ablation.md), and a
-   one-cell-wide feature is Nyquist-scale by construction.
+   Grids 32, 64 and 128: the coarsest pair of a 16, 32, 64 sequence is still pre-asymptotic for the
+   oblique field (ratio 4.8), and the two-sided brackets below would have to be loosened to hold it.
 
-   The wall-layer assertions below (nonzero, and refining at O(h)) therefore PIN A DEFECT. If the
-   wall cell's continuity row is ever made consistent with the interior rows — by extending the wide
-   difference to the wall cell with a ghost built from the prescribed wall velocity, or by moving the
-   interior rows to the compact face-difference form — the wall-layer residual will drop to round-off
-   and this test will start failing. That is the intended outcome, and the fix is to tighten the wall
-   bucket here to the same round-off tolerance the bulk bucket already uses.
+   What is asserted here, on two independent divergence-free fields and both with a nonzero
+   wall-normal component, so that neither the prescribed through-wall flux nor a cancellation special
+   to one field is doing the work:
 
-   Note for whoever reads wall-source-ablation.md alongside this test: that report calls the wall row
-   second-order consistent and quotes refinement ratios near 4. Measured here from the assembled
-   blocks, on that report's own configuration as well as on this one, the ratios are near 2 and the
-   residual is an order of magnitude larger than the report's table. The defect is real and localized
-   exactly where the report says, but it is first order, not second. */
+     1. periodic Taylor-Green: r is at round-off in every cell. The interior row is the same
+        translation-invariant antisymmetric stencil in both directions, and it annihilates this field
+        exactly at any h.
+     2. periodic oblique field: r refines at second order. The same interior rows, on a field the
+        stencil does not annihilate.
+     3. walled, both fields: the residual of the cells touching a wall refines at second order. This
+        is the property the wall-row redesign exists to deliver; it was first order (ratios near 2)
+        while T was the two-point average.
+     4. walled oblique field: the wall layer is no larger than twice the bulk on every grid. A layer
+        one order lower would separate from the bulk like 1/h under refinement, which is what the
+        previous discretization did: its wall-to-bulk ratio ran 2.2, 4.1, 8.1 over these three grids,
+        against 0.90, 0.97, 0.99 now.
+     5. guard: |u|_inf is O(1) on every grid, so a passing refinement check cannot come from a
+        trivial field.
+
+   The Taylor-Green wall ratios are near 8, not 4: that field is superconvergent at the wall for this
+   stencil. Its wall assertion is therefore one-sided (at least second order), while the oblique field,
+   which has no such cancellation, carries the two-sided bracket.
+
+   Taylor-Green is also no longer at round-off away from the wall on the walled grid, as it was while
+   T was the two-point average. The four-point interpolation is one-sided at the face next to the
+   wall, so a wall now changes two cell rows rather than one and the second row falls in the bulk
+   bucket; both refine at third order here (bulk ratios 11.2 and 11.4), which is why the walled bulk
+   assertions are one-sided too. */
 
 static const char help[] = "Continuity-row consistency of the assembled D and T blocks (solver free)\n"
-                           "Pushes an analytic divergence-free field through U = b_interp + T u and\n"
+                           "Pushes analytic divergence-free fields through U = b_interp + T u and\n"
                            "checks the per-cell residual D U - b_cont on periodic and walled grids.\n";
 
-/* Taylor-Green velocity; div u = sin(x) sin(y) - sin(x) sin(y) = 0 for every (x, y) */
-static PetscScalar TaylorGreenU(PetscReal x, PetscReal y)
+/* Field 0 is Taylor-Green, psi = -cos(x) cos(y); field 1 is the oblique field psi = cos(x + 2y).
+   Both are divergence free identically and both have a nonzero normal component on every wall of
+   [0, 2 pi]^2, so the walled cases all carry prescribed through-wall flux. */
+static PetscInt field_id = 0;
+
+static PetscScalar FieldU(PetscReal x, PetscReal y)
 {
-  return -PetscCosReal(x) * PetscSinReal(y);
+  if (field_id == 0) return -PetscCosReal(x) * PetscSinReal(y);
+  return -2. * PetscSinReal(x + 2. * y);
 }
 
-static PetscScalar TaylorGreenV(PetscReal x, PetscReal y)
+static PetscScalar FieldV(PetscReal x, PetscReal y)
 {
-  return PetscSinReal(x) * PetscCosReal(y);
+  if (field_id == 0) return PetscSinReal(x) * PetscCosReal(y);
+  return PetscSinReal(x + 2. * y);
 }
 
 /* The same field as the boundary velocity, so b_interp carries the exact wall data */
-static PetscErrorCode TaylorGreenBC(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx)
+static PetscErrorCode FieldBC(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx)
 {
   PetscFunctionBeginUser;
-  if (comp == 0) *val = TaylorGreenU(x[0], x[1]);
-  else if (comp == 1) *val = TaylorGreenV(x[0], x[1]);
+  if (comp == 0) *val = FieldU(x[0], x[1]);
+  else if (comp == 1) *val = FieldV(x[0], x[1]);
   else *val = 0.;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -84,10 +108,10 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
   s_bulk = 0.;
 
   /* The grid sequence is intrinsic to the refinement study, so the DM is not taken from options */
-  PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, bt, bt, N, N, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 2, NULL, NULL, &dm));
+  PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, bt, bt, N, N, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 4, NULL, NULL, &dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 2. * PETSC_PI, 0., 2. * PETSC_PI, 0., 0.));
-  PetscCall(PhysTestCreateINS(dm, rho, mu, TaylorGreenBC, &phys));
+  PetscCall(PhysTestCreateINS(dm, rho, mu, FieldBC, &phys));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_VELOCITY, &loc, &c_vel, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_PRESSURE, &loc, &c_p, NULL));
@@ -109,10 +133,10 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
       st.k   = 0;
       st.loc = DMSTAG_ELEMENT;
       st.c   = c_vel;
-      v      = TaylorGreenU(xc, yc);
+      v      = FieldU(xc, yc);
       PetscCall(DMStagVecSetValuesStencil(sol_dm, X, 1, &st, &v, INSERT_VALUES));
       st.c = c_vel + 1;
-      v    = TaylorGreenV(xc, yc);
+      v    = FieldV(xc, yc);
       PetscCall(DMStagVecSetValuesStencil(sol_dm, X, 1, &st, &v, INSERT_VALUES));
     }
   }
@@ -152,9 +176,9 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
   PetscCall(VecRestoreSubVector(f, is_p, &bp));
   PetscCall(VecRestoreSubVector(R, is_p, &rp));
 
-  /* Periodic geometry has no wall row anywhere, so assert the stronger max-norm statement directly:
-     the whole pressure field of the residual is at round-off. */
-  if (!walled) {
+  /* Periodic Taylor-Green: the interior stencil annihilates the field exactly, so assert the
+     stronger max-norm statement directly. */
+  if (!walled && field_id == 0) {
     PetscCall(DMCreateGlobalVector(sol_dm, &Z));
     PetscCall(VecZeroEntries(Z));
     PetscCall(PhysTestCheckField(phys, PHYS_FIELD_PRESSURE, R, Z, 1e-12 * *u_max / h));
@@ -208,16 +232,17 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
 
 int main(int argc, char **argv)
 {
-  PetscInt  grid[3] = {16, 32, 64};
-  PetscReal wall[3], bulk[3];
-  PetscReal u_max, tol, ratio;
-  PetscInt  k;
+  const PetscInt grid[3] = {32, 64, 128};
+  PetscReal      wall[3], bulk[3];
+  PetscReal      u_max, tol, ratio;
+  PetscInt       k;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
-  /* Periodic: the residual must be round-off in every cell. D U has the units of u / h, so the
-     round-off tolerance carries a 1 / h. */
+  /* Periodic Taylor-Green: the residual must be round-off in every cell. D U has the units of u / h,
+     so the round-off tolerance carries a 1 / h. */
+  field_id = 0;
   for (k = 0; k < 3; ++k) {
     PetscCall(PhysTestContinuityResidual(DM_BOUNDARY_PERIODIC, grid[k], &wall[k], &bulk[k], &u_max));
     PetscCheck(u_max > .5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Periodic %" PetscInt_FMT ": the sampled field is trivial, |u|_max = %g", grid[k], (double)u_max);
@@ -225,20 +250,45 @@ int main(int argc, char **argv)
     PetscCheck(bulk[k] <= tol, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Periodic %" PetscInt_FMT ": continuity residual %g exceeds round-off %g", grid[k], (double)bulk[k], (double)tol);
   }
 
-  /* Walled: every cell away from the wall is still at round-off, while the wall-adjacent layer
-     carries a nonzero residual. CHARACTERIZATION — see the note at the top of this file. */
+  /* Periodic oblique field: the interior rows carry a genuine truncation error and it is second
+     order. This is what the periodic round-off check above cannot see. */
+  field_id = 1;
+  for (k = 0; k < 3; ++k) {
+    PetscCall(PhysTestContinuityResidual(DM_BOUNDARY_PERIODIC, grid[k], &wall[k], &bulk[k], &u_max));
+    PetscCheck(u_max > .5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Periodic oblique %" PetscInt_FMT ": the sampled field is trivial, |u|_max = %g", grid[k], (double)u_max);
+  }
+  for (k = 0; k + 1 < 3; ++k) {
+    ratio = bulk[k] / bulk[k + 1];
+    PetscCheck(ratio >= 3.5 && ratio <= 4.5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Periodic oblique residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is not O(h^2)", grid[k], grid[k + 1], (double)ratio);
+  }
+
+  /* Walled Taylor-Green: the wall layer refines at least at second order. The bracket is one-sided
+     because this field is superconvergent at the wall for this stencil (measured ratios near 8). */
+  field_id = 0;
   for (k = 0; k < 3; ++k) {
     PetscCall(PhysTestContinuityResidual(DM_BOUNDARY_NONE, grid[k], &wall[k], &bulk[k], &u_max));
     PetscCheck(u_max > .5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled %" PetscInt_FMT ": the sampled field is trivial, |u|_max = %g", grid[k], (double)u_max);
-    tol = 1e-12 * u_max * grid[k] / (2. * PETSC_PI);
-    PetscCheck(bulk[k] <= tol, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled %" PetscInt_FMT ": continuity residual away from the wall is %g, above round-off %g", grid[k], (double)bulk[k], (double)tol);
-    PetscCheck(wall[k] > 1e6 * tol, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled %" PetscInt_FMT ": the wall-layer residual %g collapsed to round-off; if the wall continuity row was made consistent, tighten this test", grid[k], (double)wall[k]);
   }
-
-  /* The wall-layer residual refines at first order: successive rms values fall by ~2 */
   for (k = 0; k + 1 < 3; ++k) {
     ratio = wall[k] / wall[k + 1];
-    PetscCheck(ratio >= 1.8 && ratio <= 2.2, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Wall-layer residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is not O(h)", grid[k], grid[k + 1], (double)ratio);
+    PetscCheck(ratio >= 3.5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled wall-layer residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is below O(h^2)", grid[k], grid[k + 1], (double)ratio);
+    ratio = bulk[k] / bulk[k + 1];
+    PetscCheck(ratio >= 3.5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled bulk residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is below O(h^2)", grid[k], grid[k + 1], (double)ratio);
+  }
+
+  /* Walled oblique field: the wall layer and the bulk both refine at second order, and the wall layer
+     stays the size of the bulk instead of separating from it like 1 / h. */
+  field_id = 1;
+  for (k = 0; k < 3; ++k) {
+    PetscCall(PhysTestContinuityResidual(DM_BOUNDARY_NONE, grid[k], &wall[k], &bulk[k], &u_max));
+    PetscCheck(u_max > .5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled oblique %" PetscInt_FMT ": the sampled field is trivial, |u|_max = %g", grid[k], (double)u_max);
+    PetscCheck(wall[k] <= 2. * bulk[k], PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled oblique %" PetscInt_FMT ": wall-layer residual %g is more than twice the bulk residual %g, i.e. a lower-order wall layer", grid[k], (double)wall[k], (double)bulk[k]);
+  }
+  for (k = 0; k + 1 < 3; ++k) {
+    ratio = wall[k] / wall[k + 1];
+    PetscCheck(ratio >= 3.5 && ratio <= 4.5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled oblique wall-layer residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is not O(h^2)", grid[k], grid[k + 1], (double)ratio);
+    ratio = bulk[k] / bulk[k + 1];
+    PetscCheck(ratio >= 3.5 && ratio <= 4.5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled oblique bulk residual %" PetscInt_FMT " -> %" PetscInt_FMT ": ratio %g is not O(h^2)", grid[k], grid[k + 1], (double)ratio);
   }
 
   PetscCall(FlucaFinalize());
