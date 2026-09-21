@@ -81,7 +81,7 @@ Based on the temporal discretization presented above, the Rhie-Chow interpolatio
 \mathbf{u}_\text{face}^{n+1} = \overline{\mathbf{u}}^{n+1} + \frac{\Delta t}{\rho} \left[ \overline{\nabla p'} - \left. \nabla p' \right|_\text{face} \right] \tag{7}
 ```
 
-where $\overline{\phi}$ denotes linear interpolation of $\phi$ from neighboring cell centers to the face. The first term $\overline{\mathbf{u}}^{n+1}$ represents the linear interpolation of cell-centered velocities. The second term is the correction, comprising the difference between the interpolated pressure gradient (from cell centers) and the pressure gradient computed directly at the face. This correction couples the pressure and velocity fields at the face, suppressing checkerboard oscillations.
+where $\overline{\phi}$ denotes interpolation of $\phi$ from neighboring cell centers to the face. The first term $\overline{\mathbf{u}}^{n+1}$ represents the interpolation of cell-centered velocities. The second term is the correction, comprising the difference between the interpolated pressure gradient (from cell centers) and the pressure gradient computed directly at the face. This correction couples the pressure and velocity fields at the face, suppressing checkerboard oscillations.
 
 The coefficient of the correction term is fixed as $\Delta t / \rho$, in contrast to the classical Rhie-Chow interpolation, which employs coefficients derived from the discretized momentum equation. This formulation follows Zang et al. [2], who developed a similar approach for collocated grids.
 
@@ -149,6 +149,14 @@ The operator $\mathbf{G}$ represents the (scaled) cell-centered pressure gradien
 (\mathbf{G}p)_i = \frac{\Delta t}{\rho} \frac{\delta p}{\delta x_i}
 ```
 
+At a cell adjacent to a prescribed-velocity (wall) boundary, $\mathbf{G}$ is closed by a second-order one-sided difference in the wall-normal direction,
+
+```math
+\left. \frac{\delta p}{\delta n} \right|_0 = \frac{-3 p_0 + 4 p_1 - p_2}{2 \Delta n}
+```
+
+rather than by a homogeneous Neumann ghost $p_{-1} = p_0$, which would degrade the central difference to the first-order $(p_1 - p_0) / (2 \Delta n)$. Although $\mathbf{G}$ is applied to the correction $p'$ in the momentum equation below, the same operator supplies the $q$ gradient on the right-hand side, so the two together form the gradient of the full pressure $p^{n+1/2}$. Its wall-normal derivative is in general genuinely nonzero at a wall, so the homogeneous Neumann condition belongs to the Poisson problem of the pressure *correction*, not to the pressure gradient of the momentum equation.
+
 The operator $\mathbf{D}$ represents the discrete divergence operator applied to the face-normal velocities:
 
 ```math
@@ -167,17 +175,31 @@ where $\mathbf{r}$ represents the right-hand side consisting of known quantities
 \mathbf{D}U^{n+1} = 0 \tag{10}
 ```
 
-To complete the operator notation, the Rhie-Chow interpolation is expressed using two additional operators. Let $\mathbf{T}$ denote the operator that linearly interpolates a cell-centered vector to the faces and extracts its normal component:
+To complete the operator notation, the Rhie-Chow interpolation is expressed using two additional operators. Let $\mathbf{T}$ denote the operator that interpolates a cell-centered vector to the faces and extracts its normal component:
 
 ```math
 \mathbf{T}\mathbf{v} = \overline{\mathbf{v}} \cdot \mathbf{n}
 ```
+
+$\mathbf{T}$ is a fourth-order accurate interpolation — on a uniform grid, the four-point stencil over the cells $i-2, \ldots, i+1$ for the face $i-1/2$ — and it carries no boundary condition: next to a boundary it takes its stencil from interior cells alone. The prescribed normal velocity at a boundary face is supplied by a separate two-point Dirichlet interpolation, which reproduces the boundary datum $\mathbf{u}_b \cdot \mathbf{n}$ with unit weight and contributes nothing at interior faces. This is the origin of $b_\text{interp}$ in equation (13) below; the boundary-face rows are the boundary condition itself, so $\mathbf{T}$ is never evaluated there.
+
+The accuracy order of $\mathbf{T}$ is dictated by the continuity equation, not by the interpolation in isolation. Since the continuity row of a cell is a flux difference (10), its truncation error is the *difference* of the face errors of $\mathbf{T}$, not the face errors themselves: writing $U_f = \mathbf{u}(\mathbf{x}_f) \cdot \mathbf{n} + e_f$, the row's error is $(e_{f+1} - e_f) / \Delta n$. A two-point (linear) interpolation leaves $e_f = (\Delta n^2 / 8) \, \partial^2 u / \partial n^2$ at every interior face. That is a smooth field sampled at the faces, so its difference across a cell is $O(\Delta n^3)$ and the interior rows come out second order even though each face is only second-order accurate — the interior order is a cancellation, not an accuracy.
+
+A prescribed-velocity boundary face has nothing to cancel against. There $U$ is the boundary datum itself, so $e = 0$ exactly and the wall cell differences an $O(\Delta n^2)$ face error against zero. With $h$ denoting the uniform wall-normal spacing, the wall cell's continuity row reads
+
+```math
+\frac{(u_0 + u_1)/2 - u_b}{h} + \frac{\delta U}{\delta y} = \frac{\partial u}{\partial x} + \frac{\partial v}{\partial y} + \frac{h}{8} \frac{\partial^2 u}{\partial x^2} + O(h^2)
+```
+
+which is only first order, leaving a one-cell-thick layer of $O(h)$ truncation error along every prescribed-velocity boundary. Neither of the two properties that produce it may be traded away: $U$ must equal $\mathbf{u}_b \cdot \mathbf{n}$ exactly on such a face, and $\mathbf{D}$ must remain a flux difference so that the continuity rows still sum to the net boundary flux. With $e = 0$ fixed at the boundary face and $O(\Delta n^3)$ differences required, every face error is forced to be $O(\Delta n^3)$, which is what a fourth-order accurate interpolation delivers. Every continuity row is then second order, on uniform and on smoothly stretched grids alike.
 
 Let $\mathbf{G}^\text{st}$ denote the operator that computes the scaled face-normal pressure gradient directly at the face (the staggered gradient):
 
 ```math
 \mathbf{G}^\text{st}p = \frac{\Delta t}{\rho} \left. \frac{\delta p}{\delta n} \right|_\text{face}
 ```
+
+At a prescribed-velocity boundary face, $\mathbf{G}^\text{st}$ enforces the homogeneous Neumann condition $\partial p' / \partial n = 0$, and so does the pressure-correction Poisson operator $\mathbf{D}\mathbf{G}^\text{st}$ built from it: the correction step must leave the prescribed normal velocity at that face untouched. This is the counterpart of the one-sided treatment of $\mathbf{G}$ described above — the two operators differ at a wall precisely because one differences the full pressure and the other the correction.
 
 The Rhie-Chow interpolation (7) then takes the form:
 
@@ -323,9 +345,11 @@ Zang et al. [2] presented the FSM for collocated grids. Applied to the matrix sy
 
 1. Solve $\mathbf{A}\mathbf{u}^* = \mathbf{r} + \mathbf{b}_\text{mom}$ for the intermediate velocity $\mathbf{u}^*$.
 2. Compute the face-normal intermediate velocity: $U^* = \mathbf{T}\mathbf{u}^* + b_\text{interp}$.
-3. Solve the pressure Poisson equation $\mathbf{D}\mathbf{G}^\text{st}p' = \mathbf{D}U^* + b_\text{cont}$ for $p'$.
+3. Solve the pressure Poisson equation $\mathbf{D}\mathbf{G}^\text{st}p' = \mathbf{D}U^* - b_\text{cont}$ for $p'$.
 4. Correct the velocity: $\mathbf{u}^{n+1} = \mathbf{u}^* - \mathbf{G}p'$.
 5. Correct the face-normal velocity: $U^{n+1} = U^* - \mathbf{G}^\text{st}p'$.
+
+The sign of $b_\text{cont}$ in step 3 follows from the third row of (13): substituting step 5 into $\mathbf{D}U^{n+1} = b_\text{cont}$ gives $\mathbf{D}U^* - \mathbf{D}\mathbf{G}^\text{st}p' = b_\text{cont}$. For the incompressible Navier-Stokes equations treated here $b_\text{cont}$ vanishes identically, so the choice has no numerical consequence, but it must remain consistent with (13).
 
 The corresponding matrix decomposition is:
 
