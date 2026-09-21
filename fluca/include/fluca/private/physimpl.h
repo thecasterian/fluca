@@ -8,7 +8,6 @@ FLUCA_EXTERN PetscErrorCode PhysRegisterAll(void);
 FLUCA_EXTERN PetscLogEvent  PHYS_SetUp;
 
 FLUCA_INTERN PetscErrorCode PCCreate_ABF(PC);
-FLUCA_INTERN PetscErrorCode TSCreate_FSM(TS);
 
 #define PHYS_MAX_FIELDS 8
 

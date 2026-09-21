@@ -244,25 +244,3 @@ PetscErrorCode PhysComputeCouplingSystem(Phys phys, PetscReal t, PetscReal dt, M
   PetscUseTypeMethod(phys, computecouplingsystem, t, dt, M, f);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
-
-/*
-  PhysSetUpTS - Configure a TS to integrate this Phys with TSFSM.
-
-  The pressure field of the solution holds p^{n+1/2} after each step; pressure at integer time
-  levels is the caller's responsibility (e.g. p^{n+1} = (3 p^{n+1/2} - p^{n-1/2}) / 2).
-*/
-PetscErrorCode PhysSetUpTS(Phys phys, TS ts)
-{
-  TSAdapt adapt;
-
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscValidHeaderSpecific(ts, TS_CLASSID, 2);
-  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysSetUpTS()");
-  PetscCall(TSSetDM(ts, phys->sol_dm));
-  PetscCall(TSSetType(ts, TSFSM));
-  PetscCall(TSFSMSetPhys(ts, phys));
-  PetscCall(TSGetAdapt(ts, &adapt));
-  PetscCall(TSAdaptSetType(adapt, TSADAPTNONE));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
