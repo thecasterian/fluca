@@ -1,9 +1,10 @@
 #include <flucaphys.h>
+#include <flucaseg.h>
 #include <flucasys.h>
 #include <petscdmstag.h>
 #include <petscmath.h>
 
-static const char help[] = "2D Taylor-Green vortex with TSFSM\n"
+static const char help[] = "2D Taylor-Green vortex with SEGFSM\n"
                            "Exact solution on periodic [0, 2*pi]^2:\n"
                            "  u = -cos(x)*sin(y)*exp(-2*nu*t)\n"
                            "  v =  sin(x)*cos(y)*exp(-2*nu*t)\n"
@@ -13,10 +14,10 @@ static const char help[] = "2D Taylor-Green vortex with TSFSM\n"
                            "  -stag_grid_x <int>, -stag_grid_y <int> : Grid cells per direction (default: 32)\n"
                            "  -rho <real> : Density (default: 1.0)\n"
                            "  -mu <real>  : Dynamic viscosity (default: 0.01)\n"
-                           "  -repeat_solve : Refill Y with the same initial condition and TSSolve again over the same\n"
+                           "  -repeat_solve : Refill Y with the same initial condition and SegSolve again over the same\n"
                            "                  interval, checking that the errors reproduce exactly (default: false)\n";
 
-/* Fill cell velocity at t_vel and cell pressure at t_p with the exact TGV; face velocity is left for TSFSM to project */
+/* Fill cell velocity at t_vel and cell pressure at t_p with the exact TGV; face velocity is left for SEGFSM to project */
 static PetscErrorCode FillExactSolution(Phys phys, PetscReal nu, PetscReal t_vel, PetscReal t_p, Vec Y)
 {
   DM                  sol_dm;
@@ -110,7 +111,7 @@ int main(int argc, char **argv)
 {
   DM        dm, sol_dm;
   Phys      phys;
-  TS        ts;
+  Seg       seg;
   Vec       Y;
   PetscReal rho = 1., mu = 0.01, nu, t_final, dt, dt0, err[3], err_repeat[3];
   PetscBool repeat_solve = PETSC_FALSE;
@@ -138,21 +139,21 @@ int main(int argc, char **argv)
   PetscCall(PhysSetUp(phys));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
 
-  PetscCall(TSCreate(PETSC_COMM_WORLD, &ts));
-  PetscCall(PhysSetUpTS(phys, ts));
-  PetscCall(TSSetMaxTime(ts, 1.));
-  PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_MATCHSTEP));
-  PetscCall(TSSetTimeStep(ts, 0.01));
-  PetscCall(TSSetFromOptions(ts));
-  PetscCall(TSGetTimeStep(ts, &dt0));
+  PetscCall(SegCreate(PETSC_COMM_WORLD, &seg));
+  PetscCall(SegSetType(seg, SEGFSM));
+  PetscCall(SegSetPhys(seg, phys));
+  PetscCall(SegSetMaxTime(seg, 1.));
+  PetscCall(SegSetTimeStep(seg, 0.01));
+  PetscCall(SegSetFromOptions(seg));
+  PetscCall(SegGetTimeStep(seg, &dt0));
 
   /* Initial condition: exact TGV at t = 0; the initial pressure is q at the first step */
   PetscCall(DMCreateGlobalVector(sol_dm, &Y));
   PetscCall(FillExactSolution(phys, nu, 0., 0., Y));
 
-  PetscCall(TSSolve(ts, Y));
-  PetscCall(TSGetTime(ts, &t_final));
-  PetscCall(TSGetTimeStep(ts, &dt));
+  PetscCall(SegSolve(seg, Y));
+  PetscCall(SegGetTime(seg, &t_final));
+  PetscCall(SegGetTimeStep(seg, &dt));
   PetscCall(ComputeL2Error(phys, nu, t_final, dt, Y, err));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "t = %.4f, L2 errors: u = %.4e, v = %.4e, p(t - dt/2) = %.4e\n", (double)t_final, (double)err[0], (double)err[1], (double)err[2]));
   /* Velocity errors only: pressure error is spatial-discretization dominated. Measured values are ~8e-5 at
@@ -160,25 +161,26 @@ int main(int argc, char **argv)
   PetscCheck(err[0] < 1.e-3 && err[1] < 1.e-3, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Velocity L2 errors %g, %g exceed the expected bound for this grid", (double)err[0], (double)err[1]);
 
   if (repeat_solve) {
-    /* Reuse the same TS and the same Vec Y for a second, identical solve. If TSFSM fails to notice that Y was
-       refilled and skips re-projecting the face velocity, this run integrates against the stale face velocity
-       from the first solve and its errors diverge from the first solve's. */
-    PetscCall(TSSetTime(ts, 0.));
-    PetscCall(TSSetStepNumber(ts, 0));
-    PetscCall(TSSetTimeStep(ts, dt0));
-    PetscCall(TSSetConvergedReason(ts, TS_CONVERGED_ITERATING));
+    /* Reuse the same Seg and the same Vec Y for a second, identical solve. SegSolve() projects the initial
+       face velocity once per call, so this run must start from the same discretely divergence-free state as
+       the first one; if it did not, it would integrate against the stale face velocity from the first solve
+       and its errors would diverge from the first solve's. */
+    PetscCall(SegSetTime(seg, 0.));
+    PetscCall(SegSetStepNumber(seg, 0));
+    PetscCall(SegSetTimeStep(seg, dt0));
+    PetscCall(SegSetConvergedReason(seg, SEG_CONVERGED_ITERATING));
     PetscCall(FillExactSolution(phys, nu, 0., 0., Y));
 
-    PetscCall(TSSolve(ts, Y));
-    PetscCall(TSGetTime(ts, &t_final));
-    PetscCall(TSGetTimeStep(ts, &dt));
+    PetscCall(SegSolve(seg, Y));
+    PetscCall(SegGetTime(seg, &t_final));
+    PetscCall(SegGetTimeStep(seg, &dt));
     PetscCall(ComputeL2Error(phys, nu, t_final, dt, Y, err_repeat));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "repeat: t = %.4f, L2 errors: u = %.4e, v = %.4e, p(t - dt/2) = %.4e\n", (double)t_final, (double)err_repeat[0], (double)err_repeat[1], (double)err_repeat[2]));
     for (c = 0; c < 3; ++c) PetscCheck(PetscAbsReal(err_repeat[c] - err[c]) < 1.e-12, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Repeated solve error[%" PetscInt_FMT "] %g differs from the first solve's %g", c, (double)err_repeat[c], (double)err[c]);
   }
 
   PetscCall(VecDestroy(&Y));
-  PetscCall(TSDestroy(&ts));
+  PetscCall(SegDestroy(&seg));
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));
   PetscCall(FlucaFinalize());
@@ -190,16 +192,16 @@ int main(int argc, char **argv)
   test:
     suffix: fsm
     nsize: 1
-    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_fsm_ksp_max_it 1
+    args: -stag_grid_x 16 -stag_grid_y 16 -seg_max_time 0.1 -seg_dt 0.01 -seg_ksp_max_it 1
 
   test:
     suffix: fsm_repeat
     nsize: 1
-    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_fsm_ksp_max_it 1 -repeat_solve
+    args: -stag_grid_x 16 -stag_grid_y 16 -seg_max_time 0.1 -seg_dt 0.01 -seg_ksp_max_it 1 -repeat_solve
 
   test:
     suffix: fsm_converged
     nsize: 1
-    args: -stag_grid_x 16 -stag_grid_y 16 -ts_max_time 0.1 -ts_dt 0.01 -ts_fsm_ksp_rtol 1e-10 -ts_fsm_abf_momentum_ksp_type preonly -ts_fsm_abf_momentum_pc_type lu -ts_fsm_abf_schur_ksp_type preonly -ts_fsm_abf_schur_pc_type lu -ts_fsm_abf_schur_pc_factor_shift_type nonzero
+    args: -stag_grid_x 16 -stag_grid_y 16 -seg_max_time 0.1 -seg_dt 0.01 -seg_ksp_rtol 1e-10 -seg_abf_momentum_ksp_type preonly -seg_abf_momentum_pc_type lu -seg_abf_schur_ksp_type preonly -seg_abf_schur_pc_type lu -seg_abf_schur_pc_factor_shift_type nonzero
 
 TEST*/

@@ -13,7 +13,7 @@ foreach(tutorial_src ${TUTORIAL_SRCS})
     add_executable(${tutorial_name} ${tutorial_src})
     set_target_properties(${tutorial_name} PROPERTIES OUTPUT_NAME ${tutorial_base_name})
     target_link_libraries(${tutorial_name} PRIVATE
-        fluca::phys
+        fluca::seg
         m
     )
     fluca_parse_tutorial_file(${CMAKE_CURRENT_SOURCE_DIR}/${tutorial_src} ${tutorial_name} ${tutorial_base_name})

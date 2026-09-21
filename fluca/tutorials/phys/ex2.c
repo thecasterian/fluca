@@ -1,12 +1,13 @@
 #include <flucaphys.h>
+#include <flucaseg.h>
 #include <flucasys.h>
 #include <petscdmstag.h>
 #include <petscmath.h>
 
-static const char help[] = "Temporal self-convergence of TSFSM on the 2D Taylor-Green vortex\n"
-                           "Solves to -ts_max_time with dt, dt/2, dt/4, ... and prints ||X_dt - X_{dt/2}|| for u and p,\n"
+static const char help[] = "Temporal self-convergence of SEGFSM on the 2D Taylor-Green vortex\n"
+                           "Solves to -seg_max_time with dt, dt/2, dt/4, ... and prints ||X_dt - X_{dt/2}|| for u and p,\n"
                            "the L2 self-difference between each pair of consecutive levels, which is a proxy for the\n"
-                           "temporal error of TSFSM's Crank-Nicolson integration. On this code, at mu = 1 both the\n"
+                           "temporal error of SEGFSM's Crank-Nicolson integration. On this code, at mu = 1 both the\n"
                            "periodic and the walled case show second-order ratios (about 4x per halving) for u and p.\n"
                            "At small mu the self-difference can fall below the spatial (grid) error floor once dt is\n"
                            "small enough (observed at mu = 0.01), and the printed ratios stop being meaningful there.\n"
@@ -16,7 +17,7 @@ static const char help[] = "Temporal self-convergence of TSFSM on the 2D Taylor-
                            "  -mu <real>       : Dynamic viscosity with rho = 1 (default: 1.0)\n"
                            "  -dt <real>       : Largest time step (default: 0.02)\n"
                            "  -nlevels <int>   : Number of refinement levels, i.e. dt, dt/2, ..., dt/2^(nlevels-1) (default: 4)\n"
-                           "  -ts_max_time <real> : Final integration time (default: 0.1)\n";
+                           "  -seg_max_time <real> : Final integration time (default: 0.1)\n";
 
 typedef struct {
   PetscReal nu;
@@ -40,14 +41,14 @@ static PetscErrorCode WallVelocity(PetscInt dim, PetscReal t, const PetscReal x[
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode SavePressure(TS ts)
+/* Called before every step, so on return from the last one p_prev holds p^{N-3/2} */
+static PetscErrorCode SavePressure(Seg seg, void *ctx)
 {
-  AppCtx *user;
+  AppCtx *user = (AppCtx *)ctx;
   Vec     X, p;
 
   PetscFunctionBeginUser;
-  PetscCall(TSGetApplicationContext(ts, &user));
-  PetscCall(TSGetSolution(ts, &X));
+  PetscCall(SegGetSolution(seg, &X));
   PetscCall(VecGetSubVector(X, user->is_p, &p));
   PetscCall(VecCopy(p, user->p_prev));
   PetscCall(VecRestoreSubVector(X, user->is_p, &p));
@@ -98,27 +99,26 @@ static PetscErrorCode FillInitialCondition(Phys phys, AppCtx *user, Vec Y)
 /* Solve with time step dt; on return the pressure field of Y holds the mean-free extrapolated p^N */
 static PetscErrorCode Solve(Phys phys, AppCtx *user, PetscReal dt, PetscReal tmax, Vec Y)
 {
-  TS          ts;
+  Seg         seg;
   Vec         p;
   PetscScalar mean;
   PetscInt    np, nsteps;
 
   PetscFunctionBeginUser;
   PetscCall(FillInitialCondition(phys, user, Y));
-  PetscCall(TSCreate(PetscObjectComm((PetscObject)phys), &ts));
-  PetscCall(PhysSetUpTS(phys, ts));
-  PetscCall(TSSetApplicationContext(ts, user));
-  PetscCall(TSSetPreStep(ts, SavePressure));
-  PetscCall(TSSetMaxTime(ts, tmax));
-  PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_MATCHSTEP));
-  /* TSSetTimeStep must come after TSSetFromOptions: otherwise a stray -ts_dt on the command line
+  PetscCall(SegCreate(PetscObjectComm((PetscObject)phys), &seg));
+  PetscCall(SegSetType(seg, SEGFSM));
+  PetscCall(SegSetPhys(seg, phys));
+  PetscCall(SegSetPreStep(seg, SavePressure, user));
+  PetscCall(SegSetMaxTime(seg, tmax));
+  /* SegSetTimeStep must come after SegSetFromOptions: otherwise a stray -seg_dt on the command line
      would silently override dt and collapse the whole refinement ladder to one step size. */
-  PetscCall(TSSetFromOptions(ts));
-  PetscCall(TSSetTimeStep(ts, dt));
-  PetscCall(TSSolve(ts, Y));
-  PetscCall(TSGetStepNumber(ts, &nsteps));
-  PetscCheck(nsteps >= 2, PetscObjectComm((PetscObject)ts), PETSC_ERR_PLIB, "This level took %" PetscInt_FMT " step(s); the Armfield & Street extrapolation needs at least 2 to have a valid p_prev", nsteps);
-  PetscCall(TSDestroy(&ts));
+  PetscCall(SegSetFromOptions(seg));
+  PetscCall(SegSetTimeStep(seg, dt));
+  PetscCall(SegSolve(seg, Y));
+  PetscCall(SegGetStepNumber(seg, &nsteps));
+  PetscCheck(nsteps >= 2, PetscObjectComm((PetscObject)seg), PETSC_ERR_PLIB, "This level took %" PetscInt_FMT " step(s); the Armfield & Street extrapolation needs at least 2 to have a valid p_prev", nsteps);
+  PetscCall(SegDestroy(&seg));
 
   PetscCall(VecGetSubVector(Y, user->is_p, &p));
   PetscCall(VecAXPBY(p, -0.5, 1.5, user->p_prev));
@@ -165,10 +165,10 @@ int main(int argc, char **argv)
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-walled", &walled, NULL));
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-mu", &mu, NULL));
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-dt", &dt, NULL));
-  PetscCall(PetscOptionsGetReal(NULL, NULL, "-ts_max_time", &tmax, NULL));
+  PetscCall(PetscOptionsGetReal(NULL, NULL, "-seg_max_time", &tmax, NULL));
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-nlevels", &nlevels, NULL));
-  PetscCall(PetscOptionsGetInt(NULL, NULL, "-ts_fsm_ksp_max_it", &max_it, &max_it_set));
-  solver_mode = max_it_set && max_it <= 1 ? "classic FSM (single sweep)" : "coupled (iterative to -ts_fsm_ksp_rtol)";
+  PetscCall(PetscOptionsGetInt(NULL, NULL, "-seg_ksp_max_it", &max_it, &max_it_set));
+  solver_mode = max_it_set && max_it <= 1 ? "classic FSM (single sweep)" : "coupled (iterative to -seg_ksp_rtol)";
   user.nu     = mu;
   L           = walled ? 1. : 2. * PETSC_PI;
 
@@ -236,11 +236,11 @@ int main(int argc, char **argv)
   test:
     suffix: periodic
     nsize: 1
-    args: -stag_grid_x 16 -stag_grid_y 16 -nlevels 3 -ts_max_time 0.04 -ts_fsm_ksp_rtol 1e-12 -ts_fsm_abf_momentum_ksp_type preonly -ts_fsm_abf_momentum_pc_type lu -ts_fsm_abf_schur_ksp_type preonly -ts_fsm_abf_schur_pc_type lu -ts_fsm_abf_schur_pc_factor_shift_type nonzero
+    args: -stag_grid_x 16 -stag_grid_y 16 -nlevels 3 -seg_max_time 0.04 -seg_ksp_rtol 1e-12 -seg_abf_momentum_ksp_type preonly -seg_abf_momentum_pc_type lu -seg_abf_schur_ksp_type preonly -seg_abf_schur_pc_type lu -seg_abf_schur_pc_factor_shift_type nonzero
 
   test:
     suffix: walled
     nsize: 1
-    args: -walled -stag_grid_x 16 -stag_grid_y 16 -nlevels 3 -ts_max_time 0.04 -ts_fsm_ksp_rtol 1e-12 -ts_fsm_abf_momentum_ksp_type preonly -ts_fsm_abf_momentum_pc_type lu -ts_fsm_abf_schur_ksp_type preonly -ts_fsm_abf_schur_pc_type lu -ts_fsm_abf_schur_pc_factor_shift_type nonzero
+    args: -walled -stag_grid_x 16 -stag_grid_y 16 -nlevels 3 -seg_max_time 0.04 -seg_ksp_rtol 1e-12 -seg_abf_momentum_ksp_type preonly -seg_abf_momentum_pc_type lu -seg_abf_schur_ksp_type preonly -seg_abf_schur_pc_type lu -seg_abf_schur_pc_factor_shift_type nonzero
 
 TEST*/
