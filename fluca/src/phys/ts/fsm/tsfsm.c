@@ -219,10 +219,16 @@ static PetscErrorCode TSStep_FSM(TS ts)
   if (reason == KSP_DIVERGED_ITS) {
     PetscInt max_it;
 
-    /* A fixed number of sweeps (e.g. -ts_fsm_ksp_max_it 1, the classic FSM) ends here by design;
-       any larger limit means the requested tolerance was not reached */
+    /* Stopping at the iteration limit is an accepted outcome only for a single sweep
+       (-ts_fsm_ksp_max_it 1, the classic fractional step method), which ends there by design.
+       With any other limit the requested tolerance was simply not reached, so the step is
+       rejected like any other solve failure. */
     PetscCall(KSPGetTolerances(fsm->ksp, NULL, NULL, NULL, &max_it));
-    if (max_it > 1) PetscCall(PetscInfo(ts, "Step=%" PetscInt_FMT ", coupled solve stopped at the iteration limit %" PetscInt_FMT " before reaching the requested tolerance\n", ts->steps, max_it));
+    if (max_it != 1) {
+      PetscCall(PetscInfo(ts, "Step=%" PetscInt_FMT ", coupled solve stopped at the iteration limit %" PetscInt_FMT " before reaching the requested tolerance\n", ts->steps, max_it));
+      ts->reason = TS_DIVERGED_STEP_REJECTED;
+      PetscFunctionReturn(PETSC_SUCCESS);
+    }
   } else if (reason < 0) {
     PetscCall(PetscInfo(ts, "Step=%" PetscInt_FMT ", coupled solve failed: %s\n", ts->steps, KSPConvergedReasons[reason]));
     ts->reason = TS_DIVERGED_STEP_REJECTED;
