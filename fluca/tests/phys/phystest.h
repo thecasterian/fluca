@@ -4,31 +4,31 @@
 #include <flucasys.h>
 #include <petscdmstag.h>
 
-/* Create and set up a PhysINS on dm. Every non-periodic boundary gets a velocity BC from bcfn
+/* Create and set up a PhysLaminar on dm. Every non-periodic boundary gets a velocity BC from bcfn
    (NULL means zero velocity). */
-static PetscErrorCode PhysTestCreateINS(DM dm, PetscReal rho, PetscReal mu, PhysINSBCFn *bcfn, Phys *phys)
+static PetscErrorCode PhysTestCreateLaminar(DM dm, PetscReal rho, PetscReal mu, PhysLaminarBCFn *bcfn, Phys *phys)
 {
   DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
-  PhysINSBC      bc;
+  PhysLaminarBC  bc;
   PetscInt       dim, d;
 
   PetscFunctionBeginUser;
   PetscCall(DMGetDimension(dm, &dim));
   PetscCall(DMStagGetBoundaryTypes(dm, &bt[0], &bt[1], &bt[2]));
   PetscCall(PhysCreate(PetscObjectComm((PetscObject)dm), phys));
-  PetscCall(PhysSetType(*phys, PHYSINS));
+  PetscCall(PhysSetType(*phys, PHYSLAMINAR));
   PetscCall(PhysSetBaseDM(*phys, dm));
-  PetscCall(PhysINSSetDensity(*phys, rho));
-  PetscCall(PhysINSSetViscosity(*phys, mu));
-  bc.type       = PHYS_INS_BC_VELOCITY;
+  PetscCall(PhysLaminarSetDensity(*phys, rho));
+  PetscCall(PhysLaminarSetViscosity(*phys, mu));
+  bc.type       = PHYS_LAMINAR_BC_VELOCITY;
   bc.fn         = bcfn;
   bc.ctx        = NULL;
   bc.fn_dot     = NULL;
   bc.fn_dot_ctx = NULL;
   for (d = 0; d < dim; ++d) {
     if (bt[d] == DM_BOUNDARY_PERIODIC) continue;
-    PetscCall(PhysINSSetBoundaryCondition(*phys, 2 * d, bc));
-    PetscCall(PhysINSSetBoundaryCondition(*phys, 2 * d + 1, bc));
+    PetscCall(PhysLaminarSetBoundaryCondition(*phys, 2 * d, bc));
+    PetscCall(PhysLaminarSetBoundaryCondition(*phys, 2 * d + 1, bc));
   }
   PetscCall(PhysSetFromOptions(*phys));
   PetscCall(PhysSetUp(*phys));

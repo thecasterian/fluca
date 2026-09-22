@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 add_library(fluca_seg SHARED
-    impl/fsm/fsm.c
+    impls/cnlinear/cnlinear.c
     interface/segbasic.c
     interface/segmon.c
     interface/segopts.c

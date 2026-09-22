@@ -4,7 +4,7 @@
 #include <petscdmstag.h>
 #include <petscmath.h>
 
-static const char help[] = "2D Taylor-Green vortex with SEGFSM\n"
+static const char help[] = "2D Taylor-Green vortex with SEGCNLINEAR\n"
                            "Exact solution on periodic [0, 2*pi]^2:\n"
                            "  u = -cos(x)*sin(y)*exp(-2*nu*t)\n"
                            "  v =  sin(x)*cos(y)*exp(-2*nu*t)\n"
@@ -17,7 +17,7 @@ static const char help[] = "2D Taylor-Green vortex with SEGFSM\n"
                            "  -repeat_solve : Refill Y with the same initial condition and SegSolve again over the same\n"
                            "                  interval, checking that the errors reproduce exactly (default: false)\n";
 
-/* Fill cell velocity at t_vel and cell pressure at t_p with the exact TGV; face velocity is left for SEGFSM to project */
+/* Fill cell velocity at t_vel and cell pressure at t_p with the exact TGV; face velocity is left for SEGCNLINEAR to project */
 static PetscErrorCode FillExactSolution(Phys phys, PetscReal nu, PetscReal t_vel, PetscReal t_p, Vec Y)
 {
   DM                  sol_dm;
@@ -124,23 +124,23 @@ int main(int argc, char **argv)
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-repeat_solve", &repeat_solve, NULL));
   nu = mu / rho;
 
-  /* Base DM: grid topology and coordinates; stencil width 4 is required by PhysINS */
+  /* Base DM: grid topology and coordinates; stencil width 4 is required by PhysLaminar */
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC, 32, 32, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 4, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 2. * PETSC_PI, 0., 2. * PETSC_PI, 0., 0.));
 
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
-  PetscCall(PhysSetType(phys, PHYSINS));
+  PetscCall(PhysSetType(phys, PHYSLAMINAR));
   PetscCall(PhysSetBaseDM(phys, dm));
-  PetscCall(PhysINSSetDensity(phys, rho));
-  PetscCall(PhysINSSetViscosity(phys, mu));
+  PetscCall(PhysLaminarSetDensity(phys, rho));
+  PetscCall(PhysLaminarSetViscosity(phys, mu));
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
 
   PetscCall(SegCreate(PETSC_COMM_WORLD, &seg));
-  PetscCall(SegSetType(seg, SEGFSM));
+  PetscCall(SegSetType(seg, SEGCNLINEAR));
   PetscCall(SegSetPhys(seg, phys));
   PetscCall(SegSetMaxTime(seg, 1.));
   PetscCall(SegSetTimeStep(seg, 0.01));

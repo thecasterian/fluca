@@ -1,9 +1,9 @@
-#include <fluca/private/segfsmimpl.h>
+#include <fluca/private/segcnlinearimpl.h>
 
 /* M and f of eq. (13): momentum rows from the state at t^n, coupling rows with boundary data at t_coupling */
-static PetscErrorCode SegFSMAssembleSystem_Private(Seg seg, PetscReal t_coupling)
+static PetscErrorCode SegCNLinearAssembleSystem_Private(Seg seg, PetscReal t_coupling)
 {
-  Seg_FSM *fsm = (Seg_FSM *)seg->data;
+  Seg_CNLinear *fsm = (Seg_CNLinear *)seg->data;
 
   PetscFunctionBegin;
   PetscCall(MatZeroEntries(fsm->M));
@@ -17,9 +17,9 @@ static PetscErrorCode SegFSMAssembleSystem_Private(Seg seg, PetscReal t_coupling
 
 /* Replace the face velocity of the initial state by the discretely divergence-free projection of
    T u0 + b_interp: U0 = U* - G^st phi with D G^st phi = D U* - b_cont. u0 and p0 are unchanged. */
-static PetscErrorCode SegPreSolve_FSM(Seg seg)
+static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
 {
-  Seg_FSM           *fsm = (Seg_FSM *)seg->data;
+  Seg_CNLinear      *fsm = (Seg_CNLinear *)seg->data;
   MPI_Comm           comm;
   Mat                negT, G, negR, D, W, S;
   Vec                u, U, fU, fp, Ustar, phi, rhs;
@@ -31,7 +31,7 @@ static PetscErrorCode SegPreSolve_FSM(Seg seg)
 
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)seg, &comm));
-  PetscCall(SegFSMAssembleSystem_Private(seg, seg->t));
+  PetscCall(SegCNLinearAssembleSystem_Private(seg, seg->t));
   PetscCall(MatCreateSubMatrix(fsm->M, fsm->is[1], fsm->is[0], MAT_INITIAL_MATRIX, &negT));
   PetscCall(MatCreateSubMatrix(fsm->M, fsm->is[0], fsm->is[2], MAT_INITIAL_MATRIX, &G));
   PetscCall(MatCreateSubMatrix(fsm->M, fsm->is[1], fsm->is[2], MAT_INITIAL_MATRIX, &negR));
@@ -96,21 +96,21 @@ static PetscErrorCode SegPreSolve_FSM(Seg seg)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode SegSetUp_FSM(Seg seg)
+static PetscErrorCode SegSetUp_CNLinear(Seg seg)
 {
-  Seg_FSM    *fsm = (Seg_FSM *)seg->data;
-  MPI_Comm    comm;
-  DM          dm;
-  Vec         nullvec, sub;
-  Mat         blocks[9];
-  KSP         ksp, kspA, kspS;
-  PC          pc, subpc;
-  PetscInt    k, n, N;
-  const char *names[3] = {PHYS_FIELD_VELOCITY, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_PRESSURE};
+  Seg_CNLinear *fsm = (Seg_CNLinear *)seg->data;
+  MPI_Comm      comm;
+  DM            dm;
+  Vec           nullvec, sub;
+  Mat           blocks[9];
+  KSP           ksp, kspA, kspS;
+  PC            pc, subpc;
+  PetscInt      k, n, N;
+  const char   *names[3] = {PHYS_FIELD_VELOCITY, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_PRESSURE};
 
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)seg, &comm));
-  PetscCheck(seg->phys->setupcalled, comm, PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before SegSetUp() with SEGFSM");
+  PetscCheck(seg->phys->setupcalled, comm, PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before SegSetUp() with SEGCNLINEAR");
   PetscCall(PhysGetSolutionDM(seg->phys, &dm));
 
   for (k = 0; k < 3; ++k) PetscCall(PhysGetFieldIS(seg->phys, names[k], &fsm->is[k]));
@@ -161,9 +161,9 @@ static PetscErrorCode SegSetUp_FSM(Seg seg)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode SegStep_FSM(Seg seg)
+static PetscErrorCode SegStep_CNLinear(Seg seg)
 {
-  Seg_FSM           *fsm = (Seg_FSM *)seg->data;
+  Seg_CNLinear      *fsm = (Seg_CNLinear *)seg->data;
   KSP                ksp;
   KSPConvergedReason reason;
   Vec                xs, Xs;
@@ -171,7 +171,7 @@ static PetscErrorCode SegStep_FSM(Seg seg)
 
   PetscFunctionBegin;
   PetscCall(SegGetKSP(seg, &ksp));
-  PetscCall(SegFSMAssembleSystem_Private(seg, seg->t + seg->dt));
+  PetscCall(SegCNLinearAssembleSystem_Private(seg, seg->t + seg->dt));
   /* PCABF takes its blocks from M; mark P changed so that the preconditioner is rebuilt */
   PetscCall(PetscObjectStateIncrease((PetscObject)fsm->P));
   PetscCall(VecZeroEntries(fsm->x));
@@ -212,17 +212,17 @@ static PetscErrorCode SegStep_FSM(Seg seg)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode SegView_FSM(Seg seg, PetscViewer viewer)
+static PetscErrorCode SegView_CNLinear(Seg seg, PetscViewer viewer)
 {
   PetscFunctionBegin;
   if (seg->ksp) PetscCall(KSPView(seg->ksp, viewer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode SegDestroy_FSM(Seg seg)
+static PetscErrorCode SegDestroy_CNLinear(Seg seg)
 {
-  Seg_FSM *fsm = (Seg_FSM *)seg->data;
-  PetscInt k;
+  Seg_CNLinear *fsm = (Seg_CNLinear *)seg->data;
+  PetscInt      k;
 
   PetscFunctionBegin;
   PetscCall(MatDestroy(&fsm->P));
@@ -235,10 +235,10 @@ static PetscErrorCode SegDestroy_FSM(Seg seg)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode SegCreate_FSM(Seg seg)
+PetscErrorCode SegCreate_CNLinear(Seg seg)
 {
-  Seg_FSM *fsm;
-  PetscInt k;
+  Seg_CNLinear *fsm;
+  PetscInt      k;
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&fsm));
@@ -251,10 +251,10 @@ PetscErrorCode SegCreate_FSM(Seg seg)
   fsm->x         = NULL;
   for (k = 0; k < 3; ++k) fsm->is[k] = NULL;
 
-  seg->ops->setup    = SegSetUp_FSM;
-  seg->ops->presolve = SegPreSolve_FSM;
-  seg->ops->step     = SegStep_FSM;
-  seg->ops->destroy  = SegDestroy_FSM;
-  seg->ops->view     = SegView_FSM;
+  seg->ops->setup    = SegSetUp_CNLinear;
+  seg->ops->presolve = SegPreSolve_CNLinear;
+  seg->ops->step     = SegStep_CNLinear;
+  seg->ops->destroy  = SegDestroy_CNLinear;
+  seg->ops->view     = SegView_CNLinear;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 
 add_library(fluca_phys SHARED
-    impls/ins/ins.c
-    impls/ins/insops.c
-    impls/ins/inssystem.c
+    impls/laminar/laminar.c
+    impls/laminar/laminarops.c
+    impls/laminar/laminarsystem.c
     interface/physbasic.c
     interface/physfield.c
     interface/physopts.c

@@ -19,7 +19,7 @@ typedef struct _p_Seg *Seg;
 
 /* Seg types */
 typedef const char *SegType;
-#define SEGFSM "fsm" /* Fractional step method */
+#define SEGCNLINEAR "cnlinear" /* Linearized Crank-Nicolson */
 
 typedef enum {
   SEG_CONVERGED_ITERATING   = 0,

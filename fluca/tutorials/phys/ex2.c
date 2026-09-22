@@ -4,10 +4,10 @@
 #include <petscdmstag.h>
 #include <petscmath.h>
 
-static const char help[] = "Temporal self-convergence of SEGFSM on the 2D Taylor-Green vortex\n"
+static const char help[] = "Temporal self-convergence of SEGCNLINEAR on the 2D Taylor-Green vortex\n"
                            "Solves to -seg_max_time with dt, dt/2, dt/4, ... and prints ||X_dt - X_{dt/2}|| for u and p,\n"
                            "the L2 self-difference between each pair of consecutive levels, which is a proxy for the\n"
-                           "temporal error of SEGFSM's Crank-Nicolson integration. On this code, at mu = 1 both the\n"
+                           "temporal error of SEGCNLINEAR's Crank-Nicolson integration. On this code, at mu = 1 both the\n"
                            "periodic and the walled case show second-order ratios (about 4x per halving) for u and p.\n"
                            "At small mu the self-difference can fall below the spatial (grid) error floor once dt is\n"
                            "small enough (observed at mu = 0.01), and the printed ratios stop being meaningful there.\n"
@@ -107,7 +107,7 @@ static PetscErrorCode Solve(Phys phys, AppCtx *user, PetscReal dt, PetscReal tma
   PetscFunctionBeginUser;
   PetscCall(FillInitialCondition(phys, user, Y));
   PetscCall(SegCreate(PetscObjectComm((PetscObject)phys), &seg));
-  PetscCall(SegSetType(seg, SEGFSM));
+  PetscCall(SegSetType(seg, SEGCNLINEAR));
   PetscCall(SegSetPhys(seg, phys));
   PetscCall(SegSetPreStep(seg, SavePressure, user));
   PetscCall(SegSetMaxTime(seg, tmax));
@@ -149,16 +149,16 @@ static PetscErrorCode FieldDifference(IS is, Vec a, Vec b, PetscReal h, PetscRea
 
 int main(int argc, char **argv)
 {
-  DM          dm, sol_dm;
-  Phys        phys;
-  PhysINSBC   bc;
-  AppCtx      user;
-  IS          is_v;
-  Vec         Y[2], sub;
-  const char *solver_mode;
-  PetscBool   walled = PETSC_FALSE, max_it_set;
-  PetscReal   mu = 1., dt = 0.02, tmax = 0.1, L, h, e_u, e_p, e_u_prev = 0., e_p_prev = 0.;
-  PetscInt    nlevels = 4, N, l, f, max_it = 0;
+  DM            dm, sol_dm;
+  Phys          phys;
+  PhysLaminarBC bc;
+  AppCtx        user;
+  IS            is_v;
+  Vec           Y[2], sub;
+  const char   *solver_mode;
+  PetscBool     walled = PETSC_FALSE, max_it_set;
+  PetscReal     mu = 1., dt = 0.02, tmax = 0.1, L, h, e_u, e_p, e_u_prev = 0., e_p_prev = 0.;
+  PetscInt      nlevels = 4, N, l, f, max_it = 0;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
@@ -178,17 +178,17 @@ int main(int argc, char **argv)
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., L, 0., L, 0., 0.));
 
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
-  PetscCall(PhysSetType(phys, PHYSINS));
+  PetscCall(PhysSetType(phys, PHYSLAMINAR));
   PetscCall(PhysSetBaseDM(phys, dm));
-  PetscCall(PhysINSSetDensity(phys, 1.));
-  PetscCall(PhysINSSetViscosity(phys, mu));
+  PetscCall(PhysLaminarSetDensity(phys, 1.));
+  PetscCall(PhysLaminarSetViscosity(phys, mu));
   if (walled) {
-    bc.type       = PHYS_INS_BC_VELOCITY;
+    bc.type       = PHYS_LAMINAR_BC_VELOCITY;
     bc.fn         = WallVelocity;
     bc.ctx        = &user;
     bc.fn_dot     = NULL;
     bc.fn_dot_ctx = NULL;
-    for (f = 0; f < 4; f++) PetscCall(PhysINSSetBoundaryCondition(phys, f, bc));
+    for (f = 0; f < 4; f++) PetscCall(PhysLaminarSetBoundaryCondition(phys, f, bc));
   }
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));

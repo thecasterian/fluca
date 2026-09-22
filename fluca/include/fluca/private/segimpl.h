@@ -9,7 +9,7 @@ FLUCA_EXTERN PetscBool     SegRegisterAllCalled;
 FLUCA_EXTERN PetscLogEvent SEG_SetUp;
 FLUCA_EXTERN PetscLogEvent SEG_Step;
 
-FLUCA_INTERN PetscErrorCode SegCreate_FSM(Seg);
+FLUCA_INTERN PetscErrorCode SegCreate_CNLinear(Seg);
 
 typedef struct _SegOps *SegOps;
 

@@ -53,7 +53,7 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
-  PetscCall(PhysTestCreateINS(dm, rho, mu, NULL, &phys));
+  PetscCall(PhysTestCreateLaminar(dm, rho, mu, NULL, &phys));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_PRESSURE, &loc, &c_p, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_FACE_VELOCITY, &loc, &c_U, NULL));
@@ -136,7 +136,7 @@ int main(int argc, char **argv)
      central one at its neighbour telescoped to exactly G^st there. That cancellation was an accident
      of the two-point average and is gone; the wall-adjacent rows now carry the same O(h^2 d3p/dn3)
      Rhie-Chow correction that every interior row carries, which is why the assertion is now that -R
-     has no part of lower order rather than that it is zero. See insops.c for why T had to change. */
+     has no part of lower order rather than that it is zero. See laminarops.c for why T had to change. */
   scale = (dt / rho) / PetscMin(hx, hy);
   tol   = 1e-12 * scale;
   PetscCall(DMCreateGlobalVector(sol_dm, &WPfull));

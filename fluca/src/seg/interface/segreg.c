@@ -14,6 +14,6 @@ PetscErrorCode SegRegisterAll(void)
   if (SegRegisterAllCalled) PetscFunctionReturn(PETSC_SUCCESS);
   SegRegisterAllCalled = PETSC_TRUE;
 
-  PetscCall(SegRegister(SEGFSM, SegCreate_FSM));
+  PetscCall(SegRegister(SEGCNLINEAR, SegCreate_CNLinear));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

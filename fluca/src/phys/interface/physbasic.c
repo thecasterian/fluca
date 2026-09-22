@@ -7,7 +7,7 @@ PetscLogEvent PHYS_SetUp   = 0;
 PetscFunctionList PhysList              = NULL;
 PetscBool         PhysRegisterAllCalled = PETSC_FALSE;
 
-const char *PhysINSBCTypes[] = {"NONE", "VELOCITY", "PhysINSBCType", "", NULL};
+const char *PhysLaminarBCTypes[] = {"NONE", "VELOCITY", "PhysLaminarBCType", "", NULL};
 
 PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
 {

@@ -33,7 +33,7 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
-  PetscCall(PhysTestCreateINS(dm, 1., 0.1, LidVelocity, &phys));
+  PetscCall(PhysTestCreateLaminar(dm, 1., 0.1, LidVelocity, &phys));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_VELOCITY, &loc, &c_vel, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_PRESSURE, &loc, &c_p, NULL));

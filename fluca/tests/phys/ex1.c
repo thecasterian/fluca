@@ -2,7 +2,7 @@
 #include <flucasys.h>
 #include <petscdmstag.h>
 
-static const char help[] = "Test Phys INS subtype: verify solution DM DOF layout and field registry\n";
+static const char help[] = "Test Phys Laminar subtype: verify solution DM DOF layout and field registry\n";
 
 static PetscErrorCode BCVelocityZero(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx)
 {
@@ -16,7 +16,7 @@ int main(int argc, char **argv)
   DM                dm, sol_dm;
   Phys              phys;
   PetscInt          f, c0, ncomp, n;
-  PhysINSBC         bc;
+  PhysLaminarBC     bc;
   PhysFieldLocation loc;
   IS                is;
   const char       *names[] = {PHYS_FIELD_VELOCITY, PHYS_FIELD_PRESSURE, PHYS_FIELD_FACE_VELOCITY};
@@ -24,23 +24,23 @@ int main(int argc, char **argv)
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
-  /* Create 2D base DMStag: 1 element DOF, stencil width 4 as required by PhysINS */
+  /* Create 2D base DMStag: 1 element DOF, stencil width 4 as required by PhysLaminar */
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 4, 4, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 4, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
 
-  /* Create Phys INS, set zero velocity BCs on all faces */
+  /* Create Phys Laminar, set zero velocity BCs on all faces */
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
-  PetscCall(PhysSetType(phys, PHYSINS));
+  PetscCall(PhysSetType(phys, PHYSLAMINAR));
   PetscCall(PhysSetBaseDM(phys, dm));
 
-  bc.type       = PHYS_INS_BC_VELOCITY;
+  bc.type       = PHYS_LAMINAR_BC_VELOCITY;
   bc.fn         = BCVelocityZero;
   bc.ctx        = NULL;
   bc.fn_dot     = NULL;
   bc.fn_dot_ctx = NULL;
-  for (f = 0; f < 4; f++) PetscCall(PhysINSSetBoundaryCondition(phys, f, bc));
+  for (f = 0; f < 4; f++) PetscCall(PhysLaminarSetBoundaryCondition(phys, f, bc));
 
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));

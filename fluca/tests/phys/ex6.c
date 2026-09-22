@@ -15,7 +15,7 @@
    where the argument used to break, because U there is the boundary datum itself and carries no error
    at all; differencing an O(h^2) face error against zero left the wall cell's row first order and the
    whole continuity operator with a one-cell-thick O(h) truncation layer. The fourth-order accurate
-   interpolation T now used in the Rhie-Chow row (see fluca/src/phys/impls/ins/insops.c) makes every
+   interpolation T now used in the Rhie-Chow row (see fluca/src/phys/impls/laminar/laminarops.c) makes every
    face error O(h^3) instead, which removes the layer without touching either invariant: U is still
    exactly u_b . n on a prescribed-velocity face, and D is still a flux difference.
 
@@ -112,7 +112,7 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, bt, bt, N, N, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 4, NULL, NULL, &dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 2. * PETSC_PI, 0., 2. * PETSC_PI, 0., 0.));
-  PetscCall(PhysTestCreateINS(dm, rho, mu, FieldBC, &phys));
+  PetscCall(PhysTestCreateLaminar(dm, rho, mu, FieldBC, &phys));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_VELOCITY, &loc, &c_vel, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_PRESSURE, &loc, &c_p, NULL));

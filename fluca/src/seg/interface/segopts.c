@@ -204,9 +204,9 @@ PetscErrorCode SegSetFromOptions(Seg seg)
 
   PetscObjectOptionsBegin((PetscObject)seg);
 
-  PetscCall(PetscOptionsFList("-seg_type", "Seg type", "SegSetType", SegList, (char *)(((PetscObject)seg)->type_name ? ((PetscObject)seg)->type_name : SEGFSM), type, sizeof(type), &flg));
+  PetscCall(PetscOptionsFList("-seg_type", "Seg type", "SegSetType", SegList, (char *)(((PetscObject)seg)->type_name ? ((PetscObject)seg)->type_name : SEGCNLINEAR), type, sizeof(type), &flg));
   if (flg) PetscCall(SegSetType(seg, type));
-  else if (!((PetscObject)seg)->type_name) PetscCall(SegSetType(seg, SEGFSM));
+  else if (!((PetscObject)seg)->type_name) PetscCall(SegSetType(seg, SEGCNLINEAR));
 
   PetscCall(PetscOptionsReal("-seg_dt", "Time step size", "SegSetTimeStep", seg->dt, &seg->dt, NULL));
   PetscCall(PetscOptionsReal("-seg_max_time", "Final time", "SegSetMaxTime", seg->max_time, &seg->max_time, NULL));

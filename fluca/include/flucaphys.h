@@ -9,7 +9,7 @@ typedef struct _p_Phys *Phys;
 
 /* Phys types */
 typedef const char *PhysType;
-#define PHYSINS "ins" /* Incompressible Navier-Stokes */
+#define PHYSLAMINAR "laminar" /* Isothermal laminar incompressible flow */
 
 FLUCA_EXTERN PetscClassId   PHYS_CLASSID;
 FLUCA_EXTERN PetscErrorCode PhysInitializePackage(void);
@@ -18,24 +18,24 @@ FLUCA_EXTERN PetscErrorCode PhysFinalizePackage(void);
 /* Body force callback */
 typedef PetscErrorCode PhysBodyForceFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar f[], void *ctx);
 
-/* INS boundary condition types */
+/* Laminar boundary condition types */
 typedef enum {
-  PHYS_INS_BC_NONE,
-  PHYS_INS_BC_VELOCITY,
-} PhysINSBCType;
-FLUCA_EXTERN const char *PhysINSBCTypes[];
+  PHYS_LAMINAR_BC_NONE,
+  PHYS_LAMINAR_BC_VELOCITY,
+} PhysLaminarBCType;
+FLUCA_EXTERN const char *PhysLaminarBCTypes[];
 
-/* INS boundary condition callback: returns value of field component at boundary coordinates.
+/* Laminar boundary condition callback: returns value of field component at boundary coordinates.
    comp is the solution DOF component being queried (0..dim-1 for velocity, dim for pressure). */
-typedef PetscErrorCode PhysINSBCFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx);
+typedef PetscErrorCode PhysLaminarBCFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx);
 
 typedef struct {
-  PhysINSBCType type;
-  PhysINSBCFn  *fn; /* value BC: u_bc(t, x, comp) */
-  void         *ctx;
-  PhysINSBCFn  *fn_dot; /* time derivative BC: du_bc/dt(t, x, comp); NULL = use FD approx of fn */
-  void         *fn_dot_ctx;
-} PhysINSBC;
+  PhysLaminarBCType type;
+  PhysLaminarBCFn  *fn; /* value BC: u_bc(t, x, comp) */
+  void             *ctx;
+  PhysLaminarBCFn  *fn_dot; /* time derivative BC: du_bc/dt(t, x, comp); NULL = use FD approx of fn */
+  void             *fn_dot_ctx;
+} PhysLaminarBC;
 
 /* Lifecycle */
 FLUCA_EXTERN PetscErrorCode PhysCreate(MPI_Comm, Phys *);
@@ -107,13 +107,13 @@ FLUCA_EXTERN PetscErrorCode PhysGetOptionsPrefix(Phys, const char *[]);
 /* Body force (base class) */
 FLUCA_EXTERN PetscErrorCode PhysSetBodyForce(Phys, PhysBodyForceFn *, void *);
 
-/* PHYSINS specific */
-FLUCA_EXTERN PetscErrorCode PhysINSSetDensity(Phys, PetscReal);
-FLUCA_EXTERN PetscErrorCode PhysINSGetDensity(Phys, PetscReal *);
-FLUCA_EXTERN PetscErrorCode PhysINSSetViscosity(Phys, PetscReal);
-FLUCA_EXTERN PetscErrorCode PhysINSGetViscosity(Phys, PetscReal *);
-FLUCA_EXTERN PetscErrorCode PhysINSSetBoundaryCondition(Phys, PetscInt, PhysINSBC);
-FLUCA_EXTERN PetscErrorCode PhysINSGetBoundaryCondition(Phys, PetscInt, PhysINSBC *);
+/* PHYSLAMINAR specific */
+FLUCA_EXTERN PetscErrorCode PhysLaminarSetDensity(Phys, PetscReal);
+FLUCA_EXTERN PetscErrorCode PhysLaminarGetDensity(Phys, PetscReal *);
+FLUCA_EXTERN PetscErrorCode PhysLaminarSetViscosity(Phys, PetscReal);
+FLUCA_EXTERN PetscErrorCode PhysLaminarGetViscosity(Phys, PetscReal *);
+FLUCA_EXTERN PetscErrorCode PhysLaminarSetBoundaryCondition(Phys, PetscInt, PhysLaminarBC);
+FLUCA_EXTERN PetscErrorCode PhysLaminarGetBoundaryCondition(Phys, PetscInt, PhysLaminarBC *);
 
 /* Registration */
 FLUCA_EXTERN PetscFunctionList PhysList;

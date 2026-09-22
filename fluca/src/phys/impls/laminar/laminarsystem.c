@@ -1,4 +1,4 @@
-#include <fluca/private/physinsimpl.h>
+#include <fluca/private/physlaminarimpl.h>
 
 /* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
 static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
@@ -36,7 +36,7 @@ static PetscErrorCode AddIdentity_Private(DM dm, Mat M, DMStagStencilLocation lo
 /* f_d += scale * body_force_d(t) at every cell center */
 static PetscErrorCode AddBodyForce_Private(Phys phys, PetscReal t, PetscReal scale, Vec f)
 {
-  Phys_INS           *ins     = (Phys_INS *)phys->data;
+  Phys_Laminar       *ins     = (Phys_Laminar *)phys->data;
   DM                  sol_dm  = phys->sol_dm;
   PetscInt            dim     = phys->dim;
   const PetscScalar **arrc[3] = {NULL, NULL, NULL};
@@ -82,13 +82,13 @@ static PetscErrorCode AddBodyForce_Private(Phys phys, PetscReal t, PetscReal sca
 
 /* Momentum rows of the coupled system (13), guide eq. (6) and (9):
    A u^{n+1} + G p' = u^n + (dt/2) nu lap(u^n) - (dt/rho) grad(q) + boundary terms */
-PetscErrorCode PhysComputeMomentumSystem_INS(Phys phys, PetscReal t, PetscReal dt, Vec X, Mat M, Vec f)
+PetscErrorCode PhysComputeMomentumSystem_Laminar(Phys phys, PetscReal t, PetscReal dt, Vec X, Mat M, Vec f)
 {
-  Phys_INS   *ins    = (Phys_INS *)phys->data;
-  DM          sol_dm = phys->sol_dm;
-  PetscInt    dim    = phys->dim, d, e;
-  Vec         tmp, fv, xv;
-  PetscScalar rho;
+  Phys_Laminar *ins    = (Phys_Laminar *)phys->data;
+  DM            sol_dm = phys->sol_dm;
+  PetscInt      dim    = phys->dim, d, e;
+  Vec           tmp, fv, xv;
+  PetscScalar   rho;
 
   PetscFunctionBegin;
   PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho));
@@ -182,12 +182,12 @@ static PetscErrorCode AddNegR_Private(Mat M, Mat negR, PetscScalar scale)
 
 /* Rhie-Chow rows (guide eq. (11)): -T u + U - R p' = b_interp, and continuity rows (guide eq. (10)): D U = b_cont.
    Boundary faces carry the prescribed normal velocity, U = u_b . n. */
-PetscErrorCode PhysComputeCouplingSystem_INS(Phys phys, PetscReal t, PetscReal dt, Mat M, Vec f)
+PetscErrorCode PhysComputeCouplingSystem_Laminar(Phys phys, PetscReal t, PetscReal dt, Mat M, Vec f)
 {
-  Phys_INS   *ins    = (Phys_INS *)phys->data;
-  DM          sol_dm = phys->sol_dm;
-  PetscInt    dim    = phys->dim, e;
-  PetscScalar rho;
+  Phys_Laminar *ins    = (Phys_Laminar *)phys->data;
+  DM            sol_dm = phys->sol_dm;
+  PetscInt      dim    = phys->dim, e;
+  PetscScalar   rho;
 
   PetscFunctionBegin;
   PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho));

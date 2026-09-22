@@ -40,7 +40,7 @@ PetscErrorCode PhysSetFromOptions(Phys phys)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  if (!((PetscObject)phys)->type_name) default_type = PHYSINS;
+  if (!((PetscObject)phys)->type_name) default_type = PHYSLAMINAR;
   else default_type = ((PetscObject)phys)->type_name;
   PetscCall(PhysRegisterAll());
 

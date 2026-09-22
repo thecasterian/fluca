@@ -113,7 +113,7 @@ PetscErrorCode SegSetUp(Seg seg)
 
   PetscCall(PetscLogEventBegin(SEG_SetUp, (PetscObject)seg, 0, 0, 0));
 
-  if (!((PetscObject)seg)->type_name) PetscCall(SegSetType(seg, SEGFSM));
+  if (!((PetscObject)seg)->type_name) PetscCall(SegSetType(seg, SEGCNLINEAR));
   PetscCheck(seg->phys, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "No Phys attached to Seg; call SegSetPhys() first");
 
   PetscTryTypeMethod(seg, setup);

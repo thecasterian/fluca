@@ -1,22 +1,22 @@
-#include <fluca/private/physinsimpl.h>
+#include <fluca/private/physlaminarimpl.h>
 
 /* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
 static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
 
 /* --- BC adapter functions ------------------------------------------------- */
 
-static PetscErrorCode PhysINS_BCAdapterFn(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
+static PetscErrorCode PhysLaminar_BCAdapterFn(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
 {
-  PhysINS_BCAdapter *a = (PhysINS_BCAdapter *)ctx;
+  PhysLaminar_BCAdapter *a = (PhysLaminar_BCAdapter *)ctx;
 
   PetscFunctionBegin;
   PetscCall(a->fn(dim, t, x, a->comp, value, a->fn_ctx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode PhysINS_BCAdapterFnDot(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
+static PetscErrorCode PhysLaminar_BCAdapterFnDot(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
 {
-  PhysINS_BCAdapter *a = (PhysINS_BCAdapter *)ctx;
+  PhysLaminar_BCAdapter *a = (PhysLaminar_BCAdapter *)ctx;
 
   PetscFunctionBegin;
   PetscCall(a->fn_dot(dim, t, x, a->comp, value, a->fn_dot_ctx));
@@ -24,27 +24,27 @@ static PetscErrorCode PhysINS_BCAdapterFnDot(PetscInt dim, PetscReal t, const Pe
 }
 
 /* Set velocity Dirichlet BCs of velocity component d on a FlucaFD operator.
-   Uses the BC adapter to bridge PhysINSBCFn (has comp) to FlucaFDBCValueFn (no comp). */
+   Uses the BC adapter to bridge PhysLaminarBCFn (has comp) to FlucaFDBCValueFn (no comp). */
 static PetscErrorCode SetVelocityDirichletBCs(Phys phys, FlucaFD fd, PetscInt d)
 {
-  Phys_INS                *ins                          = (Phys_INS *)phys->data;
-  FlucaFDBoundaryCondition fd_bcs[2 * PHYS_INS_MAX_DIM] = {{0}};
+  Phys_Laminar            *ins                              = (Phys_Laminar *)phys->data;
+  FlucaFDBoundaryCondition fd_bcs[2 * PHYS_LAMINAR_MAX_DIM] = {{0}};
   PetscInt                 f;
 
   PetscFunctionBegin;
   for (f = 0; f < 2 * phys->dim; f++) {
-    if (ins->bcs[f].type == PHYS_INS_BC_VELOCITY && ins->bcs[f].fn) {
+    if (ins->bcs[f].type == PHYS_LAMINAR_BC_VELOCITY && ins->bcs[f].fn) {
       ins->bc_adapters[d][f].fn         = ins->bcs[f].fn;
       ins->bc_adapters[d][f].fn_dot     = ins->bcs[f].fn_dot;
       ins->bc_adapters[d][f].fn_ctx     = ins->bcs[f].ctx;
       ins->bc_adapters[d][f].fn_dot_ctx = ins->bcs[f].fn_dot_ctx;
       ins->bc_adapters[d][f].comp       = d;
       fd_bcs[f].type                    = FLUCAFD_BC_DIRICHLET;
-      fd_bcs[f].fn                      = PhysINS_BCAdapterFn;
+      fd_bcs[f].fn                      = PhysLaminar_BCAdapterFn;
       fd_bcs[f].fn_ctx                  = &ins->bc_adapters[d][f];
-      fd_bcs[f].fn_dot                  = ins->bcs[f].fn_dot ? PhysINS_BCAdapterFnDot : NULL;
+      fd_bcs[f].fn_dot                  = ins->bcs[f].fn_dot ? PhysLaminar_BCAdapterFnDot : NULL;
       fd_bcs[f].fn_dot_ctx              = &ins->bc_adapters[d][f];
-    } else if (ins->bcs[f].type == PHYS_INS_BC_VELOCITY) {
+    } else if (ins->bcs[f].type == PHYS_LAMINAR_BC_VELOCITY) {
       /* Constant zero velocity BC */
       fd_bcs[f].type  = FLUCAFD_BC_DIRICHLET;
       fd_bcs[f].value = 0.;
@@ -98,10 +98,10 @@ static const PetscInt interp_accu_order = 4;
    Coefficients depending on dt and the linearization state are set per step. */
 static PetscErrorCode BuildMomentumOperators_Private(Phys phys)
 {
-  Phys_INS *ins    = (Phys_INS *)phys->data;
-  DM        sol_dm = phys->sol_dm;
-  PetscInt  dim    = phys->dim, d, e;
-  DM        cdm;
+  Phys_Laminar *ins    = (Phys_Laminar *)phys->data;
+  DM            sol_dm = phys->sol_dm;
+  PetscInt      dim    = phys->dim, d, e;
+  DM            cdm;
 
   PetscFunctionBegin;
   PetscCall(PhysGetFieldIS_Internal(phys, PHYS_FIELD_VELOCITY, &ins->is_vel));
@@ -143,7 +143,7 @@ static PetscErrorCode BuildMomentumOperators_Private(Phys phys)
   /* Linearized convection, guide eq. (5) and section Spatial Discretization:
      d/dx_e(ubar_d^{n+1} U_e^n + ubar_d^n ubar_e^{n+1}) */
   for (d = 0; d < dim; d++) {
-    FlucaFD terms[2 * PHYS_INS_MAX_DIM], sum;
+    FlucaFD terms[2 * PHYS_LAMINAR_MAX_DIM], sum;
 
     for (e = 0; e < dim; e++) {
       FlucaFD interp_d, interp_e, outer;
@@ -180,7 +180,7 @@ static PetscErrorCode BuildMomentumOperators_Private(Phys phys)
 /* Local indices of the locally owned face-velocity rows that lie on a non-periodic boundary */
 static PetscErrorCode CreateBoundaryFaceRows_Private(Phys phys)
 {
-  Phys_INS      *ins    = (Phys_INS *)phys->data;
+  Phys_Laminar  *ins    = (Phys_Laminar *)phys->data;
   DM             sol_dm = phys->sol_dm;
   PetscInt       dim    = phys->dim;
   DMBoundaryType bt[3]  = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
@@ -237,7 +237,7 @@ static PetscErrorCode CreateBoundaryFaceRows_Private(Phys phys)
    reach the diagonal neighbours that the star preallocation of the system matrix has no room for. */
 static PetscErrorCode CreateBlockMatrix_Private(Phys phys, Mat *A)
 {
-  Phys_INS              *ins = (Phys_INS *)phys->data;
+  Phys_Laminar          *ins = (Phys_Laminar *)phys->data;
   ISLocalToGlobalMapping ltog;
   PetscInt               n, N;
   const PetscInt         nz = 12;
@@ -270,11 +270,11 @@ static PetscErrorCode CreateBlockMatrix_Private(Phys phys, Mat *A)
    step only scales it by dt/rho, so it is built once here. */
 static PetscErrorCode BuildCouplingOperators_Private(Phys phys)
 {
-  Phys_INS *ins    = (Phys_INS *)phys->data;
-  DM        sol_dm = phys->sol_dm;
-  PetscInt  dim    = phys->dim, e;
-  FlucaFD   div[PHYS_INS_MAX_DIM];
-  Mat       Tmat, Gmat, Gstmat;
+  Phys_Laminar *ins    = (Phys_Laminar *)phys->data;
+  DM            sol_dm = phys->sol_dm;
+  PetscInt      dim    = phys->dim, e;
+  FlucaFD       div[PHYS_LAMINAR_MAX_DIM];
+  Mat           Tmat, Gmat, Gstmat;
 
   PetscFunctionBegin;
   PetscCall(CreateBoundaryFaceRows_Private(phys));
@@ -336,18 +336,18 @@ static PetscErrorCode BuildCouplingOperators_Private(Phys phys)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
+PetscErrorCode PhysLaminarBuildOperators_Internal(Phys phys)
 {
-  Phys_INS   *ins    = (Phys_INS *)phys->data;
-  DM          sol_dm = phys->sol_dm;
-  PetscInt    dim    = phys->dim, d, e;
-  PetscScalar mu;
+  Phys_Laminar *ins    = (Phys_Laminar *)phys->data;
+  DM            sol_dm = phys->sol_dm;
+  PetscInt      dim    = phys->dim, d, e;
+  PetscScalar   mu;
 
   PetscFunctionBegin;
   PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_VISCOSITY, &mu));
   /* --- fd_laplacian[d] = sum_e d/dx_e(-mu * d(u_d)/dx_e) --- */
   for (d = 0; d < dim; d++) {
-    FlucaFD comp_ops[PHYS_INS_MAX_DIM];
+    FlucaFD comp_ops[PHYS_LAMINAR_MAX_DIM];
 
     for (e = 0; e < dim; e++) {
       FlucaFD inner, scaled, outer;
@@ -391,21 +391,21 @@ PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PhysINSDestroyOperators_Internal(Phys phys)
+PetscErrorCode PhysLaminarDestroyOperators_Internal(Phys phys)
 {
-  Phys_INS *ins = (Phys_INS *)phys->data;
-  PetscInt  d, e;
+  Phys_Laminar *ins = (Phys_Laminar *)phys->data;
+  PetscInt      d, e;
 
   PetscFunctionBegin;
   PetscCall(MatDestroy(&ins->negR));
-  for (d = 0; d < PHYS_INS_MAX_DIM; d++) {
+  for (d = 0; d < PHYS_LAMINAR_MAX_DIM; d++) {
     PetscCall(FlucaFDDestroy(&ins->fd_bface[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_negT[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_T[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_conv[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_grad[d]));
     PetscCall(FlucaFDDestroy(&ins->fd_visc[d]));
-    for (e = 0; e < PHYS_INS_MAX_DIM; e++) {
+    for (e = 0; e < PHYS_LAMINAR_MAX_DIM; e++) {
       PetscCall(FlucaFDDestroy(&ins->fd_conv_ubar[d][e]));
       PetscCall(FlucaFDDestroy(&ins->fd_conv_U[d][e]));
       PetscCall(FlucaFDDestroy(&ins->fd_interp_vel[d][e]));

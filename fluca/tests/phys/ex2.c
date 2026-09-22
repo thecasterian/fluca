@@ -25,7 +25,7 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 2. * PETSC_PI, 0., 2. * PETSC_PI, 0., 0.));
-  PetscCall(PhysTestCreateINS(dm, rho, mu, NULL, &phys));
+  PetscCall(PhysTestCreateLaminar(dm, rho, mu, NULL, &phys));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_VELOCITY, &loc, &c_vel, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_FACE_VELOCITY, &loc, &c_U, NULL));

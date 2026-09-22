@@ -9,4 +9,4 @@ typedef struct {
   IS           is[3]; /* velocity, face velocity, pressure */
   MatNullSpace nullspace;
   Vec          f, x;
-} Seg_FSM;
+} Seg_CNLinear;
