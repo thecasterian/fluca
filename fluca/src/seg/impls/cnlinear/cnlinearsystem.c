@@ -100,6 +100,7 @@ PetscErrorCode SegCNLinearComputeMomentumSystem_Internal(Seg seg, PetscReal t, P
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(seg, SEG_CLASSID, 1);
+  PetscCheck(seg->setupcalled, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "Must call SegSetUp() before assembling the system");
   PetscValidLogicalCollectiveReal(seg, t, 2);
   PetscValidLogicalCollectiveReal(seg, dt, 3);
   PetscValidHeaderSpecific(X, VEC_CLASSID, 4);
@@ -212,6 +213,7 @@ PetscErrorCode SegCNLinearComputeCouplingSystem_Internal(Seg seg, PetscReal t, P
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(seg, SEG_CLASSID, 1);
+  PetscCheck(seg->setupcalled, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "Must call SegSetUp() before assembling the system");
   PetscValidLogicalCollectiveReal(seg, t, 2);
   PetscValidLogicalCollectiveReal(seg, dt, 3);
   PetscValidHeaderSpecific(M, MAT_CLASSID, 4);
