@@ -16,3 +16,6 @@ Has coordinate DM
 Field velocity: location ELEMENT, first component 0, components 2, entries 32
 Field pressure: location ELEMENT, first component 2, components 1, entries 16
 Field face_velocity: location FACE, first component 0, components 1, entries 40
+velocity: role MOMENTUM, nullspace_const FALSE
+pressure: role PRESSURE, nullspace_const TRUE
+face_velocity: role AUXILIARY, nullspace_const FALSE

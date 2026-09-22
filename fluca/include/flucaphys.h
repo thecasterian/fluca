@@ -57,6 +57,18 @@ typedef enum {
 } PhysFieldLocation;
 FLUCA_EXTERN const char *PhysFieldLocations[];
 
+/* What equation a field satisfies. Seg builds operators from this. */
+typedef enum {
+  PHYS_EQN_MOMENTUM,           /* rho Du/Dt = -grad p + div(mu grad u) */
+  PHYS_EQN_PRESSURE,           /* the incompressibility constraint */
+  PHYS_EQN_TRANSPORTED_SCALAR, /* reserved; rejected by Seg */
+  PHYS_EQN_AUXILIARY,          /* satisfies no PDE of its own; rejected by Seg */
+} PhysEquationRole;
+FLUCA_EXTERN const char *PhysEquationRoles[];
+
+FLUCA_EXTERN PetscErrorCode PhysGetFieldRole(Phys, const char[], PhysEquationRole *);
+FLUCA_EXTERN PetscErrorCode PhysGetFieldNullSpaceConstant(Phys, const char[], PetscBool *);
+
 #define PHYS_FIELD_VELOCITY      "velocity"
 #define PHYS_FIELD_PRESSURE      "pressure"
 #define PHYS_FIELD_FACE_VELOCITY "face_velocity"

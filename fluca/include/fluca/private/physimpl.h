@@ -16,6 +16,8 @@ typedef struct {
   PhysFieldLocation loc;
   PetscInt          ncomp; /* components per point (per face for PHYS_FIELD_FACE) */
   PetscInt          c0;    /* first component within its location */
+  PhysEquationRole  role;
+  PetscBool         nullspace_const; /* field is determined only up to a constant */
 } PhysField;
 
 typedef struct _PhysOps *PhysOps;
@@ -51,6 +53,7 @@ struct _p_Phys {
   PetscBool setupcalled;
 };
 
-FLUCA_INTERN PetscErrorCode PhysRegisterField_Internal(Phys, const char[], PhysFieldLocation, PetscInt);
+FLUCA_INTERN PetscErrorCode PhysRegisterField_Internal(Phys, const char[], PhysFieldLocation, PetscInt, PhysEquationRole);
+FLUCA_INTERN PetscErrorCode PhysDeclareConstantNullSpace_Internal(Phys, const char[]);
 FLUCA_INTERN PetscErrorCode PhysGetField_Internal(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);
 FLUCA_INTERN PetscErrorCode PhysGetFieldIS_Internal(Phys, const char[], IS *);

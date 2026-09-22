@@ -1,11 +1,12 @@
 #include <fluca/private/physimpl.h>
 
 const char *PhysFieldLocations[] = {"ELEMENT", "FACE", "PhysFieldLocation", "PHYS_FIELD_", NULL};
+const char *PhysEquationRoles[]  = {"MOMENTUM", "PRESSURE", "TRANSPORTED_SCALAR", "AUXILIARY", "PhysEquationRole", "PHYS_EQN_", NULL};
 
 /* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
 static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
 
-PetscErrorCode PhysRegisterField_Internal(Phys phys, const char name[], PhysFieldLocation loc, PetscInt ncomp)
+PetscErrorCode PhysRegisterField_Internal(Phys phys, const char name[], PhysFieldLocation loc, PetscInt ncomp, PhysEquationRole role)
 {
   PhysField *field;
   PetscInt   f, c0 = 0;
@@ -21,9 +22,11 @@ PetscErrorCode PhysRegisterField_Internal(Phys phys, const char name[], PhysFiel
   }
   field = &phys->fields[phys->nfields];
   PetscCall(PetscStrallocpy(name, &field->name));
-  field->loc   = loc;
-  field->ncomp = ncomp;
-  field->c0    = c0;
+  field->loc             = loc;
+  field->ncomp           = ncomp;
+  field->c0              = c0;
+  field->role            = role;
+  field->nullspace_const = PETSC_FALSE;
   ++phys->nfields;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -52,6 +55,42 @@ PetscErrorCode PhysGetField_Internal(Phys phys, const char name[], PhysFieldLoca
   if (loc) *loc = field->loc;
   if (c0) *c0 = field->c0;
   if (ncomp) *ncomp = field->ncomp;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysDeclareConstantNullSpace_Internal(Phys phys, const char name[])
+{
+  PhysField *field;
+
+  PetscFunctionBegin;
+  PetscCall(PhysFindField_Private(phys, name, &field));
+  field->nullspace_const = PETSC_TRUE;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysGetFieldRole(Phys phys, const char name[], PhysEquationRole *role)
+{
+  PhysField *field;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscAssertPointer(name, 2);
+  PetscAssertPointer(role, 3);
+  PetscCall(PhysFindField_Private(phys, name, &field));
+  *role = field->role;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysGetFieldNullSpaceConstant(Phys phys, const char name[], PetscBool *flg)
+{
+  PhysField *field;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscAssertPointer(name, 2);
+  PetscAssertPointer(flg, 3);
+  PetscCall(PhysFindField_Private(phys, name, &field));
+  *flg = field->nullspace_const;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

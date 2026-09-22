@@ -58,6 +58,19 @@ int main(int argc, char **argv)
     PetscCall(ISDestroy(&is));
   }
 
+  {
+    const char      *names[3] = {PHYS_FIELD_VELOCITY, PHYS_FIELD_PRESSURE, PHYS_FIELD_FACE_VELOCITY};
+    PhysEquationRole role;
+    PetscBool        nsconst;
+    PetscInt         f;
+
+    for (f = 0; f < 3; ++f) {
+      PetscCall(PhysGetFieldRole(phys, names[f], &role));
+      PetscCall(PhysGetFieldNullSpaceConstant(phys, names[f], &nsconst));
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s: role %s, nullspace_const %s\n", names[f], PhysEquationRoles[role], PetscBools[nsconst]));
+    }
+  }
+
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));
 
