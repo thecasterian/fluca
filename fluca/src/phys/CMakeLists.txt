@@ -10,7 +10,6 @@ add_library(fluca_phys SHARED
     interface/physpkg.c
     interface/physprop.c
     interface/physreg.c
-    utils/abfpc/abfpc.c
 )
 target_include_directories(fluca_phys PUBLIC
     ${CMAKE_SOURCE_DIR}/fluca/include

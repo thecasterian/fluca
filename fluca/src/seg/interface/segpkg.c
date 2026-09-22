@@ -17,6 +17,7 @@ PetscErrorCode SegInitializePackage(void)
   /* Register constructors */
   PetscCall(SegRegisterAll());
   PetscCall(PhysInitializePackage());
+  PetscCall(PCRegister(PCABF, PCCreate_ABF));
   /* Register events */
   PetscCall(PetscLogEventRegister("SegSetUp", SEG_CLASSID, &SEG_SetUp));
   PetscCall(PetscLogEventRegister("SegStep", SEG_CLASSID, &SEG_Step));

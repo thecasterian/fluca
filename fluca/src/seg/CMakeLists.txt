@@ -7,6 +7,7 @@ add_library(fluca_seg SHARED
     interface/segopts.c
     interface/segpkg.c
     interface/segreg.c
+    utils/abfpc/abfpc.c
 )
 
 target_include_directories(fluca_seg PUBLIC

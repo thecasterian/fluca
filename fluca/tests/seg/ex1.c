@@ -1,4 +1,5 @@
-#include "phystest.h"
+#include "segtest.h"
+#include <flucaseg.h>
 
 static const char help[] = "Test one PCABF sweep on the coupled system (13) against the theory guide's error (17)\n"
                            "With A1 = A2 = I, the Rhie-Chow and continuity rows are solved exactly and\n"
@@ -29,6 +30,8 @@ int main(int argc, char **argv)
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
+  /* PCABF is registered by SegInitializePackage; this test uses only Phys, which never triggers it */
+  PetscCall(SegInitializePackage());
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 8, 8, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 4, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
