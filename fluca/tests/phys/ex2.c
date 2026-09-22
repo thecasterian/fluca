@@ -1,6 +1,6 @@
 #include "phystest.h"
 
-static const char help[] = "Test PhysComputeMomentumSystem on a periodic 2D Taylor-Green field\n"
+static const char help[] = "Test the momentum rows of the coupled system on a periodic 2D Taylor-Green field\n"
                            "With U = T u, the linearized convection satisfies J(u) u = 2 div(ubar ubar),\n"
                            "so the momentum rows of M X and f have closed forms on a uniform grid.\n";
 
@@ -89,7 +89,7 @@ int main(int argc, char **argv)
   PetscCall(VecAssemblyBegin(E_f));
   PetscCall(VecAssemblyEnd(E_f));
 
-  PetscCall(PhysComputeMomentumSystem(phys, 0., dt, X, M, f));
+  PetscCall(SegCNLinearComputeMomentumSystem_Internal(seg, 0., dt, X, M, f));
   PetscCall(MatAssemblyBegin(M, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(M, MAT_FINAL_ASSEMBLY));
   PetscCall(MatMult(M, X, MX));

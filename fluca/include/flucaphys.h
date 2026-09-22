@@ -95,10 +95,6 @@ FLUCA_EXTERN PetscErrorCode PhysGetPropertySource(Phys, const char[], PhysProper
 FLUCA_EXTERN PetscErrorCode PhysGetPropertyConstant(Phys, const char[], PetscScalar *);
 FLUCA_EXTERN PetscErrorCode PhysGetPropertyLocation(Phys, const char[], PhysFieldLocation *);
 
-/* Rows of the coupled system (13) of the theory guide, assembled on the solution DM */
-FLUCA_EXTERN PetscErrorCode PhysComputeMomentumSystem(Phys, PetscReal, PetscReal, Vec, Mat, Vec);
-FLUCA_EXTERN PetscErrorCode PhysComputeCouplingSystem(Phys, PetscReal, PetscReal, Mat, Vec);
-
 /* Options prefix */
 FLUCA_EXTERN PetscErrorCode PhysSetOptionsPrefix(Phys, const char[]);
 FLUCA_EXTERN PetscErrorCode PhysAppendOptionsPrefix(Phys, const char[]);

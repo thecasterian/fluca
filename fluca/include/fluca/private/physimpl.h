@@ -32,11 +32,8 @@ typedef struct _PhysOps *PhysOps;
 struct _PhysOps {
   PetscErrorCode (*setfromoptions)(Phys, PetscOptionItems);
   PetscErrorCode (*registerfields)(Phys);
-  PetscErrorCode (*setup)(Phys);
   PetscErrorCode (*destroy)(Phys);
   PetscErrorCode (*view)(Phys, PetscViewer);
-  PetscErrorCode (*computemomentumsystem)(Phys, PetscReal, PetscReal, Vec, Mat, Vec);
-  PetscErrorCode (*computecouplingsystem)(Phys, PetscReal, PetscReal, Mat, Vec);
 };
 
 struct _p_Phys {

@@ -5,7 +5,6 @@ static PetscErrorCode PhysRegisterFields_Laminar(Phys phys)
   PetscFunctionBegin;
   PetscCall(PhysDeclareField_Internal(phys, PHYS_FIELD_VELOCITY, PHYS_FIELD_ELEMENT, phys->dim, PHYS_EQN_MOMENTUM));
   PetscCall(PhysDeclareField_Internal(phys, PHYS_FIELD_PRESSURE, PHYS_FIELD_ELEMENT, 1, PHYS_EQN_PRESSURE));
-  PetscCall(PhysDeclareField_Internal(phys, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1, PHYS_EQN_AUXILIARY));
   PetscCall(PhysDeclareConstantNullSpace_Internal(phys, PHYS_FIELD_PRESSURE));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -29,35 +28,9 @@ static PetscErrorCode PhysSetFromOptions_Laminar(Phys phys, PetscOptionItems Pet
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode PhysSetUp_Laminar(Phys phys)
-{
-  Phys_Laminar  *ins   = (Phys_Laminar *)phys->data;
-  DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
-  PetscInt       sw, d;
-
-  PetscFunctionBegin;
-  /* The Rhie-Chow correction R = T G_c - G^st composes the four-point interpolation T with the
-     three-point cell gradient. Next to a wall the interpolation is folded onto four interior cells,
-     and a face row then reaches four elements away on the side the folding points into. */
-  PetscCall(DMStagGetStencilWidth(phys->sol_dm, &sw));
-  PetscCheck(sw >= 4, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "PhysLaminar requires a base DM stencil width of at least 4, got %" PetscInt_FMT, sw);
-  /* Only velocity boundary conditions are supported: every non-periodic boundary needs one */
-  PetscCall(DMStagGetBoundaryTypes(phys->sol_dm, &bt[0], &bt[1], &bt[2]));
-  for (d = 0; d < phys->dim; ++d) {
-    if (bt[d] == DM_BOUNDARY_PERIODIC) continue;
-    PetscCheck(ins->bcs[2 * d].type == PHYS_LAMINAR_BC_VELOCITY && ins->bcs[2 * d + 1].type == PHYS_LAMINAR_BC_VELOCITY, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "PhysLaminar requires a velocity boundary condition on both non-periodic boundaries in direction %" PetscInt_FMT, d);
-  }
-  PetscCall(PhysGetField_Internal(phys, PHYS_FIELD_VELOCITY, NULL, &ins->c_vel, NULL));
-  PetscCall(PhysGetField_Internal(phys, PHYS_FIELD_PRESSURE, NULL, &ins->c_p, NULL));
-  PetscCall(PhysGetField_Internal(phys, PHYS_FIELD_FACE_VELOCITY, NULL, &ins->c_U, NULL));
-  PetscCall(PhysLaminarBuildOperators_Internal(phys));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode PhysDestroy_Laminar(Phys phys)
 {
   PetscFunctionBegin;
-  PetscCall(PhysLaminarDestroyOperators_Internal(phys));
   PetscCall(PetscFree(phys->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -101,20 +74,11 @@ PetscErrorCode PhysCreate_Laminar(Phys phys)
     ins->bcs[f].fn_dot_ctx = NULL;
   }
 
-  /* Initialize operators to NULL */
-  for (f = 0; f < PHYS_LAMINAR_MAX_DIM; f++) {
-    ins->fd_laplacian[f] = NULL;
-    ins->fd_grad_p[f]    = NULL;
-  }
-
-  phys->data                       = ins;
-  phys->ops->registerfields        = PhysRegisterFields_Laminar;
-  phys->ops->setfromoptions        = PhysSetFromOptions_Laminar;
-  phys->ops->setup                 = PhysSetUp_Laminar;
-  phys->ops->destroy               = PhysDestroy_Laminar;
-  phys->ops->view                  = PhysView_Laminar;
-  phys->ops->computemomentumsystem = PhysComputeMomentumSystem_Laminar;
-  phys->ops->computecouplingsystem = PhysComputeCouplingSystem_Laminar;
+  phys->data                = ins;
+  phys->ops->registerfields = PhysRegisterFields_Laminar;
+  phys->ops->setfromoptions = PhysSetFromOptions_Laminar;
+  phys->ops->destroy        = PhysDestroy_Laminar;
+  phys->ops->view           = PhysView_Laminar;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

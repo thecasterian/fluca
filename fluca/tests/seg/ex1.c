@@ -83,8 +83,8 @@ int main(int argc, char **argv)
   PetscCall(VecAssemblyEnd(X));
 
   PetscCall(PhysTestCreateSystem(phys, &M, &f));
-  PetscCall(PhysComputeMomentumSystem(phys, 0., dt, X, M, f));
-  PetscCall(PhysComputeCouplingSystem(phys, dt, dt, M, f));
+  PetscCall(SegCNLinearComputeMomentumSystem_Internal(seg, 0., dt, X, M, f));
+  PetscCall(SegCNLinearComputeCouplingSystem_Internal(seg, dt, dt, M, f));
   PetscCall(MatAssemblyBegin(M, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(M, MAT_FINAL_ASSEMBLY));
 

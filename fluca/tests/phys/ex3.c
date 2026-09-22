@@ -1,6 +1,6 @@
 #include "phystest.h"
 
-static const char help[] = "Test the coupling blocks of PhysComputeCouplingSystem on a walled 2D grid\n"
+static const char help[] = "Test the coupling blocks of the coupled system on a walled 2D grid\n"
                            "S = D((-T) G - (-R)) must equal -(dt/rho) times the compact Neumann Laplacian,\n"
                            "the Schur complement of the fractional step method (theory guide eq. (18)).\n"
                            "Also checks, row by row: W = (-T) G - (-R) equals -(dt/rho) times the compact\n"
@@ -65,8 +65,8 @@ int main(int argc, char **argv)
   PetscCall(PhysTestCreateSystem(phys, &M, &f));
   PetscCall(DMCreateGlobalVector(sol_dm, &X));
   PetscCall(VecZeroEntries(X));
-  PetscCall(PhysComputeMomentumSystem(phys, 0., dt, X, M, f));
-  PetscCall(PhysComputeCouplingSystem(phys, dt, dt, M, f));
+  PetscCall(SegCNLinearComputeMomentumSystem_Internal(seg, 0., dt, X, M, f));
+  PetscCall(SegCNLinearComputeCouplingSystem_Internal(seg, dt, dt, M, f));
   PetscCall(MatAssemblyBegin(M, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(M, MAT_FINAL_ASSEMBLY));
 
@@ -137,7 +137,7 @@ int main(int argc, char **argv)
      central one at its neighbour telescoped to exactly G^st there. That cancellation was an accident
      of the two-point average and is gone; the wall-adjacent rows now carry the same O(h^2 d3p/dn3)
      Rhie-Chow correction that every interior row carries, which is why the assertion is now that -R
-     has no part of lower order rather than that it is zero. See laminarops.c for why T had to change. */
+     has no part of lower order rather than that it is zero. See segops.c for why T had to change. */
   scale = (dt / rho) / PetscMin(hx, hy);
   tol   = 1e-12 * scale;
   PetscCall(DMCreateGlobalVector(sol_dm, &WPfull));

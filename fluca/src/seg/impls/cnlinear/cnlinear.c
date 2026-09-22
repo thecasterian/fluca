@@ -8,8 +8,8 @@ static PetscErrorCode SegCNLinearAssembleSystem_Private(Seg seg, PetscReal t_cou
   PetscFunctionBegin;
   PetscCall(MatZeroEntries(fsm->M));
   PetscCall(VecZeroEntries(fsm->f));
-  PetscCall(PhysComputeMomentumSystem(seg->phys, seg->t, seg->dt, seg->sol, fsm->M, fsm->f));
-  PetscCall(PhysComputeCouplingSystem(seg->phys, t_coupling, seg->dt, fsm->M, fsm->f));
+  PetscCall(SegCNLinearComputeMomentumSystem_Internal(seg, seg->t, seg->dt, seg->sol, fsm->M, fsm->f));
+  PetscCall(SegCNLinearComputeCouplingSystem_Internal(seg, t_coupling, seg->dt, fsm->M, fsm->f));
   PetscCall(MatAssemblyBegin(fsm->M, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(fsm->M, MAT_FINAL_ASSEMBLY));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -117,6 +117,7 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
   PetscCheck(setupcalled, comm, PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before SegSetUp() with SEGCNLINEAR");
   PetscCall(PhysDeclareField_Internal(seg->phys, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1, PHYS_EQN_AUXILIARY));
   PetscCall(PhysCreateSolutionDM_Internal(seg->phys));
+  PetscCall(SegOpsBuild_Internal(seg));
   PetscCall(PhysGetSolutionDM(seg->phys, &dm));
 
   for (k = 0; k < 3; ++k) PetscCall(PhysGetFieldIS(seg->phys, names[k], &fsm->is[k]));
@@ -231,6 +232,7 @@ static PetscErrorCode SegDestroy_CNLinear(Seg seg)
   PetscInt      k;
 
   PetscFunctionBegin;
+  PetscCall(SegOpsDestroy_Internal(seg));
   PetscCall(MatDestroy(&fsm->P));
   PetscCall(MatNullSpaceDestroy(&fsm->nullspace));
   PetscCall(MatDestroy(&fsm->M));

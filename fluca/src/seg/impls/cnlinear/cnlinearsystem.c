@@ -1,4 +1,4 @@
-#include <fluca/private/physlaminarimpl.h>
+#include <fluca/private/segcnlinearimpl.h>
 
 /* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
 static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
@@ -34,16 +34,19 @@ static PetscErrorCode AddIdentity_Private(DM dm, Mat M, DMStagStencilLocation lo
 }
 
 /* f_d += scale * body_force_d(t) at every cell center */
-static PetscErrorCode AddBodyForce_Private(Phys phys, PetscReal t, PetscReal scale, Vec f)
+static PetscErrorCode AddBodyForce_Private(Seg seg, PetscReal t, PetscReal scale, Vec f)
 {
-  Phys_Laminar       *ins     = (Phys_Laminar *)phys->data;
-  DM                  sol_dm  = phys->sol_dm;
-  PetscInt            dim     = phys->dim;
+  Seg_CNLinear       *cn      = (Seg_CNLinear *)seg->data;
+  Seg_Ops            *ops     = &cn->ops;
+  Phys                phys    = seg->phys;
+  PetscInt            dim     = ops->dim;
   const PetscScalar **arrc[3] = {NULL, NULL, NULL};
   PetscInt            xs, ys, zs, xm, ym, zm, slot_elem, i, j, k, d;
+  DM                  sol_dm;
 
   PetscFunctionBegin;
   if (!phys->bodyforce) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(DMStagGetProductCoordinateLocationSlot(sol_dm, DMSTAG_ELEMENT, &slot_elem));
   PetscCall(DMStagGetProductCoordinateArraysRead(sol_dm, &arrc[0], &arrc[1], &arrc[2]));
   PetscCall(DMStagGetCorners(sol_dm, &xs, &ys, &zs, &xm, &ym, &zm, NULL, NULL, NULL));
@@ -67,7 +70,7 @@ static PetscErrorCode AddBodyForce_Private(Phys phys, PetscReal t, PetscReal sca
         row.k   = k;
         row.loc = DMSTAG_ELEMENT;
         for (d = 0; d < dim; d++) {
-          row.c = ins->c_vel + d;
+          row.c = ops->c_vel + d;
           v     = scale * force[d];
           PetscCall(DMStagVecSetValuesStencil(sol_dm, f, 1, &row, &v, ADD_VALUES));
         }
@@ -81,42 +84,55 @@ static PetscErrorCode AddBodyForce_Private(Phys phys, PetscReal t, PetscReal sca
 }
 
 /* Momentum rows of the coupled system (13), guide eq. (6) and (9):
-   A u^{n+1} + G p' = u^n + (dt/2) nu lap(u^n) - (dt/rho) grad(q) + boundary terms */
-PetscErrorCode PhysComputeMomentumSystem_Laminar(Phys phys, PetscReal t, PetscReal dt, Vec X, Mat M, Vec f)
+   A u^{n+1} + G p' = u^n + (dt/2) nu lap(u^n) - (dt/rho) grad(q) + boundary terms
+
+   Input: t = t^n, dt, X = state at t^n on the solution DM (velocity u^n, face velocity U^n, pressure q = p^{n-1/2}).
+   Adds A (velocity columns) and G (pressure columns) into the velocity rows of M with ADD_VALUES and
+   without assembling M, and adds r + b_mom into the velocity rows of f. Other rows are untouched. */
+PetscErrorCode SegCNLinearComputeMomentumSystem_Internal(Seg seg, PetscReal t, PetscReal dt, Vec X, Mat M, Vec f)
 {
-  Phys_Laminar *ins    = (Phys_Laminar *)phys->data;
-  DM            sol_dm = phys->sol_dm;
-  PetscInt      dim    = phys->dim, d, e;
+  Seg_CNLinear *cn  = (Seg_CNLinear *)seg->data;
+  Seg_Ops      *ops = &cn->ops;
+  PetscInt      dim = ops->dim, d, e;
   Vec           tmp, fv, xv;
   PetscScalar   rho;
+  DM            sol_dm;
 
   PetscFunctionBegin;
-  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho));
+  PetscValidHeaderSpecific(seg, SEG_CLASSID, 1);
+  PetscValidLogicalCollectiveReal(seg, t, 2);
+  PetscValidLogicalCollectiveReal(seg, dt, 3);
+  PetscValidHeaderSpecific(X, VEC_CLASSID, 4);
+  PetscValidHeaderSpecific(M, MAT_CLASSID, 5);
+  PetscValidHeaderSpecific(f, VEC_CLASSID, 6);
+  PetscCheck(dt > 0., PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_OUTOFRANGE, "Time step must be positive, got %g", (double)dt);
+  PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
+  PetscCall(PhysGetPropertyConstant(seg->phys, PHYS_PROPERTY_DENSITY, &rho));
   /* Coefficients that depend on dt */
   for (d = 0; d < dim; d++) {
-    PetscCall(FlucaFDScaleSetConstant(ins->fd_visc[d], dt / (2. * rho)));
-    PetscCall(FlucaFDScaleSetConstant(ins->fd_conv[d], dt / 2.));
-    PetscCall(FlucaFDScaleSetConstant(ins->fd_grad[d], dt / rho));
+    PetscCall(FlucaFDScaleSetConstant(ops->fd_visc[d], dt / (2. * rho)));
+    PetscCall(FlucaFDScaleSetConstant(ops->fd_conv[d], dt / 2.));
+    PetscCall(FlucaFDScaleSetConstant(ops->fd_grad[d], dt / rho));
   }
 
   /* Linearization state: U^n from X, and ubar^n with boundary values at t */
   for (d = 0; d < dim; d++) {
-    PetscCall(VecZeroEntries(ins->ubar[d]));
-    for (e = 0; e < dim; e++) PetscCall(FlucaFDApply(ins->fd_interp_vel[d][e], t, sol_dm, ins->dm_face, X, ins->ubar[d]));
+    PetscCall(VecZeroEntries(ops->ubar[d]));
+    for (e = 0; e < dim; e++) PetscCall(FlucaFDApply(ops->fd_interp_vel[d][e], t, sol_dm, ops->dm_face, X, ops->ubar[d]));
   }
   for (d = 0; d < dim; d++) {
     for (e = 0; e < dim; e++) {
-      PetscCall(FlucaFDScaleSetVector(ins->fd_conv_U[d][e], X, face_loc[e], ins->c_U));
-      PetscCall(FlucaFDScaleSetVector(ins->fd_conv_ubar[d][e], ins->ubar[d], face_loc[e], 0));
+      PetscCall(FlucaFDScaleSetVector(ops->fd_conv_U[d][e], X, face_loc[e], ops->c_U));
+      PetscCall(FlucaFDScaleSetVector(ops->fd_conv_ubar[d][e], ops->ubar[d], face_loc[e], 0));
     }
   }
 
   /* Matrix: A in the velocity columns, G in the pressure columns */
   for (d = 0; d < dim; d++) {
-    PetscCall(AddIdentity_Private(sol_dm, M, DMSTAG_ELEMENT, ins->c_vel + d));
-    PetscCall(FlucaFDGetOperator(ins->fd_visc[d], sol_dm, sol_dm, M));
-    PetscCall(FlucaFDGetOperator(ins->fd_conv[d], sol_dm, sol_dm, M));
-    PetscCall(FlucaFDGetOperator(ins->fd_grad[d], sol_dm, sol_dm, M));
+    PetscCall(AddIdentity_Private(sol_dm, M, DMSTAG_ELEMENT, ops->c_vel + d));
+    PetscCall(FlucaFDGetOperator(ops->fd_visc[d], sol_dm, sol_dm, M));
+    PetscCall(FlucaFDGetOperator(ops->fd_conv[d], sol_dm, sol_dm, M));
+    PetscCall(FlucaFDGetOperator(ops->fd_grad[d], sol_dm, sol_dm, M));
   }
 
   /* Right-hand side */
@@ -124,35 +140,35 @@ PetscErrorCode PhysComputeMomentumSystem_Laminar(Phys phys, PetscReal t, PetscRe
   for (d = 0; d < dim; d++) {
     /* +(dt/2) nu (lap u^n + b^n) */
     PetscCall(VecZeroEntries(tmp));
-    PetscCall(FlucaFDApply(ins->fd_visc[d], t, sol_dm, sol_dm, X, tmp));
+    PetscCall(FlucaFDApply(ops->fd_visc[d], t, sol_dm, sol_dm, X, tmp));
     PetscCall(VecAXPY(f, -1., tmp));
     /* -(dt/rho) grad q */
     PetscCall(VecZeroEntries(tmp));
-    PetscCall(FlucaFDApply(ins->fd_grad[d], t, sol_dm, sol_dm, X, tmp));
+    PetscCall(FlucaFDApply(ops->fd_grad[d], t, sol_dm, sol_dm, X, tmp));
     PetscCall(VecAXPY(f, -1., tmp));
     /* Boundary parts of A at t + dt move to the right-hand side */
     PetscCall(VecZeroEntries(tmp));
-    PetscCall(FlucaFDApply(ins->fd_visc[d], t + dt, sol_dm, sol_dm, ins->zero, tmp));
+    PetscCall(FlucaFDApply(ops->fd_visc[d], t + dt, sol_dm, sol_dm, ops->zero, tmp));
     PetscCall(VecAXPY(f, -1., tmp));
     PetscCall(VecZeroEntries(tmp));
-    PetscCall(FlucaFDApply(ins->fd_conv[d], t + dt, sol_dm, sol_dm, ins->zero, tmp));
+    PetscCall(FlucaFDApply(ops->fd_conv[d], t + dt, sol_dm, sol_dm, ops->zero, tmp));
     PetscCall(VecAXPY(f, -1., tmp));
   }
   PetscCall(DMRestoreGlobalVector(sol_dm, &tmp));
 
   /* +u^n */
-  PetscCall(VecGetSubVector(f, ins->is_vel, &fv));
-  PetscCall(VecGetSubVector(X, ins->is_vel, &xv));
+  PetscCall(VecGetSubVector(f, ops->is_vel, &fv));
+  PetscCall(VecGetSubVector(X, ops->is_vel, &xv));
   PetscCall(VecAXPY(fv, 1., xv));
-  PetscCall(VecRestoreSubVector(X, ins->is_vel, &xv));
-  PetscCall(VecRestoreSubVector(f, ins->is_vel, &fv));
+  PetscCall(VecRestoreSubVector(X, ops->is_vel, &xv));
+  PetscCall(VecRestoreSubVector(f, ops->is_vel, &fv));
 
   /* Body force per unit mass, time-centered */
-  PetscCall(AddBodyForce_Private(phys, t + dt / 2., dt / rho, f));
+  PetscCall(AddBodyForce_Private(seg, t + dt / 2., dt / rho, f));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* M += scale * negR on the face-velocity rows. negR is assembled once, unscaled, in laminarops.c; only
+/* M += scale * negR on the face-velocity rows. negR is assembled once, unscaled, in segops.c; only
    the dt/rho factor of guide eq. (11) changes from step to step. */
 static PetscErrorCode AddNegR_Private(Mat M, Mat negR, PetscScalar scale)
 {
@@ -181,30 +197,42 @@ static PetscErrorCode AddNegR_Private(Mat M, Mat negR, PetscScalar scale)
 }
 
 /* Rhie-Chow rows (guide eq. (11)): -T u + U - R p' = b_interp, and continuity rows (guide eq. (10)): D U = b_cont.
-   Boundary faces carry the prescribed normal velocity, U = u_b . n. */
-PetscErrorCode PhysComputeCouplingSystem_Laminar(Phys phys, PetscReal t, PetscReal dt, Mat M, Vec f)
+   Boundary faces carry the prescribed normal velocity, U = u_b . n.
+
+   Input: t = time of the boundary data (t^{n+1} within a step), dt.
+   Adds -T, I, -R into the face-velocity rows and D into the pressure rows of M, and b_interp, b_cont into f.
+   M is assembled on return, with boundary-face rows replaced by unit rows. */
+PetscErrorCode SegCNLinearComputeCouplingSystem_Internal(Seg seg, PetscReal t, PetscReal dt, Mat M, Vec f)
 {
-  Phys_Laminar *ins    = (Phys_Laminar *)phys->data;
-  DM            sol_dm = phys->sol_dm;
-  PetscInt      dim    = phys->dim, e;
+  Seg_CNLinear *cn  = (Seg_CNLinear *)seg->data;
+  Seg_Ops      *ops = &cn->ops;
+  PetscInt      dim = ops->dim, e;
   PetscScalar   rho;
+  DM            sol_dm;
 
   PetscFunctionBegin;
-  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho));
+  PetscValidHeaderSpecific(seg, SEG_CLASSID, 1);
+  PetscValidLogicalCollectiveReal(seg, t, 2);
+  PetscValidLogicalCollectiveReal(seg, dt, 3);
+  PetscValidHeaderSpecific(M, MAT_CLASSID, 4);
+  PetscValidHeaderSpecific(f, VEC_CLASSID, 5);
+  PetscCheck(dt > 0., PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_OUTOFRANGE, "Time step must be positive, got %g", (double)dt);
+  PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
+  PetscCall(PhysGetPropertyConstant(seg->phys, PHYS_PROPERTY_DENSITY, &rho));
   for (e = 0; e < dim; e++) {
-    PetscCall(AddIdentity_Private(sol_dm, M, face_loc[e], ins->c_U));
-    PetscCall(FlucaFDGetOperator(ins->fd_negT[e], sol_dm, sol_dm, M));
-    PetscCall(FlucaFDApply(ins->fd_bface[e], t, sol_dm, sol_dm, ins->zero, f));
+    PetscCall(AddIdentity_Private(sol_dm, M, face_loc[e], ops->c_U));
+    PetscCall(FlucaFDGetOperator(ops->fd_negT[e], sol_dm, sol_dm, M));
+    PetscCall(FlucaFDApply(ops->fd_bface[e], t, sol_dm, sol_dm, ops->zero, f));
   }
-  PetscCall(AddNegR_Private(M, ins->negR, dt / rho));
-  PetscCall(FlucaFDGetOperator(ins->fd_D, sol_dm, sol_dm, M));
-  PetscCall(FlucaFDApply(ins->fd_D, t, sol_dm, sol_dm, ins->zero, f));
+  PetscCall(AddNegR_Private(M, ops->negR, dt / rho));
+  PetscCall(FlucaFDGetOperator(ops->fd_D, sol_dm, sol_dm, M));
+  PetscCall(FlucaFDApply(ops->fd_D, t, sol_dm, sol_dm, ops->zero, f));
 
   /* A boundary-face row is the boundary condition itself, so replace it by a unit row; the right-hand
      side already holds u_b . n, because the interpolation reproduces the Dirichlet datum there with a
      unit weight and every interior weight zero. */
   PetscCall(MatAssemblyBegin(M, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(M, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatZeroRowsLocal(M, ins->nbface, ins->bface, 1., NULL, NULL));
+  PetscCall(MatZeroRowsLocal(M, ops->nbface, ops->bface, 1., NULL, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

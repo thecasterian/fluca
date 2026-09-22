@@ -1,5 +1,6 @@
 #pragma once
 
+#include <fluca/private/segcnlinearimpl.h>
 #include <flucaphys.h>
 #include <flucaseg.h>
 #include <flucasys.h>

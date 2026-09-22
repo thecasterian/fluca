@@ -1,6 +1,6 @@
 #include "phystest.h"
 
-static const char help[] = "Test the boundary terms of PhysComputeCouplingSystem with time-dependent wall velocity\n"
+static const char help[] = "Test the boundary terms of the coupling rows with time-dependent wall velocity\n"
                            "Boundary-face rows must read U = u_b(t) . n; all other right-hand-side entries vanish.\n";
 
 static PetscErrorCode WallVelocity(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx)
@@ -59,7 +59,7 @@ int main(int argc, char **argv)
   hy = 1. / Ny;
 
   PetscCall(PhysTestCreateSystem(phys, &M, &f));
-  PetscCall(PhysComputeCouplingSystem(phys, t, 0.1, M, f));
+  PetscCall(SegCNLinearComputeCouplingSystem_Internal(seg, t, 0.1, M, f));
 
   /* Expected right-hand side: u_b . n on boundary faces, zero elsewhere (single rank) */
   PetscCall(DMCreateGlobalVector(sol_dm, &E));

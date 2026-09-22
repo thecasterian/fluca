@@ -15,7 +15,7 @@
    where the argument used to break, because U there is the boundary datum itself and carries no error
    at all; differencing an O(h^2) face error against zero left the wall cell's row first order and the
    whole continuity operator with a one-cell-thick O(h) truncation layer. The fourth-order accurate
-   interpolation T now used in the Rhie-Chow row (see fluca/src/phys/impls/laminar/laminarops.c) makes every
+   interpolation T now used in the Rhie-Chow row (see fluca/src/seg/utils/ops/segops.c) makes every
    face error O(h^3) instead, which removes the layer without touching either invariant: U is still
    exactly u_b . n on a prescribed-velocity face, and D is still a flux difference.
 
@@ -146,8 +146,8 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
   PetscCall(VecAssemblyEnd(X));
 
   PetscCall(PhysTestCreateSystem(phys, &M, &f));
-  PetscCall(PhysComputeMomentumSystem(phys, 0., dt, X, M, f));
-  PetscCall(PhysComputeCouplingSystem(phys, 0., dt, M, f));
+  PetscCall(SegCNLinearComputeMomentumSystem_Internal(seg, 0., dt, X, M, f));
+  PetscCall(SegCNLinearComputeCouplingSystem_Internal(seg, 0., dt, M, f));
   PetscCall(MatAssemblyBegin(M, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(M, MAT_FINAL_ASSEMBLY));
 
@@ -158,7 +158,7 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
   PetscCall(MatCreateSubMatrix(M, is_p, is_U, MAT_INITIAL_MATRIX, &D));
 
   /* Rhie-Chow row: -T u + U - R p' = b_interp, so U = b_interp + T u with T = -negT. At a boundary
-     face the negT row was zeroed by PhysComputeCouplingSystem and b_interp is already u_b . n. */
+     face the negT row was zeroed by the coupling rows and b_interp is already u_b . n. */
   PetscCall(VecGetSubVector(X, is_v, &xv));
   PetscCall(VecGetSubVector(f, is_U, &bU));
   PetscCall(VecDuplicate(bU, &U));
