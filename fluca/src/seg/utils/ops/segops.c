@@ -356,10 +356,12 @@ PetscErrorCode SegOpsBuild_Internal(Seg seg)
   PetscScalar    mu;
   PetscInt       dim, sw, d, e;
   DM             sol_dm;
+  PetscBool      islaminar;
 
   PetscFunctionBegin;
   /* The operators below read the laminar boundary conditions and assume the laminar fields */
-  PetscValidHeaderSpecificType(seg->phys, PHYS_CLASSID, 1, PHYSLAMINAR);
+  PetscCall(PetscObjectTypeCompare((PetscObject)seg->phys, PHYSLAMINAR, &islaminar));
+  PetscCheck(islaminar, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONG, "SegCNLinear requires a Phys of type %s", PHYSLAMINAR);
   PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
   PetscCall(DMGetDimension(sol_dm, &dim));
   ops->dim = dim;

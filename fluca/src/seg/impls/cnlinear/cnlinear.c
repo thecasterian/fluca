@@ -102,18 +102,27 @@ static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
 static PetscErrorCode SegSetUp_CNLinear(Seg seg)
 {
   Seg_CNLinear        *fsm                              = (Seg_CNLinear *)seg->data;
-  const SegFieldUpdate updates[SEG_CNLINEAR_NUM_FIELDS] = {SEG_FIELD_UPDATE_VALUE, SEG_FIELD_UPDATE_VALUE, SEG_FIELD_UPDATE_INCREMENT};
-  const char          *names[SEG_CNLINEAR_NUM_FIELDS]   = {PHYS_FIELD_VELOCITY, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_PRESSURE};
-  MPI_Comm             comm;
-  DM                   dm;
-  Vec                  nullvecs[SEG_MAX_FIELDS];
-  Vec                  sub;
-  IS                   is[SEG_CNLINEAR_NUM_FIELDS];
-  Mat                  blocks[SEG_CNLINEAR_NUM_FIELDS * SEG_CNLINEAR_NUM_FIELDS];
-  KSP                  ksp, kspA, kspS;
-  PC                   pc, subpc;
-  PetscBool            setupcalled, isconst;
-  PetscInt             k, nnull, n, N;
+  const SegFieldUpdate updates[SEG_CNLINEAR_NUM_FIELDS] = {
+    [SEG_CNLINEAR_FIELD_VELOCITY]      = SEG_FIELD_UPDATE_VALUE,
+    [SEG_CNLINEAR_FIELD_FACE_VELOCITY] = SEG_FIELD_UPDATE_VALUE,
+    [SEG_CNLINEAR_FIELD_PRESSURE]      = SEG_FIELD_UPDATE_INCREMENT,
+  };
+  const char *names[SEG_CNLINEAR_NUM_FIELDS] = {
+    [SEG_CNLINEAR_FIELD_VELOCITY]      = PHYS_FIELD_VELOCITY,
+    [SEG_CNLINEAR_FIELD_FACE_VELOCITY] = PHYS_FIELD_FACE_VELOCITY,
+    [SEG_CNLINEAR_FIELD_PRESSURE]      = PHYS_FIELD_PRESSURE,
+  };
+  MPI_Comm          comm;
+  DM                dm;
+  Vec               nullvecs[SEG_MAX_FIELDS];
+  Vec               sub;
+  IS                is[SEG_CNLINEAR_NUM_FIELDS];
+  Mat               blocks[SEG_CNLINEAR_NUM_FIELDS * SEG_CNLINEAR_NUM_FIELDS];
+  KSP               ksp, kspA, kspS;
+  PC                pc, subpc;
+  PetscBool         setupcalled, isconst;
+  PetscInt          k, nnull, n, N, ncomp;
+  PhysFieldLocation loc;
 
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)seg, &comm));
@@ -128,6 +137,7 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
 
   /* The row blocks of the coupled system, in the order a step writes them back: the velocity and
      the face velocity rows solve for the new value, the pressure rows for a correction. */
+  PetscCheck(SEG_CNLINEAR_NUM_FIELDS <= SEG_MAX_FIELDS, comm, PETSC_ERR_SUP, "SegCNLinear needs %d fields but Seg holds at most %d", SEG_CNLINEAR_NUM_FIELDS, SEG_MAX_FIELDS);
   seg->nfields = SEG_CNLINEAR_NUM_FIELDS;
   for (k = 0; k < SEG_CNLINEAR_NUM_FIELDS; ++k) {
     seg->fields[k].name   = names[k];
@@ -141,14 +151,19 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
   PetscCall(DMCreateGlobalVector(dm, &fsm->f));
   PetscCall(DMCreateGlobalVector(dm, &fsm->x));
 
-  /* Every field the Phys declares as determined only up to a constant contributes one null-space
-     vector: constant on that field's entries and zero on every other. Their supports are disjoint,
+  /* Each field the Phys declares as determined only up to a constant contributes one null-space
+     vector: constant on that field's entries and zero on every other. Deriving a single vector this
+     way is only valid for a single-component element field, since a face field or a field with more
+     than one component needs one null-space dimension per component. Their supports are disjoint,
      so normalising each one on its own entries makes the set orthonormal, as MatNullSpaceCreate()
      requires. For PHYSLAMINAR the pressure is the only such field. */
   nnull = 0;
   for (k = 0; k < seg->nfields; ++k) {
     PetscCall(PhysGetFieldNullSpaceConstant(seg->phys, seg->fields[k].name, &isconst));
     if (!isconst) continue;
+    PetscCall(PhysGetField(seg->phys, seg->fields[k].name, &loc, NULL, &ncomp));
+    PetscCheck(loc == PHYS_FIELD_ELEMENT && ncomp == 1, PetscObjectComm((PetscObject)seg), PETSC_ERR_SUP, "Field %s declares a constant null space, but deriving one requires a single element-located component; it has %" PetscInt_FMT " component(s) at %s",
+               seg->fields[k].name, ncomp, PhysFieldLocations[loc]);
     PetscCall(DMCreateGlobalVector(dm, &nullvecs[nnull]));
     PetscCall(VecZeroEntries(nullvecs[nnull]));
     PetscCall(VecGetSubVector(nullvecs[nnull], seg->fields[k].is, &sub));
@@ -234,7 +249,8 @@ static PetscErrorCode SegStep_CNLinear(Seg seg)
     PetscCall(VecGetSubVector(fsm->x, seg->fields[f].is, &xs));
     PetscCall(VecGetSubVector(seg->sol, seg->fields[f].is, &Xs));
     if (seg->fields[f].update == SEG_FIELD_UPDATE_VALUE) PetscCall(VecCopy(xs, Xs));
-    else PetscCall(VecAXPY(Xs, 1., xs));
+    else if (seg->fields[f].update == SEG_FIELD_UPDATE_INCREMENT) PetscCall(VecAXPY(Xs, 1., xs));
+    else SETERRQ(PetscObjectComm((PetscObject)seg), PETSC_ERR_SUP, "Unsupported field update mode %d", (int)seg->fields[f].update);
     PetscCall(VecRestoreSubVector(seg->sol, seg->fields[f].is, &Xs));
     PetscCall(VecRestoreSubVector(fsm->x, seg->fields[f].is, &xs));
   }
