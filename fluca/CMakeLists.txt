@@ -24,7 +24,6 @@ set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -DNDEBUG")
 
 message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
 
-add_subdirectory(app)
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(tutorials)
