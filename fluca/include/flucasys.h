@@ -13,6 +13,12 @@
   #define FLUCA_INTERN extern FLUCA_VISIBILITY_INTERNAL
 #endif
 
+/* Maximum spatial dimension Fluca supports, and the number of boundary faces of a Cartesian cell.
+   Every module sizes its fixed-capacity per-direction arrays with these, so that the constant is
+   stated exactly once. */
+#define FLUCA_MAX_DIM   3
+#define FLUCA_MAX_FACES (2 * FLUCA_MAX_DIM)
+
 FLUCA_EXTERN PetscBool FlucaInitializeCalled;
 FLUCA_EXTERN PetscBool FlucaFinalizeCalled;
 

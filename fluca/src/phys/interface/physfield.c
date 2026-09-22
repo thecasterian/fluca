@@ -8,13 +8,15 @@ static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTA
 
 /* Declare a solution field. Idempotent: re-declaring a field with the same layout is a silent
    success, so that a Seg may declare an auxiliary field that its Phys has already declared. */
-PetscErrorCode PhysDeclareField_Internal(Phys phys, const char name[], PhysFieldLocation loc, PetscInt ncomp, PhysEquationRole role)
+PetscErrorCode PhysDeclareField(Phys phys, const char name[], PhysFieldLocation loc, PetscInt ncomp, PhysEquationRole role)
 {
   PhysField *field;
   PetscInt   f, c0 = 0;
   PetscBool  same;
 
   PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscAssertPointer(name, 2);
   PetscCheck(phys->nfields < PHYS_MAX_FIELDS, PetscObjectComm((PetscObject)phys), PETSC_ERR_SUP, "Cannot register more than %d fields", PHYS_MAX_FIELDS);
   PetscCheck(ncomp > 0, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Field %s must have at least one component", name);
   for (f = 0; f < phys->nfields; ++f) {

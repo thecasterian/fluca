@@ -3,8 +3,8 @@
 static PetscErrorCode PhysRegisterFields_Laminar(Phys phys)
 {
   PetscFunctionBegin;
-  PetscCall(PhysDeclareField_Internal(phys, PHYS_FIELD_VELOCITY, PHYS_FIELD_ELEMENT, phys->dim, PHYS_EQN_MOMENTUM));
-  PetscCall(PhysDeclareField_Internal(phys, PHYS_FIELD_PRESSURE, PHYS_FIELD_ELEMENT, 1, PHYS_EQN_PRESSURE));
+  PetscCall(PhysDeclareField(phys, PHYS_FIELD_VELOCITY, PHYS_FIELD_ELEMENT, phys->dim, PHYS_EQN_MOMENTUM));
+  PetscCall(PhysDeclareField(phys, PHYS_FIELD_PRESSURE, PHYS_FIELD_ELEMENT, 1, PHYS_EQN_PRESSURE));
   PetscCall(PhysDeclareConstantNullSpace_Internal(phys, PHYS_FIELD_PRESSURE));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -66,7 +66,7 @@ PetscErrorCode PhysCreate_Laminar(Phys phys)
   PetscCall(PhysSetPropertyConstant_Internal(phys, PHYS_PROPERTY_VISCOSITY, 1.));
 
   /* Initialize BCs to NONE */
-  for (f = 0; f < PHYS_LAMINAR_MAX_FACES; f++) {
+  for (f = 0; f < FLUCA_MAX_FACES; f++) {
     ins->bcs[f].type       = PHYS_LAMINAR_BC_NONE;
     ins->bcs[f].fn         = NULL;
     ins->bcs[f].ctx        = NULL;
@@ -139,7 +139,7 @@ PetscErrorCode PhysLaminarSetBoundaryCondition(Phys phys, PetscInt face, PhysLam
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscValidHeaderSpecificType(phys, PHYS_CLASSID, 1, PHYSLAMINAR);
-  PetscCheck(face >= 0 && face < PHYS_LAMINAR_MAX_FACES, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Face index %" PetscInt_FMT " out of range [0, %d)", face, PHYS_LAMINAR_MAX_FACES);
+  PetscCheck(face >= 0 && face < FLUCA_MAX_FACES, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Face index %" PetscInt_FMT " out of range [0, %d)", face, FLUCA_MAX_FACES);
   ins->bcs[face] = bc;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -152,7 +152,7 @@ PetscErrorCode PhysLaminarGetBoundaryCondition(Phys phys, PetscInt face, PhysLam
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscValidHeaderSpecificType(phys, PHYS_CLASSID, 1, PHYSLAMINAR);
   PetscAssertPointer(bc, 3);
-  PetscCheck(face >= 0 && face < PHYS_LAMINAR_MAX_FACES, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Face index %" PetscInt_FMT " out of range [0, %d)", face, PHYS_LAMINAR_MAX_FACES);
+  PetscCheck(face >= 0 && face < FLUCA_MAX_FACES, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Face index %" PetscInt_FMT " out of range [0, %d)", face, FLUCA_MAX_FACES);
   *bc = ins->bcs[face];
   PetscFunctionReturn(PETSC_SUCCESS);
 }

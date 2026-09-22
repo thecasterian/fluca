@@ -1,4 +1,4 @@
-#include "phystest.h"
+#include "segtest.h"
 
 static const char help[] = "Test the coupling blocks of the coupled system on a walled 2D grid\n"
                            "S = D((-T) G - (-R)) must equal -(dt/rho) times the compact Neumann Laplacian,\n"

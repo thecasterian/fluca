@@ -41,11 +41,14 @@ static PetscErrorCode AddBodyForce_Private(Seg seg, PetscReal t, PetscReal scale
   Phys                phys    = seg->phys;
   PetscInt            dim     = ops->dim;
   const PetscScalar **arrc[3] = {NULL, NULL, NULL};
+  PhysBodyForceFn    *bodyforce;
+  void               *bodyforce_ctx;
   PetscInt            xs, ys, zs, xm, ym, zm, slot_elem, i, j, k, d;
   DM                  sol_dm;
 
   PetscFunctionBegin;
-  if (!phys->bodyforce) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCall(PhysGetBodyForce(phys, &bodyforce, &bodyforce_ctx));
+  if (!bodyforce) PetscFunctionReturn(PETSC_SUCCESS);
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(DMStagGetProductCoordinateLocationSlot(sol_dm, DMSTAG_ELEMENT, &slot_elem));
   PetscCall(DMStagGetProductCoordinateArraysRead(sol_dm, &arrc[0], &arrc[1], &arrc[2]));
@@ -64,7 +67,7 @@ static PetscErrorCode AddBodyForce_Private(Seg seg, PetscReal t, PetscReal scale
         coords[0] = PetscRealPart(arrc[0][i][slot_elem]);
         coords[1] = PetscRealPart(arrc[1][j][slot_elem]);
         if (dim == 3) coords[2] = PetscRealPart(arrc[2][k][slot_elem]);
-        PetscCall(phys->bodyforce(dim, t, coords, force, phys->bodyforce_ctx));
+        PetscCall(bodyforce(dim, t, coords, force, bodyforce_ctx));
         row.i   = i;
         row.j   = j;
         row.k   = k;
@@ -93,7 +96,7 @@ PetscErrorCode SegCNLinearComputeMomentumSystem_Internal(Seg seg, PetscReal t, P
 {
   Seg_CNLinear *cn  = (Seg_CNLinear *)seg->data;
   Seg_Ops      *ops = &cn->ops;
-  PetscInt      dim = ops->dim, d, e;
+  PetscInt      dim, d, e;
   Vec           tmp, fv, xv;
   PetscScalar   rho;
   DM            sol_dm;
@@ -107,6 +110,7 @@ PetscErrorCode SegCNLinearComputeMomentumSystem_Internal(Seg seg, PetscReal t, P
   PetscValidHeaderSpecific(M, MAT_CLASSID, 5);
   PetscValidHeaderSpecific(f, VEC_CLASSID, 6);
   PetscCheck(dt > 0., PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_OUTOFRANGE, "Time step must be positive, got %g", (double)dt);
+  dim = ops->dim;
   PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
   PetscCall(PhysGetPropertyConstant(seg->phys, PHYS_PROPERTY_DENSITY, &rho));
   /* Coefficients that depend on dt */
@@ -207,7 +211,7 @@ PetscErrorCode SegCNLinearComputeCouplingSystem_Internal(Seg seg, PetscReal t, P
 {
   Seg_CNLinear *cn  = (Seg_CNLinear *)seg->data;
   Seg_Ops      *ops = &cn->ops;
-  PetscInt      dim = ops->dim, e;
+  PetscInt      dim, e;
   PetscScalar   rho;
   DM            sol_dm;
 
@@ -219,6 +223,7 @@ PetscErrorCode SegCNLinearComputeCouplingSystem_Internal(Seg seg, PetscReal t, P
   PetscValidHeaderSpecific(M, MAT_CLASSID, 4);
   PetscValidHeaderSpecific(f, VEC_CLASSID, 5);
   PetscCheck(dt > 0., PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_OUTOFRANGE, "Time step must be positive, got %g", (double)dt);
+  dim = ops->dim;
   PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
   PetscCall(PhysGetPropertyConstant(seg->phys, PHYS_PROPERTY_DENSITY, &rho));
   for (e = 0; e < dim; e++) {

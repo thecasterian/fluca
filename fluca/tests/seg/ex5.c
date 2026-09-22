@@ -1,4 +1,4 @@
-#include "phystest.h"
+#include "segtest.h"
 
 /* Continuity-row consistency of the assembled D and T blocks, solver free.
 

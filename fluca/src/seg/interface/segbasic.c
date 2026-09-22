@@ -27,6 +27,7 @@ PetscErrorCode SegCreate(MPI_Comm comm, Seg *seg)
   s->max_steps         = PETSC_INT_MAX;
   s->sol               = NULL;
   s->data              = NULL;
+  s->nfields           = 0;
   s->ksp               = NULL;
   s->errorifstepfailed = PETSC_TRUE;
   s->reason            = SEG_CONVERGED_ITERATING;
@@ -252,6 +253,8 @@ PetscErrorCode SegViewFromOptions(Seg seg, PetscObject obj, const char name[])
 
 PetscErrorCode SegDestroy(Seg *seg)
 {
+  PetscInt f;
+
   PetscFunctionBegin;
   if (!*seg) PetscFunctionReturn(PETSC_SUCCESS);
   PetscValidHeaderSpecific((*seg), SEG_CLASSID, 1);
@@ -266,6 +269,7 @@ PetscErrorCode SegDestroy(Seg *seg)
 
   PetscTryTypeMethod((*seg), destroy);
 
+  for (f = 0; f < (*seg)->nfields; ++f) PetscCall(ISDestroy(&(*seg)->fields[f].is));
   PetscCall(VecDestroy(&(*seg)->sol));
   PetscCall(PhysDestroy(&(*seg)->phys));
 

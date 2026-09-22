@@ -57,10 +57,6 @@ struct _p_Phys {
   PetscBool setupcalled;
 };
 
-/* Seg calls these two from its own library to complete the two-phase setup, so they need public
-   visibility even though they are internal API. */
-FLUCA_EXTERN PetscErrorCode PhysDeclareField_Internal(Phys, const char[], PhysFieldLocation, PetscInt, PhysEquationRole);
-FLUCA_EXTERN PetscErrorCode PhysCreateSolutionDM_Internal(Phys);
 FLUCA_INTERN PetscErrorCode PhysDeclareConstantNullSpace_Internal(Phys, const char[]);
 FLUCA_INTERN PetscErrorCode PhysGetField_Internal(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);
 FLUCA_INTERN PetscErrorCode PhysGetFieldIS_Internal(Phys, const char[], IS *);

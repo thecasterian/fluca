@@ -12,6 +12,21 @@ FLUCA_EXTERN PetscLogEvent SEG_Step;
 FLUCA_INTERN PetscErrorCode SegCreate_CNLinear(Seg);
 FLUCA_INTERN PetscErrorCode PCCreate_ABF(PC);
 
+/* How a step turns the solution of the coupled system into the new state of a field */
+typedef enum {
+  SEG_FIELD_UPDATE_VALUE,     /* the solve returns the new value -> VecCopy */
+  SEG_FIELD_UPDATE_INCREMENT, /* the solve returns a correction  -> VecAXPY */
+} SegFieldUpdate;
+
+#define SEG_MAX_FIELDS 8
+
+/* One row block of the coupled system, in the order the subtype writes it back */
+typedef struct {
+  const char    *name;   /* field name on the attached Phys; static storage */
+  IS             is;     /* its entries of the solution vector; owned by the Seg */
+  SegFieldUpdate update; /* how the step applies the solve to it */
+} SegFieldEntry;
+
 typedef struct _SegOps *SegOps;
 
 struct _SegOps {
@@ -35,6 +50,10 @@ struct _p_Seg {
   /* Data */
   Vec   sol;  /* solution vector, owned by the caller of SegSolve() */
   void *data; /* implementation-specific data */
+
+  /* Fields of the coupled system, filled by the subtype during setup */
+  PetscInt      nfields;
+  SegFieldEntry fields[SEG_MAX_FIELDS];
 
   /* Solver */
   KSP                ksp;               /* coupled solve of eq. (13) */

@@ -1,4 +1,4 @@
-#include "phystest.h"
+#include "segtest.h"
 
 static const char help[] = "Test the boundary terms of the coupling rows with time-dependent wall velocity\n"
                            "Boundary-face rows must read U = u_b(t) . n; all other right-hand-side entries vanish.\n";

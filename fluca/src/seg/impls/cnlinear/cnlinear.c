@@ -19,7 +19,10 @@ static PetscErrorCode SegCNLinearAssembleSystem_Private(Seg seg, PetscReal t_cou
    T u0 + b_interp: U0 = U* - G^st phi with D G^st phi = D U* - b_cont. u0 and p0 are unchanged. */
 static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
 {
-  Seg_CNLinear      *fsm = (Seg_CNLinear *)seg->data;
+  Seg_CNLinear      *fsm  = (Seg_CNLinear *)seg->data;
+  IS                 is_u = seg->fields[SEG_CNLINEAR_FIELD_VELOCITY].is;
+  IS                 is_U = seg->fields[SEG_CNLINEAR_FIELD_FACE_VELOCITY].is;
+  IS                 is_p = seg->fields[SEG_CNLINEAR_FIELD_PRESSURE].is;
   MPI_Comm           comm;
   Mat                negT, G, negR, D, W, S;
   Vec                u, U, fU, fp, Ustar, phi, rhs;
@@ -32,10 +35,10 @@ static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)seg, &comm));
   PetscCall(SegCNLinearAssembleSystem_Private(seg, seg->t));
-  PetscCall(MatCreateSubMatrix(fsm->M, fsm->is[1], fsm->is[0], MAT_INITIAL_MATRIX, &negT));
-  PetscCall(MatCreateSubMatrix(fsm->M, fsm->is[0], fsm->is[2], MAT_INITIAL_MATRIX, &G));
-  PetscCall(MatCreateSubMatrix(fsm->M, fsm->is[1], fsm->is[2], MAT_INITIAL_MATRIX, &negR));
-  PetscCall(MatCreateSubMatrix(fsm->M, fsm->is[2], fsm->is[1], MAT_INITIAL_MATRIX, &D));
+  PetscCall(MatCreateSubMatrix(fsm->M, is_U, is_u, MAT_INITIAL_MATRIX, &negT));
+  PetscCall(MatCreateSubMatrix(fsm->M, is_u, is_p, MAT_INITIAL_MATRIX, &G));
+  PetscCall(MatCreateSubMatrix(fsm->M, is_U, is_p, MAT_INITIAL_MATRIX, &negR));
+  PetscCall(MatCreateSubMatrix(fsm->M, is_p, is_U, MAT_INITIAL_MATRIX, &D));
 
   /* W = (-T) G - (-R) = -G^st, S = D W: the Schur complement of eq. (18) */
   PetscCall(MatMatMult(negT, G, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &W));
@@ -46,19 +49,19 @@ static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
 
   /* U* = T u0 + b_interp */
   PetscCall(MatCreateVecs(negT, NULL, &Ustar));
-  PetscCall(VecGetSubVector(seg->sol, fsm->is[0], &u));
-  PetscCall(VecGetSubVector(fsm->f, fsm->is[1], &fU));
+  PetscCall(VecGetSubVector(seg->sol, is_u, &u));
+  PetscCall(VecGetSubVector(fsm->f, is_U, &fU));
   PetscCall(MatMult(negT, u, Ustar));
   PetscCall(VecAYPX(Ustar, -1., fU));
-  PetscCall(VecRestoreSubVector(fsm->f, fsm->is[1], &fU));
-  PetscCall(VecRestoreSubVector(seg->sol, fsm->is[0], &u));
+  PetscCall(VecRestoreSubVector(fsm->f, is_U, &fU));
+  PetscCall(VecRestoreSubVector(seg->sol, is_u, &u));
 
   /* S phi = b_cont - D U* */
   PetscCall(MatCreateVecs(S, &phi, &rhs));
-  PetscCall(VecGetSubVector(fsm->f, fsm->is[2], &fp));
+  PetscCall(VecGetSubVector(fsm->f, is_p, &fp));
   PetscCall(MatMult(D, Ustar, rhs));
   PetscCall(VecAYPX(rhs, -1., fp));
-  PetscCall(VecRestoreSubVector(fsm->f, fsm->is[2], &fp));
+  PetscCall(VecRestoreSubVector(fsm->f, is_p, &fp));
   PetscCall(MatNullSpaceRemove(nullspace, rhs));
 
   PetscCall(KSPCreate(comm, &ksp));
@@ -77,10 +80,10 @@ static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
   PetscCheck(reason > 0, comm, PETSC_ERR_NOT_CONVERGED, "Initial face velocity projection did not converge: %s", KSPConvergedReasons[reason]);
 
   /* U0 = U* + W phi */
-  PetscCall(VecGetSubVector(seg->sol, fsm->is[1], &U));
+  PetscCall(VecGetSubVector(seg->sol, is_U, &U));
   PetscCall(MatMult(W, phi, U));
   PetscCall(VecAXPY(U, 1., Ustar));
-  PetscCall(VecRestoreSubVector(seg->sol, fsm->is[1], &U));
+  PetscCall(VecRestoreSubVector(seg->sol, is_U, &U));
 
   PetscCall(KSPDestroy(&ksp));
   PetscCall(VecDestroy(&rhs));
@@ -98,16 +101,19 @@ static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
 
 static PetscErrorCode SegSetUp_CNLinear(Seg seg)
 {
-  Seg_CNLinear *fsm = (Seg_CNLinear *)seg->data;
-  MPI_Comm      comm;
-  DM            dm;
-  Vec           nullvec, sub;
-  Mat           blocks[9];
-  KSP           ksp, kspA, kspS;
-  PC            pc, subpc;
-  PetscBool     setupcalled;
-  PetscInt      k, n, N;
-  const char   *names[3] = {PHYS_FIELD_VELOCITY, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_PRESSURE};
+  Seg_CNLinear        *fsm                              = (Seg_CNLinear *)seg->data;
+  const SegFieldUpdate updates[SEG_CNLINEAR_NUM_FIELDS] = {SEG_FIELD_UPDATE_VALUE, SEG_FIELD_UPDATE_VALUE, SEG_FIELD_UPDATE_INCREMENT};
+  const char          *names[SEG_CNLINEAR_NUM_FIELDS]   = {PHYS_FIELD_VELOCITY, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_PRESSURE};
+  MPI_Comm             comm;
+  DM                   dm;
+  Vec                  nullvecs[SEG_MAX_FIELDS];
+  Vec                  sub;
+  IS                   is[SEG_CNLINEAR_NUM_FIELDS];
+  Mat                  blocks[SEG_CNLINEAR_NUM_FIELDS * SEG_CNLINEAR_NUM_FIELDS];
+  KSP                  ksp, kspA, kspS;
+  PC                   pc, subpc;
+  PetscBool            setupcalled, isconst;
+  PetscInt             k, nnull, n, N;
 
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)seg, &comm));
@@ -115,38 +121,58 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
      fractional step method needs can be added here before the solution DM is laid out. */
   PetscCall(PhysGetSetUpCalled(seg->phys, &setupcalled));
   PetscCheck(setupcalled, comm, PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before SegSetUp() with SEGCNLINEAR");
-  PetscCall(PhysDeclareField_Internal(seg->phys, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1, PHYS_EQN_AUXILIARY));
-  PetscCall(PhysCreateSolutionDM_Internal(seg->phys));
+  PetscCall(PhysDeclareField(seg->phys, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1, PHYS_EQN_AUXILIARY));
+  PetscCall(PhysCreateSolutionDM(seg->phys));
   PetscCall(SegOpsBuild_Internal(seg));
   PetscCall(PhysGetSolutionDM(seg->phys, &dm));
 
-  for (k = 0; k < 3; ++k) PetscCall(PhysGetFieldIS(seg->phys, names[k], &fsm->is[k]));
+  /* The row blocks of the coupled system, in the order a step writes them back: the velocity and
+     the face velocity rows solve for the new value, the pressure rows for a correction. */
+  seg->nfields = SEG_CNLINEAR_NUM_FIELDS;
+  for (k = 0; k < SEG_CNLINEAR_NUM_FIELDS; ++k) {
+    seg->fields[k].name   = names[k];
+    seg->fields[k].update = updates[k];
+    PetscCall(PhysGetFieldIS(seg->phys, names[k], &seg->fields[k].is));
+  }
+
   PetscCall(DMCreateMatrix(dm, &fsm->M));
   PetscCall(MatSetOption(fsm->M, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
   PetscCall(MatSetOption(fsm->M, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE));
   PetscCall(DMCreateGlobalVector(dm, &fsm->f));
   PetscCall(DMCreateGlobalVector(dm, &fsm->x));
 
-  /* Pressure is determined up to a constant (velocity or periodic boundaries only) */
-  PetscCall(DMCreateGlobalVector(dm, &nullvec));
-  PetscCall(VecZeroEntries(nullvec));
-  PetscCall(VecGetSubVector(nullvec, fsm->is[2], &sub));
-  PetscCall(VecGetSize(sub, &N));
-  PetscCall(VecSet(sub, 1. / PetscSqrtReal((PetscReal)N)));
-  PetscCall(VecRestoreSubVector(nullvec, fsm->is[2], &sub));
-  PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, 1, &nullvec, &fsm->nullspace));
-  PetscCall(VecDestroy(&nullvec));
-  PetscCall(MatSetNullSpace(fsm->M, fsm->nullspace));
+  /* Every field the Phys declares as determined only up to a constant contributes one null-space
+     vector: constant on that field's entries and zero on every other. Their supports are disjoint,
+     so normalising each one on its own entries makes the set orthonormal, as MatNullSpaceCreate()
+     requires. For PHYSLAMINAR the pressure is the only such field. */
+  nnull = 0;
+  for (k = 0; k < seg->nfields; ++k) {
+    PetscCall(PhysGetFieldNullSpaceConstant(seg->phys, seg->fields[k].name, &isconst));
+    if (!isconst) continue;
+    PetscCall(DMCreateGlobalVector(dm, &nullvecs[nnull]));
+    PetscCall(VecZeroEntries(nullvecs[nnull]));
+    PetscCall(VecGetSubVector(nullvecs[nnull], seg->fields[k].is, &sub));
+    PetscCall(VecGetSize(sub, &N));
+    PetscCall(VecSet(sub, 1. / PetscSqrtReal((PetscReal)N)));
+    PetscCall(VecRestoreSubVector(nullvecs[nnull], seg->fields[k].is, &sub));
+    ++nnull;
+  }
+  if (nnull > 0) {
+    PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, nnull, nullvecs, &fsm->nullspace));
+    PetscCall(MatSetNullSpace(fsm->M, fsm->nullspace));
+  }
+  for (k = 0; k < nnull; ++k) PetscCall(VecDestroy(&nullvecs[k]));
 
   /* PCABF reads the field index sets from a MATNEST preconditioning matrix and the blocks from M */
-  for (k = 0; k < 9; ++k) blocks[k] = NULL;
-  for (k = 0; k < 3; ++k) {
-    PetscCall(ISGetLocalSize(fsm->is[k], &n));
-    PetscCall(ISGetSize(fsm->is[k], &N));
-    PetscCall(MatCreateConstantDiagonal(comm, n, n, N, N, 1., &blocks[4 * k]));
+  for (k = 0; k < SEG_CNLINEAR_NUM_FIELDS * SEG_CNLINEAR_NUM_FIELDS; ++k) blocks[k] = NULL;
+  for (k = 0; k < SEG_CNLINEAR_NUM_FIELDS; ++k) {
+    is[k] = seg->fields[k].is;
+    PetscCall(ISGetLocalSize(is[k], &n));
+    PetscCall(ISGetSize(is[k], &N));
+    PetscCall(MatCreateConstantDiagonal(comm, n, n, N, N, 1., &blocks[(SEG_CNLINEAR_NUM_FIELDS + 1) * k]));
   }
-  PetscCall(MatCreateNest(comm, 3, fsm->is, 3, fsm->is, blocks, &fsm->P));
-  for (k = 0; k < 3; ++k) PetscCall(MatDestroy(&blocks[4 * k]));
+  PetscCall(MatCreateNest(comm, SEG_CNLINEAR_NUM_FIELDS, is, SEG_CNLINEAR_NUM_FIELDS, is, blocks, &fsm->P));
+  for (k = 0; k < SEG_CNLINEAR_NUM_FIELDS; ++k) PetscCall(MatDestroy(&blocks[(SEG_CNLINEAR_NUM_FIELDS + 1) * k]));
 
   PetscCall(SegGetKSP(seg, &ksp));
   PetscCall(KSPSetOperators(ksp, fsm->M, fsm->P));
@@ -174,7 +200,7 @@ static PetscErrorCode SegStep_CNLinear(Seg seg)
   KSP                ksp;
   KSPConvergedReason reason;
   Vec                xs, Xs;
-  PetscInt           k;
+  PetscInt           f;
 
   PetscFunctionBegin;
   PetscCall(SegGetKSP(seg, &ksp));
@@ -203,19 +229,15 @@ static PetscErrorCode SegStep_CNLinear(Seg seg)
     PetscFunctionReturn(PETSC_SUCCESS);
   }
 
-  /* X <- [u^{n+1}, U^{n+1}, q + p'] */
-  for (k = 0; k < 2; ++k) {
-    PetscCall(VecGetSubVector(fsm->x, fsm->is[k], &xs));
-    PetscCall(VecGetSubVector(seg->sol, fsm->is[k], &Xs));
-    PetscCall(VecCopy(xs, Xs));
-    PetscCall(VecRestoreSubVector(seg->sol, fsm->is[k], &Xs));
-    PetscCall(VecRestoreSubVector(fsm->x, fsm->is[k], &xs));
+  /* X <- [u^{n+1}, U^{n+1}, q + p'], each field updated the way it was declared */
+  for (f = 0; f < seg->nfields; ++f) {
+    PetscCall(VecGetSubVector(fsm->x, seg->fields[f].is, &xs));
+    PetscCall(VecGetSubVector(seg->sol, seg->fields[f].is, &Xs));
+    if (seg->fields[f].update == SEG_FIELD_UPDATE_VALUE) PetscCall(VecCopy(xs, Xs));
+    else PetscCall(VecAXPY(Xs, 1., xs));
+    PetscCall(VecRestoreSubVector(seg->sol, seg->fields[f].is, &Xs));
+    PetscCall(VecRestoreSubVector(fsm->x, seg->fields[f].is, &xs));
   }
-  PetscCall(VecGetSubVector(fsm->x, fsm->is[2], &xs));
-  PetscCall(VecGetSubVector(seg->sol, fsm->is[2], &Xs));
-  PetscCall(VecAXPY(Xs, 1., xs));
-  PetscCall(VecRestoreSubVector(seg->sol, fsm->is[2], &Xs));
-  PetscCall(VecRestoreSubVector(fsm->x, fsm->is[2], &xs));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -229,7 +251,6 @@ static PetscErrorCode SegView_CNLinear(Seg seg, PetscViewer viewer)
 static PetscErrorCode SegDestroy_CNLinear(Seg seg)
 {
   Seg_CNLinear *fsm = (Seg_CNLinear *)seg->data;
-  PetscInt      k;
 
   PetscFunctionBegin;
   PetscCall(SegOpsDestroy_Internal(seg));
@@ -238,7 +259,6 @@ static PetscErrorCode SegDestroy_CNLinear(Seg seg)
   PetscCall(MatDestroy(&fsm->M));
   PetscCall(VecDestroy(&fsm->x));
   PetscCall(VecDestroy(&fsm->f));
-  for (k = 0; k < 3; ++k) PetscCall(ISDestroy(&fsm->is[k]));
   PetscCall(PetscFree(seg->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -246,7 +266,6 @@ static PetscErrorCode SegDestroy_CNLinear(Seg seg)
 PetscErrorCode SegCreate_CNLinear(Seg seg)
 {
   Seg_CNLinear *fsm;
-  PetscInt      k;
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&fsm));
@@ -257,7 +276,6 @@ PetscErrorCode SegCreate_CNLinear(Seg seg)
   fsm->nullspace = NULL;
   fsm->f         = NULL;
   fsm->x         = NULL;
-  for (k = 0; k < 3; ++k) fsm->is[k] = NULL;
 
   seg->ops->setup    = SegSetUp_CNLinear;
   seg->ops->presolve = SegPreSolve_CNLinear;

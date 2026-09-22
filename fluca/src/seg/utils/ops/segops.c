@@ -7,7 +7,7 @@ static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTA
 
 static PetscErrorCode SegOpsBCAdapterFn(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
 {
-  Seg_BCAdapter *a = (Seg_BCAdapter *)ctx;
+  SegCNLinear_BCAdapter *a = (SegCNLinear_BCAdapter *)ctx;
 
   PetscFunctionBegin;
   PetscCall(a->fn(dim, t, x, a->comp, value, a->fn_ctx));
@@ -16,7 +16,7 @@ static PetscErrorCode SegOpsBCAdapterFn(PetscInt dim, PetscReal t, const PetscRe
 
 static PetscErrorCode SegOpsBCAdapterFnDot(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
 {
-  Seg_BCAdapter *a = (Seg_BCAdapter *)ctx;
+  SegCNLinear_BCAdapter *a = (SegCNLinear_BCAdapter *)ctx;
 
   PetscFunctionBegin;
   PetscCall(a->fn_dot(dim, t, x, a->comp, value, a->fn_dot_ctx));
@@ -27,9 +27,9 @@ static PetscErrorCode SegOpsBCAdapterFnDot(PetscInt dim, PetscReal t, const Pets
    Uses the BC adapter to bridge PhysLaminarBCFn (has comp) to FlucaFDBCValueFn (no comp). */
 static PetscErrorCode SetVelocityDirichletBCs(Seg seg, FlucaFD fd, PetscInt d)
 {
-  Seg_CNLinear            *cn                          = (Seg_CNLinear *)seg->data;
-  Seg_Ops                 *ops                         = &cn->ops;
-  FlucaFDBoundaryCondition fd_bcs[2 * SEG_OPS_MAX_DIM] = {{0}};
+  Seg_CNLinear            *cn                        = (Seg_CNLinear *)seg->data;
+  Seg_Ops                 *ops                       = &cn->ops;
+  FlucaFDBoundaryCondition fd_bcs[2 * FLUCA_MAX_DIM] = {{0}};
   PhysLaminarBC            bc;
   PetscInt                 f;
 
@@ -147,7 +147,7 @@ static PetscErrorCode BuildMomentumOperators_Private(Seg seg)
   /* Linearized convection, guide eq. (5) and section Spatial Discretization:
      d/dx_e(ubar_d^{n+1} U_e^n + ubar_d^n ubar_e^{n+1}) */
   for (d = 0; d < dim; d++) {
-    FlucaFD terms[2 * SEG_OPS_MAX_DIM], sum;
+    FlucaFD terms[2 * FLUCA_MAX_DIM], sum;
 
     for (e = 0; e < dim; e++) {
       FlucaFD interp_d, interp_e, outer;
@@ -282,7 +282,7 @@ static PetscErrorCode BuildCouplingOperators_Private(Seg seg)
   Seg_CNLinear *cn  = (Seg_CNLinear *)seg->data;
   Seg_Ops      *ops = &cn->ops;
   PetscInt      dim = ops->dim, e;
-  FlucaFD       div[SEG_OPS_MAX_DIM];
+  FlucaFD       div[FLUCA_MAX_DIM];
   Mat           Tmat, Gmat, Gstmat;
   DM            sol_dm;
 
@@ -358,6 +358,8 @@ PetscErrorCode SegOpsBuild_Internal(Seg seg)
   DM             sol_dm;
 
   PetscFunctionBegin;
+  /* The operators below read the laminar boundary conditions and assume the laminar fields */
+  PetscValidHeaderSpecificType(seg->phys, PHYS_CLASSID, 1, PHYSLAMINAR);
   PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
   PetscCall(DMGetDimension(sol_dm, &dim));
   ops->dim = dim;
@@ -383,7 +385,7 @@ PetscErrorCode SegOpsBuild_Internal(Seg seg)
   PetscCall(PhysGetPropertyConstant(seg->phys, PHYS_PROPERTY_VISCOSITY, &mu));
   /* --- fd_laplacian[d] = sum_e d/dx_e(-mu * d(u_d)/dx_e) --- */
   for (d = 0; d < dim; d++) {
-    FlucaFD comp_ops[SEG_OPS_MAX_DIM];
+    FlucaFD comp_ops[FLUCA_MAX_DIM];
 
     for (e = 0; e < dim; e++) {
       FlucaFD inner, scaled, outer;
@@ -435,14 +437,14 @@ PetscErrorCode SegOpsDestroy_Internal(Seg seg)
 
   PetscFunctionBegin;
   PetscCall(MatDestroy(&ops->negR));
-  for (d = 0; d < SEG_OPS_MAX_DIM; d++) {
+  for (d = 0; d < FLUCA_MAX_DIM; d++) {
     PetscCall(FlucaFDDestroy(&ops->fd_bface[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_negT[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_T[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_conv[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_grad[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_visc[d]));
-    for (e = 0; e < SEG_OPS_MAX_DIM; e++) {
+    for (e = 0; e < FLUCA_MAX_DIM; e++) {
       PetscCall(FlucaFDDestroy(&ops->fd_conv_ubar[d][e]));
       PetscCall(FlucaFDDestroy(&ops->fd_conv_U[d][e]));
       PetscCall(FlucaFDDestroy(&ops->fd_interp_vel[d][e]));

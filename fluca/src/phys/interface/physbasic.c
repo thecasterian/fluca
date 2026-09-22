@@ -98,13 +98,14 @@ PetscErrorCode PhysDestroy(Phys *phys)
    for. Idempotent: the first caller after every field has been declared creates the DM, and a later
    caller finds it already there. Seg triggers this from SegSetUp(), once it has declared its own
    auxiliary fields on top of the ones the Phys subtype declared during PhysSetUp(). */
-PetscErrorCode PhysCreateSolutionDM_Internal(Phys phys)
+PetscErrorCode PhysCreateSolutionDM(Phys phys)
 {
   PetscInt dof[2] = {0, 0}; /* indexed by PhysFieldLocation */
   PetscInt f;
   DM       cdm;
 
   PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   if (phys->sol_dm) PetscFunctionReturn(PETSC_SUCCESS);
   for (f = 0; f < phys->nfields; ++f) dof[phys->fields[f].loc] += phys->fields[f].ncomp;
   switch (phys->dim) {
@@ -143,7 +144,7 @@ PetscErrorCode PhysSetUp(Phys phys)
   PetscCall(DMGetDimension(phys->base_dm, &phys->dim));
 
   /* The subtype declares its fields. The solution DM is laid out from them only once a Seg has
-     added its own auxiliary fields; see PhysCreateSolutionDM_Internal(). */
+     added its own auxiliary fields; see PhysCreateSolutionDM(). */
   PetscCheck(phys->ops->registerfields, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Phys type not set or subtype does not implement registerfields");
   PetscCall((*phys->ops->registerfields)(phys));
 

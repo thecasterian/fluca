@@ -1,4 +1,4 @@
-#include "phystest.h"
+#include "segtest.h"
 
 static const char help[] = "Test the momentum rows of the coupled system on a periodic 2D Taylor-Green field\n"
                            "With U = T u, the linearized convection satisfies J(u) u = 2 div(ubar ubar),\n"

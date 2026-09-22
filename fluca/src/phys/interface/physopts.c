@@ -86,3 +86,13 @@ PetscErrorCode PhysSetBodyForce(Phys phys, PhysBodyForceFn *fn, void *ctx)
   phys->bodyforce_ctx = ctx;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+/* The body force set by PhysSetBodyForce(), or NULL if none was set. Either output may be NULL. */
+PetscErrorCode PhysGetBodyForce(Phys phys, PhysBodyForceFn **fn, void **ctx)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  if (fn) *fn = phys->bodyforce;
+  if (ctx) *ctx = phys->bodyforce_ctx;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}

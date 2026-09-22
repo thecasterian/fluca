@@ -173,7 +173,7 @@ int main(int argc, char **argv)
 /*TEST
 
   test:
-    suffix: fsm_sweep
+    suffix: abf_sweep
     nsize: 1
     args: -abf_momentum_ksp_type preonly -abf_momentum_pc_type lu -abf_schur_ksp_type preonly -abf_schur_pc_type lu -abf_schur_pc_factor_shift_type nonzero
     output_file: output/empty.out
