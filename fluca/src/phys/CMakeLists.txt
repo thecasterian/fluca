@@ -8,6 +8,7 @@ add_library(fluca_phys SHARED
     interface/physfield.c
     interface/physopts.c
     interface/physpkg.c
+    interface/physprop.c
     interface/physreg.c
     utils/abfpc/abfpc.c
 )

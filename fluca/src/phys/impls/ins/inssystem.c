@@ -84,17 +84,19 @@ static PetscErrorCode AddBodyForce_Private(Phys phys, PetscReal t, PetscReal sca
    A u^{n+1} + G p' = u^n + (dt/2) nu lap(u^n) - (dt/rho) grad(q) + boundary terms */
 PetscErrorCode PhysComputeMomentumSystem_INS(Phys phys, PetscReal t, PetscReal dt, Vec X, Mat M, Vec f)
 {
-  Phys_INS *ins    = (Phys_INS *)phys->data;
-  DM        sol_dm = phys->sol_dm;
-  PetscInt  dim    = phys->dim, d, e;
-  Vec       tmp, fv, xv;
+  Phys_INS   *ins    = (Phys_INS *)phys->data;
+  DM          sol_dm = phys->sol_dm;
+  PetscInt    dim    = phys->dim, d, e;
+  Vec         tmp, fv, xv;
+  PetscScalar rho;
 
   PetscFunctionBegin;
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho));
   /* Coefficients that depend on dt */
   for (d = 0; d < dim; d++) {
-    PetscCall(FlucaFDScaleSetConstant(ins->fd_visc[d], dt / (2. * ins->rho)));
+    PetscCall(FlucaFDScaleSetConstant(ins->fd_visc[d], dt / (2. * rho)));
     PetscCall(FlucaFDScaleSetConstant(ins->fd_conv[d], dt / 2.));
-    PetscCall(FlucaFDScaleSetConstant(ins->fd_grad[d], dt / ins->rho));
+    PetscCall(FlucaFDScaleSetConstant(ins->fd_grad[d], dt / rho));
   }
 
   /* Linearization state: U^n from X, and ubar^n with boundary values at t */
@@ -146,7 +148,7 @@ PetscErrorCode PhysComputeMomentumSystem_INS(Phys phys, PetscReal t, PetscReal d
   PetscCall(VecRestoreSubVector(f, ins->is_vel, &fv));
 
   /* Body force per unit mass, time-centered */
-  PetscCall(AddBodyForce_Private(phys, t + dt / 2., dt / ins->rho, f));
+  PetscCall(AddBodyForce_Private(phys, t + dt / 2., dt / rho, f));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -182,17 +184,19 @@ static PetscErrorCode AddNegR_Private(Mat M, Mat negR, PetscScalar scale)
    Boundary faces carry the prescribed normal velocity, U = u_b . n. */
 PetscErrorCode PhysComputeCouplingSystem_INS(Phys phys, PetscReal t, PetscReal dt, Mat M, Vec f)
 {
-  Phys_INS *ins    = (Phys_INS *)phys->data;
-  DM        sol_dm = phys->sol_dm;
-  PetscInt  dim    = phys->dim, e;
+  Phys_INS   *ins    = (Phys_INS *)phys->data;
+  DM          sol_dm = phys->sol_dm;
+  PetscInt    dim    = phys->dim, e;
+  PetscScalar rho;
 
   PetscFunctionBegin;
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho));
   for (e = 0; e < dim; e++) {
     PetscCall(AddIdentity_Private(sol_dm, M, face_loc[e], ins->c_U));
     PetscCall(FlucaFDGetOperator(ins->fd_negT[e], sol_dm, sol_dm, M));
     PetscCall(FlucaFDApply(ins->fd_bface[e], t, sol_dm, sol_dm, ins->zero, f));
   }
-  PetscCall(AddNegR_Private(M, ins->negR, dt / ins->rho));
+  PetscCall(AddNegR_Private(M, ins->negR, dt / rho));
   PetscCall(FlucaFDGetOperator(ins->fd_D, sol_dm, sol_dm, M));
   PetscCall(FlucaFDApply(ins->fd_D, t, sol_dm, sol_dm, ins->zero, f));
 

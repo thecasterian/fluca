@@ -25,6 +25,7 @@ PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
   p->dim           = PETSC_DETERMINE;
   p->data          = NULL;
   p->nfields       = 0;
+  p->nprops        = 0;
   p->setupcalled   = PETSC_FALSE;
 
   *phys = p;
@@ -69,7 +70,7 @@ PetscErrorCode PhysGetType(Phys phys, PhysType *type)
 
 PetscErrorCode PhysDestroy(Phys *phys)
 {
-  PetscInt f;
+  PetscInt f, p;
 
   PetscFunctionBegin;
   if (!*phys) PetscFunctionReturn(PETSC_SUCCESS);
@@ -84,6 +85,7 @@ PetscErrorCode PhysDestroy(Phys *phys)
   PetscTryTypeMethod((*phys), destroy);
 
   for (f = 0; f < (*phys)->nfields; ++f) PetscCall(PetscFree((*phys)->fields[f].name));
+  for (p = 0; p < (*phys)->nprops; ++p) PetscCall(PetscFree((*phys)->props[p].name));
 
   PetscCall(DMDestroy(&(*phys)->sol_dm));
   PetscCall(DMDestroy(&(*phys)->base_dm));
@@ -181,24 +183,6 @@ PetscErrorCode PhysViewFromOptions(Phys phys, PetscObject obj, const char name[]
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscCall(FlucaObjectViewFromOptions((PetscObject)phys, obj, name));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode PhysGetDensity(Phys phys, PetscReal *rho)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscAssertPointer(rho, 2);
-  PetscUseTypeMethod(phys, getdensity, rho);
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode PhysGetViscosity(Phys phys, PetscReal *mu)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscAssertPointer(mu, 2);
-  PetscUseTypeMethod(phys, getviscosity, mu);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

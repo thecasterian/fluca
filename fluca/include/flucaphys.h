@@ -76,9 +76,24 @@ FLUCA_EXTERN PetscErrorCode PhysGetFieldNullSpaceConstant(Phys, const char[], Pe
 FLUCA_EXTERN PetscErrorCode PhysGetField(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);
 FLUCA_EXTERN PetscErrorCode PhysGetFieldIS(Phys, const char[], IS *);
 
-/* Material properties */
-FLUCA_EXTERN PetscErrorCode PhysGetDensity(Phys, PetscReal *);
-FLUCA_EXTERN PetscErrorCode PhysGetViscosity(Phys, PetscReal *);
+/* Material properties.
+
+   Only PHYS_PROPERTY_CONSTANT is accepted. FUNCTION and FIELD are reserved: the enum, the
+   registration call and the queries carry them so that supporting them later does not change
+   any signature, but registering one raises PETSC_ERR_SUP. */
+typedef enum {
+  PHYS_PROPERTY_CONSTANT,
+  PHYS_PROPERTY_FUNCTION,
+  PHYS_PROPERTY_FIELD,
+} PhysPropertySource;
+FLUCA_EXTERN const char *PhysPropertySources[];
+
+#define PHYS_PROPERTY_DENSITY   "density"
+#define PHYS_PROPERTY_VISCOSITY "viscosity"
+
+FLUCA_EXTERN PetscErrorCode PhysGetPropertySource(Phys, const char[], PhysPropertySource *);
+FLUCA_EXTERN PetscErrorCode PhysGetPropertyConstant(Phys, const char[], PetscScalar *);
+FLUCA_EXTERN PetscErrorCode PhysGetPropertyLocation(Phys, const char[], PhysFieldLocation *);
 
 /* Rows of the coupled system (13) of the theory guide, assembled on the solution DM */
 FLUCA_EXTERN PetscErrorCode PhysComputeMomentumSystem(Phys, PetscReal, PetscReal, Vec, Mat, Vec);

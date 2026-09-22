@@ -71,6 +71,21 @@ int main(int argc, char **argv)
     }
   }
 
+  {
+    const char        *props[2] = {PHYS_PROPERTY_DENSITY, PHYS_PROPERTY_VISCOSITY};
+    PhysPropertySource src;
+    PhysFieldLocation  loc;
+    PetscScalar        val;
+    PetscInt           p;
+
+    for (p = 0; p < 2; ++p) {
+      PetscCall(PhysGetPropertySource(phys, props[p], &src));
+      PetscCall(PhysGetPropertyLocation(phys, props[p], &loc));
+      PetscCall(PhysGetPropertyConstant(phys, props[p], &val));
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s: source %s, location %s, value %g\n", props[p], PhysPropertySources[src], PhysFieldLocations[loc], (double)PetscRealPart(val)));
+    }
+  }
+
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));
 

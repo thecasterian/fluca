@@ -338,12 +338,13 @@ static PetscErrorCode BuildCouplingOperators_Private(Phys phys)
 
 PetscErrorCode PhysINSBuildOperators_Internal(Phys phys)
 {
-  Phys_INS *ins    = (Phys_INS *)phys->data;
-  DM        sol_dm = phys->sol_dm;
-  PetscInt  dim    = phys->dim, d, e;
-  PetscReal mu     = ins->mu;
+  Phys_INS   *ins    = (Phys_INS *)phys->data;
+  DM          sol_dm = phys->sol_dm;
+  PetscInt    dim    = phys->dim, d, e;
+  PetscScalar mu;
 
   PetscFunctionBegin;
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_VISCOSITY, &mu));
   /* --- fd_laplacian[d] = sum_e d/dx_e(-mu * d(u_d)/dx_e) --- */
   for (d = 0; d < dim; d++) {
     FlucaFD comp_ops[PHYS_INS_MAX_DIM];

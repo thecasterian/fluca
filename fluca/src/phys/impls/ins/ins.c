@@ -10,33 +10,22 @@ static PetscErrorCode PhysRegisterFields_INS(Phys phys)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode PhysGetDensity_INS(Phys phys, PetscReal *rho)
-{
-  Phys_INS *ins = (Phys_INS *)phys->data;
-
-  PetscFunctionBegin;
-  *rho = ins->rho;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode PhysGetViscosity_INS(Phys phys, PetscReal *mu)
-{
-  Phys_INS *ins = (Phys_INS *)phys->data;
-
-  PetscFunctionBegin;
-  *mu = ins->mu;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode PhysSetFromOptions_INS(Phys phys, PetscOptionItems PetscOptionsObject)
 {
-  Phys_INS *ins = (Phys_INS *)phys->data;
+  PetscScalar rho, mu;
+  PetscReal   rho_new, mu_new;
 
   PetscFunctionBegin;
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho));
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_VISCOSITY, &mu));
+  rho_new = PetscRealPart(rho);
+  mu_new  = PetscRealPart(mu);
   PetscOptionsHeadBegin(PetscOptionsObject, "INS Options");
-  PetscCall(PetscOptionsReal("-phys_ins_density", "Density", "PhysINSSetDensity", ins->rho, &ins->rho, NULL));
-  PetscCall(PetscOptionsReal("-phys_ins_viscosity", "Dynamic viscosity", "PhysINSSetViscosity", ins->mu, &ins->mu, NULL));
+  PetscCall(PetscOptionsReal("-phys_ins_density", "Density", "PhysINSSetDensity", PetscRealPart(rho), &rho_new, NULL));
+  PetscCall(PetscOptionsReal("-phys_ins_viscosity", "Dynamic viscosity", "PhysINSSetViscosity", PetscRealPart(mu), &mu_new, NULL));
   PetscOptionsHeadEnd();
+  PetscCall(PhysSetPropertyConstant_Internal(phys, PHYS_PROPERTY_DENSITY, rho_new));
+  PetscCall(PhysSetPropertyConstant_Internal(phys, PHYS_PROPERTY_VISCOSITY, mu_new));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -75,15 +64,17 @@ static PetscErrorCode PhysDestroy_INS(Phys phys)
 
 static PetscErrorCode PhysView_INS(Phys phys, PetscViewer viewer)
 {
-  Phys_INS *ins = (Phys_INS *)phys->data;
-  PetscBool isascii;
+  PetscBool   isascii;
+  PetscScalar rho, mu;
 
   PetscFunctionBegin;
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &isascii));
   if (isascii) {
+    PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho));
+    PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_VISCOSITY, &mu));
     PetscCall(PetscViewerASCIIPushTab(viewer));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "Density: %g\n", (double)ins->rho));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "Viscosity: %g\n", (double)ins->mu));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Density: %g\n", (double)PetscRealPart(rho)));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Viscosity: %g\n", (double)PetscRealPart(mu)));
     PetscCall(PetscViewerASCIIPopTab(viewer));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -96,8 +87,10 @@ PetscErrorCode PhysCreate_INS(Phys phys)
 
   PetscFunctionBegin;
   PetscCall(PetscNew(&ins));
-  ins->rho = 1.;
-  ins->mu  = 1.;
+  PetscCall(PhysRegisterProperty_Internal(phys, PHYS_PROPERTY_DENSITY, PHYS_FIELD_ELEMENT, PHYS_PROPERTY_CONSTANT));
+  PetscCall(PhysRegisterProperty_Internal(phys, PHYS_PROPERTY_VISCOSITY, PHYS_FIELD_FACE, PHYS_PROPERTY_CONSTANT));
+  PetscCall(PhysSetPropertyConstant_Internal(phys, PHYS_PROPERTY_DENSITY, 1.));
+  PetscCall(PhysSetPropertyConstant_Internal(phys, PHYS_PROPERTY_VISCOSITY, 1.));
 
   /* Initialize BCs to NONE */
   for (f = 0; f < PHYS_INS_MAX_FACES; f++) {
@@ -116,8 +109,6 @@ PetscErrorCode PhysCreate_INS(Phys phys)
 
   phys->data                       = ins;
   phys->ops->registerfields        = PhysRegisterFields_INS;
-  phys->ops->getdensity            = PhysGetDensity_INS;
-  phys->ops->getviscosity          = PhysGetViscosity_INS;
   phys->ops->setfromoptions        = PhysSetFromOptions_INS;
   phys->ops->setup                 = PhysSetUp_INS;
   phys->ops->destroy               = PhysDestroy_INS;
@@ -131,51 +122,49 @@ PetscErrorCode PhysCreate_INS(Phys phys)
 
 PetscErrorCode PhysINSSetDensity(Phys phys, PetscReal rho)
 {
-  Phys_INS *ins = (Phys_INS *)phys->data;
-
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscValidHeaderSpecificType(phys, PHYS_CLASSID, 1, PHYSINS);
   PetscValidLogicalCollectiveReal(phys, rho, 2);
   PetscCheck(rho > 0, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Density must be positive, got %g", (double)rho);
-  ins->rho = rho;
+  PetscCall(PhysSetPropertyConstant_Internal(phys, PHYS_PROPERTY_DENSITY, rho));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode PhysINSGetDensity(Phys phys, PetscReal *rho)
 {
-  Phys_INS *ins = (Phys_INS *)phys->data;
+  PetscScalar rho_val;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscValidHeaderSpecificType(phys, PHYS_CLASSID, 1, PHYSINS);
   PetscAssertPointer(rho, 2);
-  *rho = ins->rho;
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho_val));
+  *rho = PetscRealPart(rho_val);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode PhysINSSetViscosity(Phys phys, PetscReal mu)
 {
-  Phys_INS *ins = (Phys_INS *)phys->data;
-
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscValidHeaderSpecificType(phys, PHYS_CLASSID, 1, PHYSINS);
   PetscValidLogicalCollectiveReal(phys, mu, 2);
   PetscCheck(mu >= 0, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Viscosity must be non-negative, got %g", (double)mu);
-  ins->mu = mu;
+  PetscCall(PhysSetPropertyConstant_Internal(phys, PHYS_PROPERTY_VISCOSITY, mu));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode PhysINSGetViscosity(Phys phys, PetscReal *mu)
 {
-  Phys_INS *ins = (Phys_INS *)phys->data;
+  PetscScalar mu_val;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscValidHeaderSpecificType(phys, PHYS_CLASSID, 1, PHYSINS);
   PetscAssertPointer(mu, 2);
-  *mu = ins->mu;
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_VISCOSITY, &mu_val));
+  *mu = PetscRealPart(mu_val);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

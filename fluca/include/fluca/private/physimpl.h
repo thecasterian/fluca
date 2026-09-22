@@ -20,6 +20,15 @@ typedef struct {
   PetscBool         nullspace_const; /* field is determined only up to a constant */
 } PhysField;
 
+#define PHYS_MAX_PROPERTIES 8
+
+typedef struct {
+  char              *name;
+  PhysFieldLocation  loc;
+  PhysPropertySource source;
+  PetscScalar        constant; /* valid when source is PHYS_PROPERTY_CONSTANT */
+} PhysProperty;
+
 typedef struct _PhysOps *PhysOps;
 
 struct _PhysOps {
@@ -28,8 +37,6 @@ struct _PhysOps {
   PetscErrorCode (*setup)(Phys);
   PetscErrorCode (*destroy)(Phys);
   PetscErrorCode (*view)(Phys, PetscViewer);
-  PetscErrorCode (*getdensity)(Phys, PetscReal *);
-  PetscErrorCode (*getviscosity)(Phys, PetscReal *);
   PetscErrorCode (*computemomentumsystem)(Phys, PetscReal, PetscReal, Vec, Mat, Vec);
   PetscErrorCode (*computecouplingsystem)(Phys, PetscReal, PetscReal, Mat, Vec);
 };
@@ -43,11 +50,13 @@ struct _p_Phys {
   void            *bodyforce_ctx;
 
   /* Data */
-  DM        sol_dm;                  /* solution DMStag (created by subtype during setup) */
-  PetscInt  dim;                     /* spatial dimension (extracted from base_dm) */
-  void     *data;                    /* subtype-specific */
-  PetscInt  nfields;                 /* registered solution fields */
-  PhysField fields[PHYS_MAX_FIELDS]; /* in registration order */
+  DM           sol_dm;                  /* solution DMStag (created by subtype during setup) */
+  PetscInt     dim;                     /* spatial dimension (extracted from base_dm) */
+  void        *data;                    /* subtype-specific */
+  PetscInt     nfields;                 /* registered solution fields */
+  PhysField    fields[PHYS_MAX_FIELDS]; /* in registration order */
+  PetscInt     nprops;
+  PhysProperty props[PHYS_MAX_PROPERTIES];
 
   /* State */
   PetscBool setupcalled;
@@ -57,3 +66,5 @@ FLUCA_INTERN PetscErrorCode PhysRegisterField_Internal(Phys, const char[], PhysF
 FLUCA_INTERN PetscErrorCode PhysDeclareConstantNullSpace_Internal(Phys, const char[]);
 FLUCA_INTERN PetscErrorCode PhysGetField_Internal(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);
 FLUCA_INTERN PetscErrorCode PhysGetFieldIS_Internal(Phys, const char[], IS *);
+FLUCA_INTERN PetscErrorCode PhysRegisterProperty_Internal(Phys, const char[], PhysFieldLocation, PhysPropertySource);
+FLUCA_INTERN PetscErrorCode PhysSetPropertyConstant_Internal(Phys, const char[], PetscScalar);
