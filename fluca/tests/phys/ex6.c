@@ -91,6 +91,7 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
 {
   DM                dm, sol_dm;
   Phys              phys;
+  Seg               seg;
   Mat               M, negT, D;
   Vec               X, f, U, R, Rloc, Z;
   Vec               xv, bU, bp, rp;
@@ -112,7 +113,7 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, bt, bt, N, N, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 4, NULL, NULL, &dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 2. * PETSC_PI, 0., 2. * PETSC_PI, 0., 0.));
-  PetscCall(PhysTestCreateLaminar(dm, rho, mu, FieldBC, &phys));
+  PetscCall(PhysTestSetUp(dm, rho, mu, FieldBC, &phys, &seg));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_VELOCITY, &loc, &c_vel, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_PRESSURE, &loc, &c_p, NULL));
@@ -226,6 +227,7 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
   PetscCall(VecDestroy(&f));
   PetscCall(MatDestroy(&M));
   PetscCall(VecDestroy(&X));
+  PetscCall(SegDestroy(&seg));
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));
   PetscFunctionReturn(PETSC_SUCCESS);

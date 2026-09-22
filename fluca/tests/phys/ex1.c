@@ -1,4 +1,5 @@
 #include <flucaphys.h>
+#include <flucaseg.h>
 #include <flucasys.h>
 #include <petscdmstag.h>
 
@@ -15,6 +16,7 @@ int main(int argc, char **argv)
 {
   DM                dm, sol_dm;
   Phys              phys;
+  Seg               seg;
   PetscInt          f, c0, ncomp, n;
   PhysLaminarBC     bc;
   PhysFieldLocation loc;
@@ -44,6 +46,12 @@ int main(int argc, char **argv)
 
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));
+
+  /* The solution DM is laid out only once a Seg has declared its own auxiliary fields */
+  PetscCall(SegCreate(PETSC_COMM_WORLD, &seg));
+  PetscCall(SegSetType(seg, SEGCNLINEAR));
+  PetscCall(SegSetPhys(seg, phys));
+  PetscCall(SegSetUp(seg));
 
   /* View solution DM */
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
@@ -86,6 +94,7 @@ int main(int argc, char **argv)
     }
   }
 
+  PetscCall(SegDestroy(&seg));
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));
 

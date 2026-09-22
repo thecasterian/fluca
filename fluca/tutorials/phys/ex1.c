@@ -137,15 +137,18 @@ int main(int argc, char **argv)
   PetscCall(PhysLaminarSetViscosity(phys, mu));
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));
-  PetscCall(PhysGetSolutionDM(phys, &sol_dm));
 
+  /* SegSetUp() declares the face velocity that SEGCNLINEAR needs and lays out the solution DM, so
+     it must run before anything asks the Phys for that DM. */
   PetscCall(SegCreate(PETSC_COMM_WORLD, &seg));
   PetscCall(SegSetType(seg, SEGCNLINEAR));
   PetscCall(SegSetPhys(seg, phys));
   PetscCall(SegSetMaxTime(seg, 1.));
   PetscCall(SegSetTimeStep(seg, 0.01));
   PetscCall(SegSetFromOptions(seg));
+  PetscCall(SegSetUp(seg));
   PetscCall(SegGetTimeStep(seg, &dt0));
+  PetscCall(PhysGetSolutionDM(phys, &sol_dm));
 
   /* Initial condition: exact TGV at t = 0; the initial pressure is q at the first step */
   PetscCall(DMCreateGlobalVector(sol_dm, &Y));

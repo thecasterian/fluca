@@ -96,29 +96,27 @@ static PetscErrorCode FillInitialCondition(Phys phys, AppCtx *user, Vec Y)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Solve with time step dt; on return the pressure field of Y holds the mean-free extrapolated p^N */
-static PetscErrorCode Solve(Phys phys, AppCtx *user, PetscReal dt, PetscReal tmax, Vec Y)
+/* Solve with time step dt; on return the pressure field of Y holds the mean-free extrapolated p^N.
+   The Seg is created once in main(), because it is what lays out the solution DM that Y lives on, so
+   every level rewinds the same Seg to the start of the interval instead of building a new one. */
+static PetscErrorCode Solve(Phys phys, Seg seg, AppCtx *user, PetscReal dt, Vec Y)
 {
-  Seg         seg;
   Vec         p;
   PetscScalar mean;
   PetscInt    np, nsteps;
 
   PetscFunctionBeginUser;
   PetscCall(FillInitialCondition(phys, user, Y));
-  PetscCall(SegCreate(PetscObjectComm((PetscObject)phys), &seg));
-  PetscCall(SegSetType(seg, SEGCNLINEAR));
-  PetscCall(SegSetPhys(seg, phys));
-  PetscCall(SegSetPreStep(seg, SavePressure, user));
-  PetscCall(SegSetMaxTime(seg, tmax));
-  /* SegSetTimeStep must come after SegSetFromOptions: otherwise a stray -seg_dt on the command line
-     would silently override dt and collapse the whole refinement ladder to one step size. */
-  PetscCall(SegSetFromOptions(seg));
+  /* Rewind the loop state of the previous level. SegSetTimeStep must come after the
+     SegSetFromOptions() in main(): otherwise a stray -seg_dt on the command line would silently
+     override dt and collapse the whole refinement ladder to one step size. */
+  PetscCall(SegSetTime(seg, 0.));
+  PetscCall(SegSetStepNumber(seg, 0));
   PetscCall(SegSetTimeStep(seg, dt));
+  PetscCall(SegSetConvergedReason(seg, SEG_CONVERGED_ITERATING));
   PetscCall(SegSolve(seg, Y));
   PetscCall(SegGetStepNumber(seg, &nsteps));
   PetscCheck(nsteps >= 2, PetscObjectComm((PetscObject)seg), PETSC_ERR_PLIB, "This level took %" PetscInt_FMT " step(s); the Armfield & Street extrapolation needs at least 2 to have a valid p_prev", nsteps);
-  PetscCall(SegDestroy(&seg));
 
   PetscCall(VecGetSubVector(Y, user->is_p, &p));
   PetscCall(VecAXPBY(p, -0.5, 1.5, user->p_prev));
@@ -151,6 +149,7 @@ int main(int argc, char **argv)
 {
   DM            dm, sol_dm;
   Phys          phys;
+  Seg           seg;
   PhysLaminarBC bc;
   AppCtx        user;
   IS            is_v;
@@ -192,6 +191,16 @@ int main(int argc, char **argv)
   }
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));
+
+  /* SegSetUp() declares the face velocity that SEGCNLINEAR needs and lays out the solution DM, so
+     it must run before anything asks the Phys for that DM. */
+  PetscCall(SegCreate(PETSC_COMM_WORLD, &seg));
+  PetscCall(SegSetType(seg, SEGCNLINEAR));
+  PetscCall(SegSetPhys(seg, phys));
+  PetscCall(SegSetPreStep(seg, SavePressure, &user));
+  PetscCall(SegSetMaxTime(seg, tmax));
+  PetscCall(SegSetFromOptions(seg));
+  PetscCall(SegSetUp(seg));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(DMStagGetGlobalSizes(sol_dm, &N, NULL, NULL));
   h = L / N;
@@ -208,7 +217,7 @@ int main(int argc, char **argv)
   for (l = 0; l < nlevels; ++l) {
     PetscReal dtl = dt / PetscPowInt(2, l);
 
-    PetscCall(Solve(phys, &user, dtl, tmax, Y[l % 2]));
+    PetscCall(Solve(phys, seg, &user, dtl, Y[l % 2]));
     if (l == 0) continue;
     PetscCall(FieldDifference(is_v, Y[0], Y[1], h, &e_u));
     PetscCall(FieldDifference(user.is_p, Y[0], Y[1], h, &e_p));
@@ -225,6 +234,7 @@ int main(int argc, char **argv)
   PetscCall(VecDestroy(&Y[0]));
   PetscCall(ISDestroy(&user.is_p));
   PetscCall(ISDestroy(&is_v));
+  PetscCall(SegDestroy(&seg));
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));
   PetscCall(FlucaFinalize());

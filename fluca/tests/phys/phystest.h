@@ -1,12 +1,15 @@
 #pragma once
 
 #include <flucaphys.h>
+#include <flucaseg.h>
 #include <flucasys.h>
 #include <petscdmstag.h>
 
-/* Create and set up a PhysLaminar on dm. Every non-periodic boundary gets a velocity BC from bcfn
-   (NULL means zero velocity). */
-static PetscErrorCode PhysTestCreateLaminar(DM dm, PetscReal rho, PetscReal mu, PhysLaminarBCFn *bcfn, Phys *phys)
+/* Two-phase setup of a PhysLaminar on dm: the Phys freezes its declarations, then a SEGCNLINEAR
+   adds its auxiliary fields and triggers creation of the solution DM. Every non-periodic boundary
+   gets a velocity BC from bcfn (NULL means zero velocity), set before PhysSetUp() as required.
+   Both objects are returned; destroy seg before phys. */
+static PetscErrorCode PhysTestSetUp(DM dm, PetscReal rho, PetscReal mu, PhysLaminarBCFn *bcfn, Phys *phys, Seg *seg)
 {
   DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
   PhysLaminarBC  bc;
@@ -32,6 +35,10 @@ static PetscErrorCode PhysTestCreateLaminar(DM dm, PetscReal rho, PetscReal mu, 
   }
   PetscCall(PhysSetFromOptions(*phys));
   PetscCall(PhysSetUp(*phys));
+  PetscCall(SegCreate(PetscObjectComm((PetscObject)dm), seg));
+  PetscCall(SegSetType(*seg, SEGCNLINEAR));
+  PetscCall(SegSetPhys(*seg, *phys));
+  PetscCall(SegSetUp(*seg));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

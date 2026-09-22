@@ -105,12 +105,18 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
   Mat           blocks[9];
   KSP           ksp, kspA, kspS;
   PC            pc, subpc;
+  PetscBool     setupcalled;
   PetscInt      k, n, N;
   const char   *names[3] = {PHYS_FIELD_VELOCITY, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_PRESSURE};
 
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)seg, &comm));
-  PetscCheck(seg->phys->setupcalled, comm, PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before SegSetUp() with SEGCNLINEAR");
+  /* Two-phase setup: the Phys has frozen its own declarations, so the face velocity that the
+     fractional step method needs can be added here before the solution DM is laid out. */
+  PetscCall(PhysGetSetUpCalled(seg->phys, &setupcalled));
+  PetscCheck(setupcalled, comm, PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before SegSetUp() with SEGCNLINEAR");
+  PetscCall(PhysDeclareField_Internal(seg->phys, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1, PHYS_EQN_AUXILIARY));
+  PetscCall(PhysCreateSolutionDM_Internal(seg->phys));
   PetscCall(PhysGetSolutionDM(seg->phys, &dm));
 
   for (k = 0; k < 3; ++k) PetscCall(PhysGetFieldIS(seg->phys, names[k], &fsm->is[k]));

@@ -13,6 +13,7 @@ int main(int argc, char **argv)
 {
   DM                dm, sol_dm;
   Phys              phys;
+  Seg               seg;
   Mat               M;
   Vec               X, f, MX, E_MX, E_f;
   PhysFieldLocation loc;
@@ -25,7 +26,7 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 2. * PETSC_PI, 0., 2. * PETSC_PI, 0., 0.));
-  PetscCall(PhysTestCreateLaminar(dm, rho, mu, NULL, &phys));
+  PetscCall(PhysTestSetUp(dm, rho, mu, NULL, &phys, &seg));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_VELOCITY, &loc, &c_vel, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_FACE_VELOCITY, &loc, &c_U, NULL));
@@ -104,6 +105,7 @@ int main(int argc, char **argv)
   PetscCall(VecDestroy(&X));
   PetscCall(VecDestroy(&f));
   PetscCall(MatDestroy(&M));
+  PetscCall(SegDestroy(&seg));
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));
   PetscCall(FlucaFinalize());

@@ -1,5 +1,4 @@
 #include "segtest.h"
-#include <flucaseg.h>
 
 static const char help[] = "Test one PCABF sweep on the coupled system (13) against the theory guide's error (17)\n"
                            "With A1 = A2 = I, the Rhie-Chow and continuity rows are solved exactly and\n"
@@ -17,6 +16,7 @@ int main(int argc, char **argv)
 {
   DM                dm, sol_dm;
   Phys              phys;
+  Seg               seg;
   Mat               M, P, A, G, blocks[9];
   Vec               X, f, x, r, E, nullvec, sub, xp, w, Aw, Ev;
   IS                is[3];
@@ -30,13 +30,11 @@ int main(int argc, char **argv)
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
-  /* PCABF is registered by SegInitializePackage; this test uses only Phys, which never triggers it */
-  PetscCall(SegInitializePackage());
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 8, 8, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 4, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
-  PetscCall(PhysTestCreateLaminar(dm, 1., 0.1, LidVelocity, &phys));
+  PetscCall(PhysTestSetUp(dm, 1., 0.1, LidVelocity, &phys, &seg));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_VELOCITY, &loc, &c_vel, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_PRESSURE, &loc, &c_p, NULL));
@@ -165,6 +163,7 @@ int main(int argc, char **argv)
   PetscCall(VecDestroy(&f));
   PetscCall(MatDestroy(&M));
   PetscCall(VecDestroy(&X));
+  PetscCall(SegDestroy(&seg));
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));
   PetscCall(FlucaFinalize());
