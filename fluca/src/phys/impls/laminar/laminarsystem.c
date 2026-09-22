@@ -152,7 +152,7 @@ PetscErrorCode PhysComputeMomentumSystem_Laminar(Phys phys, PetscReal t, PetscRe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* M += scale * negR on the face-velocity rows. negR is assembled once, unscaled, in insops.c; only
+/* M += scale * negR on the face-velocity rows. negR is assembled once, unscaled, in laminarops.c; only
    the dt/rho factor of guide eq. (11) changes from step to step. */
 static PetscErrorCode AddNegR_Private(Mat M, Mat negR, PetscScalar scale)
 {

@@ -51,10 +51,10 @@ typedef struct {
   PetscInt *bface;                          /* their local indices on the solution DM */
 } Phys_Laminar;
 
-/* Internal functions defined in insops.c */
+/* Internal functions defined in laminarops.c */
 FLUCA_INTERN PetscErrorCode PhysLaminarBuildOperators_Internal(Phys);
 FLUCA_INTERN PetscErrorCode PhysLaminarDestroyOperators_Internal(Phys);
 
-/* Defined in inssystem.c */
+/* Defined in laminarsystem.c */
 FLUCA_INTERN PetscErrorCode PhysComputeMomentumSystem_Laminar(Phys, PetscReal, PetscReal, Vec, Mat, Vec);
 FLUCA_INTERN PetscErrorCode PhysComputeCouplingSystem_Laminar(Phys, PetscReal, PetscReal, Mat, Vec);
