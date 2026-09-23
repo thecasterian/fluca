@@ -79,6 +79,7 @@ PetscErrorCode PhysGetFieldRole(Phys phys, const char name[], PhysEquationRole *
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscAssertPointer(name, 2);
   PetscAssertPointer(role, 3);
+  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysGetFieldRole()");
   PetscCall(PhysFindField_Private(phys, name, &field));
   *role = field->role;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -92,6 +93,7 @@ PetscErrorCode PhysGetFieldNullSpaceConstant(Phys phys, const char name[], Petsc
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscAssertPointer(name, 2);
   PetscAssertPointer(flg, 3);
+  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysGetFieldNullSpaceConstant()");
   PetscCall(PhysFindField_Private(phys, name, &field));
   *flg = field->nullspace_const;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -102,6 +104,7 @@ PetscErrorCode PhysGetNumFields(Phys phys, PetscInt *nfields)
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscAssertPointer(nfields, 2);
+  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysGetNumFields()");
   *nfields = phys->nfields;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -111,6 +114,7 @@ PetscErrorCode PhysGetFieldName(Phys phys, PetscInt idx, const char *name[])
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscAssertPointer(name, 3);
+  PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysGetFieldName()");
   PetscCheck(idx >= 0 && idx < phys->nfields, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Field index %" PetscInt_FMT " is out of range [0, %" PetscInt_FMT ")", idx, phys->nfields);
   *name = phys->fields[idx].name;
   PetscFunctionReturn(PETSC_SUCCESS);
