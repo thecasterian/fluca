@@ -6,25 +6,21 @@ const char *PhysEquationRoles[]  = {"MOMENTUM", "PRESSURE", "TRANSPORTED_SCALAR"
 /* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
 static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
 
-/* Declare a solution field. Idempotent: re-declaring a field with the same layout is a silent
-   success, so that a Seg may declare an auxiliary field that its Phys has already declared. */
-PetscErrorCode PhysDeclareField(Phys phys, const char name[], PhysFieldLocation loc, PetscInt ncomp, PhysEquationRole role)
+/* Declare a solution field. Called only while PhysSetUp() runs: first for the fields every Phys has,
+   then by the subtype's setup for its own, before the solution DM is laid out from all of them. */
+PetscErrorCode PhysDeclareField_Internal(Phys phys, const char name[], PhysFieldLocation loc, PetscInt ncomp, PhysEquationRole role)
 {
   PhysField *field;
   PetscInt   f, c0 = 0;
   PetscBool  same;
 
   PetscFunctionBegin;
-  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscAssertPointer(name, 2);
+  PetscCheck(!phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Cannot declare field %s after PhysSetUp()", name);
   PetscCheck(phys->nfields < PHYS_MAX_FIELDS, PetscObjectComm((PetscObject)phys), PETSC_ERR_SUP, "Cannot register more than %d fields", PHYS_MAX_FIELDS);
   PetscCheck(ncomp > 0, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Field %s must have at least one component", name);
   for (f = 0; f < phys->nfields; ++f) {
     PetscCall(PetscStrcmp(phys->fields[f].name, name, &same));
-    if (same) {
-      PetscCheck(phys->fields[f].loc == loc && phys->fields[f].ncomp == ncomp && phys->fields[f].role == role, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONG, "Field %s is already registered with a different layout", name);
-      PetscFunctionReturn(PETSC_SUCCESS);
-    }
+    PetscCheck(!same, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONG, "Field %s is already declared", name);
     if (phys->fields[f].loc == loc) c0 += phys->fields[f].ncomp;
   }
   field = &phys->fields[phys->nfields];
@@ -161,7 +157,6 @@ PetscErrorCode PhysGetFieldIS(Phys phys, const char name[], IS *is)
   PetscAssertPointer(name, 2);
   PetscAssertPointer(is, 3);
   PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysGetFieldIS()");
-  PetscCheck(phys->sol_dm, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Solution DM does not exist yet; call SegSetUp() on a Seg attached to this Phys first");
   PetscCall(PhysGetFieldIS_Internal(phys, name, is));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

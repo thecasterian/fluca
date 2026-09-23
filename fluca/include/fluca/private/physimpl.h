@@ -57,6 +57,7 @@ struct _p_Phys {
   PetscBool setupcalled;
 };
 
+FLUCA_INTERN PetscErrorCode PhysDeclareField_Internal(Phys, const char[], PhysFieldLocation, PetscInt, PhysEquationRole);
 FLUCA_INTERN PetscErrorCode PhysDeclareConstantNullSpace_Internal(Phys, const char[]);
 FLUCA_INTERN PetscErrorCode PhysGetField_Internal(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);
 FLUCA_INTERN PetscErrorCode PhysGetFieldIS_Internal(Phys, const char[], IS *);

@@ -138,8 +138,6 @@ int main(int argc, char **argv)
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));
 
-  /* SegSetUp() declares the face velocity that SEGCNLINEAR needs and lays out the solution DM, so
-     it must run before anything asks the Phys for that DM. */
   PetscCall(SegCreate(PETSC_COMM_WORLD, &seg));
   PetscCall(SegSetType(seg, SEGCNLINEAR));
   PetscCall(SegSetPhys(seg, phys));

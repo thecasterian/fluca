@@ -6,10 +6,9 @@
 #include <flucasys.h>
 #include <petscdmstag.h>
 
-/* Two-phase setup of a PhysLaminar on dm: the Phys freezes its declarations, then a SEGCNLINEAR
-   adds its auxiliary fields and triggers creation of the solution DM. Every non-periodic boundary
-   gets a velocity BC from bcfn (NULL means zero velocity), set before PhysSetUp() as required.
-   Both objects are returned; destroy seg before phys. */
+/* Set up a PhysLaminar on dm, which lays out the solution DM, and a SEGCNLINEAR attached to it.
+   Every non-periodic boundary gets a velocity BC from bcfn (NULL means zero velocity), set before
+   PhysSetUp() as required. Both objects are returned; destroy seg before phys. */
 static PetscErrorCode PhysTestSetUp(DM dm, PetscReal rho, PetscReal mu, PhysLaminarBCFn *bcfn, Phys *phys, Seg *seg)
 {
   DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};

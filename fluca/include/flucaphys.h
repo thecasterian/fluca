@@ -78,11 +78,6 @@ FLUCA_EXTERN PetscErrorCode PhysGetFieldName(Phys, PetscInt, const char *[]);
 FLUCA_EXTERN PetscErrorCode PhysGetField(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);
 FLUCA_EXTERN PetscErrorCode PhysGetFieldIS(Phys, const char[], IS *);
 
-/* Two-phase setup. A Seg subtype declares the auxiliary fields its method needs on top of the ones
-   the Phys subtype declared during PhysSetUp(), then lays out the solution DM from all of them. */
-FLUCA_EXTERN PetscErrorCode PhysDeclareField(Phys, const char[], PhysFieldLocation, PetscInt, PhysEquationRole);
-FLUCA_EXTERN PetscErrorCode PhysCreateSolutionDM(Phys);
-
 /* Material properties.
 
    Only PHYS_PROPERTY_CONSTANT is accepted. FUNCTION and FIELD are reserved: the enum, the

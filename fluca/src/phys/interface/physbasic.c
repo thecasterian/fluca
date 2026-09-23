@@ -96,15 +96,13 @@ PetscErrorCode PhysDestroy(Phys *phys)
 
 /* Lay out the solution DMStag from the declared fields. Called by PhysSetUp() once the common fields
    and the subtype's own fields are declared. */
-PetscErrorCode PhysCreateSolutionDM(Phys phys)
+static PetscErrorCode PhysCreateSolutionDM_Private(Phys phys)
 {
   PetscInt dof[2] = {0, 0}; /* indexed by PhysFieldLocation */
   PetscInt f;
   DM       cdm;
 
   PetscFunctionBegin;
-  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  if (phys->sol_dm) PetscFunctionReturn(PETSC_SUCCESS);
   for (f = 0; f < phys->nfields; ++f) dof[phys->fields[f].loc] += phys->fields[f].ncomp;
   switch (phys->dim) {
   case 2:
@@ -145,14 +143,14 @@ PetscErrorCode PhysSetUp(Phys phys)
 
   /* Every Phys describes incompressible flow on the collocated grid, so every Phys has these fields.
      Their order fixes each field's first component, and hence the layout of the solution DM. */
-  PetscCall(PhysDeclareField(phys, PHYS_FIELD_VELOCITY, PHYS_FIELD_ELEMENT, phys->dim, PHYS_EQN_MOMENTUM));
-  PetscCall(PhysDeclareField(phys, PHYS_FIELD_PRESSURE, PHYS_FIELD_ELEMENT, 1, PHYS_EQN_PRESSURE));
-  PetscCall(PhysDeclareField(phys, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1, PHYS_EQN_AUXILIARY));
+  PetscCall(PhysDeclareField_Internal(phys, PHYS_FIELD_VELOCITY, PHYS_FIELD_ELEMENT, phys->dim, PHYS_EQN_MOMENTUM));
+  PetscCall(PhysDeclareField_Internal(phys, PHYS_FIELD_PRESSURE, PHYS_FIELD_ELEMENT, 1, PHYS_EQN_PRESSURE));
+  PetscCall(PhysDeclareField_Internal(phys, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1, PHYS_EQN_AUXILIARY));
 
   /* The subtype adds its own fields and field attributes; the solution DM does not exist yet */
   PetscTryTypeMethod(phys, setup);
 
-  PetscCall(PhysCreateSolutionDM(phys));
+  PetscCall(PhysCreateSolutionDM_Private(phys));
 
   PetscCall(PetscLogEventEnd(PHYS_SetUp, (PetscObject)phys, 0, 0, 0));
 

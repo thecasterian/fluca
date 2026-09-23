@@ -97,8 +97,8 @@ static PetscErrorCode FillInitialCondition(Phys phys, AppCtx *user, Vec Y)
 }
 
 /* Solve with time step dt; on return the pressure field of Y holds the mean-free extrapolated p^N.
-   The Seg is created once in main(), because it is what lays out the solution DM that Y lives on, so
-   every level rewinds the same Seg to the start of the interval instead of building a new one. */
+   The Seg is created once in main() and reused across levels, rewound to the start of the interval
+   instead of being rebuilt; Y's solution DM comes from phys, which lays it out in PhysSetUp(). */
 static PetscErrorCode Solve(Phys phys, Seg seg, AppCtx *user, PetscReal dt, Vec Y)
 {
   Vec         p;
@@ -192,8 +192,6 @@ int main(int argc, char **argv)
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));
 
-  /* SegSetUp() declares the face velocity that SEGCNLINEAR needs and lays out the solution DM, so
-     it must run before anything asks the Phys for that DM. */
   PetscCall(SegCreate(PETSC_COMM_WORLD, &seg));
   PetscCall(SegSetType(seg, SEGCNLINEAR));
   PetscCall(SegSetPhys(seg, phys));
