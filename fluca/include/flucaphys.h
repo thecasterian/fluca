@@ -62,7 +62,7 @@ typedef enum {
   PHYS_EQN_MOMENTUM,           /* rho Du/Dt = -grad p + div(mu grad u) */
   PHYS_EQN_PRESSURE,           /* the incompressibility constraint */
   PHYS_EQN_TRANSPORTED_SCALAR, /* reserved; rejected by Seg */
-  PHYS_EQN_AUXILIARY,          /* satisfies no PDE of its own; rejected by Seg */
+  PHYS_EQN_AUXILIARY,          /* satisfies no PDE of its own; the Seg defines its rows */
 } PhysEquationRole;
 FLUCA_EXTERN const char *PhysEquationRoles[];
 

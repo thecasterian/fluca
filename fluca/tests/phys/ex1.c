@@ -24,7 +24,7 @@ int main(int argc, char **argv)
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
 
-  /* Create 2D base DMStag: 1 element DOF, stencil width 4 as required by PhysLaminar */
+  /* Create 2D base DMStag: 1 element DOF, stencil width 4 as SEGCNLINEAR requires of a base DM */
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 4, 4, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 4, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
