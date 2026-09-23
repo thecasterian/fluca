@@ -101,6 +101,25 @@ PetscErrorCode PhysGetFieldNullSpaceConstant(Phys phys, const char name[], Petsc
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode PhysGetNumFields(Phys phys, PetscInt *nfields)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscAssertPointer(nfields, 2);
+  *nfields = phys->nfields;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysGetFieldName(Phys phys, PetscInt idx, const char *name[])
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscAssertPointer(name, 3);
+  PetscCheck(idx >= 0 && idx < phys->nfields, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Field index %" PetscInt_FMT " is out of range [0, %" PetscInt_FMT ")", idx, phys->nfields);
+  *name = phys->fields[idx].name;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode PhysGetFieldIS_Internal(Phys phys, const char name[], IS *is)
 {
   PhysField     *field;

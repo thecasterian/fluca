@@ -68,6 +68,8 @@ FLUCA_EXTERN const char *PhysEquationRoles[];
 
 FLUCA_EXTERN PetscErrorCode PhysGetFieldRole(Phys, const char[], PhysEquationRole *);
 FLUCA_EXTERN PetscErrorCode PhysGetFieldNullSpaceConstant(Phys, const char[], PetscBool *);
+FLUCA_EXTERN PetscErrorCode PhysGetNumFields(Phys, PetscInt *);
+FLUCA_EXTERN PetscErrorCode PhysGetFieldName(Phys, PetscInt, const char *[]);
 
 #define PHYS_FIELD_VELOCITY      "velocity"
 #define PHYS_FIELD_PRESSURE      "pressure"

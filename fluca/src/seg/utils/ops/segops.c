@@ -349,16 +349,16 @@ static PetscErrorCode BuildCouplingOperators_Private(Seg seg)
 
 PetscErrorCode SegOpsBuild_Internal(Seg seg)
 {
-  Seg_CNLinear     *cn               = (Seg_CNLinear *)seg->data;
-  Seg_Ops          *ops              = &cn->ops;
-  DMBoundaryType    bt[3]            = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
-  const char *const handled_fields[] = {PHYS_FIELD_VELOCITY, PHYS_FIELD_PRESSURE, PHYS_FIELD_FACE_VELOCITY};
-  PhysLaminarBC     bc_lo, bc_hi;
-  PhysEquationRole  role;
-  PetscScalar       mu;
-  PetscInt          dim, sw, d, e, k;
-  DM                sol_dm;
-  PetscBool         islaminar;
+  Seg_CNLinear    *cn    = (Seg_CNLinear *)seg->data;
+  Seg_Ops         *ops   = &cn->ops;
+  DMBoundaryType   bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
+  PhysLaminarBC    bc_lo, bc_hi;
+  PhysEquationRole role;
+  const char      *name;
+  PetscScalar      mu;
+  PetscInt         dim, sw, d, e, k, nfields;
+  DM               sol_dm;
+  PetscBool        islaminar;
 
   PetscFunctionBegin;
   /* The operators below read the laminar boundary conditions and assume the laminar fields */
@@ -382,12 +382,16 @@ PetscErrorCode SegOpsBuild_Internal(Seg seg)
     PetscCheck(bc_lo.type == PHYS_LAMINAR_BC_VELOCITY && bc_hi.type == PHYS_LAMINAR_BC_VELOCITY, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "SegCNLinear requires a velocity boundary condition on both non-periodic boundaries in direction %" PetscInt_FMT, d);
   }
 
-  /* SegCNLinear only builds operators for the momentum, pressure and auxiliary fields it declares
-     or consumes by name; a transported-scalar field would be laid into the solution DM with no rows
-     ever written for it, leaving a singular system with no diagnostic. */
-  for (k = 0; k < (PetscInt)PETSC_STATIC_ARRAY_LENGTH(handled_fields); ++k) {
-    PetscCall(PhysGetFieldRole(seg->phys, handled_fields[k], &role));
-    PetscCheck(role == PHYS_EQN_MOMENTUM || role == PHYS_EQN_PRESSURE || role == PHYS_EQN_AUXILIARY, PetscObjectComm((PetscObject)seg), PETSC_ERR_SUP, "SegCNLinear cannot build operators for field %s with equation role %s", handled_fields[k], PhysEquationRoles[role]);
+  /* SegCNLinear only builds operators for fields with a momentum, pressure or auxiliary role; a
+     transported-scalar field, or any other field it does not know how to handle, would be laid into
+     the solution DM with no rows ever written for it, leaving a singular system with no diagnostic.
+     Every declared field must be checked, not just the ones this Seg looks up by name, since a Phys
+     subtype may declare additional fields this Seg is unaware of. */
+  PetscCall(PhysGetNumFields(seg->phys, &nfields));
+  for (k = 0; k < nfields; ++k) {
+    PetscCall(PhysGetFieldName(seg->phys, k, &name));
+    PetscCall(PhysGetFieldRole(seg->phys, name, &role));
+    PetscCheck(role == PHYS_EQN_MOMENTUM || role == PHYS_EQN_PRESSURE || role == PHYS_EQN_AUXILIARY, PetscObjectComm((PetscObject)seg), PETSC_ERR_SUP, "SegCNLinear cannot build operators for field %s with equation role %s", name, PhysEquationRoles[role]);
   }
 
   PetscCall(PhysGetField(seg->phys, PHYS_FIELD_VELOCITY, NULL, &ops->c_vel, NULL));
