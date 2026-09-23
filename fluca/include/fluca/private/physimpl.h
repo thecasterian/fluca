@@ -31,7 +31,7 @@ typedef struct _PhysOps *PhysOps;
 
 struct _PhysOps {
   PetscErrorCode (*setfromoptions)(Phys, PetscOptionItems);
-  PetscErrorCode (*registerfields)(Phys);
+  PetscErrorCode (*setup)(Phys); /* runs before the solution DM exists: declares subtype fields and field attributes */
   PetscErrorCode (*destroy)(Phys);
   PetscErrorCode (*view)(Phys, PetscViewer);
 };
@@ -45,7 +45,7 @@ struct _p_Phys {
   void            *bodyforce_ctx;
 
   /* Data */
-  DM           sol_dm;                  /* solution DMStag (created during SegSetUp(), once every field is declared) */
+  DM           sol_dm;                  /* solution DMStag (created at the end of PhysSetUp(), from every declared field) */
   PetscInt     dim;                     /* spatial dimension (extracted from base_dm) */
   void        *data;                    /* subtype-specific */
   PetscInt     nfields;                 /* registered solution fields */

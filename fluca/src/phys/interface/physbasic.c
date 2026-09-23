@@ -94,10 +94,8 @@ PetscErrorCode PhysDestroy(Phys *phys)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Lay out the solution DMStag from the declared fields and build whatever the subtype needs the DM
-   for. Idempotent: the first caller after every field has been declared creates the DM, and a later
-   caller finds it already there. Seg triggers this from SegSetUp(), once it has declared its own
-   auxiliary fields on top of the ones the Phys subtype declared during PhysSetUp(). */
+/* Lay out the solution DMStag from the declared fields. Called by PhysSetUp() once the common fields
+   and the subtype's own fields are declared. */
 PetscErrorCode PhysCreateSolutionDM(Phys phys)
 {
   PetscInt dof[2] = {0, 0}; /* indexed by PhysFieldLocation */
@@ -143,10 +141,18 @@ PetscErrorCode PhysSetUp(Phys phys)
   /* Extract dimension */
   PetscCall(DMGetDimension(phys->base_dm, &phys->dim));
 
-  /* The subtype declares its fields. The solution DM is laid out from them only once a Seg has
-     added its own auxiliary fields; see PhysCreateSolutionDM(). */
-  PetscCheck(phys->ops->registerfields, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Phys type not set or subtype does not implement registerfields");
-  PetscCall((*phys->ops->registerfields)(phys));
+  PetscCheck(((PetscObject)phys)->type_name, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Phys type not set. Call PhysSetType() first");
+
+  /* Every Phys describes incompressible flow on the collocated grid, so every Phys has these fields.
+     Their order fixes each field's first component, and hence the layout of the solution DM. */
+  PetscCall(PhysDeclareField(phys, PHYS_FIELD_VELOCITY, PHYS_FIELD_ELEMENT, phys->dim, PHYS_EQN_MOMENTUM));
+  PetscCall(PhysDeclareField(phys, PHYS_FIELD_PRESSURE, PHYS_FIELD_ELEMENT, 1, PHYS_EQN_PRESSURE));
+  PetscCall(PhysDeclareField(phys, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1, PHYS_EQN_AUXILIARY));
+
+  /* The subtype adds its own fields and field attributes; the solution DM does not exist yet */
+  PetscTryTypeMethod(phys, setup);
+
+  PetscCall(PhysCreateSolutionDM(phys));
 
   PetscCall(PetscLogEventEnd(PHYS_SetUp, (PetscObject)phys, 0, 0, 0));
 

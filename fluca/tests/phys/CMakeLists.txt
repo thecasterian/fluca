@@ -12,7 +12,7 @@ foreach(test_src ${TEST_SRCS})
     add_executable(${test_name} ${test_src})
     set_target_properties(${test_name} PROPERTIES OUTPUT_NAME ${test_base_name})
     target_link_libraries(${test_name} PRIVATE
-        fluca::seg
+        fluca::phys
         m
     )
     fluca_parse_test_file(${CMAKE_CURRENT_SOURCE_DIR}/${test_src} ${test_name} ${test_base_name})

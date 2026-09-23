@@ -1,10 +1,10 @@
 #include <fluca/private/physlaminarimpl.h>
 
-static PetscErrorCode PhysRegisterFields_Laminar(Phys phys)
+/* PhysSetUp() has declared the common fields. The boundary conditions of PHYSLAMINAR prescribe the
+   velocity only, so the pressure is determined only up to a constant. */
+static PetscErrorCode PhysSetUp_Laminar(Phys phys)
 {
   PetscFunctionBegin;
-  PetscCall(PhysDeclareField(phys, PHYS_FIELD_VELOCITY, PHYS_FIELD_ELEMENT, phys->dim, PHYS_EQN_MOMENTUM));
-  PetscCall(PhysDeclareField(phys, PHYS_FIELD_PRESSURE, PHYS_FIELD_ELEMENT, 1, PHYS_EQN_PRESSURE));
   PetscCall(PhysDeclareConstantNullSpace_Internal(phys, PHYS_FIELD_PRESSURE));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -75,7 +75,7 @@ PetscErrorCode PhysCreate_Laminar(Phys phys)
   }
 
   phys->data                = ins;
-  phys->ops->registerfields = PhysRegisterFields_Laminar;
+  phys->ops->setup          = PhysSetUp_Laminar;
   phys->ops->setfromoptions = PhysSetFromOptions_Laminar;
   phys->ops->destroy        = PhysDestroy_Laminar;
   phys->ops->view           = PhysView_Laminar;

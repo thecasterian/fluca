@@ -27,7 +27,7 @@ PetscErrorCode PhysGetSolutionDM(Phys phys, DM *dm)
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscAssertPointer(dm, 2);
-  PetscCheck(phys->sol_dm, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Solution DM does not exist yet; call SegSetUp() on a Seg attached to this Phys first");
+  PetscCheck(phys->sol_dm, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Solution DM does not exist yet; call PhysSetUp() first");
   *dm = phys->sol_dm;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

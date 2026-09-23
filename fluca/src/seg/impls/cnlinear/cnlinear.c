@@ -126,12 +126,8 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
 
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)seg, &comm));
-  /* Two-phase setup: the Phys has frozen its own declarations, so the face velocity that the
-     fractional step method needs can be added here before the solution DM is laid out. */
   PetscCall(PhysGetSetUpCalled(seg->phys, &setupcalled));
   PetscCheck(setupcalled, comm, PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before SegSetUp() with SEGCNLINEAR");
-  PetscCall(PhysDeclareField(seg->phys, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1, PHYS_EQN_AUXILIARY));
-  PetscCall(PhysCreateSolutionDM(seg->phys));
   PetscCall(SegOpsBuild_Internal(seg));
   PetscCall(PhysGetSolutionDM(seg->phys, &dm));
 
