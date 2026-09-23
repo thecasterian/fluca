@@ -69,9 +69,21 @@ PetscErrorCode PhysGetType(Phys phys, PhysType *type)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Forget every declared field and the solution DM laid out from them */
+static PetscErrorCode PhysResetFields_Private(Phys phys)
+{
+  PetscInt f;
+
+  PetscFunctionBegin;
+  for (f = 0; f < phys->nfields; ++f) PetscCall(PetscFree(phys->fields[f].name));
+  phys->nfields = 0;
+  PetscCall(DMDestroy(&phys->sol_dm));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode PhysDestroy(Phys *phys)
 {
-  PetscInt f, p;
+  PetscInt p;
 
   PetscFunctionBegin;
   if (!*phys) PetscFunctionReturn(PETSC_SUCCESS);
@@ -85,10 +97,9 @@ PetscErrorCode PhysDestroy(Phys *phys)
   /* Call type-specific destroy */
   PetscTryTypeMethod((*phys), destroy);
 
-  for (f = 0; f < (*phys)->nfields; ++f) PetscCall(PetscFree((*phys)->fields[f].name));
+  PetscCall(PhysResetFields_Private(*phys));
   for (p = 0; p < (*phys)->nprops; ++p) PetscCall(PetscFree((*phys)->props[p].name));
 
-  PetscCall(DMDestroy(&(*phys)->sol_dm));
   PetscCall(DMDestroy(&(*phys)->base_dm));
 
   PetscCall(PetscHeaderDestroy(phys));
@@ -143,7 +154,9 @@ PetscErrorCode PhysSetUp(Phys phys)
   PetscCheck(((PetscObject)phys)->type_name, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Phys type not set. Call PhysSetType() first");
 
   /* Every Phys describes incompressible flow on the collocated grid, so every Phys has these fields.
-     Their order fixes each field's first component, and hence the layout of the solution DM. */
+     Their order fixes each field's first component, and hence the layout of the solution DM. A
+     PhysSetUp() that failed part-way may have declared some of them already, so start afresh. */
+  PetscCall(PhysResetFields_Private(phys));
   PetscCall(PhysDeclareField_Internal(phys, PHYS_FIELD_VELOCITY, PHYS_FIELD_ELEMENT, phys->dim, PHYS_EQN_MOMENTUM));
   PetscCall(PhysDeclareField_Internal(phys, PHYS_FIELD_PRESSURE, PHYS_FIELD_ELEMENT, 1, PHYS_EQN_PRESSURE));
   PetscCall(PhysDeclareField_Internal(phys, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1, PHYS_EQN_AUXILIARY));
