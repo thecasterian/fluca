@@ -44,6 +44,7 @@ PetscErrorCode PhysSetType(Phys phys, PhysType type)
   PetscCall(PhysGetType(phys, &old_type));
   PetscCall(PetscObjectTypeCompare((PetscObject)phys, type, &match));
   if (match) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCheck(!phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the Phys type after PhysSetUp()");
 
   PetscCall(PetscFunctionListFind(PhysList, type, &impl_create));
   PetscCheck(impl_create, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_UNKNOWN_TYPE, "Unknown Phys type: %s", type);
