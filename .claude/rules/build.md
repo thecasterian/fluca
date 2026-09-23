@@ -18,8 +18,8 @@ Each module is a shared library with an alias target:
 |--------|-------|-------------|
 | `fluca_sys` | `fluca::sys` | PETSc, HDF5, CGNS |
 | `fluca_fd` | `fluca::fd` | `fluca::sys` |
-| `fluca_mesh` | `fluca::mesh` | `fluca::sys` |
-| `fluca_ns` | `fluca::ns` | `fluca::mesh` |
+| `fluca_phys` | `fluca::phys` | `fluca::sys` |
+| `fluca_seg` | `fluca::seg` | `fluca::phys`, `fluca::fd`, `fluca::viewer` |
 | `fluca_viewer` | `fluca::viewer` | `fluca::sys` |
 
 Always link against `fluca::*` alias targets, not the raw `fluca_*` names.
