@@ -1,8 +1,5 @@
 #include <fluca/private/segcnlinearimpl.h>
 
-/* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
-static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
-
 /* Add 1 to the diagonal of every locally owned row at (loc, c), including the extra boundary faces */
 static PetscErrorCode AddIdentity_Private(DM dm, Mat M, DMStagStencilLocation loc, PetscInt c)
 {

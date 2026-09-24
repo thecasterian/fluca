@@ -1,8 +1,5 @@
 #include <fluca/private/segcnlinearimpl.h>
 
-/* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
-static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
-
 /* Operators of the momentum rows: A = I + (dt/2) J - (dt/2) nu lap and G = (dt/rho) grad, built on
    the spatial operators in cn->sops. Coefficients depending on dt and the linearization state are
    set per step. */

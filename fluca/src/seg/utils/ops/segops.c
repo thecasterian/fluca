@@ -1,8 +1,5 @@
 #include <fluca/private/segopsimpl.h>
 
-/* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
-static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
-
 /* --- BC adapter functions ------------------------------------------------- */
 
 static PetscErrorCode SegSpatialOpsBCAdapterFn(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)

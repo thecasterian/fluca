@@ -3,6 +3,11 @@
 #include <flucafd.h>
 #include <flucaphys.h>
 
+/* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z. Shared by the
+   Seg spatial and CN-linear operators; PETSC_UNUSED because a translation unit that includes this
+   header through segtest.h (the Seg test helpers) does not necessarily reference it directly. */
+PETSC_UNUSED static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
+
 /* Adapter to bridge PhysLaminarBCFn (has comp) to FlucaFDBCValueFn (no comp) */
 typedef struct {
   PhysLaminarBCFn *fn;     /* value callback */
@@ -33,8 +38,8 @@ typedef struct {
 
   Vec zero; /* zero solution vector: evaluates boundary (affine) parts */
 
-  /* Linearization state of the momentum rows of the coupled system (13) */
-  FlucaFD fd_interp_vel[FLUCA_MAX_DIM][FLUCA_MAX_DIM]; /* [d][e]: u_d -> faces normal to e, onto component 0 of a one-DOF-per-face DM */
+  /* Interpolation of the velocity to faces, used by the linearization */
+  FlucaFD fd_interp_vel[FLUCA_MAX_DIM][FLUCA_MAX_DIM]; /* [d][e]: u_d -> faces normal to e */
 
   /* Coupling rows of the coupled system (13) */
   FlucaFD   fd_T[FLUCA_MAX_DIM];     /* T: u_e -> faces normal to e, fourth-order, interior cells only */
