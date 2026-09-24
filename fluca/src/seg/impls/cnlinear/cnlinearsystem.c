@@ -33,8 +33,7 @@ static PetscErrorCode AddIdentity_Private(DM dm, Mat M, DMStagStencilLocation lo
 /* f_d += scale * body_force_d(t) at every cell center */
 static PetscErrorCode AddBodyForce_Private(Seg seg, PetscReal t, PetscReal scale, Vec f)
 {
-  Seg_CNLinear       *cn      = (Seg_CNLinear *)seg->data;
-  SegSpatialOps      *sops    = &cn->sops;
+  SegSpatialOps      *sops    = &seg->sops;
   Phys                phys    = seg->phys;
   PetscInt            dim     = sops->dim;
   const PetscScalar **arrc[3] = {NULL, NULL, NULL};
@@ -92,7 +91,7 @@ static PetscErrorCode AddBodyForce_Private(Seg seg, PetscReal t, PetscReal scale
 PetscErrorCode SegCNLinearComputeMomentumSystem_Internal(Seg seg, PetscReal t, PetscReal dt, Vec X, Mat M, Vec f)
 {
   Seg_CNLinear  *cn   = (Seg_CNLinear *)seg->data;
-  SegSpatialOps *sops = &cn->sops;
+  SegSpatialOps *sops = &seg->sops;
   PetscInt       dim, d, e;
   Vec            tmp, fv, xv;
   PetscScalar    rho;
@@ -121,7 +120,7 @@ PetscErrorCode SegCNLinearComputeMomentumSystem_Internal(Seg seg, PetscReal t, P
   /* Linearization state: U^n from X, and ubar^n with boundary values at t */
   for (d = 0; d < dim; d++) {
     PetscCall(VecZeroEntries(cn->ubar[d]));
-    for (e = 0; e < dim; e++) PetscCall(FlucaFDApply(sops->fd_interp_vel[d][e], t, sol_dm, cn->dm_face, X, cn->ubar[d]));
+    for (e = 0; e < dim; e++) PetscCall(FlucaFDApply(cn->fd_interp_vel[d][e], t, sol_dm, cn->dm_face, X, cn->ubar[d]));
   }
   for (d = 0; d < dim; d++) {
     for (e = 0; e < dim; e++) {
@@ -207,8 +206,7 @@ static PetscErrorCode AddNegR_Private(Mat M, Mat negR, PetscScalar scale)
    M is assembled on return, with boundary-face rows replaced by unit rows. */
 PetscErrorCode SegCNLinearComputeCouplingSystem_Internal(Seg seg, PetscReal t, PetscReal dt, Mat M, Vec f)
 {
-  Seg_CNLinear  *cn   = (Seg_CNLinear *)seg->data;
-  SegSpatialOps *sops = &cn->sops;
+  SegSpatialOps *sops = &seg->sops;
   PetscInt       dim, e;
   PetscScalar    rho;
   DM             sol_dm;

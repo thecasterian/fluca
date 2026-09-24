@@ -1,12 +1,12 @@
 #include <fluca/private/segcnlinearimpl.h>
 
 /* Operators of the momentum rows: A = I + (dt/2) J - (dt/2) nu lap and G = (dt/rho) grad, built on
-   the spatial operators in cn->sops. Coefficients depending on dt and the linearization state are
+   the spatial operators in seg->sops. Coefficients depending on dt and the linearization state are
    set per step. */
 static PetscErrorCode BuildMomentumOperators_Private(Seg seg)
 {
   Seg_CNLinear  *cn   = (Seg_CNLinear *)seg->data;
-  SegSpatialOps *sops = &cn->sops;
+  SegSpatialOps *sops = &seg->sops;
   PetscInt       dim  = sops->dim, d, e;
   DM             sol_dm, cdm;
 
@@ -27,7 +27,14 @@ static PetscErrorCode BuildMomentumOperators_Private(Seg seg)
   PetscCall(DMStagSetCoordinateDMType(cn->dm_face, DMPRODUCT));
   PetscCall(DMGetCoordinateDM(sol_dm, &cdm));
   PetscCall(DMSetCoordinateDM(cn->dm_face, cdm));
-  for (d = 0; d < dim; d++) PetscCall(DMCreateGlobalVector(cn->dm_face, &cn->ubar[d]));
+  for (d = 0; d < dim; d++) {
+    PetscCall(DMCreateGlobalVector(cn->dm_face, &cn->ubar[d]));
+    for (e = 0; e < dim; e++) {
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, sops->c_vel + d, face_loc[e], 0, &cn->fd_interp_vel[d][e]));
+      PetscCall(SegSpatialOpsSetVelocityBCs_Internal(seg->phys, sops, cn->fd_interp_vel[d][e], d));
+      PetscCall(FlucaFDSetUp(cn->fd_interp_vel[d][e]));
+    }
+  }
 
   /* Viscous and pressure-gradient blocks */
   for (d = 0; d < dim; d++) {
@@ -195,15 +202,12 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
   Mat               blocks[SEG_CNLINEAR_NUM_FIELDS * SEG_CNLINEAR_NUM_FIELDS];
   KSP               ksp, kspA, kspS;
   PC                pc, subpc;
-  PetscBool         setupcalled, isconst;
+  PetscBool         isconst;
   PetscInt          k, nnull, n, N, ncomp;
   PhysFieldLocation loc;
 
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)seg, &comm));
-  PetscCall(PhysGetSetUpCalled(seg->phys, &setupcalled));
-  PetscCheck(setupcalled, comm, PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before SegSetUp() with SEGCNLINEAR");
-  PetscCall(SegSpatialOpsBuild_Internal(seg->phys, &cn->sops));
   PetscCall(BuildMomentumOperators_Private(seg));
   PetscCall(PhysGetSolutionDM(seg->phys, &dm));
 
@@ -349,11 +353,11 @@ static PetscErrorCode SegDestroy_CNLinear(Seg seg)
     for (e = 0; e < FLUCA_MAX_DIM; e++) {
       PetscCall(FlucaFDDestroy(&cn->fd_conv_ubar[d][e]));
       PetscCall(FlucaFDDestroy(&cn->fd_conv_U[d][e]));
+      PetscCall(FlucaFDDestroy(&cn->fd_interp_vel[d][e]));
     }
     PetscCall(VecDestroy(&cn->ubar[d]));
   }
   PetscCall(DMDestroy(&cn->dm_face));
-  PetscCall(SegSpatialOpsDestroy_Internal(&cn->sops));
   PetscCall(MatDestroy(&cn->P));
   PetscCall(MatNullSpaceDestroy(&cn->nullspace));
   PetscCall(MatDestroy(&cn->M));

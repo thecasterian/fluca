@@ -17,8 +17,9 @@ typedef struct {
   PetscInt         comp; /* which solution component this adapter is wired for */
 } Seg_BCAdapter;
 
-/* Spatial operators of the coupled system (13) of the theory guide. Built once from the solution DM
-   of the attached Phys and reused by every step of the segregated solve.
+/* Spatial operators of the continuous equations and the coupling rows of the coupled system (13) of
+   the theory guide. Held by the Seg base class, built once by SegSetUp() from the solution DM of the
+   attached Phys, and reused by every step of the segregated solve.
 
    The operators are independent of the time discretization: none of them carries a time step, and a
    Seg subtype builds its own time-discrete operators on top of them. They are built only from a
@@ -37,9 +38,6 @@ typedef struct {
   FlucaFD fd_grad_p[FLUCA_MAX_DIM];               /* dp/dx_d */
 
   Vec zero; /* zero solution vector: evaluates boundary (affine) parts */
-
-  /* Interpolation of the velocity to faces, used by the linearization */
-  FlucaFD fd_interp_vel[FLUCA_MAX_DIM][FLUCA_MAX_DIM]; /* [d][e]: u_d -> faces normal to e */
 
   /* Coupling rows of the coupled system (13) */
   FlucaFD   fd_T[FLUCA_MAX_DIM];     /* T: u_e -> faces normal to e, fourth-order, interior cells only */

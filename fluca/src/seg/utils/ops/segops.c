@@ -343,16 +343,9 @@ PetscErrorCode SegSpatialOpsBuild_Internal(Phys phys, SegSpatialOps *ops)
     PetscCall(FlucaFDSetUp(ops->fd_grad_p[d]));
   }
 
-  /* --- zero solution vector, and fd_interp_vel[d][e]: u_d linearly interpolated to faces normal to e --- */
+  /* --- zero solution vector --- */
   PetscCall(DMCreateGlobalVector(sol_dm, &ops->zero));
   PetscCall(VecZeroEntries(ops->zero));
-  for (d = 0; d < dim; d++) {
-    for (e = 0; e < dim; e++) {
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, ops->c_vel + d, face_loc[e], 0, &ops->fd_interp_vel[d][e]));
-      PetscCall(SegSpatialOpsSetVelocityBCs_Internal(phys, ops, ops->fd_interp_vel[d][e], d));
-      PetscCall(FlucaFDSetUp(ops->fd_interp_vel[d][e]));
-    }
-  }
 
   PetscCall(BuildCouplingOperators_Private(phys, ops));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -385,10 +378,7 @@ PetscErrorCode SegSpatialOpsDestroy_Internal(SegSpatialOps *ops)
     PetscCall(FlucaFDDestroy(&ops->fd_bface[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_negT[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_T[d]));
-    for (e = 0; e < FLUCA_MAX_DIM; e++) {
-      PetscCall(FlucaFDDestroy(&ops->fd_interp_vel[d][e]));
-      PetscCall(FlucaFDDestroy(&ops->fd_negmu[d][e]));
-    }
+    for (e = 0; e < FLUCA_MAX_DIM; e++) { PetscCall(FlucaFDDestroy(&ops->fd_negmu[d][e])); }
     PetscCall(FlucaFDDestroy(&ops->fd_laplacian[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_grad_p[d]));
   }

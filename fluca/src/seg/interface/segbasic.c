@@ -108,6 +108,8 @@ PetscErrorCode SegGetSolution(Seg seg, Vec *sol)
 
 PetscErrorCode SegSetUp(Seg seg)
 {
+  PetscBool physsetup;
+
   PetscFunctionBegin;
   PetscValidHeaderSpecific(seg, SEG_CLASSID, 1);
   if (seg->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
@@ -116,7 +118,11 @@ PetscErrorCode SegSetUp(Seg seg)
 
   if (!((PetscObject)seg)->type_name) PetscCall(SegSetType(seg, SEGCNLINEAR));
   PetscCheck(seg->phys, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "No Phys attached to Seg; call SegSetPhys() first");
+  PetscCall(PhysGetSetUpCalled(seg->phys, &physsetup));
+  PetscCheck(physsetup, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before SegSetUp()");
 
+  /* The subtype builds its time-discrete operators on top of these */
+  PetscCall(SegSpatialOpsBuild_Internal(seg->phys, &seg->sops));
   PetscTryTypeMethod(seg, setup);
 
   PetscCall(PetscLogEventEnd(SEG_SetUp, (PetscObject)seg, 0, 0, 0));
@@ -267,7 +273,9 @@ PetscErrorCode SegDestroy(Seg *seg)
   PetscCall(SegMonitorCancel(*seg));
   PetscCall(KSPDestroy(&(*seg)->ksp));
 
+  /* The subtype operators wrap the spatial ones, so they go first */
   PetscTryTypeMethod((*seg), destroy);
+  PetscCall(SegSpatialOpsDestroy_Internal(&(*seg)->sops));
 
   for (f = 0; f < (*seg)->nfields; ++f) PetscCall(ISDestroy(&(*seg)->fields[f].is));
   PetscCall(VecDestroy(&(*seg)->sol));

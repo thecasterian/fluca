@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fluca/private/flucaimpl.h>
+#include <fluca/private/segopsimpl.h>
 #include <flucaseg.h>
 
 #define MAXSEGMONITORS 10
@@ -50,6 +51,9 @@ struct _p_Seg {
   /* Data */
   Vec   sol;  /* solution vector, owned by the caller of SegSolve() */
   void *data; /* implementation-specific data */
+
+  /* Spatial operators, built by SegSetUp() before the subtype setup */
+  SegSpatialOps sops;
 
   /* Fields of the coupled system, filled by the subtype during setup */
   PetscInt      nfields;
