@@ -48,7 +48,6 @@ FLUCA_EXTERN PetscErrorCode PhysGetBaseDM(Phys, DM *);
 FLUCA_EXTERN PetscErrorCode PhysGetSolutionDM(Phys, DM *);
 FLUCA_EXTERN PetscErrorCode PhysSetFromOptions(Phys);
 FLUCA_EXTERN PetscErrorCode PhysSetUp(Phys);
-FLUCA_EXTERN PetscErrorCode PhysGetSetUpCalled(Phys, PetscBool *);
 FLUCA_EXTERN PetscErrorCode PhysDestroy(Phys *);
 FLUCA_EXTERN PetscErrorCode PhysView(Phys, PetscViewer);
 FLUCA_EXTERN PetscErrorCode PhysViewFromOptions(Phys, PetscObject, const char[]);

@@ -197,15 +197,6 @@ PetscErrorCode PhysSetUp(Phys phys)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PhysGetSetUpCalled(Phys phys, PetscBool *flg)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscAssertPointer(flg, 2);
-  *flg = phys->setupcalled;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 PetscErrorCode PhysView(Phys phys, PetscViewer viewer)
 {
   PetscBool   isascii;

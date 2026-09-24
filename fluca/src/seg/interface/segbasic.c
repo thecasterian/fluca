@@ -108,8 +108,6 @@ PetscErrorCode SegGetSolution(Seg seg, Vec *sol)
 
 PetscErrorCode SegSetUp(Seg seg)
 {
-  PetscBool physsetup;
-
   PetscFunctionBegin;
   PetscValidHeaderSpecific(seg, SEG_CLASSID, 1);
   if (seg->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
@@ -118,8 +116,7 @@ PetscErrorCode SegSetUp(Seg seg)
 
   if (!((PetscObject)seg)->type_name) PetscCall(SegSetType(seg, SEGCNLINEAR));
   PetscCheck(seg->phys, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "No Phys attached to Seg; call SegSetPhys() first");
-  PetscCall(PhysGetSetUpCalled(seg->phys, &physsetup));
-  PetscCheck(physsetup, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before SegSetUp()");
+  PetscCall(PhysSetUp(seg->phys));
 
   /* The subtype builds its time-discrete operators on top of these */
   PetscCall(SegSpatialOpsBuild_Internal(seg->phys, &seg->sops));
