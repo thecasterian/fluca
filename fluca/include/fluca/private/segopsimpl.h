@@ -27,8 +27,9 @@ typedef struct {
   /* BC adapters: [comp][face] — created during setup to bridge PhysLaminarBCFn to FlucaFDBCValueFn */
   Seg_BCAdapter bc_adapters[FLUCA_MAX_DIM + 1][FLUCA_MAX_FACES];
 
-  FlucaFD fd_laplacian[FLUCA_MAX_DIM]; /* sum_e d/dx_e(-mu * d(u_d)/dx_e) */
-  FlucaFD fd_grad_p[FLUCA_MAX_DIM];    /* dp/dx_d */
+  FlucaFD fd_laplacian[FLUCA_MAX_DIM];            /* sum_e d/dx_e(-mu * d(u_d)/dx_e) */
+  FlucaFD fd_negmu[FLUCA_MAX_DIM][FLUCA_MAX_DIM]; /* [d][e]: -mu d(u_d)/dx_e, the scale inside fd_laplacian[d] */
+  FlucaFD fd_grad_p[FLUCA_MAX_DIM];               /* dp/dx_d */
 
   Vec zero; /* zero solution vector: evaluates boundary (affine) parts */
 
@@ -48,4 +49,5 @@ typedef struct {
 /* Defined in utils/ops/segops.c */
 FLUCA_INTERN PetscErrorCode SegSpatialOpsBuild_Internal(Phys, SegSpatialOps *);
 FLUCA_INTERN PetscErrorCode SegSpatialOpsSetVelocityBCs_Internal(Phys, SegSpatialOps *, FlucaFD, PetscInt);
+FLUCA_INTERN PetscErrorCode SegSpatialOpsUpdateProperties_Internal(Phys, SegSpatialOps *);
 FLUCA_INTERN PetscErrorCode SegSpatialOpsDestroy_Internal(SegSpatialOps *);

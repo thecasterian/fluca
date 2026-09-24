@@ -112,6 +112,7 @@ PetscErrorCode SegCNLinearComputeMomentumSystem_Internal(Seg seg, PetscReal t, P
   PetscCheck(dt > 0., PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_OUTOFRANGE, "Time step must be positive, got %g", (double)dt);
   dim = sops->dim;
   PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
+  PetscCall(SegSpatialOpsUpdateProperties_Internal(seg->phys, sops));
   PetscCall(PhysGetPropertyConstant(seg->phys, PHYS_PROPERTY_DENSITY, &rho));
   /* Coefficients that depend on dt */
   for (d = 0; d < dim; d++) {

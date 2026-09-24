@@ -57,8 +57,9 @@ static PetscErrorCode SegTestCreateSystem(Phys phys, Mat *M, Vec *f)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Check max |a - b| over the entries of one field */
-static PetscErrorCode SegTestCheckField(Phys phys, const char name[], Vec a, Vec b, PetscReal tol)
+/* Check max |a - b| over the entries of one field. Not every test that includes this header needs
+   an approximate check, so this helper is marked unused to avoid a warning in those translation units. */
+PETSC_UNUSED static PetscErrorCode SegTestCheckField(Phys phys, const char name[], Vec a, Vec b, PetscReal tol)
 {
   IS        is;
   Vec       sa, sb, diff;

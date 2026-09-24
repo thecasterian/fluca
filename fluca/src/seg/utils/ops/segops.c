@@ -310,26 +310,26 @@ PetscErrorCode SegSpatialOpsBuild_Internal(Phys phys, SegSpatialOps *ops)
     FlucaFD comp_ops[FLUCA_MAX_DIM];
 
     for (e = 0; e < dim; e++) {
-      FlucaFD inner, scaled, outer;
+      FlucaFD inner, outer;
 
       /* d(u_d)/dx_e */
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, ops->c_vel + d, face_loc[e], ops->c_U, &inner));
       PetscCall(FlucaFDSetUp(inner));
 
-      /* -mu * d(u_d)/dx_e */
-      PetscCall(FlucaFDScaleCreateConstant(inner, -mu, &scaled));
-      PetscCall(FlucaFDSetUp(scaled));
+      /* -mu * d(u_d)/dx_e. Kept (not destroyed) so SegSpatialOpsUpdateProperties_Internal can
+         rescale it when the viscosity changes after this operator is built. */
+      PetscCall(FlucaFDScaleCreateConstant(inner, -mu, &ops->fd_negmu[d][e]));
+      PetscCall(FlucaFDSetUp(ops->fd_negmu[d][e]));
 
       /* d/dx_e(...) back to element */
       PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, face_loc[e], ops->c_U, DMSTAG_ELEMENT, ops->c_vel + d, &outer));
       PetscCall(FlucaFDSetUp(outer));
 
       /* d/dx_e(-mu * d(u_d)/dx_e) */
-      PetscCall(FlucaFDCompositionCreate(scaled, outer, &comp_ops[e]));
+      PetscCall(FlucaFDCompositionCreate(ops->fd_negmu[d][e], outer, &comp_ops[e]));
       PetscCall(FlucaFDSetUp(comp_ops[e]));
 
       PetscCall(FlucaFDDestroy(&outer));
-      PetscCall(FlucaFDDestroy(&scaled));
       PetscCall(FlucaFDDestroy(&inner));
     }
 
@@ -361,6 +361,23 @@ PetscErrorCode SegSpatialOpsBuild_Internal(Phys phys, SegSpatialOps *ops)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Point where the spatial operators pick up the current material properties at each assembly.
+   fd_negmu[d][e] is the scale nested inside fd_laplacian[d]; a composition or sum fetches its
+   operands' stencils at apply time, so rescaling it here changes what fd_laplacian[d] (and any
+   operator built on it, such as Seg_CNLinear's fd_visc[d]) produce on the next apply. */
+PetscErrorCode SegSpatialOpsUpdateProperties_Internal(Phys phys, SegSpatialOps *ops)
+{
+  PetscScalar mu;
+  PetscInt    d, e;
+
+  PetscFunctionBegin;
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_VISCOSITY, &mu));
+  for (d = 0; d < ops->dim; d++) {
+    for (e = 0; e < ops->dim; e++) PetscCall(FlucaFDScaleSetConstant(ops->fd_negmu[d][e], -mu));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode SegSpatialOpsDestroy_Internal(SegSpatialOps *ops)
 {
   PetscInt d, e;
@@ -371,7 +388,10 @@ PetscErrorCode SegSpatialOpsDestroy_Internal(SegSpatialOps *ops)
     PetscCall(FlucaFDDestroy(&ops->fd_bface[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_negT[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_T[d]));
-    for (e = 0; e < FLUCA_MAX_DIM; e++) PetscCall(FlucaFDDestroy(&ops->fd_interp_vel[d][e]));
+    for (e = 0; e < FLUCA_MAX_DIM; e++) {
+      PetscCall(FlucaFDDestroy(&ops->fd_interp_vel[d][e]));
+      PetscCall(FlucaFDDestroy(&ops->fd_negmu[d][e]));
+    }
     PetscCall(FlucaFDDestroy(&ops->fd_laplacian[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_grad_p[d]));
   }
