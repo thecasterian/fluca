@@ -37,6 +37,7 @@ PetscErrorCode PhysSetType(Phys phys, PhysType type)
   PhysType old_type;
   PetscErrorCode (*impl_create)(Phys);
   PetscBool match;
+  PetscInt  p;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
@@ -52,6 +53,9 @@ PetscErrorCode PhysSetType(Phys phys, PhysType type)
   if (old_type) {
     PetscTryTypeMethod(phys, destroy);
     PetscCall(PetscMemzero(phys->ops, sizeof(struct _PhysOps)));
+    /* The properties belong to the old type; the new one registers its own */
+    for (p = 0; p < phys->nprops; ++p) PetscCall(PetscFree(phys->props[p].name));
+    phys->nprops = 0;
   }
 
   PetscCall(PetscObjectChangeTypeName((PetscObject)phys, type));
