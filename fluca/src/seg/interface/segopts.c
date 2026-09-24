@@ -163,9 +163,9 @@ PetscErrorCode SegSetOptionsPrefix(Seg seg, const char prefix[])
   PetscFunctionBegin;
   PetscValidHeaderSpecific(seg, SEG_CLASSID, 1);
   PetscCall(PetscObjectSetOptionsPrefix((PetscObject)seg, prefix));
-  if (seg->ksp) {
-    PetscCall(KSPSetOptionsPrefix(seg->ksp, prefix));
-    PetscCall(KSPAppendOptionsPrefix(seg->ksp, "seg_"));
+  if (seg->snes) {
+    PetscCall(SNESSetOptionsPrefix(seg->snes, prefix));
+    PetscCall(SNESAppendOptionsPrefix(seg->snes, "seg_"));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -177,10 +177,10 @@ PetscErrorCode SegAppendOptionsPrefix(Seg seg, const char prefix[])
   PetscFunctionBegin;
   PetscValidHeaderSpecific(seg, SEG_CLASSID, 1);
   PetscCall(PetscObjectAppendOptionsPrefix((PetscObject)seg, prefix));
-  if (seg->ksp) {
+  if (seg->snes) {
     PetscCall(PetscObjectGetOptionsPrefix((PetscObject)seg, &full_prefix));
-    PetscCall(KSPSetOptionsPrefix(seg->ksp, full_prefix));
-    PetscCall(KSPAppendOptionsPrefix(seg->ksp, "seg_"));
+    PetscCall(SNESSetOptionsPrefix(seg->snes, full_prefix));
+    PetscCall(SNESAppendOptionsPrefix(seg->snes, "seg_"));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

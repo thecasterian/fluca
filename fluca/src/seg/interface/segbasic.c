@@ -28,7 +28,7 @@ PetscErrorCode SegCreate(MPI_Comm comm, Seg *seg)
   s->sol               = NULL;
   s->data              = NULL;
   s->nfields           = 0;
-  s->ksp               = NULL;
+  s->snes              = NULL;
   s->errorifstepfailed = PETSC_TRUE;
   s->reason            = SEG_CONVERGED_ITERATING;
   s->t                 = 0.;
@@ -78,22 +78,22 @@ PetscErrorCode SegGetType(Seg seg, SegType *type)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode SegGetKSP(Seg seg, KSP *ksp)
+PetscErrorCode SegGetSNES(Seg seg, SNES *snes)
 {
   const char *prefix;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(seg, SEG_CLASSID, 1);
-  PetscAssertPointer(ksp, 2);
-  if (!seg->ksp) {
-    PetscCall(KSPCreate(PetscObjectComm((PetscObject)seg), &seg->ksp));
-    PetscCall(PetscObjectIncrementTabLevel((PetscObject)seg->ksp, (PetscObject)seg, 1));
-    PetscCall(PetscObjectSetOptions((PetscObject)seg->ksp, ((PetscObject)seg)->options));
+  PetscAssertPointer(snes, 2);
+  if (!seg->snes) {
+    PetscCall(SNESCreate(PetscObjectComm((PetscObject)seg), &seg->snes));
+    PetscCall(PetscObjectIncrementTabLevel((PetscObject)seg->snes, (PetscObject)seg, 1));
+    PetscCall(PetscObjectSetOptions((PetscObject)seg->snes, ((PetscObject)seg)->options));
     PetscCall(PetscObjectGetOptionsPrefix((PetscObject)seg, &prefix));
-    PetscCall(KSPSetOptionsPrefix(seg->ksp, prefix));
-    PetscCall(KSPAppendOptionsPrefix(seg->ksp, "seg_"));
+    PetscCall(SNESSetOptionsPrefix(seg->snes, prefix));
+    PetscCall(SNESAppendOptionsPrefix(seg->snes, "seg_"));
   }
-  *ksp = seg->ksp;
+  *snes = seg->snes;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -268,7 +268,7 @@ PetscErrorCode SegDestroy(Seg *seg)
   }
 
   PetscCall(SegMonitorCancel(*seg));
-  PetscCall(KSPDestroy(&(*seg)->ksp));
+  PetscCall(SNESDestroy(&(*seg)->snes));
 
   /* The subtype operators wrap the spatial ones, so they go first */
   PetscTryTypeMethod((*seg), destroy);

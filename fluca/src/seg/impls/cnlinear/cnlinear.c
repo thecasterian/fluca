@@ -97,6 +97,28 @@ static PetscErrorCode SegCNLinearAssembleSystem_Private(Seg seg, PetscReal t_cou
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Picard form of the step, A(x) x = b(x), with the residual F(x) = A x - b. The linearization of
+   eq. (13) is fixed at the state X^n, so A = M and b = f do not depend on the iterate, and
+   SegStep_CNLinear() assembles both before the solve; any SNES iteration beyond the first is defect
+   correction on that one linear system. SNESSetPicard() is not used because it multiplies by the
+   preconditioning matrix, and P here is only the MATNEST that carries the field index sets for PCABF. */
+static PetscErrorCode SegCNLinearPicardFunction_Private(SNES snes, Vec x, Vec F, void *ctx)
+{
+  Seg           seg = (Seg)ctx;
+  Seg_CNLinear *cn  = (Seg_CNLinear *)seg->data;
+
+  PetscFunctionBegin;
+  PetscCall(MatMult(cn->M, x, F));
+  PetscCall(VecAXPY(F, -1., cn->f));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode SegCNLinearPicardMatrix_Private(SNES snes, Vec x, Mat A, Mat P, void *ctx)
+{
+  PetscFunctionBegin;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* Replace the face velocity of the initial state by the discretely divergence-free projection of
    T u0 + b_interp: U0 = U* - G^st phi with D G^st phi = D U* - b_cont. u0 and p0 are unchanged. */
 static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
@@ -200,6 +222,7 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
   Vec               sub;
   IS                is[SEG_CNLINEAR_NUM_FIELDS];
   Mat               blocks[SEG_CNLINEAR_NUM_FIELDS * SEG_CNLINEAR_NUM_FIELDS];
+  SNES              snes;
   KSP               ksp, kspA, kspS;
   PC                pc, subpc;
   PetscBool         isconst;
@@ -265,8 +288,13 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
   PetscCall(MatCreateNest(comm, SEG_CNLINEAR_NUM_FIELDS, is, SEG_CNLINEAR_NUM_FIELDS, is, blocks, &cn->P));
   for (k = 0; k < SEG_CNLINEAR_NUM_FIELDS; ++k) PetscCall(MatDestroy(&blocks[(SEG_CNLINEAR_NUM_FIELDS + 1) * k]));
 
-  PetscCall(SegGetKSP(seg, &ksp));
-  PetscCall(KSPSetOperators(ksp, cn->M, cn->P));
+  /* One linear solve per step by default: KSPONLY on the Picard form gives x = 0 - M^{-1}(M 0 - f),
+     the same solution as solving M x = f from a zero initial guess */
+  PetscCall(SegGetSNES(seg, &snes));
+  PetscCall(SNESSetType(snes, SNESKSPONLY));
+  PetscCall(SNESSetFunction(snes, NULL, SegCNLinearPicardFunction_Private, seg));
+  PetscCall(SNESSetJacobian(snes, cn->M, cn->P, SegCNLinearPicardMatrix_Private, seg));
+  PetscCall(SNESGetKSP(snes, &ksp));
   PetscCall(KSPSetType(ksp, KSPRICHARDSON));
   PetscCall(KSPSetTolerances(ksp, 1.e-8, PETSC_CURRENT, PETSC_CURRENT, 1000));
   PetscCall(KSPGetPC(ksp, &pc));
@@ -281,41 +309,30 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
   PetscCall(KSPSetTolerances(kspS, 1.e-10, PETSC_CURRENT, PETSC_CURRENT, PETSC_CURRENT));
   PetscCall(KSPGetPC(kspS, &subpc));
   PetscCall(PCSetType(subpc, PCGAMG));
-  PetscCall(KSPSetFromOptions(ksp));
+  PetscCall(SNESSetFromOptions(snes));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode SegStep_CNLinear(Seg seg)
 {
-  Seg_CNLinear      *cn = (Seg_CNLinear *)seg->data;
-  KSP                ksp;
-  KSPConvergedReason reason;
-  Vec                xs, Xs;
-  PetscInt           f;
+  Seg_CNLinear       *cn = (Seg_CNLinear *)seg->data;
+  SNES                snes;
+  SNESConvergedReason reason;
+  Vec                 xs, Xs;
+  PetscInt            f;
 
   PetscFunctionBegin;
-  PetscCall(SegGetKSP(seg, &ksp));
+  PetscCall(SegGetSNES(seg, &snes));
   PetscCall(SegCNLinearAssembleSystem_Private(seg, seg->t + seg->dt));
   /* PCABF takes its blocks from M; mark P changed so that the preconditioner is rebuilt */
   PetscCall(PetscObjectStateIncrease((PetscObject)cn->P));
   PetscCall(VecZeroEntries(cn->x));
-  PetscCall(KSPSolve(ksp, cn->f, cn->x));
-  PetscCall(KSPGetConvergedReason(ksp, &reason));
-  if (reason == KSP_DIVERGED_ITS) {
-    PetscInt max_it;
-
-    /* Stopping at the iteration limit is an accepted outcome only for a single sweep
-       (-seg_ksp_max_it 1, the classic fractional step method), which ends there by design.
-       With any other limit the requested tolerance was simply not reached, so the step is
-       rejected like any other solve failure. */
-    PetscCall(KSPGetTolerances(ksp, NULL, NULL, NULL, &max_it));
-    if (max_it != 1) {
-      PetscCall(PetscInfo(seg, "Step=%" PetscInt_FMT ", coupled solve stopped at the iteration limit %" PetscInt_FMT " before reaching the requested tolerance\n", seg->step, max_it));
-      seg->reason = SEG_DIVERGED_LINEAR_SOLVE;
-      PetscFunctionReturn(PETSC_SUCCESS);
-    }
-  } else if (reason < 0) {
-    PetscCall(PetscInfo(seg, "Step=%" PetscInt_FMT ", coupled solve failed: %s\n", seg->step, KSPConvergedReasons[reason]));
+  /* A single sweep (the classic fractional step method) stops at its iteration limit by design; run it
+     with -seg_ksp_max_it 1 -seg_ksp_convergence_test skip so the linear solve reports convergence */
+  PetscCall(SNESSolve(snes, NULL, cn->x));
+  PetscCall(SNESGetConvergedReason(snes, &reason));
+  if (reason < 0) {
+    PetscCall(PetscInfo(seg, "Step=%" PetscInt_FMT ", coupled solve failed: %s\n", seg->step, SNESConvergedReasons[reason]));
     seg->reason = SEG_DIVERGED_LINEAR_SOLVE;
     PetscFunctionReturn(PETSC_SUCCESS);
   }
@@ -336,7 +353,7 @@ static PetscErrorCode SegStep_CNLinear(Seg seg)
 static PetscErrorCode SegView_CNLinear(Seg seg, PetscViewer viewer)
 {
   PetscFunctionBegin;
-  if (seg->ksp) PetscCall(KSPView(seg->ksp, viewer));
+  if (seg->snes) PetscCall(SNESView(seg->snes, viewer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

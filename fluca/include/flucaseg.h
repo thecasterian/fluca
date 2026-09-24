@@ -2,7 +2,7 @@
 
 #include <flucaphys.h>
 #include <flucasys.h>
-#include <petscksp.h>
+#include <petscsnes.h>
 
 /* Seg - Segregated solver for the coupled system (13) of the theory guide.
 
@@ -75,8 +75,9 @@ FLUCA_EXTERN PetscErrorCode SegGetConvergedReason(Seg, SegConvergedReason *);
 FLUCA_EXTERN PetscErrorCode SegSetErrorIfStepFailed(Seg, PetscBool);
 FLUCA_EXTERN PetscErrorCode SegGetErrorIfStepFailed(Seg, PetscBool *);
 
-/* The coupled solve of eq. (13); its options live under the -seg_ksp_ and -seg_pc_ prefixes */
-FLUCA_EXTERN PetscErrorCode SegGetKSP(Seg, KSP *);
+/* The solve of eq. (13) at each step, posed as a Picard iteration A x = b. Its options live under the
+   -seg_snes_ prefix and those of its linear solve under -seg_ksp_ and -seg_pc_ */
+FLUCA_EXTERN PetscErrorCode SegGetSNES(Seg, SNES *);
 
 /* Called at the top of every step of SegSolve(), before the state is advanced */
 FLUCA_EXTERN PetscErrorCode SegSetPreStep(Seg, PetscErrorCode (*)(Seg, void *), void *);

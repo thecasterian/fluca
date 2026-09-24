@@ -60,7 +60,7 @@ struct _p_Seg {
   SegFieldEntry fields[SEG_MAX_FIELDS];
 
   /* Solver */
-  KSP                ksp;               /* coupled solve of eq. (13) */
+  SNES               snes;              /* solve of eq. (13) at each step, as a Picard iteration */
   PetscBool          errorifstepfailed; /* raise an error when a step fails */
   SegConvergedReason reason;            /* convergence reason */
 

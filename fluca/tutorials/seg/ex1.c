@@ -193,12 +193,12 @@ int main(int argc, char **argv)
   test:
     suffix: cnlinear
     nsize: 1
-    args: -stag_grid_x 16 -stag_grid_y 16 -seg_max_time 0.1 -seg_dt 0.01 -seg_ksp_max_it 1
+    args: -stag_grid_x 16 -stag_grid_y 16 -seg_max_time 0.1 -seg_dt 0.01 -seg_ksp_max_it 1 -seg_ksp_convergence_test skip
 
   test:
     suffix: cnlinear_repeat
     nsize: 1
-    args: -stag_grid_x 16 -stag_grid_y 16 -seg_max_time 0.1 -seg_dt 0.01 -seg_ksp_max_it 1 -repeat_solve
+    args: -stag_grid_x 16 -stag_grid_y 16 -seg_max_time 0.1 -seg_dt 0.01 -seg_ksp_max_it 1 -seg_ksp_convergence_test skip -repeat_solve
 
   test:
     suffix: cnlinear_converged
