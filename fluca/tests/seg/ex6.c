@@ -1,6 +1,6 @@
 #include "segtest.h"
 
-static const char help[] = "Test that PhysLaminarSetViscosity() after SegSetUp() is picked up at assembly\n"
+static const char help[] = "Test that PhysSetViscosity() after SegSetUp() is picked up at assembly\n"
                            "Assembling the momentum system after changing the viscosity must equal\n"
                            "assembling it with that viscosity from the start.\n";
 
@@ -31,7 +31,7 @@ int main(int argc, char **argv)
   PetscCall(DMSetUp(dm1));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm1, 0., 1., 0., 1., 0., 0.));
   PetscCall(SegTestSetUp(dm1, rho, 1., LidVelocity, &phys1, &seg1));
-  PetscCall(PhysLaminarSetViscosity(phys1, 0.01));
+  PetscCall(PhysSetViscosity(phys1, 0.01));
   PetscCall(PhysGetSolutionDM(phys1, &sol_dm1));
   PetscCall(SegTestCreateSystem(phys1, &M1, &f1));
   PetscCall(DMCreateGlobalVector(sol_dm1, &X1));

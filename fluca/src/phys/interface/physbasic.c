@@ -7,11 +7,12 @@ PetscLogEvent PHYS_SetUp   = 0;
 PetscFunctionList PhysList              = NULL;
 PetscBool         PhysRegisterAllCalled = PETSC_FALSE;
 
-const char *PhysLaminarBCTypes[] = {"NONE", "VELOCITY", "PhysLaminarBCType", "", NULL};
+const char *PhysBCTypes[] = {"NONE", "VELOCITY", "PhysBCType", "PHYS_BC_", NULL};
 
 PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
 {
-  Phys p;
+  Phys     p;
+  PetscInt f;
 
   PetscFunctionBegin;
   PetscAssertPointer(phys, 2);
@@ -27,6 +28,22 @@ PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
   p->nfields       = 0;
   p->nprops        = 0;
   p->setupcalled   = PETSC_FALSE;
+
+  /* Every Phys has boundary conditions, initialized to none */
+  for (f = 0; f < FLUCA_MAX_FACES; ++f) {
+    p->bcs[f].type       = PHYS_BC_NONE;
+    p->bcs[f].fn         = NULL;
+    p->bcs[f].ctx        = NULL;
+    p->bcs[f].fn_dot     = NULL;
+    p->bcs[f].fn_dot_ctx = NULL;
+  }
+
+  /* Every Phys has density and viscosity; a subtype registers whatever else it needs on top */
+  PetscCall(PhysRegisterProperty_Internal(p, PHYS_PROPERTY_DENSITY, PHYS_FIELD_ELEMENT, PHYS_PROPERTY_CONSTANT));
+  PetscCall(PhysRegisterProperty_Internal(p, PHYS_PROPERTY_VISCOSITY, PHYS_FIELD_FACE, PHYS_PROPERTY_CONSTANT));
+  PetscCall(PhysSetPropertyConstant_Internal(p, PHYS_PROPERTY_DENSITY, 1.));
+  PetscCall(PhysSetPropertyConstant_Internal(p, PHYS_PROPERTY_VISCOSITY, 1.));
+  p->nprops_common = p->nprops;
 
   *phys = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -53,9 +70,11 @@ PetscErrorCode PhysSetType(Phys phys, PhysType type)
   if (old_type) {
     PetscTryTypeMethod(phys, destroy);
     PetscCall(PetscMemzero(phys->ops, sizeof(struct _PhysOps)));
-    /* The properties belong to the old type; the new one registers its own */
-    for (p = 0; p < phys->nprops; ++p) PetscCall(PetscFree(phys->props[p].name));
-    phys->nprops = 0;
+    /* The common properties (density, viscosity) and the BCs survive a type change; only the
+       properties the old type registered on top of them belong to it, and the new one registers
+       its own */
+    for (p = phys->nprops_common; p < phys->nprops; ++p) PetscCall(PetscFree(phys->props[p].name));
+    phys->nprops = phys->nprops_common;
   }
 
   PetscCall(PetscObjectChangeTypeName((PetscObject)phys, type));
@@ -189,7 +208,8 @@ PetscErrorCode PhysGetSetUpCalled(Phys phys, PetscBool *flg)
 
 PetscErrorCode PhysView(Phys phys, PetscViewer viewer)
 {
-  PetscBool isascii;
+  PetscBool   isascii;
+  PetscScalar rho, mu;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
@@ -205,6 +225,12 @@ PetscErrorCode PhysView(Phys phys, PetscViewer viewer)
       PetscCall(PetscViewerASCIIPrintf(viewer, "Dimension: %" PetscInt_FMT "\n", phys->dim));
       PetscCall(PetscViewerASCIIPopTab(viewer));
     }
+    PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho));
+    PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_VISCOSITY, &mu));
+    PetscCall(PetscViewerASCIIPushTab(viewer));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Density: %g\n", (double)PetscRealPart(rho)));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Viscosity: %g\n", (double)PetscRealPart(mu)));
+    PetscCall(PetscViewerASCIIPopTab(viewer));
   }
 
   PetscTryTypeMethod(phys, view, viewer);

@@ -52,6 +52,8 @@ struct _p_Phys {
   PhysField    fields[PHYS_MAX_FIELDS]; /* in registration order */
   PetscInt     nprops;
   PhysProperty props[PHYS_MAX_PROPERTIES];
+  PetscInt     nprops_common;        /* properties every Phys has; registered by PhysCreate() */
+  PhysBC       bcs[FLUCA_MAX_FACES]; /* one per face: left, right, down, up, back, front */
 
   /* State */
   PetscBool setupcalled;

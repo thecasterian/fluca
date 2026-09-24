@@ -147,17 +147,17 @@ static PetscErrorCode FieldDifference(IS is, Vec a, Vec b, PetscReal h, PetscRea
 
 int main(int argc, char **argv)
 {
-  DM            dm, sol_dm;
-  Phys          phys;
-  Seg           seg;
-  PhysLaminarBC bc;
-  AppCtx        user;
-  IS            is_v;
-  Vec           Y[2], sub;
-  const char   *solver_mode;
-  PetscBool     walled = PETSC_FALSE, max_it_set;
-  PetscReal     mu = 1., dt = 0.02, tmax = 0.1, L, h, e_u, e_p, e_u_prev = 0., e_p_prev = 0.;
-  PetscInt      nlevels = 4, N, l, f, max_it = 0;
+  DM          dm, sol_dm;
+  Phys        phys;
+  Seg         seg;
+  PhysBC      bc;
+  AppCtx      user;
+  IS          is_v;
+  Vec         Y[2], sub;
+  const char *solver_mode;
+  PetscBool   walled = PETSC_FALSE, max_it_set;
+  PetscReal   mu = 1., dt = 0.02, tmax = 0.1, L, h, e_u, e_p, e_u_prev = 0., e_p_prev = 0.;
+  PetscInt    nlevels = 4, N, l, f, max_it = 0;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
@@ -179,15 +179,15 @@ int main(int argc, char **argv)
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
   PetscCall(PhysSetType(phys, PHYSLAMINAR));
   PetscCall(PhysSetBaseDM(phys, dm));
-  PetscCall(PhysLaminarSetDensity(phys, 1.));
-  PetscCall(PhysLaminarSetViscosity(phys, mu));
+  PetscCall(PhysSetDensity(phys, 1.));
+  PetscCall(PhysSetViscosity(phys, mu));
   if (walled) {
-    bc.type       = PHYS_LAMINAR_BC_VELOCITY;
+    bc.type       = PHYS_BC_VELOCITY;
     bc.fn         = WallVelocity;
     bc.ctx        = &user;
     bc.fn_dot     = NULL;
     bc.fn_dot_ctx = NULL;
-    for (f = 0; f < 4; f++) PetscCall(PhysLaminarSetBoundaryCondition(phys, f, bc));
+    for (f = 0; f < 4; f++) PetscCall(PhysSetBoundaryCondition(phys, f, bc));
   }
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));

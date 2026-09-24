@@ -17,24 +17,27 @@ FLUCA_EXTERN PetscErrorCode PhysFinalizePackage(void);
 /* Body force callback */
 typedef PetscErrorCode PhysBodyForceFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar f[], void *ctx);
 
-/* Laminar boundary condition types */
+/* Boundary conditions */
 typedef enum {
-  PHYS_LAMINAR_BC_NONE,
-  PHYS_LAMINAR_BC_VELOCITY,
-} PhysLaminarBCType;
-FLUCA_EXTERN const char *PhysLaminarBCTypes[];
+  PHYS_BC_NONE,
+  PHYS_BC_VELOCITY,
+} PhysBCType;
+FLUCA_EXTERN const char *PhysBCTypes[];
 
-/* Laminar boundary condition callback: returns value of field component at boundary coordinates.
+/* Boundary condition callback: returns value of field component at boundary coordinates.
    comp is the solution DOF component being queried (0..dim-1 for velocity, dim for pressure). */
-typedef PetscErrorCode PhysLaminarBCFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx);
+typedef PetscErrorCode PhysBCFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx);
 
 typedef struct {
-  PhysLaminarBCType type;
-  PhysLaminarBCFn  *fn; /* value BC: u_bc(t, x, comp) */
-  void             *ctx;
-  PhysLaminarBCFn  *fn_dot; /* time derivative BC: du_bc/dt(t, x, comp); NULL = use FD approx of fn */
-  void             *fn_dot_ctx;
-} PhysLaminarBC;
+  PhysBCType type;
+  PhysBCFn  *fn; /* value BC: u_bc(t, x, comp) */
+  void      *ctx;
+  PhysBCFn  *fn_dot; /* time derivative BC: du_bc/dt(t, x, comp); NULL = use FD approx of fn */
+  void      *fn_dot_ctx;
+} PhysBC;
+
+FLUCA_EXTERN PetscErrorCode PhysSetBoundaryCondition(Phys, PetscInt, PhysBC);
+FLUCA_EXTERN PetscErrorCode PhysGetBoundaryCondition(Phys, PetscInt, PhysBC *);
 
 /* Lifecycle */
 FLUCA_EXTERN PetscErrorCode PhysCreate(MPI_Comm, Phys *);
@@ -93,6 +96,11 @@ FLUCA_EXTERN const char *PhysPropertySources[];
 #define PHYS_PROPERTY_DENSITY   "density"
 #define PHYS_PROPERTY_VISCOSITY "viscosity"
 
+FLUCA_EXTERN PetscErrorCode PhysSetDensity(Phys, PetscReal);
+FLUCA_EXTERN PetscErrorCode PhysGetDensity(Phys, PetscReal *);
+FLUCA_EXTERN PetscErrorCode PhysSetViscosity(Phys, PetscReal);
+FLUCA_EXTERN PetscErrorCode PhysGetViscosity(Phys, PetscReal *);
+
 FLUCA_EXTERN PetscErrorCode PhysGetPropertySource(Phys, const char[], PhysPropertySource *);
 FLUCA_EXTERN PetscErrorCode PhysGetPropertyConstant(Phys, const char[], PetscScalar *);
 FLUCA_EXTERN PetscErrorCode PhysGetPropertyLocation(Phys, const char[], PhysFieldLocation *);
@@ -105,14 +113,6 @@ FLUCA_EXTERN PetscErrorCode PhysGetOptionsPrefix(Phys, const char *[]);
 /* Body force (base class) */
 FLUCA_EXTERN PetscErrorCode PhysSetBodyForce(Phys, PhysBodyForceFn *, void *);
 FLUCA_EXTERN PetscErrorCode PhysGetBodyForce(Phys, PhysBodyForceFn **, void **);
-
-/* PHYSLAMINAR specific */
-FLUCA_EXTERN PetscErrorCode PhysLaminarSetDensity(Phys, PetscReal);
-FLUCA_EXTERN PetscErrorCode PhysLaminarGetDensity(Phys, PetscReal *);
-FLUCA_EXTERN PetscErrorCode PhysLaminarSetViscosity(Phys, PetscReal);
-FLUCA_EXTERN PetscErrorCode PhysLaminarGetViscosity(Phys, PetscReal *);
-FLUCA_EXTERN PetscErrorCode PhysLaminarSetBoundaryCondition(Phys, PetscInt, PhysLaminarBC);
-FLUCA_EXTERN PetscErrorCode PhysLaminarGetBoundaryCondition(Phys, PetscInt, PhysLaminarBC *);
 
 /* Registration */
 FLUCA_EXTERN PetscFunctionList PhysList;

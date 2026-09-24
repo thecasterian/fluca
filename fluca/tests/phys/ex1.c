@@ -16,7 +16,7 @@ int main(int argc, char **argv)
   DM                dm, sol_dm;
   Phys              phys;
   PetscInt          f, c0, ncomp, n;
-  PhysLaminarBC     bc;
+  PhysBC            bc;
   PhysFieldLocation loc;
   IS                is;
   const char       *names[] = {PHYS_FIELD_VELOCITY, PHYS_FIELD_PRESSURE, PHYS_FIELD_FACE_VELOCITY};
@@ -35,12 +35,12 @@ int main(int argc, char **argv)
   PetscCall(PhysSetType(phys, PHYSLAMINAR));
   PetscCall(PhysSetBaseDM(phys, dm));
 
-  bc.type       = PHYS_LAMINAR_BC_VELOCITY;
+  bc.type       = PHYS_BC_VELOCITY;
   bc.fn         = BCVelocityZero;
   bc.ctx        = NULL;
   bc.fn_dot     = NULL;
   bc.fn_dot_ctx = NULL;
-  for (f = 0; f < 4; f++) PetscCall(PhysLaminarSetBoundaryCondition(phys, f, bc));
+  for (f = 0; f < 4; f++) PetscCall(PhysSetBoundaryCondition(phys, f, bc));
 
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));

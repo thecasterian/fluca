@@ -21,17 +21,17 @@ static PetscErrorCode SegSpatialOpsBCAdapterFnDot(PetscInt dim, PetscReal t, con
 }
 
 /* Set velocity Dirichlet BCs of velocity component d on a FlucaFD operator.
-   Uses the BC adapter of ops to bridge PhysLaminarBCFn (has comp) to FlucaFDBCValueFn (no comp). */
+   Uses the BC adapter of ops to bridge PhysBCFn (has comp) to FlucaFDBCValueFn (no comp). */
 PetscErrorCode SegSpatialOpsSetVelocityBCs_Internal(Phys phys, SegSpatialOps *ops, FlucaFD fd, PetscInt d)
 {
   FlucaFDBoundaryCondition fd_bcs[2 * FLUCA_MAX_DIM] = {{0}};
-  PhysLaminarBC            bc;
+  PhysBC                   bc;
   PetscInt                 f;
 
   PetscFunctionBegin;
   for (f = 0; f < 2 * ops->dim; f++) {
-    PetscCall(PhysLaminarGetBoundaryCondition(phys, f, &bc));
-    if (bc.type == PHYS_LAMINAR_BC_VELOCITY && bc.fn) {
+    PetscCall(PhysGetBoundaryCondition(phys, f, &bc));
+    if (bc.type == PHYS_BC_VELOCITY && bc.fn) {
       ops->bc_adapters[d][f].fn         = bc.fn;
       ops->bc_adapters[d][f].fn_dot     = bc.fn_dot;
       ops->bc_adapters[d][f].fn_ctx     = bc.ctx;
@@ -42,7 +42,7 @@ PetscErrorCode SegSpatialOpsSetVelocityBCs_Internal(Phys phys, SegSpatialOps *op
       fd_bcs[f].fn_ctx                  = &ops->bc_adapters[d][f];
       fd_bcs[f].fn_dot                  = bc.fn_dot ? SegSpatialOpsBCAdapterFnDot : NULL;
       fd_bcs[f].fn_dot_ctx              = &ops->bc_adapters[d][f];
-    } else if (bc.type == PHYS_LAMINAR_BC_VELOCITY) {
+    } else if (bc.type == PHYS_BC_VELOCITY) {
       /* Constant zero velocity BC */
       fd_bcs[f].type  = FLUCAFD_BC_DIRICHLET;
       fd_bcs[f].value = 0.;
@@ -255,18 +255,14 @@ static PetscErrorCode BuildCouplingOperators_Private(Phys phys, SegSpatialOps *o
 PetscErrorCode SegSpatialOpsBuild_Internal(Phys phys, SegSpatialOps *ops)
 {
   DMBoundaryType   bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
-  PhysLaminarBC    bc_lo, bc_hi;
+  PhysBC           bc_lo, bc_hi;
   PhysEquationRole role;
   const char      *name;
   PetscScalar      mu;
   PetscInt         dim, sw, d, e, k, nfields;
   DM               sol_dm;
-  PetscBool        islaminar;
 
   PetscFunctionBegin;
-  /* The operators below read the laminar boundary conditions and assume the laminar fields */
-  PetscCall(PetscObjectTypeCompare((PetscObject)phys, PHYSLAMINAR, &islaminar));
-  PetscCheck(islaminar, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONG, "The Seg spatial operators require a Phys of type %s", PHYSLAMINAR);
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(DMGetDimension(sol_dm, &dim));
   ops->dim = dim;
@@ -280,9 +276,9 @@ PetscErrorCode SegSpatialOpsBuild_Internal(Phys phys, SegSpatialOps *ops)
   PetscCall(DMStagGetBoundaryTypes(sol_dm, &bt[0], &bt[1], &bt[2]));
   for (d = 0; d < dim; ++d) {
     if (bt[d] == DM_BOUNDARY_PERIODIC) continue;
-    PetscCall(PhysLaminarGetBoundaryCondition(phys, 2 * d, &bc_lo));
-    PetscCall(PhysLaminarGetBoundaryCondition(phys, 2 * d + 1, &bc_hi));
-    PetscCheck(bc_lo.type == PHYS_LAMINAR_BC_VELOCITY && bc_hi.type == PHYS_LAMINAR_BC_VELOCITY, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "The Seg spatial operators require a velocity boundary condition on both non-periodic boundaries in direction %" PetscInt_FMT, d);
+    PetscCall(PhysGetBoundaryCondition(phys, 2 * d, &bc_lo));
+    PetscCall(PhysGetBoundaryCondition(phys, 2 * d + 1, &bc_hi));
+    PetscCheck(bc_lo.type == PHYS_BC_VELOCITY && bc_hi.type == PHYS_BC_VELOCITY, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "The Seg spatial operators require a velocity boundary condition on both non-periodic boundaries in direction %" PetscInt_FMT, d);
   }
 
   /* These operators only cover fields with a momentum, pressure or auxiliary role; a

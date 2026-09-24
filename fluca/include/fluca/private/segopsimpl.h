@@ -8,13 +8,13 @@
    header through segtest.h (the Seg test helpers) does not necessarily reference it directly. */
 PETSC_UNUSED static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
 
-/* Adapter to bridge PhysLaminarBCFn (has comp) to FlucaFDBCValueFn (no comp) */
+/* Adapter to bridge PhysBCFn (has comp) to FlucaFDBCValueFn (no comp) */
 typedef struct {
-  PhysLaminarBCFn *fn;     /* value callback */
-  PhysLaminarBCFn *fn_dot; /* time derivative callback (may be NULL) */
-  void            *fn_ctx;
-  void            *fn_dot_ctx;
-  PetscInt         comp; /* which solution component this adapter is wired for */
+  PhysBCFn *fn;     /* value callback */
+  PhysBCFn *fn_dot; /* time derivative callback (may be NULL) */
+  void     *fn_ctx;
+  void     *fn_dot_ctx;
+  PetscInt  comp; /* which solution component this adapter is wired for */
 } Seg_BCAdapter;
 
 /* Spatial operators of the continuous equations and the coupling rows of the coupled system (13) of
@@ -22,15 +22,15 @@ typedef struct {
    attached Phys, and reused by every step of the segregated solve.
 
    The operators are independent of the time discretization: none of them carries a time step, and a
-   Seg subtype builds its own time-discrete operators on top of them. They are built only from a
-   PHYSLAMINAR Phys, whose boundary conditions the adapter above forwards. */
+   Seg subtype builds its own time-discrete operators on top of them. They are built from any Phys's
+   boundary conditions, forwarded through the adapter above. */
 typedef struct {
   PetscInt dim;   /* spatial dimension of the solution DM */
   PetscInt c_vel; /* first velocity component (element) */
   PetscInt c_p;   /* pressure component (element) */
   PetscInt c_U;   /* face-normal velocity component (face) */
 
-  /* BC adapters: [comp][face] — created during setup to bridge PhysLaminarBCFn to FlucaFDBCValueFn */
+  /* BC adapters: [comp][face] — created during setup to bridge PhysBCFn to FlucaFDBCValueFn */
   Seg_BCAdapter bc_adapters[FLUCA_MAX_DIM + 1][FLUCA_MAX_FACES];
 
   FlucaFD fd_laplacian[FLUCA_MAX_DIM];            /* sum_e d/dx_e(-mu * d(u_d)/dx_e) */

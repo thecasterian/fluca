@@ -37,6 +37,8 @@ PetscErrorCode PhysSetFromOptions(Phys phys)
   const char *default_type;
   char        type[256];
   PetscBool   flg;
+  PetscScalar rho, mu;
+  PetscReal   rho_new, mu_new;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
@@ -48,6 +50,17 @@ PetscErrorCode PhysSetFromOptions(Phys phys)
   PetscCall(PetscOptionsFList("-phys_type", "Physical model type", "PhysSetType", PhysList, default_type, type, sizeof(type), &flg));
   if (flg) PetscCall(PhysSetType(phys, type));
   else if (!((PetscObject)phys)->type_name) PetscCall(PhysSetType(phys, default_type));
+
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho));
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_VISCOSITY, &mu));
+  rho_new = PetscRealPart(rho);
+  mu_new  = PetscRealPart(mu);
+  PetscCall(PetscOptionsReal("-phys_density", "Density", "PhysSetDensity", rho_new, &rho_new, NULL));
+  PetscCall(PetscOptionsReal("-phys_viscosity", "Dynamic viscosity", "PhysSetViscosity", mu_new, &mu_new, NULL));
+  /* Through the public setters, so that option values get the same range checks */
+  PetscCall(PhysSetDensity(phys, rho_new));
+  PetscCall(PhysSetViscosity(phys, mu_new));
+
   PetscTryTypeMethod(phys, setfromoptions, PetscOptionsObject);
   PetscCall(PetscObjectProcessOptionsHandlers((PetscObject)phys, PetscOptionsObject));
   PetscOptionsEnd();
@@ -94,5 +107,72 @@ PetscErrorCode PhysGetBodyForce(Phys phys, PhysBodyForceFn **fn, void **ctx)
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   if (fn) *fn = phys->bodyforce;
   if (ctx) *ctx = phys->bodyforce_ctx;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* --- Material properties (base class) -------------------------------------- */
+
+PetscErrorCode PhysSetDensity(Phys phys, PetscReal rho)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscValidLogicalCollectiveReal(phys, rho, 2);
+  PetscCheck(rho > 0, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Density must be positive, got %g", (double)rho);
+  PetscCall(PhysSetPropertyConstant_Internal(phys, PHYS_PROPERTY_DENSITY, rho));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysGetDensity(Phys phys, PetscReal *rho)
+{
+  PetscScalar rho_val;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscAssertPointer(rho, 2);
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_DENSITY, &rho_val));
+  *rho = PetscRealPart(rho_val);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysSetViscosity(Phys phys, PetscReal mu)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscValidLogicalCollectiveReal(phys, mu, 2);
+  PetscCheck(mu >= 0, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Viscosity must be non-negative, got %g", (double)mu);
+  PetscCall(PhysSetPropertyConstant_Internal(phys, PHYS_PROPERTY_VISCOSITY, mu));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysGetViscosity(Phys phys, PetscReal *mu)
+{
+  PetscScalar mu_val;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscAssertPointer(mu, 2);
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_VISCOSITY, &mu_val));
+  *mu = PetscRealPart(mu_val);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* --- Boundary conditions (base class) --------------------------------------- */
+
+PetscErrorCode PhysSetBoundaryCondition(Phys phys, PetscInt face, PhysBC bc)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscCheck(face >= 0 && face < FLUCA_MAX_FACES, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Face index %" PetscInt_FMT " out of range [0, %d)", face, FLUCA_MAX_FACES);
+  phys->bcs[face] = bc;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PhysGetBoundaryCondition(Phys phys, PetscInt face, PhysBC *bc)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscAssertPointer(bc, 3);
+  PetscCheck(face >= 0 && face < FLUCA_MAX_FACES, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Face index %" PetscInt_FMT " out of range [0, %d)", face, FLUCA_MAX_FACES);
+  *bc = phys->bcs[face];
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -6,13 +6,13 @@
 #include <flucasys.h>
 #include <petscdmstag.h>
 
-/* Set up a PhysLaminar on dm, which lays out the solution DM, and a SEGCNLINEAR attached to it.
+/* Set up a PHYSLAMINAR Phys on dm, which lays out the solution DM, and a SEGCNLINEAR attached to it.
    Every non-periodic boundary gets a velocity BC from bcfn (NULL means zero velocity), set before
    PhysSetUp() as required. Both objects are returned; destroy seg before phys. */
-static PetscErrorCode SegTestSetUp(DM dm, PetscReal rho, PetscReal mu, PhysLaminarBCFn *bcfn, Phys *phys, Seg *seg)
+static PetscErrorCode SegTestSetUp(DM dm, PetscReal rho, PetscReal mu, PhysBCFn *bcfn, Phys *phys, Seg *seg)
 {
   DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
-  PhysLaminarBC  bc;
+  PhysBC         bc;
   PetscInt       dim, d;
 
   PetscFunctionBeginUser;
@@ -21,17 +21,17 @@ static PetscErrorCode SegTestSetUp(DM dm, PetscReal rho, PetscReal mu, PhysLamin
   PetscCall(PhysCreate(PetscObjectComm((PetscObject)dm), phys));
   PetscCall(PhysSetType(*phys, PHYSLAMINAR));
   PetscCall(PhysSetBaseDM(*phys, dm));
-  PetscCall(PhysLaminarSetDensity(*phys, rho));
-  PetscCall(PhysLaminarSetViscosity(*phys, mu));
-  bc.type       = PHYS_LAMINAR_BC_VELOCITY;
+  PetscCall(PhysSetDensity(*phys, rho));
+  PetscCall(PhysSetViscosity(*phys, mu));
+  bc.type       = PHYS_BC_VELOCITY;
   bc.fn         = bcfn;
   bc.ctx        = NULL;
   bc.fn_dot     = NULL;
   bc.fn_dot_ctx = NULL;
   for (d = 0; d < dim; ++d) {
     if (bt[d] == DM_BOUNDARY_PERIODIC) continue;
-    PetscCall(PhysLaminarSetBoundaryCondition(*phys, 2 * d, bc));
-    PetscCall(PhysLaminarSetBoundaryCondition(*phys, 2 * d + 1, bc));
+    PetscCall(PhysSetBoundaryCondition(*phys, 2 * d, bc));
+    PetscCall(PhysSetBoundaryCondition(*phys, 2 * d + 1, bc));
   }
   PetscCall(PhysSetFromOptions(*phys));
   PetscCall(PhysSetUp(*phys));
