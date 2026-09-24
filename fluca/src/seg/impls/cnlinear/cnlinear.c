@@ -3,15 +3,15 @@
 /* M and f of eq. (13): momentum rows from the state at t^n, coupling rows with boundary data at t_coupling */
 static PetscErrorCode SegCNLinearAssembleSystem_Private(Seg seg, PetscReal t_coupling)
 {
-  Seg_CNLinear *fsm = (Seg_CNLinear *)seg->data;
+  Seg_CNLinear *cn = (Seg_CNLinear *)seg->data;
 
   PetscFunctionBegin;
-  PetscCall(MatZeroEntries(fsm->M));
-  PetscCall(VecZeroEntries(fsm->f));
-  PetscCall(SegCNLinearComputeMomentumSystem_Internal(seg, seg->t, seg->dt, seg->sol, fsm->M, fsm->f));
-  PetscCall(SegCNLinearComputeCouplingSystem_Internal(seg, t_coupling, seg->dt, fsm->M, fsm->f));
-  PetscCall(MatAssemblyBegin(fsm->M, MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(fsm->M, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatZeroEntries(cn->M));
+  PetscCall(VecZeroEntries(cn->f));
+  PetscCall(SegCNLinearComputeMomentumSystem_Internal(seg, seg->t, seg->dt, seg->sol, cn->M, cn->f));
+  PetscCall(SegCNLinearComputeCouplingSystem_Internal(seg, t_coupling, seg->dt, cn->M, cn->f));
+  PetscCall(MatAssemblyBegin(cn->M, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(cn->M, MAT_FINAL_ASSEMBLY));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -19,7 +19,7 @@ static PetscErrorCode SegCNLinearAssembleSystem_Private(Seg seg, PetscReal t_cou
    T u0 + b_interp: U0 = U* - G^st phi with D G^st phi = D U* - b_cont. u0 and p0 are unchanged. */
 static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
 {
-  Seg_CNLinear      *fsm  = (Seg_CNLinear *)seg->data;
+  Seg_CNLinear      *cn   = (Seg_CNLinear *)seg->data;
   IS                 is_u = seg->fields[SEG_CNLINEAR_FIELD_VELOCITY].is;
   IS                 is_U = seg->fields[SEG_CNLINEAR_FIELD_FACE_VELOCITY].is;
   IS                 is_p = seg->fields[SEG_CNLINEAR_FIELD_PRESSURE].is;
@@ -35,10 +35,10 @@ static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
   PetscFunctionBegin;
   PetscCall(PetscObjectGetComm((PetscObject)seg, &comm));
   PetscCall(SegCNLinearAssembleSystem_Private(seg, seg->t));
-  PetscCall(MatCreateSubMatrix(fsm->M, is_U, is_u, MAT_INITIAL_MATRIX, &negT));
-  PetscCall(MatCreateSubMatrix(fsm->M, is_u, is_p, MAT_INITIAL_MATRIX, &G));
-  PetscCall(MatCreateSubMatrix(fsm->M, is_U, is_p, MAT_INITIAL_MATRIX, &negR));
-  PetscCall(MatCreateSubMatrix(fsm->M, is_p, is_U, MAT_INITIAL_MATRIX, &D));
+  PetscCall(MatCreateSubMatrix(cn->M, is_U, is_u, MAT_INITIAL_MATRIX, &negT));
+  PetscCall(MatCreateSubMatrix(cn->M, is_u, is_p, MAT_INITIAL_MATRIX, &G));
+  PetscCall(MatCreateSubMatrix(cn->M, is_U, is_p, MAT_INITIAL_MATRIX, &negR));
+  PetscCall(MatCreateSubMatrix(cn->M, is_p, is_U, MAT_INITIAL_MATRIX, &D));
 
   /* W = (-T) G - (-R) = -G^st, S = D W: the Schur complement of eq. (18) */
   PetscCall(MatMatMult(negT, G, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &W));
@@ -50,18 +50,18 @@ static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
   /* U* = T u0 + b_interp */
   PetscCall(MatCreateVecs(negT, NULL, &Ustar));
   PetscCall(VecGetSubVector(seg->sol, is_u, &u));
-  PetscCall(VecGetSubVector(fsm->f, is_U, &fU));
+  PetscCall(VecGetSubVector(cn->f, is_U, &fU));
   PetscCall(MatMult(negT, u, Ustar));
   PetscCall(VecAYPX(Ustar, -1., fU));
-  PetscCall(VecRestoreSubVector(fsm->f, is_U, &fU));
+  PetscCall(VecRestoreSubVector(cn->f, is_U, &fU));
   PetscCall(VecRestoreSubVector(seg->sol, is_u, &u));
 
   /* S phi = b_cont - D U* */
   PetscCall(MatCreateVecs(S, &phi, &rhs));
-  PetscCall(VecGetSubVector(fsm->f, is_p, &fp));
+  PetscCall(VecGetSubVector(cn->f, is_p, &fp));
   PetscCall(MatMult(D, Ustar, rhs));
   PetscCall(VecAYPX(rhs, -1., fp));
-  PetscCall(VecRestoreSubVector(fsm->f, is_p, &fp));
+  PetscCall(VecRestoreSubVector(cn->f, is_p, &fp));
   PetscCall(MatNullSpaceRemove(nullspace, rhs));
 
   PetscCall(KSPCreate(comm, &ksp));
@@ -101,7 +101,7 @@ static PetscErrorCode SegPreSolve_CNLinear(Seg seg)
 
 static PetscErrorCode SegSetUp_CNLinear(Seg seg)
 {
-  Seg_CNLinear        *fsm                              = (Seg_CNLinear *)seg->data;
+  Seg_CNLinear        *cn                               = (Seg_CNLinear *)seg->data;
   const SegFieldUpdate updates[SEG_CNLINEAR_NUM_FIELDS] = {
     [SEG_CNLINEAR_FIELD_VELOCITY]      = SEG_FIELD_UPDATE_VALUE,
     [SEG_CNLINEAR_FIELD_FACE_VELOCITY] = SEG_FIELD_UPDATE_VALUE,
@@ -141,11 +141,11 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
     PetscCall(PhysGetFieldIS(seg->phys, names[k], &seg->fields[k].is));
   }
 
-  PetscCall(DMCreateMatrix(dm, &fsm->M));
-  PetscCall(MatSetOption(fsm->M, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
-  PetscCall(MatSetOption(fsm->M, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE));
-  PetscCall(DMCreateGlobalVector(dm, &fsm->f));
-  PetscCall(DMCreateGlobalVector(dm, &fsm->x));
+  PetscCall(DMCreateMatrix(dm, &cn->M));
+  PetscCall(MatSetOption(cn->M, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscCall(MatSetOption(cn->M, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE));
+  PetscCall(DMCreateGlobalVector(dm, &cn->f));
+  PetscCall(DMCreateGlobalVector(dm, &cn->x));
 
   /* Each field the Phys declares as determined only up to a constant contributes one null-space
      vector: constant on that field's entries and zero on every other. Deriving a single vector this
@@ -169,8 +169,8 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
     ++nnull;
   }
   if (nnull > 0) {
-    PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, nnull, nullvecs, &fsm->nullspace));
-    PetscCall(MatSetNullSpace(fsm->M, fsm->nullspace));
+    PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, nnull, nullvecs, &cn->nullspace));
+    PetscCall(MatSetNullSpace(cn->M, cn->nullspace));
   }
   for (k = 0; k < nnull; ++k) PetscCall(VecDestroy(&nullvecs[k]));
 
@@ -182,11 +182,11 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
     PetscCall(ISGetSize(is[k], &N));
     PetscCall(MatCreateConstantDiagonal(comm, n, n, N, N, 1., &blocks[(SEG_CNLINEAR_NUM_FIELDS + 1) * k]));
   }
-  PetscCall(MatCreateNest(comm, SEG_CNLINEAR_NUM_FIELDS, is, SEG_CNLINEAR_NUM_FIELDS, is, blocks, &fsm->P));
+  PetscCall(MatCreateNest(comm, SEG_CNLINEAR_NUM_FIELDS, is, SEG_CNLINEAR_NUM_FIELDS, is, blocks, &cn->P));
   for (k = 0; k < SEG_CNLINEAR_NUM_FIELDS; ++k) PetscCall(MatDestroy(&blocks[(SEG_CNLINEAR_NUM_FIELDS + 1) * k]));
 
   PetscCall(SegGetKSP(seg, &ksp));
-  PetscCall(KSPSetOperators(ksp, fsm->M, fsm->P));
+  PetscCall(KSPSetOperators(ksp, cn->M, cn->P));
   PetscCall(KSPSetType(ksp, KSPRICHARDSON));
   PetscCall(KSPSetTolerances(ksp, 1.e-8, PETSC_CURRENT, PETSC_CURRENT, 1000));
   PetscCall(KSPGetPC(ksp, &pc));
@@ -207,7 +207,7 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
 
 static PetscErrorCode SegStep_CNLinear(Seg seg)
 {
-  Seg_CNLinear      *fsm = (Seg_CNLinear *)seg->data;
+  Seg_CNLinear      *cn = (Seg_CNLinear *)seg->data;
   KSP                ksp;
   KSPConvergedReason reason;
   Vec                xs, Xs;
@@ -217,9 +217,9 @@ static PetscErrorCode SegStep_CNLinear(Seg seg)
   PetscCall(SegGetKSP(seg, &ksp));
   PetscCall(SegCNLinearAssembleSystem_Private(seg, seg->t + seg->dt));
   /* PCABF takes its blocks from M; mark P changed so that the preconditioner is rebuilt */
-  PetscCall(PetscObjectStateIncrease((PetscObject)fsm->P));
-  PetscCall(VecZeroEntries(fsm->x));
-  PetscCall(KSPSolve(ksp, fsm->f, fsm->x));
+  PetscCall(PetscObjectStateIncrease((PetscObject)cn->P));
+  PetscCall(VecZeroEntries(cn->x));
+  PetscCall(KSPSolve(ksp, cn->f, cn->x));
   PetscCall(KSPGetConvergedReason(ksp, &reason));
   if (reason == KSP_DIVERGED_ITS) {
     PetscInt max_it;
@@ -242,13 +242,13 @@ static PetscErrorCode SegStep_CNLinear(Seg seg)
 
   /* X <- [u^{n+1}, U^{n+1}, q + p'], each field updated the way it was declared */
   for (f = 0; f < seg->nfields; ++f) {
-    PetscCall(VecGetSubVector(fsm->x, seg->fields[f].is, &xs));
+    PetscCall(VecGetSubVector(cn->x, seg->fields[f].is, &xs));
     PetscCall(VecGetSubVector(seg->sol, seg->fields[f].is, &Xs));
     if (seg->fields[f].update == SEG_FIELD_UPDATE_VALUE) PetscCall(VecCopy(xs, Xs));
     else if (seg->fields[f].update == SEG_FIELD_UPDATE_INCREMENT) PetscCall(VecAXPY(Xs, 1., xs));
     else SETERRQ(PetscObjectComm((PetscObject)seg), PETSC_ERR_SUP, "Unsupported field update mode %d", (int)seg->fields[f].update);
     PetscCall(VecRestoreSubVector(seg->sol, seg->fields[f].is, &Xs));
-    PetscCall(VecRestoreSubVector(fsm->x, seg->fields[f].is, &xs));
+    PetscCall(VecRestoreSubVector(cn->x, seg->fields[f].is, &xs));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -262,32 +262,32 @@ static PetscErrorCode SegView_CNLinear(Seg seg, PetscViewer viewer)
 
 static PetscErrorCode SegDestroy_CNLinear(Seg seg)
 {
-  Seg_CNLinear *fsm = (Seg_CNLinear *)seg->data;
+  Seg_CNLinear *cn = (Seg_CNLinear *)seg->data;
 
   PetscFunctionBegin;
   PetscCall(SegOpsDestroy_Internal(seg));
-  PetscCall(MatDestroy(&fsm->P));
-  PetscCall(MatNullSpaceDestroy(&fsm->nullspace));
-  PetscCall(MatDestroy(&fsm->M));
-  PetscCall(VecDestroy(&fsm->x));
-  PetscCall(VecDestroy(&fsm->f));
+  PetscCall(MatDestroy(&cn->P));
+  PetscCall(MatNullSpaceDestroy(&cn->nullspace));
+  PetscCall(MatDestroy(&cn->M));
+  PetscCall(VecDestroy(&cn->x));
+  PetscCall(VecDestroy(&cn->f));
   PetscCall(PetscFree(seg->data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode SegCreate_CNLinear(Seg seg)
 {
-  Seg_CNLinear *fsm;
+  Seg_CNLinear *cn;
 
   PetscFunctionBegin;
-  PetscCall(PetscNew(&fsm));
-  seg->data = (void *)fsm;
+  PetscCall(PetscNew(&cn));
+  seg->data = (void *)cn;
 
-  fsm->M         = NULL;
-  fsm->P         = NULL;
-  fsm->nullspace = NULL;
-  fsm->f         = NULL;
-  fsm->x         = NULL;
+  cn->M         = NULL;
+  cn->P         = NULL;
+  cn->nullspace = NULL;
+  cn->f         = NULL;
+  cn->x         = NULL;
 
   seg->ops->setup    = SegSetUp_CNLinear;
   seg->ops->presolve = SegPreSolve_CNLinear;
