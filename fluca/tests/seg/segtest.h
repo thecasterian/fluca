@@ -9,7 +9,7 @@
 /* Set up a PhysLaminar on dm, which lays out the solution DM, and a SEGCNLINEAR attached to it.
    Every non-periodic boundary gets a velocity BC from bcfn (NULL means zero velocity), set before
    PhysSetUp() as required. Both objects are returned; destroy seg before phys. */
-static PetscErrorCode PhysTestSetUp(DM dm, PetscReal rho, PetscReal mu, PhysLaminarBCFn *bcfn, Phys *phys, Seg *seg)
+static PetscErrorCode SegTestSetUp(DM dm, PetscReal rho, PetscReal mu, PhysLaminarBCFn *bcfn, Phys *phys, Seg *seg)
 {
   DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
   PhysLaminarBC  bc;
@@ -43,7 +43,7 @@ static PetscErrorCode PhysTestSetUp(DM dm, PetscReal rho, PetscReal mu, PhysLami
 }
 
 /* Matrix and right-hand side of the coupled system (13) on the solution DM */
-static PetscErrorCode PhysTestCreateSystem(Phys phys, Mat *M, Vec *f)
+static PetscErrorCode SegTestCreateSystem(Phys phys, Mat *M, Vec *f)
 {
   DM sol_dm;
 
@@ -58,7 +58,7 @@ static PetscErrorCode PhysTestCreateSystem(Phys phys, Mat *M, Vec *f)
 }
 
 /* Check max |a - b| over the entries of one field */
-static PetscErrorCode PhysTestCheckField(Phys phys, const char name[], Vec a, Vec b, PetscReal tol)
+static PetscErrorCode SegTestCheckField(Phys phys, const char name[], Vec a, Vec b, PetscReal tol)
 {
   IS        is;
   Vec       sa, sb, diff;

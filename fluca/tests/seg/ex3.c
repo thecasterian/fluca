@@ -54,7 +54,7 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
-  PetscCall(PhysTestSetUp(dm, rho, mu, NULL, &phys, &seg));
+  PetscCall(SegTestSetUp(dm, rho, mu, NULL, &phys, &seg));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_PRESSURE, &loc, &c_p, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_FACE_VELOCITY, &loc, &c_U, NULL));
@@ -62,7 +62,7 @@ int main(int argc, char **argv)
   hx = 1. / Nx;
   hy = 1. / Ny;
 
-  PetscCall(PhysTestCreateSystem(phys, &M, &f));
+  PetscCall(SegTestCreateSystem(phys, &M, &f));
   PetscCall(DMCreateGlobalVector(sol_dm, &X));
   PetscCall(VecZeroEntries(X));
   PetscCall(SegCNLinearComputeMomentumSystem_Internal(seg, 0., dt, X, M, f));
@@ -119,7 +119,7 @@ int main(int argc, char **argv)
   PetscCall(MatMult(S, Psub, SPsub));
   PetscCall(VecRestoreSubVector(SP, is_p, &SPsub));
   PetscCall(VecRestoreSubVector(P, is_p, &Psub));
-  PetscCall(PhysTestCheckField(phys, PHYS_FIELD_PRESSURE, SP, E, 1e-10));
+  PetscCall(SegTestCheckField(phys, PHYS_FIELD_PRESSURE, SP, E, 1e-10));
 
   /* Row-level checks: W must equal -(dt/rho) G^st exactly at a boundary face (i=0, pinned by the
      BC row so both sides are zero), a wall-adjacent interior face (i=1), and a bulk interior face

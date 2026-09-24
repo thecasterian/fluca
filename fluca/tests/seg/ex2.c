@@ -26,7 +26,7 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 2. * PETSC_PI, 0., 2. * PETSC_PI, 0., 0.));
-  PetscCall(PhysTestSetUp(dm, rho, mu, NULL, &phys, &seg));
+  PetscCall(SegTestSetUp(dm, rho, mu, NULL, &phys, &seg));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_VELOCITY, &loc, &c_vel, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_FACE_VELOCITY, &loc, &c_U, NULL));
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
   h  = 2. * PETSC_PI / N;
   nu = mu / rho;
 
-  PetscCall(PhysTestCreateSystem(phys, &M, &f));
+  PetscCall(SegTestCreateSystem(phys, &M, &f));
   PetscCall(DMCreateGlobalVector(sol_dm, &X));
   PetscCall(DMCreateGlobalVector(sol_dm, &MX));
   PetscCall(DMCreateGlobalVector(sol_dm, &E_MX));
@@ -94,10 +94,10 @@ int main(int argc, char **argv)
   PetscCall(MatAssemblyEnd(M, MAT_FINAL_ASSEMBLY));
   PetscCall(MatMult(M, X, MX));
 
-  PetscCall(PhysTestCheckField(phys, PHYS_FIELD_VELOCITY, MX, E_MX, 1e-12));
-  PetscCall(PhysTestCheckField(phys, PHYS_FIELD_VELOCITY, f, E_f, 1e-12));
-  PetscCall(PhysTestCheckField(phys, PHYS_FIELD_PRESSURE, f, E_f, 0.));
-  PetscCall(PhysTestCheckField(phys, PHYS_FIELD_FACE_VELOCITY, f, E_f, 0.));
+  PetscCall(SegTestCheckField(phys, PHYS_FIELD_VELOCITY, MX, E_MX, 1e-12));
+  PetscCall(SegTestCheckField(phys, PHYS_FIELD_VELOCITY, f, E_f, 1e-12));
+  PetscCall(SegTestCheckField(phys, PHYS_FIELD_PRESSURE, f, E_f, 0.));
+  PetscCall(SegTestCheckField(phys, PHYS_FIELD_FACE_VELOCITY, f, E_f, 0.));
 
   PetscCall(VecDestroy(&E_f));
   PetscCall(VecDestroy(&E_MX));

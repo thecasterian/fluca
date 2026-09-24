@@ -51,14 +51,14 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
-  PetscCall(PhysTestSetUp(dm, 1., 1., WallVelocity, &phys, &seg));
+  PetscCall(SegTestSetUp(dm, 1., 1., WallVelocity, &phys, &seg));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_FACE_VELOCITY, &loc, &c_U, NULL));
   PetscCall(DMStagGetGlobalSizes(sol_dm, &Nx, &Ny, NULL));
   hx = 1. / Nx;
   hy = 1. / Ny;
 
-  PetscCall(PhysTestCreateSystem(phys, &M, &f));
+  PetscCall(SegTestCreateSystem(phys, &M, &f));
   PetscCall(SegCNLinearComputeCouplingSystem_Internal(seg, t, 0.1, M, f));
 
   /* Expected right-hand side: u_b . n on boundary faces, zero elsewhere (single rank) */
@@ -86,9 +86,9 @@ int main(int argc, char **argv)
   }
   PetscCall(VecAssemblyBegin(E));
   PetscCall(VecAssemblyEnd(E));
-  PetscCall(PhysTestCheckField(phys, PHYS_FIELD_FACE_VELOCITY, f, E, 1e-14));
-  PetscCall(PhysTestCheckField(phys, PHYS_FIELD_PRESSURE, f, E, 0.));
-  PetscCall(PhysTestCheckField(phys, PHYS_FIELD_VELOCITY, f, E, 0.));
+  PetscCall(SegTestCheckField(phys, PHYS_FIELD_FACE_VELOCITY, f, E, 1e-14));
+  PetscCall(SegTestCheckField(phys, PHYS_FIELD_PRESSURE, f, E, 0.));
+  PetscCall(SegTestCheckField(phys, PHYS_FIELD_VELOCITY, f, E, 0.));
 
   /* Boundary-face rows of M are unit rows */
   for (j = 0; j < Ny; ++j) {

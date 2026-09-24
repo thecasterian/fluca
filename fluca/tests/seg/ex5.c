@@ -87,7 +87,7 @@ static PetscErrorCode FieldBC(PetscInt dim, PetscReal t, const PetscReal x[], Pe
    U = b_interp + T u for the analytic field, and return the rms of the per-cell continuity residual
    D U - b_cont split into the cells touching a wall and the rest. u_max is the field scale, used to
    build a dimensionally correct round-off tolerance. Serial only: the bucketing uses global indices. */
-static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, PetscReal *rms_wall, PetscReal *rms_bulk, PetscReal *u_max)
+static PetscErrorCode SegTestContinuityResidual(DMBoundaryType bt, PetscInt N, PetscReal *rms_wall, PetscReal *rms_bulk, PetscReal *u_max)
 {
   DM                dm, sol_dm;
   Phys              phys;
@@ -113,7 +113,7 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, bt, bt, N, N, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 4, NULL, NULL, &dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 2. * PETSC_PI, 0., 2. * PETSC_PI, 0., 0.));
-  PetscCall(PhysTestSetUp(dm, rho, mu, FieldBC, &phys, &seg));
+  PetscCall(SegTestSetUp(dm, rho, mu, FieldBC, &phys, &seg));
   PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_VELOCITY, &loc, &c_vel, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_PRESSURE, &loc, &c_p, NULL));
@@ -145,7 +145,7 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
   PetscCall(VecAssemblyBegin(X));
   PetscCall(VecAssemblyEnd(X));
 
-  PetscCall(PhysTestCreateSystem(phys, &M, &f));
+  PetscCall(SegTestCreateSystem(phys, &M, &f));
   PetscCall(SegCNLinearComputeMomentumSystem_Internal(seg, 0., dt, X, M, f));
   PetscCall(SegCNLinearComputeCouplingSystem_Internal(seg, 0., dt, M, f));
   PetscCall(MatAssemblyBegin(M, MAT_FINAL_ASSEMBLY));
@@ -183,7 +183,7 @@ static PetscErrorCode PhysTestContinuityResidual(DMBoundaryType bt, PetscInt N, 
   if (!walled && field_id == 0) {
     PetscCall(DMCreateGlobalVector(sol_dm, &Z));
     PetscCall(VecZeroEntries(Z));
-    PetscCall(PhysTestCheckField(phys, PHYS_FIELD_PRESSURE, R, Z, 1e-12 * *u_max / h));
+    PetscCall(SegTestCheckField(phys, PHYS_FIELD_PRESSURE, R, Z, 1e-12 * *u_max / h));
     PetscCall(VecDestroy(&Z));
   }
 
@@ -247,7 +247,7 @@ int main(int argc, char **argv)
      so the round-off tolerance carries a 1 / h. */
   field_id = 0;
   for (k = 0; k < 3; ++k) {
-    PetscCall(PhysTestContinuityResidual(DM_BOUNDARY_PERIODIC, grid[k], &wall[k], &bulk[k], &u_max));
+    PetscCall(SegTestContinuityResidual(DM_BOUNDARY_PERIODIC, grid[k], &wall[k], &bulk[k], &u_max));
     PetscCheck(u_max > .5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Periodic %" PetscInt_FMT ": the sampled field is trivial, |u|_max = %g", grid[k], (double)u_max);
     tol = 1e-12 * u_max * grid[k] / (2. * PETSC_PI);
     PetscCheck(bulk[k] <= tol, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Periodic %" PetscInt_FMT ": continuity residual %g exceeds round-off %g", grid[k], (double)bulk[k], (double)tol);
@@ -257,7 +257,7 @@ int main(int argc, char **argv)
      order. This is what the periodic round-off check above cannot see. */
   field_id = 1;
   for (k = 0; k < 3; ++k) {
-    PetscCall(PhysTestContinuityResidual(DM_BOUNDARY_PERIODIC, grid[k], &wall[k], &bulk[k], &u_max));
+    PetscCall(SegTestContinuityResidual(DM_BOUNDARY_PERIODIC, grid[k], &wall[k], &bulk[k], &u_max));
     PetscCheck(u_max > .5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Periodic oblique %" PetscInt_FMT ": the sampled field is trivial, |u|_max = %g", grid[k], (double)u_max);
   }
   for (k = 0; k + 1 < 3; ++k) {
@@ -271,7 +271,7 @@ int main(int argc, char **argv)
      near 8). */
   field_id = 0;
   for (k = 0; k < 3; ++k) {
-    PetscCall(PhysTestContinuityResidual(DM_BOUNDARY_NONE, grid[k], &wall[k], &bulk[k], &u_max));
+    PetscCall(SegTestContinuityResidual(DM_BOUNDARY_NONE, grid[k], &wall[k], &bulk[k], &u_max));
     PetscCheck(u_max > .5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled %" PetscInt_FMT ": the sampled field is trivial, |u|_max = %g", grid[k], (double)u_max);
     tol = 1e-12 * u_max * grid[k] / (2. * PETSC_PI);
     PetscCheck(bulk[k] <= tol, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled %" PetscInt_FMT ": bulk continuity residual %g exceeds round-off %g", grid[k], (double)bulk[k], (double)tol);
@@ -285,7 +285,7 @@ int main(int argc, char **argv)
      stays the size of the bulk instead of separating from it like 1 / h. */
   field_id = 1;
   for (k = 0; k < 3; ++k) {
-    PetscCall(PhysTestContinuityResidual(DM_BOUNDARY_NONE, grid[k], &wall[k], &bulk[k], &u_max));
+    PetscCall(SegTestContinuityResidual(DM_BOUNDARY_NONE, grid[k], &wall[k], &bulk[k], &u_max));
     PetscCheck(u_max > .5, PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled oblique %" PetscInt_FMT ": the sampled field is trivial, |u|_max = %g", grid[k], (double)u_max);
     PetscCheck(wall[k] <= 2. * bulk[k], PETSC_COMM_WORLD, PETSC_ERR_PLIB, "Walled oblique %" PetscInt_FMT ": wall-layer residual %g is more than twice the bulk residual %g, i.e. a lower-order wall layer", grid[k], (double)wall[k], (double)bulk[k]);
   }
