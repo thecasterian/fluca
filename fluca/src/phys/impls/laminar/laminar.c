@@ -23,8 +23,9 @@ static PetscErrorCode PhysSetFromOptions_Laminar(Phys phys, PetscOptionItems Pet
   PetscCall(PetscOptionsReal("-phys_laminar_density", "Density", "PhysLaminarSetDensity", PetscRealPart(rho), &rho_new, NULL));
   PetscCall(PetscOptionsReal("-phys_laminar_viscosity", "Dynamic viscosity", "PhysLaminarSetViscosity", PetscRealPart(mu), &mu_new, NULL));
   PetscOptionsHeadEnd();
-  PetscCall(PhysSetPropertyConstant_Internal(phys, PHYS_PROPERTY_DENSITY, rho_new));
-  PetscCall(PhysSetPropertyConstant_Internal(phys, PHYS_PROPERTY_VISCOSITY, mu_new));
+  /* Through the public setters, so that option values get the same range checks */
+  PetscCall(PhysLaminarSetDensity(phys, rho_new));
+  PetscCall(PhysLaminarSetViscosity(phys, mu_new));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
