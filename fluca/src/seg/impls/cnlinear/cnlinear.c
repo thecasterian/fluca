@@ -1,5 +1,83 @@
 #include <fluca/private/segcnlinearimpl.h>
 
+/* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
+static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
+
+/* Operators of the momentum rows: A = I + (dt/2) J - (dt/2) nu lap and G = (dt/rho) grad, built on
+   the spatial operators in cn->sops. Coefficients depending on dt and the linearization state are
+   set per step. */
+static PetscErrorCode BuildMomentumOperators_Private(Seg seg)
+{
+  Seg_CNLinear  *cn   = (Seg_CNLinear *)seg->data;
+  SegSpatialOps *sops = &cn->sops;
+  PetscInt       dim  = sops->dim, d, e;
+  DM             sol_dm, cdm;
+
+  PetscFunctionBegin;
+  PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
+
+  /* ubar_d^n lives on a one-DOF-per-face DM */
+  switch (dim) {
+  case 2:
+    PetscCall(DMStagCreateCompatibleDMStag(sol_dm, 0, 1, 0, 0, &cn->dm_face));
+    break;
+  case 3:
+    PetscCall(DMStagCreateCompatibleDMStag(sol_dm, 0, 0, 1, 0, &cn->dm_face));
+    break;
+  default:
+    SETERRQ(PetscObjectComm((PetscObject)seg), PETSC_ERR_SUP, "Unsupported dimension %" PetscInt_FMT, dim);
+  }
+  PetscCall(DMStagSetCoordinateDMType(cn->dm_face, DMPRODUCT));
+  PetscCall(DMGetCoordinateDM(sol_dm, &cdm));
+  PetscCall(DMSetCoordinateDM(cn->dm_face, cdm));
+  for (d = 0; d < dim; d++) PetscCall(DMCreateGlobalVector(cn->dm_face, &cn->ubar[d]));
+
+  /* Viscous and pressure-gradient blocks */
+  for (d = 0; d < dim; d++) {
+    PetscCall(FlucaFDScaleCreateConstant(sops->fd_laplacian[d], 0., &cn->fd_visc[d]));
+    PetscCall(SegSpatialOpsSetVelocityBCs_Internal(seg->phys, sops, cn->fd_visc[d], d));
+    PetscCall(FlucaFDSetUp(cn->fd_visc[d]));
+    PetscCall(FlucaFDScaleCreateConstant(sops->fd_grad_p[d], 0., &cn->fd_grad[d]));
+    PetscCall(FlucaFDSetUp(cn->fd_grad[d]));
+  }
+
+  /* Linearized convection, guide eq. (5) and section Spatial Discretization:
+     d/dx_e(ubar_d^{n+1} U_e^n + ubar_d^n ubar_e^{n+1}) */
+  for (d = 0; d < dim; d++) {
+    FlucaFD terms[2 * FLUCA_MAX_DIM], sum;
+
+    for (e = 0; e < dim; e++) {
+      FlucaFD interp_d, interp_e, outer;
+
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, sops->c_vel + d, face_loc[e], sops->c_U, &interp_d));
+      PetscCall(FlucaFDSetUp(interp_d));
+      PetscCall(FlucaFDScaleCreateVector(interp_d, sops->zero, sops->c_U, &cn->fd_conv_U[d][e]));
+      PetscCall(FlucaFDSetUp(cn->fd_conv_U[d][e]));
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, sops->c_vel + e, face_loc[e], sops->c_U, &interp_e));
+      PetscCall(FlucaFDSetUp(interp_e));
+      PetscCall(FlucaFDScaleCreateVector(interp_e, cn->ubar[d], 0, &cn->fd_conv_ubar[d][e]));
+      PetscCall(FlucaFDSetUp(cn->fd_conv_ubar[d][e]));
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, face_loc[e], sops->c_U, DMSTAG_ELEMENT, sops->c_vel + d, &outer));
+      PetscCall(FlucaFDSetUp(outer));
+      PetscCall(FlucaFDCompositionCreate(cn->fd_conv_U[d][e], outer, &terms[2 * e]));
+      PetscCall(FlucaFDSetUp(terms[2 * e]));
+      PetscCall(FlucaFDCompositionCreate(cn->fd_conv_ubar[d][e], outer, &terms[2 * e + 1]));
+      PetscCall(FlucaFDSetUp(terms[2 * e + 1]));
+      PetscCall(FlucaFDDestroy(&outer));
+      PetscCall(FlucaFDDestroy(&interp_e));
+      PetscCall(FlucaFDDestroy(&interp_d));
+    }
+    PetscCall(FlucaFDSumCreate(2 * dim, terms, &sum));
+    PetscCall(FlucaFDSetUp(sum));
+    PetscCall(FlucaFDScaleCreateConstant(sum, 0., &cn->fd_conv[d]));
+    for (e = 0; e < dim; e++) PetscCall(SegSpatialOpsSetVelocityBCs_Internal(seg->phys, sops, cn->fd_conv[d], e));
+    PetscCall(FlucaFDSetUp(cn->fd_conv[d]));
+    PetscCall(FlucaFDDestroy(&sum));
+    for (e = 0; e < 2 * dim; e++) PetscCall(FlucaFDDestroy(&terms[e]));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* M and f of eq. (13): momentum rows from the state at t^n, coupling rows with boundary data at t_coupling */
 static PetscErrorCode SegCNLinearAssembleSystem_Private(Seg seg, PetscReal t_coupling)
 {
@@ -128,7 +206,8 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
   PetscCall(PetscObjectGetComm((PetscObject)seg, &comm));
   PetscCall(PhysGetSetUpCalled(seg->phys, &setupcalled));
   PetscCheck(setupcalled, comm, PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before SegSetUp() with SEGCNLINEAR");
-  PetscCall(SegOpsBuild_Internal(seg));
+  PetscCall(SegSpatialOpsBuild_Internal(seg->phys, &cn->sops));
+  PetscCall(BuildMomentumOperators_Private(seg));
   PetscCall(PhysGetSolutionDM(seg->phys, &dm));
 
   /* The row blocks of the coupled system, in the order a step writes them back: the velocity and
@@ -263,9 +342,21 @@ static PetscErrorCode SegView_CNLinear(Seg seg, PetscViewer viewer)
 static PetscErrorCode SegDestroy_CNLinear(Seg seg)
 {
   Seg_CNLinear *cn = (Seg_CNLinear *)seg->data;
+  PetscInt      d, e;
 
   PetscFunctionBegin;
-  PetscCall(SegOpsDestroy_Internal(seg));
+  for (d = 0; d < FLUCA_MAX_DIM; d++) {
+    PetscCall(FlucaFDDestroy(&cn->fd_conv[d]));
+    PetscCall(FlucaFDDestroy(&cn->fd_grad[d]));
+    PetscCall(FlucaFDDestroy(&cn->fd_visc[d]));
+    for (e = 0; e < FLUCA_MAX_DIM; e++) {
+      PetscCall(FlucaFDDestroy(&cn->fd_conv_ubar[d][e]));
+      PetscCall(FlucaFDDestroy(&cn->fd_conv_U[d][e]));
+    }
+    PetscCall(VecDestroy(&cn->ubar[d]));
+  }
+  PetscCall(DMDestroy(&cn->dm_face));
+  PetscCall(SegSpatialOpsDestroy_Internal(&cn->sops));
   PetscCall(MatDestroy(&cn->P));
   PetscCall(MatNullSpaceDestroy(&cn->nullspace));
   PetscCall(MatDestroy(&cn->M));

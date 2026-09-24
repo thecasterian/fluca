@@ -1,22 +1,22 @@
-#include <fluca/private/segcnlinearimpl.h>
+#include <fluca/private/segopsimpl.h>
 
 /* Face stencil locations indexed by direction: LEFT for x, DOWN for y, BACK for z */
 static const DMStagStencilLocation face_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
 
 /* --- BC adapter functions ------------------------------------------------- */
 
-static PetscErrorCode SegOpsBCAdapterFn(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
+static PetscErrorCode SegSpatialOpsBCAdapterFn(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
 {
-  SegCNLinear_BCAdapter *a = (SegCNLinear_BCAdapter *)ctx;
+  Seg_BCAdapter *a = (Seg_BCAdapter *)ctx;
 
   PetscFunctionBegin;
   PetscCall(a->fn(dim, t, x, a->comp, value, a->fn_ctx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode SegOpsBCAdapterFnDot(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
+static PetscErrorCode SegSpatialOpsBCAdapterFnDot(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar *value)
 {
-  SegCNLinear_BCAdapter *a = (SegCNLinear_BCAdapter *)ctx;
+  Seg_BCAdapter *a = (Seg_BCAdapter *)ctx;
 
   PetscFunctionBegin;
   PetscCall(a->fn_dot(dim, t, x, a->comp, value, a->fn_dot_ctx));
@@ -24,18 +24,16 @@ static PetscErrorCode SegOpsBCAdapterFnDot(PetscInt dim, PetscReal t, const Pets
 }
 
 /* Set velocity Dirichlet BCs of velocity component d on a FlucaFD operator.
-   Uses the BC adapter to bridge PhysLaminarBCFn (has comp) to FlucaFDBCValueFn (no comp). */
-static PetscErrorCode SetVelocityDirichletBCs(Seg seg, FlucaFD fd, PetscInt d)
+   Uses the BC adapter of ops to bridge PhysLaminarBCFn (has comp) to FlucaFDBCValueFn (no comp). */
+PetscErrorCode SegSpatialOpsSetVelocityBCs_Internal(Phys phys, SegSpatialOps *ops, FlucaFD fd, PetscInt d)
 {
-  Seg_CNLinear            *cn                        = (Seg_CNLinear *)seg->data;
-  Seg_Ops                 *ops                       = &cn->ops;
   FlucaFDBoundaryCondition fd_bcs[2 * FLUCA_MAX_DIM] = {{0}};
   PhysLaminarBC            bc;
   PetscInt                 f;
 
   PetscFunctionBegin;
   for (f = 0; f < 2 * ops->dim; f++) {
-    PetscCall(PhysLaminarGetBoundaryCondition(seg->phys, f, &bc));
+    PetscCall(PhysLaminarGetBoundaryCondition(phys, f, &bc));
     if (bc.type == PHYS_LAMINAR_BC_VELOCITY && bc.fn) {
       ops->bc_adapters[d][f].fn         = bc.fn;
       ops->bc_adapters[d][f].fn_dot     = bc.fn_dot;
@@ -43,9 +41,9 @@ static PetscErrorCode SetVelocityDirichletBCs(Seg seg, FlucaFD fd, PetscInt d)
       ops->bc_adapters[d][f].fn_dot_ctx = bc.fn_dot_ctx;
       ops->bc_adapters[d][f].comp       = d;
       fd_bcs[f].type                    = FLUCAFD_BC_DIRICHLET;
-      fd_bcs[f].fn                      = SegOpsBCAdapterFn;
+      fd_bcs[f].fn                      = SegSpatialOpsBCAdapterFn;
       fd_bcs[f].fn_ctx                  = &ops->bc_adapters[d][f];
-      fd_bcs[f].fn_dot                  = bc.fn_dot ? SegOpsBCAdapterFnDot : NULL;
+      fd_bcs[f].fn_dot                  = bc.fn_dot ? SegSpatialOpsBCAdapterFnDot : NULL;
       fd_bcs[f].fn_dot_ctx              = &ops->bc_adapters[d][f];
     } else if (bc.type == PHYS_LAMINAR_BC_VELOCITY) {
       /* Constant zero velocity BC */
@@ -97,95 +95,9 @@ static const PetscInt interp_accu_order = 4;
    genuinely nonzero at a wall, so that ghost belongs to the Poisson problem of the pressure
    increment, not to the pressure gradient of the momentum equation. */
 
-/* Operators of the momentum rows: A = I + (dt/2) J - (dt/2) nu lap and G = (dt/rho) grad.
-   Coefficients depending on dt and the linearization state are set per step. */
-static PetscErrorCode BuildMomentumOperators_Private(Seg seg)
-{
-  Seg_CNLinear *cn  = (Seg_CNLinear *)seg->data;
-  Seg_Ops      *ops = &cn->ops;
-  PetscInt      dim = ops->dim, d, e;
-  DM            sol_dm, cdm;
-
-  PetscFunctionBegin;
-  PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
-  PetscCall(PhysGetFieldIS(seg->phys, PHYS_FIELD_VELOCITY, &ops->is_vel));
-  PetscCall(DMCreateGlobalVector(sol_dm, &ops->zero));
-  PetscCall(VecZeroEntries(ops->zero));
-
-  /* ubar_d^n lives on a one-DOF-per-face DM */
-  switch (dim) {
-  case 2:
-    PetscCall(DMStagCreateCompatibleDMStag(sol_dm, 0, 1, 0, 0, &ops->dm_face));
-    break;
-  case 3:
-    PetscCall(DMStagCreateCompatibleDMStag(sol_dm, 0, 0, 1, 0, &ops->dm_face));
-    break;
-  default:
-    SETERRQ(PetscObjectComm((PetscObject)seg), PETSC_ERR_SUP, "Unsupported dimension %" PetscInt_FMT, dim);
-  }
-  PetscCall(DMStagSetCoordinateDMType(ops->dm_face, DMPRODUCT));
-  PetscCall(DMGetCoordinateDM(sol_dm, &cdm));
-  PetscCall(DMSetCoordinateDM(ops->dm_face, cdm));
-  for (d = 0; d < dim; d++) {
-    PetscCall(DMCreateGlobalVector(ops->dm_face, &ops->ubar[d]));
-    for (e = 0; e < dim; e++) {
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, ops->c_vel + d, face_loc[e], 0, &ops->fd_interp_vel[d][e]));
-      PetscCall(SetVelocityDirichletBCs(seg, ops->fd_interp_vel[d][e], d));
-      PetscCall(FlucaFDSetUp(ops->fd_interp_vel[d][e]));
-    }
-  }
-
-  /* Viscous and pressure-gradient blocks */
-  for (d = 0; d < dim; d++) {
-    PetscCall(FlucaFDScaleCreateConstant(ops->fd_laplacian[d], 0., &ops->fd_visc[d]));
-    PetscCall(SetVelocityDirichletBCs(seg, ops->fd_visc[d], d));
-    PetscCall(FlucaFDSetUp(ops->fd_visc[d]));
-    PetscCall(FlucaFDScaleCreateConstant(ops->fd_grad_p[d], 0., &ops->fd_grad[d]));
-    PetscCall(FlucaFDSetUp(ops->fd_grad[d]));
-  }
-
-  /* Linearized convection, guide eq. (5) and section Spatial Discretization:
-     d/dx_e(ubar_d^{n+1} U_e^n + ubar_d^n ubar_e^{n+1}) */
-  for (d = 0; d < dim; d++) {
-    FlucaFD terms[2 * FLUCA_MAX_DIM], sum;
-
-    for (e = 0; e < dim; e++) {
-      FlucaFD interp_d, interp_e, outer;
-
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, ops->c_vel + d, face_loc[e], ops->c_U, &interp_d));
-      PetscCall(FlucaFDSetUp(interp_d));
-      PetscCall(FlucaFDScaleCreateVector(interp_d, ops->zero, ops->c_U, &ops->fd_conv_U[d][e]));
-      PetscCall(FlucaFDSetUp(ops->fd_conv_U[d][e]));
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, ops->c_vel + e, face_loc[e], ops->c_U, &interp_e));
-      PetscCall(FlucaFDSetUp(interp_e));
-      PetscCall(FlucaFDScaleCreateVector(interp_e, ops->ubar[d], 0, &ops->fd_conv_ubar[d][e]));
-      PetscCall(FlucaFDSetUp(ops->fd_conv_ubar[d][e]));
-      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 1, 2, face_loc[e], ops->c_U, DMSTAG_ELEMENT, ops->c_vel + d, &outer));
-      PetscCall(FlucaFDSetUp(outer));
-      PetscCall(FlucaFDCompositionCreate(ops->fd_conv_U[d][e], outer, &terms[2 * e]));
-      PetscCall(FlucaFDSetUp(terms[2 * e]));
-      PetscCall(FlucaFDCompositionCreate(ops->fd_conv_ubar[d][e], outer, &terms[2 * e + 1]));
-      PetscCall(FlucaFDSetUp(terms[2 * e + 1]));
-      PetscCall(FlucaFDDestroy(&outer));
-      PetscCall(FlucaFDDestroy(&interp_e));
-      PetscCall(FlucaFDDestroy(&interp_d));
-    }
-    PetscCall(FlucaFDSumCreate(2 * dim, terms, &sum));
-    PetscCall(FlucaFDSetUp(sum));
-    PetscCall(FlucaFDScaleCreateConstant(sum, 0., &ops->fd_conv[d]));
-    for (e = 0; e < dim; e++) PetscCall(SetVelocityDirichletBCs(seg, ops->fd_conv[d], e));
-    PetscCall(FlucaFDSetUp(ops->fd_conv[d]));
-    PetscCall(FlucaFDDestroy(&sum));
-    for (e = 0; e < 2 * dim; e++) PetscCall(FlucaFDDestroy(&terms[e]));
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 /* Local indices of the locally owned face-velocity rows that lie on a non-periodic boundary */
-static PetscErrorCode CreateBoundaryFaceRows_Private(Seg seg)
+static PetscErrorCode CreateBoundaryFaceRows_Private(Phys phys, SegSpatialOps *ops)
 {
-  Seg_CNLinear  *cn    = (Seg_CNLinear *)seg->data;
-  Seg_Ops       *ops   = &cn->ops;
   PetscInt       dim   = ops->dim;
   DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
   PetscInt       N[3] = {1, 1, 1}, s[3] = {0, 0, 0}, m[3] = {1, 1, 1}, extra[3] = {0, 0, 0};
@@ -194,7 +106,7 @@ static PetscErrorCode CreateBoundaryFaceRows_Private(Seg seg)
   DM             sol_dm;
 
   PetscFunctionBegin;
-  PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
+  PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(DMStagGetBoundaryTypes(sol_dm, &bt[0], &bt[1], &bt[2]));
   PetscCall(DMStagGetGlobalSizes(sol_dm, &N[0], &N[1], &N[2]));
   PetscCall(DMStagGetCorners(sol_dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], &extra[0], &extra[1], &extra[2]));
@@ -241,21 +153,19 @@ static PetscErrorCode CreateBoundaryFaceRows_Private(Seg seg)
    widest block row of T, G_c, G^st or their product. Cheaper and much sparser than DMCreateMatrix(),
    which lays the whole stencil out as explicit zeros; the product of two such matrices would then
    reach the diagonal neighbours that the star preallocation of the system matrix has no room for. */
-static PetscErrorCode CreateBlockMatrix_Private(Seg seg, Mat *A)
+static PetscErrorCode CreateBlockMatrix_Private(Phys phys, SegSpatialOps *ops, Mat *A)
 {
-  Seg_CNLinear          *cn  = (Seg_CNLinear *)seg->data;
-  Seg_Ops               *ops = &cn->ops;
   ISLocalToGlobalMapping ltog;
   PetscInt               n, N;
   const PetscInt         nz = 12;
   DM                     sol_dm;
 
   PetscFunctionBegin;
-  PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
+  PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(DMGetLocalToGlobalMapping(sol_dm, &ltog));
   PetscCall(VecGetLocalSize(ops->zero, &n));
   PetscCall(VecGetSize(ops->zero, &N));
-  PetscCall(MatCreate(PetscObjectComm((PetscObject)seg), A));
+  PetscCall(MatCreate(PetscObjectComm((PetscObject)phys), A));
   PetscCall(MatSetSizes(*A, n, n, N, N));
   PetscCall(MatSetType(*A, MATAIJ));
   PetscCall(MatSeqAIJSetPreallocation(*A, nz, NULL));
@@ -277,21 +187,19 @@ static PetscErrorCode CreateBlockMatrix_Private(Seg seg, Mat *A)
    (-T) G - (-R) equal to -G^st in every row - the identity that makes the fractional step method
    leave the continuity equation unperturbed (guide eq. (17), (19)). R does not depend on dt; the time
    step only scales it by dt/rho, so it is built once here. */
-static PetscErrorCode BuildCouplingOperators_Private(Seg seg)
+static PetscErrorCode BuildCouplingOperators_Private(Phys phys, SegSpatialOps *ops)
 {
-  Seg_CNLinear *cn  = (Seg_CNLinear *)seg->data;
-  Seg_Ops      *ops = &cn->ops;
-  PetscInt      dim = ops->dim, e;
-  FlucaFD       div[FLUCA_MAX_DIM];
-  Mat           Tmat, Gmat, Gstmat;
-  DM            sol_dm;
+  PetscInt dim = ops->dim, e;
+  FlucaFD  div[FLUCA_MAX_DIM];
+  Mat      Tmat, Gmat, Gstmat;
+  DM       sol_dm;
 
   PetscFunctionBegin;
-  PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
-  PetscCall(CreateBoundaryFaceRows_Private(seg));
-  PetscCall(CreateBlockMatrix_Private(seg, &Tmat));
-  PetscCall(CreateBlockMatrix_Private(seg, &Gmat));
-  PetscCall(CreateBlockMatrix_Private(seg, &Gstmat));
+  PetscCall(PhysGetSolutionDM(phys, &sol_dm));
+  PetscCall(CreateBoundaryFaceRows_Private(phys, ops));
+  PetscCall(CreateBlockMatrix_Private(phys, ops, &Tmat));
+  PetscCall(CreateBlockMatrix_Private(phys, ops, &Gmat));
+  PetscCall(CreateBlockMatrix_Private(phys, ops, &Gstmat));
   for (e = 0; e < dim; e++) {
     FlucaFD Gst;
 
@@ -304,7 +212,7 @@ static PetscErrorCode BuildCouplingOperators_Private(Seg seg)
        interior face, so applying it to the zero vector is zero there and exactly u_b . n on a
        boundary face, where the Dirichlet datum carries the whole weight. */
     PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, ops->c_vel + e, face_loc[e], ops->c_U, &ops->fd_bface[e]));
-    PetscCall(SetVelocityDirichletBCs(seg, ops->fd_bface[e], e));
+    PetscCall(SegSpatialOpsSetVelocityBCs_Internal(phys, ops, ops->fd_bface[e], e));
     PetscCall(FlucaFDSetUp(ops->fd_bface[e]));
 
     /* Blocks of R = T G_c - G^st on faces normal to e */
@@ -347,10 +255,8 @@ static PetscErrorCode BuildCouplingOperators_Private(Seg seg)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode SegOpsBuild_Internal(Seg seg)
+PetscErrorCode SegSpatialOpsBuild_Internal(Phys phys, SegSpatialOps *ops)
 {
-  Seg_CNLinear    *cn    = (Seg_CNLinear *)seg->data;
-  Seg_Ops         *ops   = &cn->ops;
   DMBoundaryType   bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
   PhysLaminarBC    bc_lo, bc_hi;
   PhysEquationRole role;
@@ -362,9 +268,9 @@ PetscErrorCode SegOpsBuild_Internal(Seg seg)
 
   PetscFunctionBegin;
   /* The operators below read the laminar boundary conditions and assume the laminar fields */
-  PetscCall(PetscObjectTypeCompare((PetscObject)seg->phys, PHYSLAMINAR, &islaminar));
-  PetscCheck(islaminar, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONG, "SegCNLinear requires a Phys of type %s", PHYSLAMINAR);
-  PetscCall(PhysGetSolutionDM(seg->phys, &sol_dm));
+  PetscCall(PetscObjectTypeCompare((PetscObject)phys, PHYSLAMINAR, &islaminar));
+  PetscCheck(islaminar, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONG, "The Seg spatial operators require a Phys of type %s", PHYSLAMINAR);
+  PetscCall(PhysGetSolutionDM(phys, &sol_dm));
   PetscCall(DMGetDimension(sol_dm, &dim));
   ops->dim = dim;
 
@@ -372,33 +278,33 @@ PetscErrorCode SegOpsBuild_Internal(Seg seg)
      three-point cell gradient. Next to a wall the interpolation is folded onto four interior cells,
      and a face row then reaches four elements away on the side the folding points into. */
   PetscCall(DMStagGetStencilWidth(sol_dm, &sw));
-  PetscCheck(sw >= 4, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_OUTOFRANGE, "SegCNLinear requires a base DM stencil width of at least 4, got %" PetscInt_FMT, sw);
+  PetscCheck(sw >= 4, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "The Seg spatial operators require a base DM stencil width of at least 4, got %" PetscInt_FMT, sw);
   /* Only velocity boundary conditions are supported: every non-periodic boundary needs one */
   PetscCall(DMStagGetBoundaryTypes(sol_dm, &bt[0], &bt[1], &bt[2]));
   for (d = 0; d < dim; ++d) {
     if (bt[d] == DM_BOUNDARY_PERIODIC) continue;
-    PetscCall(PhysLaminarGetBoundaryCondition(seg->phys, 2 * d, &bc_lo));
-    PetscCall(PhysLaminarGetBoundaryCondition(seg->phys, 2 * d + 1, &bc_hi));
-    PetscCheck(bc_lo.type == PHYS_LAMINAR_BC_VELOCITY && bc_hi.type == PHYS_LAMINAR_BC_VELOCITY, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "SegCNLinear requires a velocity boundary condition on both non-periodic boundaries in direction %" PetscInt_FMT, d);
+    PetscCall(PhysLaminarGetBoundaryCondition(phys, 2 * d, &bc_lo));
+    PetscCall(PhysLaminarGetBoundaryCondition(phys, 2 * d + 1, &bc_hi));
+    PetscCheck(bc_lo.type == PHYS_LAMINAR_BC_VELOCITY && bc_hi.type == PHYS_LAMINAR_BC_VELOCITY, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "The Seg spatial operators require a velocity boundary condition on both non-periodic boundaries in direction %" PetscInt_FMT, d);
   }
 
-  /* SegCNLinear only builds operators for fields with a momentum, pressure or auxiliary role; a
-     transported-scalar field, or any other field it does not know how to handle, would be laid into
+  /* These operators only cover fields with a momentum, pressure or auxiliary role; a
+     transported-scalar field, or any other field they do not know how to handle, would be laid into
      the solution DM with no rows ever written for it, leaving a singular system with no diagnostic.
-     Every declared field must be checked, not just the ones this Seg looks up by name, since a Phys
-     subtype may declare additional fields this Seg is unaware of. */
-  PetscCall(PhysGetNumFields(seg->phys, &nfields));
+     Every declared field must be checked, not just the ones looked up by name here, since a Phys
+     subtype may declare additional fields these operators are unaware of. */
+  PetscCall(PhysGetNumFields(phys, &nfields));
   for (k = 0; k < nfields; ++k) {
-    PetscCall(PhysGetFieldName(seg->phys, k, &name));
-    PetscCall(PhysGetFieldRole(seg->phys, name, &role));
-    PetscCheck(role == PHYS_EQN_MOMENTUM || role == PHYS_EQN_PRESSURE || role == PHYS_EQN_AUXILIARY, PetscObjectComm((PetscObject)seg), PETSC_ERR_SUP, "SegCNLinear cannot build operators for field %s with equation role %s", name, PhysEquationRoles[role]);
+    PetscCall(PhysGetFieldName(phys, k, &name));
+    PetscCall(PhysGetFieldRole(phys, name, &role));
+    PetscCheck(role == PHYS_EQN_MOMENTUM || role == PHYS_EQN_PRESSURE || role == PHYS_EQN_AUXILIARY, PetscObjectComm((PetscObject)phys), PETSC_ERR_SUP, "The Seg spatial operators cannot be built for field %s with equation role %s", name, PhysEquationRoles[role]);
   }
 
-  PetscCall(PhysGetField(seg->phys, PHYS_FIELD_VELOCITY, NULL, &ops->c_vel, NULL));
-  PetscCall(PhysGetField(seg->phys, PHYS_FIELD_PRESSURE, NULL, &ops->c_p, NULL));
-  PetscCall(PhysGetField(seg->phys, PHYS_FIELD_FACE_VELOCITY, NULL, &ops->c_U, NULL));
+  PetscCall(PhysGetField(phys, PHYS_FIELD_VELOCITY, NULL, &ops->c_vel, NULL));
+  PetscCall(PhysGetField(phys, PHYS_FIELD_PRESSURE, NULL, &ops->c_p, NULL));
+  PetscCall(PhysGetField(phys, PHYS_FIELD_FACE_VELOCITY, NULL, &ops->c_U, NULL));
 
-  PetscCall(PhysGetPropertyConstant(seg->phys, PHYS_PROPERTY_VISCOSITY, &mu));
+  PetscCall(PhysGetPropertyConstant(phys, PHYS_PROPERTY_VISCOSITY, &mu));
   /* --- fd_laplacian[d] = sum_e d/dx_e(-mu * d(u_d)/dx_e) --- */
   for (d = 0; d < dim; d++) {
     FlucaFD comp_ops[FLUCA_MAX_DIM];
@@ -428,7 +334,7 @@ PetscErrorCode SegOpsBuild_Internal(Seg seg)
     }
 
     PetscCall(FlucaFDSumCreate(dim, comp_ops, &ops->fd_laplacian[d]));
-    PetscCall(SetVelocityDirichletBCs(seg, ops->fd_laplacian[d], d));
+    PetscCall(SegSpatialOpsSetVelocityBCs_Internal(phys, ops, ops->fd_laplacian[d], d));
     PetscCall(FlucaFDSetUp(ops->fd_laplacian[d]));
 
     for (e = 0; e < dim; e++) PetscCall(FlucaFDDestroy(&comp_ops[e]));
@@ -440,16 +346,24 @@ PetscErrorCode SegOpsBuild_Internal(Seg seg)
     PetscCall(FlucaFDSetUp(ops->fd_grad_p[d]));
   }
 
-  PetscCall(BuildMomentumOperators_Private(seg));
-  PetscCall(BuildCouplingOperators_Private(seg));
+  /* --- zero solution vector, and fd_interp_vel[d][e]: u_d linearly interpolated to faces normal to e --- */
+  PetscCall(DMCreateGlobalVector(sol_dm, &ops->zero));
+  PetscCall(VecZeroEntries(ops->zero));
+  for (d = 0; d < dim; d++) {
+    for (e = 0; e < dim; e++) {
+      PetscCall(FlucaFDDerivativeCreate(sol_dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, ops->c_vel + d, face_loc[e], 0, &ops->fd_interp_vel[d][e]));
+      PetscCall(SegSpatialOpsSetVelocityBCs_Internal(phys, ops, ops->fd_interp_vel[d][e], d));
+      PetscCall(FlucaFDSetUp(ops->fd_interp_vel[d][e]));
+    }
+  }
+
+  PetscCall(BuildCouplingOperators_Private(phys, ops));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode SegOpsDestroy_Internal(Seg seg)
+PetscErrorCode SegSpatialOpsDestroy_Internal(SegSpatialOps *ops)
 {
-  Seg_CNLinear *cn  = (Seg_CNLinear *)seg->data;
-  Seg_Ops      *ops = &cn->ops;
-  PetscInt      d, e;
+  PetscInt d, e;
 
   PetscFunctionBegin;
   PetscCall(MatDestroy(&ops->negR));
@@ -457,22 +371,12 @@ PetscErrorCode SegOpsDestroy_Internal(Seg seg)
     PetscCall(FlucaFDDestroy(&ops->fd_bface[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_negT[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_T[d]));
-    PetscCall(FlucaFDDestroy(&ops->fd_conv[d]));
-    PetscCall(FlucaFDDestroy(&ops->fd_grad[d]));
-    PetscCall(FlucaFDDestroy(&ops->fd_visc[d]));
-    for (e = 0; e < FLUCA_MAX_DIM; e++) {
-      PetscCall(FlucaFDDestroy(&ops->fd_conv_ubar[d][e]));
-      PetscCall(FlucaFDDestroy(&ops->fd_conv_U[d][e]));
-      PetscCall(FlucaFDDestroy(&ops->fd_interp_vel[d][e]));
-    }
-    PetscCall(VecDestroy(&ops->ubar[d]));
+    for (e = 0; e < FLUCA_MAX_DIM; e++) PetscCall(FlucaFDDestroy(&ops->fd_interp_vel[d][e]));
     PetscCall(FlucaFDDestroy(&ops->fd_laplacian[d]));
     PetscCall(FlucaFDDestroy(&ops->fd_grad_p[d]));
   }
   PetscCall(FlucaFDDestroy(&ops->fd_D));
   PetscCall(PetscFree(ops->bface));
-  PetscCall(DMDestroy(&ops->dm_face));
   PetscCall(VecDestroy(&ops->zero));
-  PetscCall(ISDestroy(&ops->is_vel));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
