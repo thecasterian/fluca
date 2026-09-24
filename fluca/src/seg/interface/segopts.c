@@ -7,6 +7,7 @@ PetscErrorCode SegSetPhys(Seg seg, Phys phys)
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 2);
   PetscCheckSameComm(seg, 1, phys, 2);
   if (seg->phys == phys) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCheck(!seg->setupcalled, PetscObjectComm((PetscObject)seg), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the Phys after SegSetUp()");
 
   PetscCall(PetscObjectReference((PetscObject)phys));
   PetscCall(PhysDestroy(&seg->phys));
