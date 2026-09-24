@@ -14,7 +14,6 @@ typedef enum {
 
 typedef struct {
   Mat          M; /* coupled system (13) on the solution DM */
-  Mat          P; /* MATNEST carrying the field index sets that PCABF reads */
   MatNullSpace nullspace;
   Vec          f, x;
 

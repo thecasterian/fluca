@@ -97,25 +97,22 @@ static PetscErrorCode SegCNLinearAssembleSystem_Private(Seg seg, PetscReal t_cou
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Picard form of the step, A(x) x = b(x), with the residual F(x) = A x - b. The linearization of
-   eq. (13) is fixed at the state X^n, so A = M and b = f do not depend on the iterate, and
-   SegStep_CNLinear() assembles both before the solve; any SNES iteration beyond the first is defect
-   correction on that one linear system. SNESSetPicard() is not used because it multiplies by the
-   preconditioning matrix, and P here is only the MATNEST that carries the field index sets for PCABF. */
-static PetscErrorCode SegCNLinearPicardFunction_Private(SNES snes, Vec x, Vec F, void *ctx)
+/* Picard form of the step, A(x) x = b(x). The linearization of eq. (13) is fixed at the state X^n, so
+   A = M and b = f do not depend on the iterate, and SegStep_CNLinear() assembles both before the solve;
+   any SNES iteration beyond the first is defect correction on that one linear system. */
+static PetscErrorCode SegCNLinearPicardMatrix_Private(SNES snes, Vec x, Mat A, Mat P, void *ctx)
+{
+  PetscFunctionBegin;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode SegCNLinearPicardRHS_Private(SNES snes, Vec x, Vec b, void *ctx)
 {
   Seg           seg = (Seg)ctx;
   Seg_CNLinear *cn  = (Seg_CNLinear *)seg->data;
 
   PetscFunctionBegin;
-  PetscCall(MatMult(cn->M, x, F));
-  PetscCall(VecAXPY(F, -1., cn->f));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode SegCNLinearPicardMatrix_Private(SNES snes, Vec x, Mat A, Mat P, void *ctx)
-{
-  PetscFunctionBegin;
+  PetscCall(VecCopy(cn->f, b));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -220,13 +217,11 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
   DM                dm;
   Vec               nullvecs[SEG_MAX_FIELDS];
   Vec               sub;
-  IS                is[SEG_CNLINEAR_NUM_FIELDS];
-  Mat               blocks[SEG_CNLINEAR_NUM_FIELDS * SEG_CNLINEAR_NUM_FIELDS];
   SNES              snes;
   KSP               ksp, kspA, kspS;
   PC                pc, subpc;
   PetscBool         isconst;
-  PetscInt          k, nnull, n, N, ncomp;
+  PetscInt          k, nnull, N, ncomp;
   PhysFieldLocation loc;
 
   PetscFunctionBegin;
@@ -277,29 +272,17 @@ static PetscErrorCode SegSetUp_CNLinear(Seg seg)
   }
   for (k = 0; k < nnull; ++k) PetscCall(VecDestroy(&nullvecs[k]));
 
-  /* PCABF reads the field index sets from a MATNEST preconditioning matrix and the blocks from M */
-  for (k = 0; k < SEG_CNLINEAR_NUM_FIELDS * SEG_CNLINEAR_NUM_FIELDS; ++k) blocks[k] = NULL;
-  for (k = 0; k < SEG_CNLINEAR_NUM_FIELDS; ++k) {
-    is[k] = seg->fields[k].is;
-    PetscCall(ISGetLocalSize(is[k], &n));
-    PetscCall(ISGetSize(is[k], &N));
-    PetscCall(MatCreateConstantDiagonal(comm, n, n, N, N, 1., &blocks[(SEG_CNLINEAR_NUM_FIELDS + 1) * k]));
-  }
-  PetscCall(MatCreateNest(comm, SEG_CNLINEAR_NUM_FIELDS, is, SEG_CNLINEAR_NUM_FIELDS, is, blocks, &cn->P));
-  for (k = 0; k < SEG_CNLINEAR_NUM_FIELDS; ++k) PetscCall(MatDestroy(&blocks[(SEG_CNLINEAR_NUM_FIELDS + 1) * k]));
-
   /* One linear solve per step by default: KSPONLY on the Picard form gives x = 0 - M^{-1}(M 0 - f),
      the same solution as solving M x = f from a zero initial guess */
   PetscCall(SegGetSNES(seg, &snes));
   PetscCall(SNESSetType(snes, SNESKSPONLY));
-  PetscCall(SNESSetFunction(snes, NULL, SegCNLinearPicardFunction_Private, seg));
-  PetscCall(SNESSetJacobian(snes, cn->M, cn->P, SegCNLinearPicardMatrix_Private, seg));
+  PetscCall(SNESSetPicard(snes, NULL, SegCNLinearPicardRHS_Private, cn->M, cn->M, SegCNLinearPicardMatrix_Private, seg));
   PetscCall(SNESGetKSP(snes, &ksp));
   PetscCall(KSPSetType(ksp, KSPRICHARDSON));
   PetscCall(KSPSetTolerances(ksp, 1.e-8, PETSC_CURRENT, PETSC_CURRENT, 1000));
   PetscCall(KSPGetPC(ksp, &pc));
   PetscCall(PCSetType(pc, PCABF));
-  PetscCall(PCABFSetFields(pc, 0, 1, 2));
+  PetscCall(PCABFSetFieldIS(pc, seg->fields[SEG_CNLINEAR_FIELD_VELOCITY].is, seg->fields[SEG_CNLINEAR_FIELD_FACE_VELOCITY].is, seg->fields[SEG_CNLINEAR_FIELD_PRESSURE].is));
   PetscCall(PCABFSetSchurComplementAinvType(pc, PC_ABF_AINV_ID));
   PetscCall(PCABFSetUpperTriangularAinvType(pc, PC_ABF_AINV_ID));
   PetscCall(PCABFGetSubKSPs(pc, &kspA, &kspS));
@@ -324,8 +307,6 @@ static PetscErrorCode SegStep_CNLinear(Seg seg)
   PetscFunctionBegin;
   PetscCall(SegGetSNES(seg, &snes));
   PetscCall(SegCNLinearAssembleSystem_Private(seg, seg->t + seg->dt));
-  /* PCABF takes its blocks from M; mark P changed so that the preconditioner is rebuilt */
-  PetscCall(PetscObjectStateIncrease((PetscObject)cn->P));
   PetscCall(VecZeroEntries(cn->x));
   /* A single sweep (the classic fractional step method) stops at its iteration limit by design; run it
      with -seg_ksp_max_it 1 -seg_ksp_convergence_test skip so the linear solve reports convergence */
@@ -375,7 +356,6 @@ static PetscErrorCode SegDestroy_CNLinear(Seg seg)
     PetscCall(VecDestroy(&cn->ubar[d]));
   }
   PetscCall(DMDestroy(&cn->dm_face));
-  PetscCall(MatDestroy(&cn->P));
   PetscCall(MatNullSpaceDestroy(&cn->nullspace));
   PetscCall(MatDestroy(&cn->M));
   PetscCall(VecDestroy(&cn->x));
@@ -393,7 +373,6 @@ PetscErrorCode SegCreate_CNLinear(Seg seg)
   seg->data = (void *)cn;
 
   cn->M         = NULL;
-  cn->P         = NULL;
   cn->nullspace = NULL;
   cn->f         = NULL;
   cn->x         = NULL;
