@@ -103,6 +103,7 @@ FLUCA_EXTERN PetscErrorCode    SegRegisterAll(void);
 #define PCABF "abf"
 
 FLUCA_EXTERN PetscErrorCode PCABFSetFields(PC, PetscInt, PetscInt, PetscInt);
+FLUCA_EXTERN PetscErrorCode PCABFSetFieldIS(PC, IS, IS, IS);
 FLUCA_EXTERN PetscErrorCode PCABFGetSubKSPs(PC, KSP *, KSP *);
 
 typedef enum {

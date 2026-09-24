@@ -7,6 +7,9 @@ typedef struct {
   PetscInt      vidx; /* index of velocity field */
   PetscInt      Vidx; /* index of face-normal velocity field */
   PetscInt      pidx; /* index of pressure field */
+  IS            isv;  /* velocity entries, when given by PCABFSetFieldIS() */
+  IS            isV;  /* face-normal velocity entries */
+  IS            isp;  /* pressure entries */
   PCABFAinvType schurainv;
   PCABFAinvType upperainv;
 
@@ -45,23 +48,48 @@ static PetscErrorCode PCABFCreateKSP_Private(PC pc, const char prefix[], KSP *ks
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode PCApply_ABF(PC pc, Vec b, Vec x)
+/* The velocity, face-normal velocity and pressure entries: the index sets given by PCABFSetFieldIS(),
+   or else those of a MATNEST preconditioning matrix at the indices given by PCABFSetFields() */
+static PetscErrorCode PCABFGetFieldISs_Private(PC pc, IS *isv, IS *isV, IS *isp)
 {
-  PC_ABF  *abf = (PC_ABF *)pc->data;
-  PetscInt m, n;
-  IS      *rowis, *colis;
-  Vec      momrhs, interprhs, contrhs, v, V, p;
+  PC_ABF   *abf = (PC_ABF *)pc->data;
+  PetscBool isnest;
+  PetscInt  m, n;
+  IS       *rowis, *colis;
 
   PetscFunctionBegin;
+  if (abf->isv) {
+    *isv = abf->isv;
+    *isV = abf->isV;
+    *isp = abf->isp;
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
+  PetscCall(PetscObjectTypeCompare((PetscObject)pc->pmat, MATNEST, &isnest));
+  PetscCheck(isnest, PetscObjectComm((PetscObject)pc), PETSC_ERR_ARG_WRONGSTATE, "Call PCABFSetFieldIS() or give a Pmat of MATNEST type");
   PetscCall(MatNestGetSize(pc->pmat, &m, &n));
   PetscCall(PetscMalloc2(m, &rowis, n, &colis));
   PetscCall(MatNestGetISs(pc->pmat, rowis, colis));
-  PetscCall(VecGetSubVector(b, rowis[abf->vidx], &momrhs));
-  PetscCall(VecGetSubVector(b, rowis[abf->Vidx], &interprhs));
-  PetscCall(VecGetSubVector(b, rowis[abf->pidx], &contrhs));
-  PetscCall(VecGetSubVector(x, colis[abf->vidx], &v));
-  PetscCall(VecGetSubVector(x, colis[abf->Vidx], &V));
-  PetscCall(VecGetSubVector(x, colis[abf->pidx], &p));
+  *isv = rowis[abf->vidx];
+  *isV = rowis[abf->Vidx];
+  *isp = rowis[abf->pidx];
+  PetscCall(PetscFree2(rowis, colis));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PCApply_ABF(PC pc, Vec b, Vec x)
+{
+  PC_ABF *abf = (PC_ABF *)pc->data;
+  IS      isv, isV, isp;
+  Vec     momrhs, interprhs, contrhs, v, V, p;
+
+  PetscFunctionBegin;
+  PetscCall(PCABFGetFieldISs_Private(pc, &isv, &isV, &isp));
+  PetscCall(VecGetSubVector(b, isv, &momrhs));
+  PetscCall(VecGetSubVector(b, isV, &interprhs));
+  PetscCall(VecGetSubVector(b, isp, &contrhs));
+  PetscCall(VecGetSubVector(x, isv, &v));
+  PetscCall(VecGetSubVector(x, isV, &V));
+  PetscCall(VecGetSubVector(x, isp, &p));
 
   if (!abf->vstar) PetscCall(MatCreateVecs(abf->A, &abf->vstar, NULL));
   if (!abf->Vstar) PetscCall(MatCreateVecs(abf->negT, NULL, &abf->Vstar));
@@ -100,28 +128,23 @@ static PetscErrorCode PCApply_ABF(PC pc, Vec b, Vec x)
     PetscCall(VecAXPY(V, -1., abf->negRp));
   }
 
-  PetscCall(VecRestoreSubVector(b, rowis[abf->vidx], &momrhs));
-  PetscCall(VecRestoreSubVector(b, rowis[abf->Vidx], &interprhs));
-  PetscCall(VecRestoreSubVector(b, rowis[abf->pidx], &contrhs));
-  PetscCall(VecRestoreSubVector(x, colis[abf->vidx], &v));
-  PetscCall(VecRestoreSubVector(x, colis[abf->Vidx], &V));
-  PetscCall(VecRestoreSubVector(x, colis[abf->pidx], &p));
-  PetscCall(PetscFree2(rowis, colis));
+  PetscCall(VecRestoreSubVector(b, isv, &momrhs));
+  PetscCall(VecRestoreSubVector(b, isV, &interprhs));
+  PetscCall(VecRestoreSubVector(b, isp, &contrhs));
+  PetscCall(VecRestoreSubVector(x, isv, &v));
+  PetscCall(VecRestoreSubVector(x, isV, &V));
+  PetscCall(VecRestoreSubVector(x, isp, &p));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode PCSetUp_ABF(PC pc)
 {
   PC_ABF      *abf = (PC_ABF *)pc->data;
-  PetscBool    isnest;
-  PetscInt     m, n;
-  IS          *rowis, *colis;
+  IS           isv, isV, isp;
   Mat          Gdup, tmp;
   MatNullSpace nullspace;
 
   PetscFunctionBegin;
-  PetscCall(PetscObjectTypeCompare((PetscObject)pc->pmat, MATNEST, &isnest));
-  PetscCheck(isnest, PetscObjectComm((PetscObject)pc), PETSC_ERR_ARG_WRONG, "Only Pmat of MATNEST type is supported");
 
   PetscCall(MatDestroy(&abf->A));
   PetscCall(MatDestroy(&abf->negT));
@@ -137,15 +160,12 @@ static PetscErrorCode PCSetUp_ABF(PC pc)
   PetscCall(VecDestroy(&abf->invA2Gp));
   PetscCall(VecDestroy(&abf->negRp));
 
-  PetscCall(MatNestGetSize(pc->pmat, &m, &n));
-  PetscCall(PetscMalloc2(m, &rowis, n, &colis));
-  PetscCall(MatNestGetISs(pc->pmat, rowis, colis));
-  PetscCall(MatCreateSubMatrix(pc->mat, rowis[abf->vidx], colis[abf->vidx], MAT_INITIAL_MATRIX, &abf->A));
-  PetscCall(MatCreateSubMatrix(pc->mat, rowis[abf->Vidx], colis[abf->vidx], MAT_INITIAL_MATRIX, &abf->negT));
-  PetscCall(MatCreateSubMatrix(pc->mat, rowis[abf->vidx], colis[abf->pidx], MAT_INITIAL_MATRIX, &abf->G));
-  PetscCall(MatCreateSubMatrix(pc->mat, rowis[abf->pidx], colis[abf->Vidx], MAT_INITIAL_MATRIX, &abf->D));
-  PetscCall(MatCreateSubMatrix(pc->mat, rowis[abf->Vidx], colis[abf->pidx], MAT_INITIAL_MATRIX, &abf->negR));
-  PetscCall(PetscFree2(rowis, colis));
+  PetscCall(PCABFGetFieldISs_Private(pc, &isv, &isV, &isp));
+  PetscCall(MatCreateSubMatrix(pc->mat, isv, isv, MAT_INITIAL_MATRIX, &abf->A));
+  PetscCall(MatCreateSubMatrix(pc->mat, isV, isv, MAT_INITIAL_MATRIX, &abf->negT));
+  PetscCall(MatCreateSubMatrix(pc->mat, isv, isp, MAT_INITIAL_MATRIX, &abf->G));
+  PetscCall(MatCreateSubMatrix(pc->mat, isp, isV, MAT_INITIAL_MATRIX, &abf->D));
+  PetscCall(MatCreateSubMatrix(pc->mat, isV, isp, MAT_INITIAL_MATRIX, &abf->negR));
 
   /* S = D ((-T) A^-1 G - (-R)) */
   switch (abf->schurainv) {
@@ -227,10 +247,14 @@ static PetscErrorCode PCDestroy_ABF(PC pc)
   PetscCall(VecDestroy(&abf->Srhs));
   PetscCall(VecDestroy(&abf->invA2Gp));
   PetscCall(VecDestroy(&abf->negRp));
+  PetscCall(ISDestroy(&abf->isv));
+  PetscCall(ISDestroy(&abf->isV));
+  PetscCall(ISDestroy(&abf->isp));
 
   PetscCall(PetscFree(abf));
 
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetFields_C", NULL));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetFieldIS_C", NULL));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFGetSubKSPs_C", NULL));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetSchurComplementAinvType_C", NULL));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetUpperTriangularAinvType_C", NULL));
@@ -287,6 +311,23 @@ PetscErrorCode PCABFSetFields_ABF(PC pc, PetscInt vidx, PetscInt Vidx, PetscInt 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode PCABFSetFieldIS_ABF(PC pc, IS isv, IS isV, IS isp)
+{
+  PC_ABF *abf = (PC_ABF *)pc->data;
+
+  PetscFunctionBegin;
+  PetscCall(PetscObjectReference((PetscObject)isv));
+  PetscCall(PetscObjectReference((PetscObject)isV));
+  PetscCall(PetscObjectReference((PetscObject)isp));
+  PetscCall(ISDestroy(&abf->isv));
+  PetscCall(ISDestroy(&abf->isV));
+  PetscCall(ISDestroy(&abf->isp));
+  abf->isv = isv;
+  abf->isV = isV;
+  abf->isp = isp;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode PCABFGetSubKSPs_ABF(PC pc, KSP *kspA, KSP *kspS)
 {
   PC_ABF *abf = (PC_ABF *)pc->data;
@@ -325,6 +366,9 @@ PetscErrorCode PCCreate_ABF(PC pc)
   abf->vidx      = 0;
   abf->Vidx      = 1;
   abf->pidx      = 2;
+  abf->isv       = NULL;
+  abf->isV       = NULL;
+  abf->isp       = NULL;
   abf->schurainv = PC_ABF_AINV_ID;
   abf->upperainv = PC_ABF_AINV_ID;
   PetscCall(PCABFCreateKSP_Private(pc, "abf_momentum_", &abf->kspA));
@@ -353,6 +397,7 @@ PetscErrorCode PCCreate_ABF(PC pc)
   pc->ops->view           = PCView_ABF;
 
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetFields_C", PCABFSetFields_ABF));
+  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetFieldIS_C", PCABFSetFieldIS_ABF));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetSchurComplementAinvType_C", PCABFSetSchurComplementAinvType_ABF));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetUpperTriangularAinvType_C", PCABFSetUpperTriangularAinvType_ABF));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFGetSubKSPs_C", PCABFGetSubKSPs_ABF));
@@ -364,6 +409,18 @@ PetscErrorCode PCABFSetFields(PC pc, PetscInt vidx, PetscInt Vidx, PetscInt pidx
   PetscFunctionBegin;
   PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
   PetscTryMethod(pc, "PCABFSetFields_C", (PC, PetscInt, PetscInt, PetscInt), (pc, vidx, Vidx, pidx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* The entries of the velocity, face-normal velocity and pressure fields in the vectors PCABF is applied to */
+PetscErrorCode PCABFSetFieldIS(PC pc, IS isv, IS isV, IS isp)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
+  PetscValidHeaderSpecific(isv, IS_CLASSID, 2);
+  PetscValidHeaderSpecific(isV, IS_CLASSID, 3);
+  PetscValidHeaderSpecific(isp, IS_CLASSID, 4);
+  PetscTryMethod(pc, "PCABFSetFieldIS_C", (PC, IS, IS, IS), (pc, isv, isV, isp));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
