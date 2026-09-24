@@ -4,6 +4,14 @@ static const char help[] = "Test that PhysLaminarSetViscosity() after SegSetUp()
                            "Assembling the momentum system after changing the viscosity must equal\n"
                            "assembling it with that viscosity from the start.\n";
 
+/* Lid-driven cavity: u = 1 on the top wall */
+static PetscErrorCode LidVelocity(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx)
+{
+  PetscFunctionBeginUser;
+  *val = (comp == 0 && x[1] > 1. - 1e-12) ? 1. : 0.;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char **argv)
 {
   DM        dm1, dm2, sol_dm1, sol_dm2;
@@ -22,7 +30,7 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm1));
   PetscCall(DMSetUp(dm1));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm1, 0., 1., 0., 1., 0., 0.));
-  PetscCall(SegTestSetUp(dm1, rho, 1., NULL, &phys1, &seg1));
+  PetscCall(SegTestSetUp(dm1, rho, 1., LidVelocity, &phys1, &seg1));
   PetscCall(PhysLaminarSetViscosity(phys1, 0.01));
   PetscCall(PhysGetSolutionDM(phys1, &sol_dm1));
   PetscCall(SegTestCreateSystem(phys1, &M1, &f1));
@@ -37,7 +45,7 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm2));
   PetscCall(DMSetUp(dm2));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm2, 0., 1., 0., 1., 0., 0.));
-  PetscCall(SegTestSetUp(dm2, rho, 0.01, NULL, &phys2, &seg2));
+  PetscCall(SegTestSetUp(dm2, rho, 0.01, LidVelocity, &phys2, &seg2));
   PetscCall(PhysGetSolutionDM(phys2, &sol_dm2));
   PetscCall(SegTestCreateSystem(phys2, &M2, &f2));
   PetscCall(DMCreateGlobalVector(sol_dm2, &X2));
