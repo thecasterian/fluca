@@ -9,7 +9,7 @@ set(TUTORIAL_SRCS
 
 foreach(tutorial_src ${TUTORIAL_SRCS})
     get_filename_component(tutorial_base_name ${tutorial_src} NAME_WE)
-    set(tutorial_name tutorials_phys_${tutorial_base_name})
+    set(tutorial_name tutorials_seg_${tutorial_base_name})
     add_executable(${tutorial_name} ${tutorial_src})
     set_target_properties(${tutorial_name} PROPERTIES OUTPUT_NAME ${tutorial_base_name})
     target_link_libraries(${tutorial_name} PRIVATE

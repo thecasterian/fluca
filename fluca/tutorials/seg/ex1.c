@@ -191,17 +191,17 @@ int main(int argc, char **argv)
 /*TEST
 
   test:
-    suffix: fsm
+    suffix: cnlinear
     nsize: 1
     args: -stag_grid_x 16 -stag_grid_y 16 -seg_max_time 0.1 -seg_dt 0.01 -seg_ksp_max_it 1
 
   test:
-    suffix: fsm_repeat
+    suffix: cnlinear_repeat
     nsize: 1
     args: -stag_grid_x 16 -stag_grid_y 16 -seg_max_time 0.1 -seg_dt 0.01 -seg_ksp_max_it 1 -repeat_solve
 
   test:
-    suffix: fsm_converged
+    suffix: cnlinear_converged
     nsize: 1
     args: -stag_grid_x 16 -stag_grid_y 16 -seg_max_time 0.1 -seg_dt 0.01 -seg_ksp_rtol 1e-10 -seg_abf_momentum_ksp_type preonly -seg_abf_momentum_pc_type lu -seg_abf_schur_ksp_type preonly -seg_abf_schur_pc_type lu -seg_abf_schur_pc_factor_shift_type nonzero
 
