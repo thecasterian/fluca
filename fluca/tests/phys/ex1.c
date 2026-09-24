@@ -59,10 +59,8 @@ int main(int argc, char **argv)
   }
 
   {
-    const char      *names[3] = {PHYS_FIELD_VELOCITY, PHYS_FIELD_PRESSURE, PHYS_FIELD_FACE_VELOCITY};
     PhysEquationRole role;
     PetscBool        nsconst;
-    PetscInt         f;
 
     for (f = 0; f < 3; ++f) {
       PetscCall(PhysGetFieldRole(phys, names[f], &role));
@@ -74,7 +72,6 @@ int main(int argc, char **argv)
   {
     const char        *props[2] = {PHYS_PROPERTY_DENSITY, PHYS_PROPERTY_VISCOSITY};
     PhysPropertySource src;
-    PhysFieldLocation  loc;
     PetscScalar        val;
     PetscInt           p;
 
@@ -90,7 +87,6 @@ int main(int argc, char **argv)
   PetscCall(DMDestroy(&dm));
 
   PetscCall(FlucaFinalize());
-  return 0;
 }
 
 /*TEST
