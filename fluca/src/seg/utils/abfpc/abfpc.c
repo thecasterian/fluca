@@ -4,12 +4,9 @@
 const char *const PCABFAinvTypes[] = {"ID", "DIAG", "ROWSUM", "PCABFAinvType", "", NULL};
 
 typedef struct {
-  PetscInt      vidx; /* index of velocity field */
-  PetscInt      Vidx; /* index of face-normal velocity field */
-  PetscInt      pidx; /* index of pressure field */
-  IS            isv;  /* velocity entries, when given by PCABFSetFieldIS() */
-  IS            isV;  /* face-normal velocity entries */
-  IS            isp;  /* pressure entries */
+  IS            isv; /* velocity entries, when given by PCABFSetFieldIS() */
+  IS            isV; /* face-normal velocity entries */
+  IS            isp; /* pressure entries */
   PCABFAinvType schurainv;
   PCABFAinvType upperainv;
 
@@ -48,31 +45,16 @@ static PetscErrorCode PCABFCreateKSP_Private(PC pc, const char prefix[], KSP *ks
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* The velocity, face-normal velocity and pressure entries: the index sets given by PCABFSetFieldIS(),
-   or else those of a MATNEST preconditioning matrix at the indices given by PCABFSetFields() */
+/* The velocity, face-normal velocity and pressure entries given by PCABFSetFieldIS() */
 static PetscErrorCode PCABFGetFieldISs_Private(PC pc, IS *isv, IS *isV, IS *isp)
 {
-  PC_ABF   *abf = (PC_ABF *)pc->data;
-  PetscBool isnest;
-  PetscInt  m, n;
-  IS       *rowis, *colis;
+  PC_ABF *abf = (PC_ABF *)pc->data;
 
   PetscFunctionBegin;
-  if (abf->isv) {
-    *isv = abf->isv;
-    *isV = abf->isV;
-    *isp = abf->isp;
-    PetscFunctionReturn(PETSC_SUCCESS);
-  }
-  PetscCall(PetscObjectTypeCompare((PetscObject)pc->pmat, MATNEST, &isnest));
-  PetscCheck(isnest, PetscObjectComm((PetscObject)pc), PETSC_ERR_ARG_WRONGSTATE, "Call PCABFSetFieldIS() or give a Pmat of MATNEST type");
-  PetscCall(MatNestGetSize(pc->pmat, &m, &n));
-  PetscCall(PetscMalloc2(m, &rowis, n, &colis));
-  PetscCall(MatNestGetISs(pc->pmat, rowis, colis));
-  *isv = rowis[abf->vidx];
-  *isV = rowis[abf->Vidx];
-  *isp = rowis[abf->pidx];
-  PetscCall(PetscFree2(rowis, colis));
+  PetscCheck(abf->isv, PetscObjectComm((PetscObject)pc), PETSC_ERR_ARG_WRONGSTATE, "Must call PCABFSetFieldIS() before using PCABF");
+  *isv = abf->isv;
+  *isV = abf->isV;
+  *isp = abf->isp;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -253,7 +235,6 @@ static PetscErrorCode PCDestroy_ABF(PC pc)
 
   PetscCall(PetscFree(abf));
 
-  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetFields_C", NULL));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetFieldIS_C", NULL));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFGetSubKSPs_C", NULL));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetSchurComplementAinvType_C", NULL));
@@ -297,17 +278,6 @@ PetscErrorCode PCView_ABF(PC pc, PetscViewer viewer)
     PetscCall(PetscViewerASCIIPopTab(viewer));
     PetscCall(PetscViewerASCIIPopTab(viewer));
   }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode PCABFSetFields_ABF(PC pc, PetscInt vidx, PetscInt Vidx, PetscInt pidx)
-{
-  PC_ABF *abf = (PC_ABF *)pc->data;
-
-  PetscFunctionBegin;
-  abf->vidx = vidx;
-  abf->Vidx = Vidx;
-  abf->pidx = pidx;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -363,9 +333,6 @@ PetscErrorCode PCCreate_ABF(PC pc)
   PetscFunctionBegin;
   PetscCall(PetscNew(&abf));
 
-  abf->vidx      = 0;
-  abf->Vidx      = 1;
-  abf->pidx      = 2;
   abf->isv       = NULL;
   abf->isV       = NULL;
   abf->isp       = NULL;
@@ -396,19 +363,10 @@ PetscErrorCode PCCreate_ABF(PC pc)
   pc->ops->setfromoptions = PCSetFromOptions_ABF;
   pc->ops->view           = PCView_ABF;
 
-  PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetFields_C", PCABFSetFields_ABF));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetFieldIS_C", PCABFSetFieldIS_ABF));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetSchurComplementAinvType_C", PCABFSetSchurComplementAinvType_ABF));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFSetUpperTriangularAinvType_C", PCABFSetUpperTriangularAinvType_ABF));
   PetscCall(PetscObjectComposeFunction((PetscObject)pc, "PCABFGetSubKSPs_C", PCABFGetSubKSPs_ABF));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode PCABFSetFields(PC pc, PetscInt vidx, PetscInt Vidx, PetscInt pidx)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(pc, PC_CLASSID, 1);
-  PetscTryMethod(pc, "PCABFSetFields_C", (PC, PetscInt, PetscInt, PetscInt), (pc, vidx, Vidx, pidx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

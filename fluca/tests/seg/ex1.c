@@ -17,14 +17,14 @@ int main(int argc, char **argv)
   DM                dm, sol_dm;
   Phys              phys;
   Seg               seg;
-  Mat               M, P, A, G, blocks[9];
+  Mat               M, A, G;
   Vec               X, f, x, r, E, nullvec, sub, xp, w, Aw, Ev;
   IS                is[3];
   MatNullSpace      nullspace;
   KSP               ksp;
   PC                pc;
   PhysFieldLocation loc;
-  PetscInt          c_vel, c_p, c_U, Nx, Ny, xs, ys, xm, ym, nx, ny, i, j, k, n, N;
+  PetscInt          c_vel, c_p, c_U, Nx, Ny, xs, ys, xm, ym, nx, ny, i, j, k, N;
   PetscReal         dt       = 0.05, h, nrm;
   const char       *names[3] = {PHYS_FIELD_VELOCITY, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_PRESSURE};
 
@@ -99,23 +99,13 @@ int main(int argc, char **argv)
   PetscCall(MatNullSpaceCreate(PETSC_COMM_WORLD, PETSC_FALSE, 1, &nullvec, &nullspace));
   PetscCall(MatSetNullSpace(M, nullspace));
 
-  /* MATNEST carrying the field index sets that PCABF reads (its values come from M) */
-  for (k = 0; k < 9; ++k) blocks[k] = NULL;
-  for (k = 0; k < 3; ++k) {
-    PetscCall(ISGetLocalSize(is[k], &n));
-    PetscCall(ISGetSize(is[k], &N));
-    PetscCall(MatCreateConstantDiagonal(PETSC_COMM_WORLD, n, n, N, N, 1., &blocks[4 * k]));
-  }
-  PetscCall(MatCreateNest(PETSC_COMM_WORLD, 3, is, 3, is, blocks, &P));
-  for (k = 0; k < 3; ++k) PetscCall(MatDestroy(&blocks[4 * k]));
-
   PetscCall(KSPCreate(PETSC_COMM_WORLD, &ksp));
-  PetscCall(KSPSetOperators(ksp, M, P));
+  PetscCall(KSPSetOperators(ksp, M, M));
   PetscCall(KSPSetType(ksp, KSPRICHARDSON));
   PetscCall(KSPSetTolerances(ksp, PETSC_CURRENT, PETSC_CURRENT, PETSC_CURRENT, 1));
   PetscCall(KSPGetPC(ksp, &pc));
   PetscCall(PCSetType(pc, PCABF));
-  PetscCall(PCABFSetFields(pc, 0, 1, 2));
+  PetscCall(PCABFSetFieldIS(pc, is[0], is[1], is[2]));
   PetscCall(KSPSetFromOptions(ksp));
   PetscCall(DMCreateGlobalVector(sol_dm, &x));
   PetscCall(VecZeroEntries(x));
@@ -156,7 +146,6 @@ int main(int argc, char **argv)
   PetscCall(VecDestroy(&r));
   PetscCall(VecDestroy(&x));
   PetscCall(KSPDestroy(&ksp));
-  PetscCall(MatDestroy(&P));
   PetscCall(MatNullSpaceDestroy(&nullspace));
   PetscCall(VecDestroy(&nullvec));
   for (k = 0; k < 3; ++k) PetscCall(ISDestroy(&is[k]));
