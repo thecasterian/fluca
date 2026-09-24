@@ -163,6 +163,8 @@ PetscErrorCode PhysSetBoundaryCondition(Phys phys, PetscInt face, PhysBC bc)
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscCheck(face >= 0 && face < FLUCA_MAX_FACES, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Face index %" PetscInt_FMT " out of range [0, %d)", face, FLUCA_MAX_FACES);
+  /* A Seg copies the boundary conditions into its operators when it is set up, so a later change would be ignored */
+  PetscCheck(!phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Cannot change a boundary condition after PhysSetUp()");
   phys->bcs[face] = bc;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
