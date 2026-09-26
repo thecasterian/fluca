@@ -4,6 +4,7 @@ include(FlucaTestUtils)
 
 set(TEST_SRCS
     ex1.c
+    ex2.c
 )
 
 foreach(test_src ${TEST_SRCS})
