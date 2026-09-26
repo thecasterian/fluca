@@ -15,7 +15,8 @@ int main(int argc, char **argv)
   IS                is;
   PetscReal         rho, mu;
   PetscScalar       value;
-  PetscInt          dim = 2, nfields, f, k, c0, ncomp, n, dof[4] = {0, 0, 0, 0};
+  PetscInt          dim    = 2, nfields, f, k, c0, ncomp, n;
+  PetscInt          dof[4] = {0, 0, 0, 0};
   const char       *name;
   PetscErrorCode    ierr;
 

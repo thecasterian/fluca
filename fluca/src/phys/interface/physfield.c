@@ -49,7 +49,8 @@ PetscErrorCode PhysDeclareField_Internal(Phys phys, const char name[], PhysField
 /* One DMStag with the DOFs of every declared field, sharing the base DM's coordinates */
 PetscErrorCode PhysCreateSolutionDM_Internal(Phys phys)
 {
-  PetscInt dof[2] = {0, 0}, f;
+  PetscInt dof[2] = {0, 0};
+  PetscInt f;
   DM       cdm;
 
   PetscFunctionBegin;
