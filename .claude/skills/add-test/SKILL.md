@@ -10,7 +10,7 @@ Add tests following Fluca's golden-output testing conventions.
 ## Required Input
 
 Ask the user for:
-1. **Module** — test subdirectory (e.g., `fd`, `cavity_flow`)
+1. **Module** — test subdirectory (e.g., `fd`, `ns`, `phys`)
 2. **Mode** — new file (`ex<N>.c`) or new cases in an existing file
 3. **Description** — what the test exercises
 4. **Test cases** — suffix names and command-line args for each case
@@ -79,18 +79,23 @@ cmake build && ctest --test-dir build -R "ex<N>" --output-on-failure
 2. Append `test:` entries to the `/*TEST*/` block (before `TEST*/`)
 3. Build, capture golden output, re-configure, verify
 
+## Do Not Test Error Codes
+
+Tests exercise correct behavior only. Do not call a function expecting it to fail and then check or print the returned error code (e.g. pushing `PetscReturnErrorHandler` and comparing `ierr` against `PETSC_ERR_ARG_WRONGSTATE`). Argument checks and state guards (`PetscCheck`, `PetscValidHeaderSpecific`, "must call X before Y") are not covered by golden-output tests.
+
 ## Suffix Naming
 
 - Use `snake_case`, descriptive of the specific scenario being tested
 - Keep concise but unambiguous — a suffix should identify the case without reading the args
 - Study existing suffixes in the same `ex*.c` file and follow their convention
 
-Examples from the codebase: `first_deriv`, `second_deriv_left_bc_dirichlet`, `all_second_deriv_all_loc_down`, `vanleer`, `cavity_flow_2d`
+Examples from the codebase: `first_deriv`, `second_deriv_left_bc_dirichlet`, `all_second_deriv_all_loc_down`, `vanleer`, `walled`, `custom_fields`
 
 ## Checklist
 
 - [ ] Test validates an internal algorithm directly — no SNES or TS solve required
 - [ ] Inputs are constructed analytically; expected outputs are known without running a solver
+- [ ] No error-code checks: nothing calls a function expecting it to fail
 - [ ] `/*TEST*/` block has `suffix` and `args`
 - [ ] Source added to `TEST_SRCS` in CMakeLists.txt
 - [ ] Golden output captured from actual run (never hand-written)

@@ -17,7 +17,7 @@ This project follows PETSc style. All C code must conform to these rules.
 
 | Entity | Convention | Example |
 |--------|-----------|---------|
-| Functions | `PascalCase` with module prefix | `FlucaFDSetUp()`, `MeshCartCreate2d()` |
+| Functions | `PascalCase` with module prefix | `FlucaFDSetUp()`, `PhysSetUp()`, `NSSetPhys()` |
 | Types | `PascalCase` | `FlucaFD`, `FlucaFDType` |
 | Enum values / macros | `UPPER_SNAKE_CASE` | `MAT_FINAL_ASSEMBLY`, `FLUCAFD_CLASSID` |
 | Type string constants | `UPPER_SNAKE` prefix + lowercase name | `#define FLUCAFDDERIVATIVE "derivative"` |
