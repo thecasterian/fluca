@@ -122,11 +122,31 @@ static PetscErrorCode AddBodyForce_Private(NS ns, PetscReal t, PetscReal scale, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Set the scales of the time-discrete operators from the current dt and density */
+static PetscErrorCode SetTimeScales_Private(NS ns)
+{
+  NS_CNLinear *cn = (NS_CNLinear *)ns->data;
+  PetscScalar  rho;
+  PetscInt     dim, d;
+  DM           dm;
+
+  PetscFunctionBegin;
+  PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(PhysGetProperty(ns->phys, PHYS_PROPERTY_DENSITY, &rho));
+  for (d = 0; d < dim; d++) {
+    PetscCall(FlucaFDScaleSetConstant(cn->fd_visc[d], ns->dt / (2. * rho)));
+    PetscCall(FlucaFDScaleSetConstant(cn->fd_conv[d], ns->dt / 2.));
+    PetscCall(FlucaFDScaleSetConstant(cn->fd_grad[d], ns->dt / rho));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* Refresh what depends on the material properties, dt, or the state at t^n (sol0) */
 static PetscErrorCode UpdateOperators_Private(NS ns)
 {
   NS_CNLinear *cn = (NS_CNLinear *)ns->data;
-  PetscScalar  mu, rho;
+  PetscScalar  mu;
   PetscInt     dim, c_U, d, e;
   DM           dm;
 
@@ -135,13 +155,9 @@ static PetscErrorCode UpdateOperators_Private(NS ns)
   PetscCall(DMGetDimension(dm, &dim));
   PetscCall(PhysGetField(ns->phys, PHYS_FIELD_FACE_VELOCITY, NULL, &c_U, NULL));
   PetscCall(PhysGetProperty(ns->phys, PHYS_PROPERTY_VISCOSITY, &mu));
-  PetscCall(PhysGetProperty(ns->phys, PHYS_PROPERTY_DENSITY, &rho));
-  for (d = 0; d < dim; d++) {
+  for (d = 0; d < dim; d++)
     for (e = 0; e < dim; e++) PetscCall(FlucaFDScaleSetConstant(ns->fd_negmu[d][e], -mu));
-    PetscCall(FlucaFDScaleSetConstant(cn->fd_visc[d], ns->dt / (2. * rho)));
-    PetscCall(FlucaFDScaleSetConstant(cn->fd_conv[d], ns->dt / 2.));
-    PetscCall(FlucaFDScaleSetConstant(cn->fd_grad[d], ns->dt / rho));
-  }
+  PetscCall(SetTimeScales_Private(ns));
   for (d = 0; d < dim; d++) {
     PetscCall(VecZeroEntries(cn->ubar[d]));
     for (e = 0; e < dim; e++) PetscCall(FlucaFDApply(cn->fd_interp_vel[d][e], ns->t, dm, cn->dm_face, ns->sol0, cn->ubar[d]));
@@ -155,8 +171,9 @@ static PetscErrorCode UpdateOperators_Private(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Time-discrete operators on top of the spatial operators of the NS base class. Coefficients that
-   depend on dt and the linearization state are set per step by UpdateOperators_Private(). */
+/* Time-discrete operators on top of the spatial operators of the NS base class. Scales that depend on
+   dt and rho are set by SetTimeScales_Private(), and coefficients that depend on the linearization
+   state are set per step by UpdateOperators_Private(). */
 static PetscErrorCode NSSetUp_CNLinear(NS ns)
 {
   NS_CNLinear *cn = (NS_CNLinear *)ns->data;
@@ -243,7 +260,7 @@ static PetscErrorCode NSSetUp_CNLinear(NS ns)
 /* Assemble the blocks of the Jacobian that depend only on dt and rho into Jconst, unless it already
    holds them for the current dt and rho. Jconst is a duplicate of ns->J, so it has the nonzero pattern
    of every matrix made by DMCreateMatrix() on the solution DM; inserting outside it is an error. The
-   scale of fd_grad is set by UpdateOperators_Private(). */
+   time-step scales are set here too, so Jconst is correct even before the first step. */
 static PetscErrorCode AssembleConstantBlocks_Private(NS ns)
 {
   NS_CNLinear *cn = (NS_CNLinear *)ns->data;
@@ -258,6 +275,7 @@ static PetscErrorCode AssembleConstantBlocks_Private(NS ns)
   PetscCall(DMGetDimension(dm, &dim));
   PetscCall(PhysGetField(ns->phys, PHYS_FIELD_VELOCITY, NULL, &c_vel, NULL));
   PetscCall(PhysGetField(ns->phys, PHYS_FIELD_FACE_VELOCITY, NULL, &c_U, NULL));
+  PetscCall(SetTimeScales_Private(ns));
   if (!cn->Jconst) {
     PetscCall(MatDuplicate(ns->J, MAT_DO_NOT_COPY_VALUES, &cn->Jconst));
     PetscCall(MatSetOption(cn->Jconst, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE));
