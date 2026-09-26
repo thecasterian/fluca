@@ -1,3 +1,5 @@
+Default density: 1., viscosity: 1.
+Density: 2., viscosity: 0.5
 DM Object: 1 MPI process
   type: stag
 Dimension: 2
@@ -13,3 +15,5 @@ Has coordinate DM
 [0] Local elements : 4 x 4 (5 x 5 with ghosts)
 [0] Local native entries: 48
 [0] Local entries total : 75
+Boundary condition change after PhysSetUp(): rejected
+Negative density: rejected

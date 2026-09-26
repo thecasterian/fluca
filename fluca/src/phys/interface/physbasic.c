@@ -7,11 +7,12 @@ PetscLogEvent PHYS_SetUp   = 0;
 PetscFunctionList PhysList              = NULL;
 PetscBool         PhysRegisterAllCalled = PETSC_FALSE;
 
-const char *PhysINSBCTypes[] = {"NONE", "VELOCITY", "PhysINSBCType", "", NULL};
+const char *PhysBCTypes[] = {"NONE", "VELOCITY", "PhysBCType", "PHYS_BC_", NULL};
 
 PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
 {
-  Phys p;
+  Phys     p;
+  PetscInt f;
 
   PetscFunctionBegin;
   PetscAssertPointer(phys, 2);
@@ -21,10 +22,20 @@ PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
   p->base_dm       = NULL;
   p->bodyforce     = NULL;
   p->bodyforce_ctx = NULL;
+  p->nprops        = 0;
   p->sol_dm        = NULL;
   p->dim           = PETSC_DETERMINE;
   p->data          = NULL;
   p->setupcalled   = PETSC_FALSE;
+  for (f = 0; f < PHYS_MAX_FACES; f++) {
+    p->bcs[f].type       = PHYS_BC_NONE;
+    p->bcs[f].fn         = NULL;
+    p->bcs[f].ctx        = NULL;
+    p->bcs[f].fn_dot     = NULL;
+    p->bcs[f].fn_dot_ctx = NULL;
+  }
+  PetscCall(PhysRegisterProperty_Internal(p, PHYS_PROPERTY_DENSITY, 1.));
+  PetscCall(PhysRegisterProperty_Internal(p, PHYS_PROPERTY_VISCOSITY, 1.));
 
   *phys = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -38,6 +49,7 @@ PetscErrorCode PhysSetType(Phys phys, PhysType type)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
+  PetscCheck(!phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the Phys type after PhysSetUp()");
 
   PetscCall(PhysGetType(phys, &old_type));
   PetscCall(PetscObjectTypeCompare((PetscObject)phys, type, &match));
@@ -68,6 +80,8 @@ PetscErrorCode PhysGetType(Phys phys, PhysType *type)
 
 PetscErrorCode PhysDestroy(Phys *phys)
 {
+  PetscInt p;
+
   PetscFunctionBegin;
   if (!*phys) PetscFunctionReturn(PETSC_SUCCESS);
   PetscValidHeaderSpecific((*phys), PHYS_CLASSID, 1);
@@ -77,9 +91,9 @@ PetscErrorCode PhysDestroy(Phys *phys)
     PetscFunctionReturn(PETSC_SUCCESS);
   }
 
-  /* Call type-specific destroy */
   PetscTryTypeMethod((*phys), destroy);
 
+  for (p = 0; p < (*phys)->nprops; ++p) PetscCall(PetscFree((*phys)->props[p].name));
   PetscCall(DMDestroy(&(*phys)->sol_dm));
   PetscCall(DMDestroy(&(*phys)->base_dm));
 
@@ -97,19 +111,13 @@ PetscErrorCode PhysSetUp(Phys phys)
 
   PetscCall(PetscLogEventBegin(PHYS_SetUp, (PetscObject)phys, 0, 0, 0));
 
-  /* Validate base DM */
   PetscCheck(phys->base_dm, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Base DM not set. Call PhysSetBaseDM() first");
   PetscCall(PetscObjectTypeCompare((PetscObject)phys->base_dm, DMSTAG, &isdmstag));
   PetscCheck(isdmstag, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONG, "Base DM must be DMStag");
-
-  /* Extract dimension */
   PetscCall(DMGetDimension(phys->base_dm, &phys->dim));
 
-  /* Call subtype createsolutiondm */
   PetscCheck(phys->ops->createsolutiondm, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Phys type not set or subtype does not implement createsolutiondm");
   PetscCall((*phys->ops->createsolutiondm)(phys));
-
-  /* Call subtype setup */
   PetscTryTypeMethod(phys, setup);
 
   PetscCall(PetscLogEventEnd(PHYS_SetUp, (PetscObject)phys, 0, 0, 0));
@@ -123,6 +131,7 @@ PetscErrorCode PhysSetUp(Phys phys)
 PetscErrorCode PhysView(Phys phys, PetscViewer viewer)
 {
   PetscBool isascii;
+  PetscReal rho, mu;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
@@ -133,11 +142,13 @@ PetscErrorCode PhysView(Phys phys, PetscViewer viewer)
 
   if (isascii) {
     PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)phys, viewer));
-    if (phys->setupcalled) {
-      PetscCall(PetscViewerASCIIPushTab(viewer));
-      PetscCall(PetscViewerASCIIPrintf(viewer, "Dimension: %" PetscInt_FMT "\n", phys->dim));
-      PetscCall(PetscViewerASCIIPopTab(viewer));
-    }
+    PetscCall(PetscViewerASCIIPushTab(viewer));
+    PetscCall(PhysGetDensity(phys, &rho));
+    PetscCall(PhysGetViscosity(phys, &mu));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Density: %g\n", (double)rho));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Viscosity: %g\n", (double)mu));
+    if (phys->setupcalled) PetscCall(PetscViewerASCIIPrintf(viewer, "Dimension: %" PetscInt_FMT "\n", phys->dim));
+    PetscCall(PetscViewerASCIIPopTab(viewer));
   }
 
   PetscTryTypeMethod(phys, view, viewer);

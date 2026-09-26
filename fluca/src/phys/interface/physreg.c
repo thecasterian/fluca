@@ -1,6 +1,6 @@
 #include <fluca/private/physimpl.h>
 
-FLUCA_EXTERN PetscErrorCode PhysCreate_INS(Phys);
+FLUCA_EXTERN PetscErrorCode PhysCreate_Laminar(Phys);
 
 PetscErrorCode PhysRegister(const char sname[], PetscErrorCode (*function)(Phys))
 {
@@ -16,6 +16,6 @@ PetscErrorCode PhysRegisterAll(void)
   if (PhysRegisterAllCalled) PetscFunctionReturn(PETSC_SUCCESS);
   PhysRegisterAllCalled = PETSC_TRUE;
 
-  PetscCall(PhysRegister(PHYSINS, PhysCreate_INS));
+  PetscCall(PhysRegister(PHYSLAMINAR, PhysCreate_Laminar));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
