@@ -1,15 +1,19 @@
 #pragma once
 
 #include <flucasys.h>
-#include <petscts.h>
 #include <petscdmstag.h>
 
-/* Phys - Physical Model */
+/* Phys - Statement of the continuous problem: fields, boundary conditions and material properties */
 typedef struct _p_Phys *Phys;
 
 /* Phys types */
 typedef const char *PhysType;
-#define PHYSINS "ins" /* Incompressible Navier-Stokes */
+#define PHYSLAMINAR "laminar" /* Isothermal laminar incompressible flow */
+
+/* Limits. The face index of PhysSet/GetBoundaryCondition() ranges over [0, PHYS_MAX_FACES):
+   left, right, down, up, back, front. */
+#define PHYS_MAX_DIM   3
+#define PHYS_MAX_FACES (2 * PHYS_MAX_DIM)
 
 FLUCA_EXTERN PetscClassId   PHYS_CLASSID;
 FLUCA_EXTERN PetscErrorCode PhysInitializePackage(void);
@@ -18,24 +22,23 @@ FLUCA_EXTERN PetscErrorCode PhysFinalizePackage(void);
 /* Body force callback */
 typedef PetscErrorCode PhysBodyForceFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscScalar f[], void *ctx);
 
-/* INS boundary condition types */
+/* Boundary conditions */
 typedef enum {
-  PHYS_INS_BC_NONE,
-  PHYS_INS_BC_VELOCITY,
-} PhysINSBCType;
-FLUCA_EXTERN const char *PhysINSBCTypes[];
+  PHYS_BC_NONE,
+  PHYS_BC_VELOCITY,
+} PhysBCType;
+FLUCA_EXTERN const char *PhysBCTypes[];
 
-/* INS boundary condition callback: returns value of field component at boundary coordinates.
-   comp is the solution DOF component being queried (0..dim-1 for velocity, dim for pressure). */
-typedef PetscErrorCode PhysINSBCFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx);
+/* Boundary condition callback: value of velocity component comp at boundary point x and time t */
+typedef PetscErrorCode PhysBCFn(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx);
 
 typedef struct {
-  PhysINSBCType type;
-  PhysINSBCFn  *fn; /* value BC: u_bc(t, x, comp) */
-  void         *ctx;
-  PhysINSBCFn  *fn_dot; /* time derivative BC: du_bc/dt(t, x, comp); NULL = use FD approx of fn */
-  void         *fn_dot_ctx;
-} PhysINSBC;
+  PhysBCType type;
+  PhysBCFn  *fn; /* value; NULL means zero */
+  void      *ctx;
+  PhysBCFn  *fn_dot; /* time derivative; NULL means a finite difference of fn */
+  void      *fn_dot_ctx;
+} PhysBC;
 
 /* Lifecycle */
 FLUCA_EXTERN PetscErrorCode PhysCreate(MPI_Comm, Phys *);
@@ -55,16 +58,42 @@ FLUCA_EXTERN PetscErrorCode PhysSetOptionsPrefix(Phys, const char[]);
 FLUCA_EXTERN PetscErrorCode PhysAppendOptionsPrefix(Phys, const char[]);
 FLUCA_EXTERN PetscErrorCode PhysGetOptionsPrefix(Phys, const char *[]);
 
-/* Body force (base class) */
-FLUCA_EXTERN PetscErrorCode PhysSetBodyForce(Phys, PhysBodyForceFn *, void *);
+/* Boundary conditions */
+FLUCA_EXTERN PetscErrorCode PhysSetBoundaryCondition(Phys, PetscInt, PhysBC);
+FLUCA_EXTERN PetscErrorCode PhysGetBoundaryCondition(Phys, PetscInt, PhysBC *);
 
-/* PHYSINS specific */
-FLUCA_EXTERN PetscErrorCode PhysINSSetDensity(Phys, PetscReal);
-FLUCA_EXTERN PetscErrorCode PhysINSGetDensity(Phys, PetscReal *);
-FLUCA_EXTERN PetscErrorCode PhysINSSetViscosity(Phys, PetscReal);
-FLUCA_EXTERN PetscErrorCode PhysINSGetViscosity(Phys, PetscReal *);
-FLUCA_EXTERN PetscErrorCode PhysINSSetBoundaryCondition(Phys, PetscInt, PhysINSBC);
-FLUCA_EXTERN PetscErrorCode PhysINSGetBoundaryCondition(Phys, PetscInt, PhysINSBC *);
+/* Material properties (all constant) */
+#define PHYS_PROPERTY_DENSITY   "density"
+#define PHYS_PROPERTY_VISCOSITY "viscosity"
+
+FLUCA_EXTERN PetscErrorCode PhysSetDensity(Phys, PetscReal);
+FLUCA_EXTERN PetscErrorCode PhysGetDensity(Phys, PetscReal *);
+FLUCA_EXTERN PetscErrorCode PhysSetViscosity(Phys, PetscReal);
+FLUCA_EXTERN PetscErrorCode PhysGetViscosity(Phys, PetscReal *);
+FLUCA_EXTERN PetscErrorCode PhysGetProperty(Phys, const char[], PetscScalar *);
+
+/* Body force */
+FLUCA_EXTERN PetscErrorCode PhysSetBodyForce(Phys, PhysBodyForceFn *, void *);
+FLUCA_EXTERN PetscErrorCode PhysGetBodyForce(Phys, PhysBodyForceFn **, void **);
+
+/* Solution fields. PhysSetUp() declares them and lays out one DMStag holding all of them. */
+typedef enum {
+  PHYS_FIELD_ELEMENT,
+  PHYS_FIELD_FACE,
+} PhysFieldLocation;
+FLUCA_EXTERN const char *PhysFieldLocations[];
+
+#define PHYS_FIELD_VELOCITY      "velocity"
+#define PHYS_FIELD_FACE_VELOCITY "face_velocity"
+#define PHYS_FIELD_PRESSURE      "pressure"
+
+FLUCA_EXTERN PetscErrorCode PhysDeclareField(Phys, const char[], PhysFieldLocation, PetscInt);
+FLUCA_EXTERN PetscErrorCode PhysRemoveField(Phys, const char[]);
+FLUCA_EXTERN PetscErrorCode PhysResetFields(Phys);
+FLUCA_EXTERN PetscErrorCode PhysGetNumFields(Phys, PetscInt *);
+FLUCA_EXTERN PetscErrorCode PhysGetFieldName(Phys, PetscInt, const char *[]);
+FLUCA_EXTERN PetscErrorCode PhysGetField(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);
+FLUCA_EXTERN PetscErrorCode PhysGetFieldIS(Phys, const char[], IS *);
 
 /* Registration */
 FLUCA_EXTERN PetscFunctionList PhysList;

@@ -2,53 +2,91 @@
 #include <flucasys.h>
 #include <petscdmstag.h>
 
-static const char help[] = "Test Phys INS subtype: verify solution DM DOF layout\n";
+static const char help[] = "Test Phys: material properties and the field table of the solution DM\n"
+                           "Options:\n"
+                           "  -dim <int>      : spatial dimension, 2 or 3 (default: 2)\n"
+                           "  -custom_fields  : remove face_velocity, declare a temperature field, and print the field table again\n";
 
-static PetscErrorCode BCVelocityZero(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx)
+static PetscErrorCode PrintFields_Private(Phys phys, PetscInt dim)
 {
-  PetscFunctionBeginUser;
-  *val = 0.;
+  DM                sol_dm;
+  IS                is;
+  PhysFieldLocation loc;
+  PetscInt          nfields, k, c0, ncomp, n;
+  PetscInt          dof[4] = {0, 0, 0, 0};
+  const char       *name;
+
+  PetscFunctionBegin;
+  PetscCall(PhysGetSolutionDM(phys, &sol_dm));
+  PetscCall(DMStagGetDOF(sol_dm, &dof[0], &dof[1], &dof[2], &dof[3]));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Solution DM DOF per face: %" PetscInt_FMT ", per element: %" PetscInt_FMT "\n", dof[dim - 1], dof[dim]));
+  PetscCall(PhysGetNumFields(phys, &nfields));
+  for (k = 0; k < nfields; ++k) {
+    PetscCall(PhysGetFieldName(phys, k, &name));
+    PetscCall(PhysGetField(phys, name, &loc, &c0, &ncomp));
+    PetscCall(PhysGetFieldIS(phys, name, &is));
+    PetscCall(ISGetSize(is, &n));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s: location %s, c0 %" PetscInt_FMT ", ncomp %" PetscInt_FMT ", entries %" PetscInt_FMT "\n", name, PhysFieldLocations[loc], c0, ncomp, n));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 int main(int argc, char **argv)
 {
-  DM        dm, sol_dm;
-  Phys      phys;
-  PetscInt  f;
-  PhysINSBC bc;
+  DM          dm;
+  Phys        phys;
+  PhysBC      bc;
+  PetscReal   rho, mu;
+  PetscScalar value;
+  PetscInt    dim           = 2, f;
+  PetscBool   custom_fields = PETSC_FALSE;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
+  PetscCall(PetscOptionsGetInt(NULL, NULL, "-dim", &dim, NULL));
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-custom_fields", &custom_fields, NULL));
 
-  /* Create 2D base DMStag: 1 element DOF */
-  PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 4, 4, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 1, NULL, NULL, &dm));
+  if (dim == 2) PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 4, 4, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 1, NULL, NULL, &dm));
+  else PetscCall(DMStagCreate3d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 4, 4, 4, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 0, 1, DMSTAG_STENCIL_STAR, 1, NULL, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
-  PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
+  PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 1.));
 
-  /* Create Phys INS, set zero velocity BCs on all faces */
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
-  PetscCall(PhysSetType(phys, PHYSINS));
+  PetscCall(PhysSetType(phys, PHYSLAMINAR));
   PetscCall(PhysSetBaseDM(phys, dm));
 
-  bc.type       = PHYS_INS_BC_VELOCITY;
-  bc.fn         = BCVelocityZero;
+  PetscCall(PhysGetDensity(phys, &rho));
+  PetscCall(PhysGetViscosity(phys, &mu));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Default density: %g, viscosity: %g\n", (double)rho, (double)mu));
+  PetscCall(PhysSetDensity(phys, 2.));
+  PetscCall(PhysSetViscosity(phys, 0.5));
+  PetscCall(PhysGetProperty(phys, PHYS_PROPERTY_DENSITY, &value));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Density: %g, ", (double)PetscRealPart(value)));
+  PetscCall(PhysGetProperty(phys, PHYS_PROPERTY_VISCOSITY, &value));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "viscosity: %g\n", (double)PetscRealPart(value)));
+
+  bc.type       = PHYS_BC_VELOCITY;
+  bc.fn         = NULL;
   bc.ctx        = NULL;
   bc.fn_dot     = NULL;
   bc.fn_dot_ctx = NULL;
-  for (f = 0; f < 4; f++) PetscCall(PhysINSSetBoundaryCondition(phys, f, bc));
+  for (f = 0; f < 2 * dim; f++) PetscCall(PhysSetBoundaryCondition(phys, f, bc));
 
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));
+  PetscCall(PrintFields_Private(phys, dim));
 
-  /* View solution DM */
-  PetscCall(PhysGetSolutionDM(phys, &sol_dm));
-  PetscCall(DMView(sol_dm, PETSC_VIEWER_STDOUT_WORLD));
+  if (custom_fields) {
+    PetscCall(PhysRemoveField(phys, PHYS_FIELD_FACE_VELOCITY));
+    PetscCall(PhysDeclareField(phys, "temperature", PHYS_FIELD_ELEMENT, 1));
+    PetscCall(PhysSetUp(phys));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "After removing face_velocity and declaring temperature:\n"));
+    PetscCall(PrintFields_Private(phys, dim));
+  }
 
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));
-
   PetscCall(FlucaFinalize());
   return 0;
 }
@@ -58,5 +96,15 @@ int main(int argc, char **argv)
   test:
     suffix: 2d
     nsize: 1
+
+  test:
+    suffix: 3d
+    nsize: 1
+    args: -dim 3
+
+  test:
+    suffix: custom_fields
+    nsize: 1
+    args: -custom_fields
 
 TEST*/
