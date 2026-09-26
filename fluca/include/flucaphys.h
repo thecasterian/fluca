@@ -87,6 +87,9 @@ FLUCA_EXTERN const char *PhysFieldLocations[];
 #define PHYS_FIELD_FACE_VELOCITY "face_velocity"
 #define PHYS_FIELD_PRESSURE      "pressure"
 
+FLUCA_EXTERN PetscErrorCode PhysDeclareField(Phys, const char[], PhysFieldLocation, PetscInt);
+FLUCA_EXTERN PetscErrorCode PhysRemoveField(Phys, const char[]);
+FLUCA_EXTERN PetscErrorCode PhysResetFields(Phys);
 FLUCA_EXTERN PetscErrorCode PhysGetNumFields(Phys, PetscInt *);
 FLUCA_EXTERN PetscErrorCode PhysGetFieldName(Phys, PetscInt, const char *[]);
 FLUCA_EXTERN PetscErrorCode PhysGetField(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);

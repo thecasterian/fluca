@@ -4,24 +4,47 @@
 
 static const char help[] = "Test Phys: material properties and the field table of the solution DM\n"
                            "Options:\n"
-                           "  -dim <int> : spatial dimension, 2 or 3 (default: 2)\n";
+                           "  -dim <int>      : spatial dimension, 2 or 3 (default: 2)\n"
+                           "  -custom_fields  : remove face_velocity, declare a temperature field, and print the field table again\n";
+
+static PetscErrorCode PrintFields_Private(Phys phys, PetscInt dim)
+{
+  DM                sol_dm;
+  IS                is;
+  PhysFieldLocation loc;
+  PetscInt          nfields, k, c0, ncomp, n;
+  PetscInt          dof[4] = {0, 0, 0, 0};
+  const char       *name;
+
+  PetscFunctionBegin;
+  PetscCall(PhysGetSolutionDM(phys, &sol_dm));
+  PetscCall(DMStagGetDOF(sol_dm, &dof[0], &dof[1], &dof[2], &dof[3]));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Solution DM DOF per face: %" PetscInt_FMT ", per element: %" PetscInt_FMT "\n", dof[dim - 1], dof[dim]));
+  PetscCall(PhysGetNumFields(phys, &nfields));
+  for (k = 0; k < nfields; ++k) {
+    PetscCall(PhysGetFieldName(phys, k, &name));
+    PetscCall(PhysGetField(phys, name, &loc, &c0, &ncomp));
+    PetscCall(PhysGetFieldIS(phys, name, &is));
+    PetscCall(ISGetSize(is, &n));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s: location %s, c0 %" PetscInt_FMT ", ncomp %" PetscInt_FMT ", entries %" PetscInt_FMT "\n", name, PhysFieldLocations[loc], c0, ncomp, n));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
 int main(int argc, char **argv)
 {
-  DM                dm, sol_dm;
-  Phys              phys;
-  PhysBC            bc;
-  PhysFieldLocation loc;
-  IS                is;
-  PetscReal         rho, mu;
-  PetscScalar       value;
-  PetscInt          dim    = 2, nfields, f, k, c0, ncomp, n;
-  PetscInt          dof[4] = {0, 0, 0, 0};
-  const char       *name;
+  DM          dm;
+  Phys        phys;
+  PhysBC      bc;
+  PetscReal   rho, mu;
+  PetscScalar value;
+  PetscInt    dim           = 2, f;
+  PetscBool   custom_fields = PETSC_FALSE;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-dim", &dim, NULL));
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-custom_fields", &custom_fields, NULL));
 
   if (dim == 2) PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 4, 4, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 1, NULL, NULL, &dm));
   else PetscCall(DMStagCreate3d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 4, 4, 4, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 0, 1, DMSTAG_STENCIL_STAR, 1, NULL, NULL, NULL, &dm));
@@ -52,17 +75,14 @@ int main(int argc, char **argv)
 
   PetscCall(PhysSetFromOptions(phys));
   PetscCall(PhysSetUp(phys));
+  PetscCall(PrintFields_Private(phys, dim));
 
-  PetscCall(PhysGetSolutionDM(phys, &sol_dm));
-  PetscCall(DMStagGetDOF(sol_dm, &dof[0], &dof[1], &dof[2], &dof[3]));
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Solution DM DOF per face: %" PetscInt_FMT ", per element: %" PetscInt_FMT "\n", dof[dim - 1], dof[dim]));
-  PetscCall(PhysGetNumFields(phys, &nfields));
-  for (k = 0; k < nfields; ++k) {
-    PetscCall(PhysGetFieldName(phys, k, &name));
-    PetscCall(PhysGetField(phys, name, &loc, &c0, &ncomp));
-    PetscCall(PhysGetFieldIS(phys, name, &is));
-    PetscCall(ISGetSize(is, &n));
-    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s: location %s, c0 %" PetscInt_FMT ", ncomp %" PetscInt_FMT ", entries %" PetscInt_FMT "\n", name, PhysFieldLocations[loc], c0, ncomp, n));
+  if (custom_fields) {
+    PetscCall(PhysRemoveField(phys, PHYS_FIELD_FACE_VELOCITY));
+    PetscCall(PhysDeclareField(phys, "temperature", PHYS_FIELD_ELEMENT, 1));
+    PetscCall(PhysSetUp(phys));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "After removing face_velocity and declaring temperature:\n"));
+    PetscCall(PrintFields_Private(phys, dim));
   }
 
   PetscCall(PhysDestroy(&phys));
@@ -81,5 +101,10 @@ int main(int argc, char **argv)
     suffix: 3d
     nsize: 1
     args: -dim 3
+
+  test:
+    suffix: custom_fields
+    nsize: 1
+    args: -custom_fields
 
 TEST*/
