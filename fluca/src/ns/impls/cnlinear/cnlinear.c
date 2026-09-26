@@ -1,15 +1,17 @@
 #include <fluca/private/nsimpl.h>
 
 typedef struct {
-  Vec     phalf;                                     /* pressure at n-1/2 in its pressure entries */
-  DM      dm_face;                                   /* one DOF per face */
-  Vec     ubar[PHYS_MAX_DIM];                        /* u_d^n interpolated to faces, with boundary values */
-  FlucaFD fd_interp_vel[PHYS_MAX_DIM][PHYS_MAX_DIM]; /* [d][e]: u_d -> faces normal to e */
-  FlucaFD fd_conv_U[PHYS_MAX_DIM][PHYS_MAX_DIM];     /* [d][e]: interp(u_d) * U_e^n */
-  FlucaFD fd_conv_ubar[PHYS_MAX_DIM][PHYS_MAX_DIM];  /* [d][e]: ubar_d^n * interp(u_e) */
-  FlucaFD fd_conv[PHYS_MAX_DIM];                     /* (dt/2) sum_e d/dx_e(...) */
-  FlucaFD fd_visc[PHYS_MAX_DIM];                     /* (dt/(2 rho)) fd_laplacian[d] */
-  FlucaFD fd_grad[PHYS_MAX_DIM];                     /* (dt/rho) fd_grad_p[d] */
+  Vec       phalf;                                     /* pressure at n-1/2 in its pressure entries */
+  DM        dm_face;                                   /* one DOF per face */
+  Vec       ubar[PHYS_MAX_DIM];                        /* u_d^n interpolated to faces, with boundary values */
+  FlucaFD   fd_interp_vel[PHYS_MAX_DIM][PHYS_MAX_DIM]; /* [d][e]: u_d -> faces normal to e */
+  FlucaFD   fd_conv_U[PHYS_MAX_DIM][PHYS_MAX_DIM];     /* [d][e]: interp(u_d) * U_e^n */
+  FlucaFD   fd_conv_ubar[PHYS_MAX_DIM][PHYS_MAX_DIM];  /* [d][e]: ubar_d^n * interp(u_e) */
+  FlucaFD   fd_conv[PHYS_MAX_DIM];                     /* (dt/2) sum_e d/dx_e(...) */
+  FlucaFD   fd_visc[PHYS_MAX_DIM];                     /* (dt/(2 rho)) fd_laplacian[d] */
+  FlucaFD   fd_grad[PHYS_MAX_DIM];                     /* (dt/rho) fd_grad_p[d] */
+  Mat       Jconst;                                    /* Jacobian blocks that depend only on dt and rho; NULL until built */
+  PetscReal dt_const, rho_const;                       /* dt and rho Jconst was assembled with */
 } NS_CNLinear;
 
 /* Add 1 to the diagonal of every locally owned row at (loc, c), including the extra boundary faces */
@@ -238,11 +240,11 @@ static PetscErrorCode NSSetUp_CNLinear(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* The coupled system, with the operators refreshed by the step:
-   momentum rows       [A  0  G  ]   A = I + (dt/2) conv + (dt/(2 rho)) (-mu lap), G = (dt/rho) grad
-   Rhie-Chow rows      [-T I  -R ]   boundary-face rows reduce to U = u_b . n
-   continuity rows     [0  D  0  ] */
-static PetscErrorCode NSFormJacobian_CNLinear(NS ns, Vec x, Mat J)
+/* Assemble the blocks of the Jacobian that depend only on dt and rho into Jconst, unless it already
+   holds them for the current dt and rho. Jconst is a duplicate of ns->J, so it has the nonzero pattern
+   of every matrix made by DMCreateMatrix() on the solution DM; inserting outside it is an error. The
+   scale of fd_grad is set by UpdateOperators_Private(). */
+static PetscErrorCode AssembleConstantBlocks_Private(NS ns)
 {
   NS_CNLinear *cn = (NS_CNLinear *)ns->data;
   PetscScalar  rho;
@@ -250,24 +252,54 @@ static PetscErrorCode NSFormJacobian_CNLinear(NS ns, Vec x, Mat J)
   DM           dm;
 
   PetscFunctionBegin;
+  PetscCall(PhysGetProperty(ns->phys, PHYS_PROPERTY_DENSITY, &rho));
+  if (cn->Jconst && cn->dt_const == ns->dt && cn->rho_const == PetscRealPart(rho)) PetscFunctionReturn(PETSC_SUCCESS);
   PetscCall(PhysGetSolutionDM(ns->phys, &dm));
   PetscCall(DMGetDimension(dm, &dim));
   PetscCall(PhysGetField(ns->phys, PHYS_FIELD_VELOCITY, NULL, &c_vel, NULL));
   PetscCall(PhysGetField(ns->phys, PHYS_FIELD_FACE_VELOCITY, NULL, &c_U, NULL));
-  PetscCall(PhysGetProperty(ns->phys, PHYS_PROPERTY_DENSITY, &rho));
-  PetscCall(MatZeroEntries(J));
+  if (!cn->Jconst) {
+    PetscCall(MatDuplicate(ns->J, MAT_DO_NOT_COPY_VALUES, &cn->Jconst));
+    PetscCall(MatSetOption(cn->Jconst, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE));
+  } else PetscCall(MatZeroEntries(cn->Jconst));
   for (d = 0; d < dim; d++) {
-    PetscCall(AddIdentity_Private(dm, J, DMSTAG_ELEMENT, c_vel + d));
-    PetscCall(FlucaFDGetOperator(cn->fd_visc[d], dm, dm, J));
-    PetscCall(FlucaFDGetOperator(cn->fd_conv[d], dm, dm, J));
-    PetscCall(FlucaFDGetOperator(cn->fd_grad[d], dm, dm, J));
+    PetscCall(AddIdentity_Private(dm, cn->Jconst, DMSTAG_ELEMENT, c_vel + d));
+    PetscCall(FlucaFDGetOperator(cn->fd_grad[d], dm, dm, cn->Jconst));
   }
   for (e = 0; e < dim; e++) {
-    PetscCall(AddIdentity_Private(dm, J, face_loc[e], c_U));
-    PetscCall(FlucaFDGetOperator(ns->fd_negT[e], dm, dm, J));
+    PetscCall(AddIdentity_Private(dm, cn->Jconst, face_loc[e], c_U));
+    PetscCall(FlucaFDGetOperator(ns->fd_negT[e], dm, dm, cn->Jconst));
   }
-  PetscCall(AddScaledMatrix_Private(J, ns->negR, ns->dt / rho));
-  PetscCall(FlucaFDGetOperator(ns->fd_D, dm, dm, J));
+  PetscCall(AddScaledMatrix_Private(cn->Jconst, ns->negR, ns->dt / rho));
+  PetscCall(FlucaFDGetOperator(ns->fd_D, dm, dm, cn->Jconst));
+  PetscCall(MatAssemblyBegin(cn->Jconst, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(cn->Jconst, MAT_FINAL_ASSEMBLY));
+  cn->dt_const  = ns->dt;
+  cn->rho_const = PetscRealPart(rho);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* The coupled system, with the operators refreshed by the step:
+   momentum rows       [A  0  G  ]   A = I + (dt/2) conv + (dt/(2 rho)) (-mu lap), G = (dt/rho) grad
+   Rhie-Chow rows      [-T I  -R ]   boundary-face rows reduce to U = u_b . n
+   continuity rows     [0  D  0  ]
+   Everything but the viscous and convective parts of A is copied from Jconst, which is rebuilt only
+   when dt or rho changes. J must have the nonzero pattern of DMCreateMatrix() on the solution DM. */
+static PetscErrorCode NSFormJacobian_CNLinear(NS ns, Vec x, Mat J)
+{
+  NS_CNLinear *cn = (NS_CNLinear *)ns->data;
+  PetscInt     dim, d;
+  DM           dm;
+
+  PetscFunctionBegin;
+  PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(AssembleConstantBlocks_Private(ns));
+  PetscCall(MatCopy(cn->Jconst, J, SAME_NONZERO_PATTERN));
+  for (d = 0; d < dim; d++) {
+    PetscCall(FlucaFDGetOperator(cn->fd_visc[d], dm, dm, J));
+    PetscCall(FlucaFDGetOperator(cn->fd_conv[d], dm, dm, J));
+  }
   PetscCall(MatAssemblyBegin(J, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(J, MAT_FINAL_ASSEMBLY));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -390,6 +422,7 @@ static PetscErrorCode NSDestroy_CNLinear(NS ns)
     }
     PetscCall(VecDestroy(&cn->ubar[d]));
   }
+  PetscCall(MatDestroy(&cn->Jconst));
   PetscCall(DMDestroy(&cn->dm_face));
   PetscCall(VecDestroy(&cn->phalf));
   PetscCall(PetscFree(ns->data));
