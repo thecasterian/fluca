@@ -50,7 +50,6 @@ PetscErrorCode PhysSetType(Phys phys, PhysType type)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscCheck(!phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the Phys type after PhysSetUp()");
 
   PetscCall(PhysGetType(phys, &old_type));
   PetscCall(PetscObjectTypeCompare((PetscObject)phys, type, &match));
@@ -63,6 +62,9 @@ PetscErrorCode PhysSetType(Phys phys, PhysType type)
     PetscTryTypeMethod(phys, destroy);
     PetscCall(PetscMemzero(phys->ops, sizeof(struct _PhysOps)));
   }
+  /* The fields and the solution DM belong to the old type; PhysSetUp() must run again */
+  PetscCall(PhysResetFields_Internal(phys));
+  phys->setupcalled = PETSC_FALSE;
 
   PetscCall(PetscObjectChangeTypeName((PetscObject)phys, type));
   PetscCall((*impl_create)(phys));
