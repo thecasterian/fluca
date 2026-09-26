@@ -270,8 +270,6 @@ static PetscErrorCode NSFormJacobian_CNLinear(NS ns, Vec x, Mat J)
   PetscCall(FlucaFDGetOperator(ns->fd_D, dm, dm, J));
   PetscCall(MatAssemblyBegin(J, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(J, MAT_FINAL_ASSEMBLY));
-  /* DMCreateMatrix() lays out explicit zeros that give the default ILU sub-solves zero pivots on coarse grids */
-  PetscCall(MatEliminateZeros(J, PETSC_FALSE));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

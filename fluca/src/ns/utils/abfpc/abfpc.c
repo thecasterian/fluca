@@ -127,7 +127,6 @@ static PetscErrorCode PCSetUp_ABF(PC pc)
   MatNullSpace nullspace;
 
   PetscFunctionBegin;
-
   PetscCall(MatDestroy(&abf->A));
   PetscCall(MatDestroy(&abf->negT));
   PetscCall(MatDestroy(&abf->G));
@@ -144,6 +143,8 @@ static PetscErrorCode PCSetUp_ABF(PC pc)
 
   PetscCall(PCABFGetFieldISs_Private(pc, &isv, &isV, &isp));
   PetscCall(MatCreateSubMatrix(pc->mat, isv, isv, MAT_INITIAL_MATRIX, &abf->A));
+  /* DMStag matrices carry explicit zeros that give ILU zero pivots */
+  PetscCall(MatEliminateZeros(abf->A, PETSC_FALSE));
   PetscCall(MatCreateSubMatrix(pc->mat, isV, isv, MAT_INITIAL_MATRIX, &abf->negT));
   PetscCall(MatCreateSubMatrix(pc->mat, isv, isp, MAT_INITIAL_MATRIX, &abf->G));
   PetscCall(MatCreateSubMatrix(pc->mat, isp, isV, MAT_INITIAL_MATRIX, &abf->D));
@@ -170,6 +171,8 @@ static PetscErrorCode PCSetUp_ABF(PC pc)
   }
   if (abf->negR) PetscCall(MatAXPY(tmp, -1., abf->negR, DIFFERENT_NONZERO_PATTERN));
   PetscCall(MatMatMult(abf->D, tmp, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &abf->S));
+  /* S inherits the explicit zeros of the DMStag blocks, which give ILU zero pivots */
+  PetscCall(MatEliminateZeros(abf->S, PETSC_FALSE));
   PetscCall(MatDestroy(&tmp));
 
   PetscCall(MatGetNullSpace(pc->mat, &nullspace));

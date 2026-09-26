@@ -128,9 +128,9 @@ static PetscErrorCode CheckField_Private(NS ns, const char name[], PhysFieldLoca
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* The pressure null space from the boundary condition types. A velocity boundary prescribes the
-   normal velocity only, so the pressure is determined up to a constant; a periodic direction has no
-   boundary. A boundary type that prescribes the pressure would return here without a null space. */
+/* The pressure null space from the boundary condition types. Only velocity boundaries and periodic
+   directions are supported; neither prescribes the pressure, so the pressure is determined up to a
+   constant and the null space is the constant pressure. */
 static PetscErrorCode CreateNullSpace_Private(NS ns)
 {
   DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
