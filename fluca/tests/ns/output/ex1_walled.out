@@ -1,0 +1,4 @@
+Null space: 1 vector(s), constant no
+velocity: norm 0., min 0., max 0.
+face_velocity: norm 0., min 0., max 0.
+pressure: norm 1., min 0.25, max 0.25
