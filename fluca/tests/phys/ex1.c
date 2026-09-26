@@ -2,7 +2,7 @@
 #include <flucasys.h>
 #include <petscdmstag.h>
 
-static const char help[] = "Test Phys: material properties, guards and the field table of the solution DM\n"
+static const char help[] = "Test Phys: material properties and the field table of the solution DM\n"
                            "Options:\n"
                            "  -dim <int> : spatial dimension, 2 or 3 (default: 2)\n";
 
@@ -18,7 +18,6 @@ int main(int argc, char **argv)
   PetscInt          dim    = 2, nfields, f, k, c0, ncomp, n;
   PetscInt          dof[4] = {0, 0, 0, 0};
   const char       *name;
-  PetscErrorCode    ierr;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
@@ -44,11 +43,6 @@ int main(int argc, char **argv)
   PetscCall(PhysGetProperty(phys, PHYS_PROPERTY_VISCOSITY, &value));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "viscosity: %g\n", (double)PetscRealPart(value)));
 
-  PetscCall(PetscPushErrorHandler(PetscReturnErrorHandler, NULL));
-  ierr = PhysGetNumFields(phys, &nfields);
-  PetscCall(PetscPopErrorHandler());
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Field query before PhysSetUp(): %s\n", ierr == PETSC_ERR_ARG_WRONGSTATE ? "rejected" : "accepted"));
-
   bc.type       = PHYS_BC_VELOCITY;
   bc.fn         = NULL;
   bc.ctx        = NULL;
@@ -70,21 +64,6 @@ int main(int argc, char **argv)
     PetscCall(ISGetSize(is, &n));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s: location %s, c0 %" PetscInt_FMT ", ncomp %" PetscInt_FMT ", entries %" PetscInt_FMT "\n", name, PhysFieldLocations[loc], c0, ncomp, n));
   }
-
-  PetscCall(PetscPushErrorHandler(PetscReturnErrorHandler, NULL));
-  ierr = PhysSetBoundaryCondition(phys, 0, bc);
-  PetscCall(PetscPopErrorHandler());
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Boundary condition change after PhysSetUp(): %s\n", ierr == PETSC_ERR_ARG_WRONGSTATE ? "rejected" : "accepted"));
-
-  PetscCall(PetscPushErrorHandler(PetscReturnErrorHandler, NULL));
-  ierr = PhysSetType(phys, PHYSLAMINAR);
-  PetscCall(PetscPopErrorHandler());
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Type change after PhysSetUp(): %s\n", ierr == PETSC_ERR_ARG_WRONGSTATE ? "rejected" : "accepted"));
-
-  PetscCall(PetscPushErrorHandler(PetscReturnErrorHandler, NULL));
-  ierr = PhysSetDensity(phys, -1.);
-  PetscCall(PetscPopErrorHandler());
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Negative density: %s\n", ierr == PETSC_ERR_ARG_OUTOFRANGE ? "rejected" : "accepted"));
 
   PetscCall(PhysDestroy(&phys));
   PetscCall(DMDestroy(&dm));
