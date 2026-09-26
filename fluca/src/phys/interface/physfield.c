@@ -60,13 +60,13 @@ PetscErrorCode PhysDeclareField(Phys phys, const char name[], PhysFieldLocation 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscAssertPointer(name, 2);
-  PetscCall(PhysClearSetUp_Private(phys));
   PetscCheck(phys->nfields < PHYS_MAX_FIELDS, PetscObjectComm((PetscObject)phys), PETSC_ERR_SUP, "Cannot declare more than %d fields", PHYS_MAX_FIELDS);
   PetscCheck(ncomp > 0 || ncomp == PETSC_DECIDE, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_OUTOFRANGE, "Field %s must have a positive component count or PETSC_DECIDE", name);
   for (f = 0; f < phys->nfields; ++f) {
     PetscCall(PetscStrcmp(phys->fields[f].name, name, &same));
     PetscCheck(!same, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONG, "Field %s is already declared", name);
   }
+  PetscCall(PhysClearSetUp_Private(phys));
   field = &phys->fields[phys->nfields];
   PetscCall(PetscStrallocpy(name, &field->name));
   field->loc   = loc;
@@ -84,8 +84,8 @@ PetscErrorCode PhysRemoveField(Phys phys, const char name[])
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   PetscAssertPointer(name, 2);
-  PetscCall(PhysClearSetUp_Private(phys));
   PetscCall(PhysFindField_Private(phys, name, &idx));
+  PetscCall(PhysClearSetUp_Private(phys));
   PetscCall(PetscFree(phys->fields[idx].name));
   PetscCall(ISDestroy(&phys->fields[idx].is));
   for (f = idx; f < phys->nfields - 1; ++f) phys->fields[f] = phys->fields[f + 1];
