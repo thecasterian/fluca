@@ -114,7 +114,9 @@ int main(int argc, char **argv)
   PetscCall(VecAssemblyBegin(X));
   PetscCall(VecAssemblyEnd(X));
 
-  /* One step linearizes the operators at X; M and f are then the system of that step */
+  /* NSStep() advances time and the step counter, and leaves the Jacobian and function linearized at X.
+     After the step, NSFormFunction() evaluates f at q = phalf, not at this step's actual right-hand side;
+     the identity checked below holds for M and any right-hand side, so this mismatch does not matter. */
   PetscCall(NSStep(ns));
   PetscCall(DMCreateMatrix(sol_dm, &M));
   PetscCall(MatSetOption(M, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
