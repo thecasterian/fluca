@@ -14,14 +14,23 @@ typedef struct {
   PetscScalar value;
 } PhysProperty;
 
+#define PHYS_MAX_FIELDS 8
+
+typedef struct {
+  char             *name;
+  PhysFieldLocation loc;
+  PetscInt          c0;    /* first component within its location */
+  PetscInt          ncomp; /* components per element, or per face for PHYS_FIELD_FACE */
+  IS                is;    /* created on first PhysGetFieldIS(); callers borrow it and must not destroy it */
+} PhysField;
+
 typedef struct _PhysOps *PhysOps;
 
 struct _PhysOps {
   PetscErrorCode (*setfromoptions)(Phys, PetscOptionItems);
-  PetscErrorCode (*setup)(Phys);
+  PetscErrorCode (*setup)(Phys); /* declares the subtype's fields; runs before the solution DM exists */
   PetscErrorCode (*destroy)(Phys);
   PetscErrorCode (*view)(Phys, PetscViewer);
-  PetscErrorCode (*createsolutiondm)(Phys);
 };
 
 struct _p_Phys {
@@ -36,12 +45,17 @@ struct _p_Phys {
   PhysProperty     props[PHYS_MAX_PROPERTIES];
 
   /* Data */
-  DM       sol_dm; /* solution DMStag */
-  PetscInt dim;    /* spatial dimension (extracted from base_dm) */
-  void    *data;   /* subtype-specific */
+  DM        sol_dm; /* solution DMStag */
+  PetscInt  dim;    /* spatial dimension (extracted from base_dm) */
+  void     *data;   /* subtype-specific */
+  PetscInt  nfields;
+  PhysField fields[PHYS_MAX_FIELDS]; /* in declaration order */
 
   /* State */
   PetscBool setupcalled;
 };
 
 FLUCA_INTERN PetscErrorCode PhysRegisterProperty_Internal(Phys, const char[], PetscScalar);
+FLUCA_INTERN PetscErrorCode PhysDeclareField_Internal(Phys, const char[], PhysFieldLocation, PetscInt);
+FLUCA_INTERN PetscErrorCode PhysCreateSolutionDM_Internal(Phys);
+FLUCA_INTERN PetscErrorCode PhysResetFields_Internal(Phys);

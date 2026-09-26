@@ -76,6 +76,22 @@ FLUCA_EXTERN PetscErrorCode PhysGetProperty(Phys, const char[], PetscScalar *);
 FLUCA_EXTERN PetscErrorCode PhysSetBodyForce(Phys, PhysBodyForceFn *, void *);
 FLUCA_EXTERN PetscErrorCode PhysGetBodyForce(Phys, PhysBodyForceFn **, void **);
 
+/* Solution fields. PhysSetUp() declares them and lays out one DMStag holding all of them. */
+typedef enum {
+  PHYS_FIELD_ELEMENT,
+  PHYS_FIELD_FACE,
+} PhysFieldLocation;
+FLUCA_EXTERN const char *PhysFieldLocations[];
+
+#define PHYS_FIELD_VELOCITY      "velocity"
+#define PHYS_FIELD_FACE_VELOCITY "face_velocity"
+#define PHYS_FIELD_PRESSURE      "pressure"
+
+FLUCA_EXTERN PetscErrorCode PhysGetNumFields(Phys, PetscInt *);
+FLUCA_EXTERN PetscErrorCode PhysGetFieldName(Phys, PetscInt, const char *[]);
+FLUCA_EXTERN PetscErrorCode PhysGetField(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);
+FLUCA_EXTERN PetscErrorCode PhysGetFieldIS(Phys, const char[], IS *);
+
 /* Registration */
 FLUCA_EXTERN PetscFunctionList PhysList;
 FLUCA_EXTERN PetscErrorCode    PhysRegister(const char[], PetscErrorCode (*)(Phys));

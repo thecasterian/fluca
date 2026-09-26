@@ -23,6 +23,7 @@ PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
   p->bodyforce     = NULL;
   p->bodyforce_ctx = NULL;
   p->nprops        = 0;
+  p->nfields       = 0;
   p->sol_dm        = NULL;
   p->dim           = PETSC_DETERMINE;
   p->data          = NULL;
@@ -94,7 +95,7 @@ PetscErrorCode PhysDestroy(Phys *phys)
   PetscTryTypeMethod((*phys), destroy);
 
   for (p = 0; p < (*phys)->nprops; ++p) PetscCall(PetscFree((*phys)->props[p].name));
-  PetscCall(DMDestroy(&(*phys)->sol_dm));
+  PetscCall(PhysResetFields_Internal(*phys));
   PetscCall(DMDestroy(&(*phys)->base_dm));
 
   PetscCall(PetscHeaderDestroy(phys));
@@ -116,9 +117,11 @@ PetscErrorCode PhysSetUp(Phys phys)
   PetscCheck(isdmstag, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONG, "Base DM must be DMStag");
   PetscCall(DMGetDimension(phys->base_dm, &phys->dim));
 
-  PetscCheck(phys->ops->createsolutiondm, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Phys type not set or subtype does not implement createsolutiondm");
-  PetscCall((*phys->ops->createsolutiondm)(phys));
-  PetscTryTypeMethod(phys, setup);
+  /* Start from an empty field table, so that a retry after a failed setup is clean */
+  PetscCall(PhysResetFields_Internal(phys));
+  PetscCheck(phys->ops->setup, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Phys type not set");
+  PetscUseTypeMethod(phys, setup);
+  PetscCall(PhysCreateSolutionDM_Internal(phys));
 
   PetscCall(PetscLogEventEnd(PHYS_SetUp, (PetscObject)phys, 0, 0, 0));
 

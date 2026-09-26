@@ -1,10 +1,10 @@
 Default density: 1., viscosity: 1.
 Density: 2., viscosity: 0.5
 Field query before PhysSetUp(): rejected
-Solution DM DOF per face: 1, per element: 3
-velocity: location ELEMENT, c0 0, ncomp 2, entries 32
-face_velocity: location FACE, c0 0, ncomp 1, entries 40
-pressure: location ELEMENT, c0 2, ncomp 1, entries 16
+Solution DM DOF per face: 1, per element: 4
+velocity: location ELEMENT, c0 0, ncomp 3, entries 192
+face_velocity: location FACE, c0 0, ncomp 1, entries 240
+pressure: location ELEMENT, c0 3, ncomp 1, entries 64
 Boundary condition change after PhysSetUp(): rejected
 Type change after PhysSetUp(): rejected
 Negative density: rejected
