@@ -16,15 +16,16 @@ Pure C project (not C++). Follows PETSc coding conventions — see `petsc-conven
 
 ```
 fluca/
-├── include/           Public headers (flucafd.h, flucamesh.h, flucans.h, ...)
+├── include/           Public headers (flucafd.h, flucaphys.h, flucans.h, flucamesh.h, ...)
 │   └── fluca/private/ Implementation headers (*impl.h)
 ├── src/
 │   ├── sys/           FlucaInitialize/Finalize, shared utilities
 │   ├── fd/            Finite difference operators (FlucaFD) on DMStag
 │   │   ├── interface/ Base class (create, setup, apply, options)
 │   │   └── impls/     Subtypes: derivative, composition, scale, sum, secondordertvd
-│   ├── mesh/          Mesh abstraction (Mesh, MeshCart)
-│   ├── ns/            Navier-Stokes solver (NS) with segregated methods
+│   ├── phys/          Problem statement (Phys): base DM, properties, BCs, solution fields
+│   ├── mesh/          Mesh abstraction (Mesh, MeshCart) — unused, no longer referenced by ns/; pending removal
+│   ├── ns/            Navier-Stokes solver (NS): solves the problem stated by a Phys
 │   ├── seg/           Segregated solver framework
 │   └── viewer/        CGNS I/O via PetscViewer
 ├── tests/             Golden-output tests (ex*.c + output/*.out)
@@ -47,6 +48,7 @@ fluca/
 ## Key Modules
 
 - **FlucaFD**: Polymorphic finite difference operator on PETSc DMStag. Subtypes compute stencils for derivatives, compositions, scaling, sums, and TVD schemes.
-- **Mesh / MeshCart**: Cartesian grid with boundary types, coordinate setup, and DM access.
-- **NS**: Incompressible Navier-Stokes solver — Crank-Nicolson time integration, fractional step pressure-velocity coupling.
+- **Phys**: States the continuous problem — base DMStag, density/viscosity, per-face boundary conditions (`PhysSetBoundaryCondition`), and the solution fields (velocity, face velocity, pressure) that `PhysSetUp` lays out on one DMStag.
+- **NS**: Incompressible Navier-Stokes solver that solves the problem a `Phys` states — Crank-Nicolson time integration of a monolithic system built from FlucaFD operators, with the PCABF preconditioner for the coupled solve.
+- **Mesh / MeshCart**: Cartesian grid with boundary types, coordinate setup, and DM access. Unused by any other module; kept in the tree pending removal.
 - **Viewer**: CGNS file I/O for solution data.

@@ -55,6 +55,7 @@ Tutorials differ from tests:
 - Typically longer, with comments explaining each step
 - Use `SetFromOptions` / `ViewFromOptions` for runtime configurability
 - May use PETSc solvers (SNES, KSP) as part of the example
+- Are examples for users, not tests: report results (errors, norms, convergence) for the reader, but never fail on them. No accuracy thresholds, `-tol_*` options, or `PetscCheck` on computed values; a nonzero exit code must mean the program itself failed (e.g. a solver error)
 
 ### 3. Add `/*TEST*/` block
 
@@ -109,4 +110,5 @@ ctest --test-dir build -R "tutorials_<module>" # Run tutorial test cases
 - [ ] Key steps have explanatory comments
 - [ ] `/*TEST*/` block with at least one test case
 - [ ] Source added to `TUTORIAL_SRCS` in CMakeLists.txt
+- [ ] No pass/fail checks on computed results (no tolerances)
 - [ ] Builds and all tutorial test cases pass (exit code 0)

@@ -1,6 +1,5 @@
 #include <fluca/private/nsimpl.h>
 #include <flucaviewer.h>
-#include <petscdmcomposite.h>
 #include <petscdmstag.h>
 
 const char *const  NSConvergedReasons_Shifted[] = {"DIVERGED_NONLINEAR_SOLVE", "CONVERGED_ITERATING", "CONVERGED_TIME", "CONVERGED_ITS", "NSConvergedReason", "", NULL};
@@ -23,19 +22,15 @@ PetscErrorCode NSCreate(MPI_Comm comm, NS *ns)
   PetscAssertPointer(ns, 2);
 
   PetscCall(NSInitializePackage());
+  /* The header is zero-initialized, so every spatial operator starts NULL */
   PetscCall(FlucaHeaderCreate(n, NS_CLASSID, "NS", "Navier-Stokes solver", "NS", comm, NSDestroy, NSView));
-  n->rho               = 0.0;
-  n->mu                = 0.0;
   n->dt                = 0.0;
   n->max_time          = PETSC_MAX_REAL;
   n->max_steps         = PETSC_INT_MAX;
+  n->phys              = NULL;
   n->step              = 0;
   n->t                 = 0.0;
-  n->mesh              = NULL;
-  n->bcs               = NULL;
   n->data              = NULL;
-  n->fieldlink         = NULL;
-  n->soldm             = NULL;
   n->sol               = NULL;
   n->sol0              = NULL;
   n->snes              = NULL;
@@ -87,37 +82,12 @@ PetscErrorCode NSGetType(NS ns, NSType *type)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode AddField_Private(NS ns, const char *fieldname, MeshDMType dmtype)
-{
-  NSFieldLink newlink, lastlink;
-
-  PetscFunctionBegin;
-  /* Create new field */
-  PetscCall(PetscNew(&newlink));
-  PetscCall(PetscStrallocpy(fieldname, &newlink->fieldname));
-  newlink->dmtype = dmtype;
-  newlink->is     = NULL;
-  newlink->prev   = NULL;
-  newlink->next   = NULL;
-
-  /* Append to end of list */
-  if (!ns->fieldlink) {
-    ns->fieldlink = newlink;
-  } else {
-    lastlink = ns->fieldlink;
-    while (lastlink->next) lastlink = lastlink->next;
-    lastlink->next = newlink;
-    newlink->prev  = lastlink;
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode FormJacobian_Private(SNES snes, Vec x, Mat J, Mat Jpre, void *ctx)
 {
   NS ns = (NS)ctx;
 
   PetscFunctionBegin;
-  PetscCall(NSFormJacobian(ns, x, Jpre, NS_UPDATE_JACOBIAN));
+  PetscCall(NSFormJacobian(ns, x, Jpre));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -136,9 +106,6 @@ static PetscErrorCode PicardComputeFunction_Private(SNES snes, Vec x, Vec f, voi
 
   PetscFunctionBegin;
   PetscCall(SNESPicardComputeFunction(snes, x, f, ctx));
-
-  /* Remove null space */
-  PetscAssert(ns->nullspace, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONGSTATE, "Null space must be set");
   PetscCall(MatNullSpaceRemove(ns->nullspace, f));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -150,103 +117,103 @@ static PetscErrorCode FormInitialGuess_Private(SNES snes, Vec x, void *ctx)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode CheckField_Private(NS ns, const char name[], PhysFieldLocation loc, PetscInt ncomp)
+{
+  PhysFieldLocation floc;
+  PetscInt          fncomp;
+
+  PetscFunctionBegin;
+  PetscCall(PhysGetField(ns->phys, name, &floc, NULL, &fncomp));
+  PetscCheck(floc == loc && fncomp == ncomp, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONG, "NS requires field %s at %s with %" PetscInt_FMT " component(s); the Phys declares it at %s with %" PetscInt_FMT, name, PhysFieldLocations[loc], ncomp, PhysFieldLocations[floc], fncomp);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* The pressure null space from the boundary condition types. Only velocity boundaries and periodic
+   directions are supported; neither prescribes the pressure, so the pressure is determined up to a
+   constant and the null space is the constant pressure. */
+static PetscErrorCode CreateNullSpace_Private(NS ns)
+{
+  DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
+  PhysBC         bc;
+  IS             is_p;
+  Vec            nullvec, sub;
+  PetscInt       dim, d, s, np;
+  DM             dm;
+
+  PetscFunctionBegin;
+  PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(DMStagGetBoundaryTypes(dm, &bt[0], &bt[1], &bt[2]));
+  for (d = 0; d < dim; ++d) {
+    if (bt[d] == DM_BOUNDARY_PERIODIC) continue;
+    for (s = 0; s < 2; ++s) {
+      PetscCall(PhysGetBoundaryCondition(ns->phys, 2 * d + s, &bc));
+      switch (bc.type) {
+      case PHYS_BC_VELOCITY:
+        break;
+      default:
+        SETERRQ(PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "NS does not support boundary condition type %s on face %" PetscInt_FMT, PhysBCTypes[bc.type], 2 * d + s);
+      }
+    }
+  }
+  PetscCall(PhysGetFieldIS(ns->phys, PHYS_FIELD_PRESSURE, &is_p));
+  PetscCall(DMCreateGlobalVector(dm, &nullvec));
+  PetscCall(VecZeroEntries(nullvec));
+  PetscCall(VecGetSubVector(nullvec, is_p, &sub));
+  PetscCall(VecGetSize(sub, &np));
+  PetscCall(VecSet(sub, 1. / PetscSqrtReal((PetscReal)np)));
+  PetscCall(VecRestoreSubVector(nullvec, is_p, &sub));
+  PetscCall(MatNullSpaceCreate(PetscObjectComm((PetscObject)ns), PETSC_FALSE, 1, &nullvec, &ns->nullspace));
+  PetscCall(VecDestroy(&nullvec));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetUp(NS ns)
 {
-  MPI_Comm    comm;
-  DM          dm;
-  NSFieldLink link;
-  IS         *is;
-  Vec        *subvecs;
-  SNES        snes;
-  KSP         ksp;
-  PC          pc;
-  PetscInt    nf, nb, i;
-  PetscBool   neednullspace, isabf;
+  PetscInt  dim, sw;
+  PetscBool isabf;
+  IS        is_vel, is_U, is_p;
+  SNES      snes;
+  KSP       ksp;
+  PC        pc;
+  DM        dm;
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   if (ns->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
   PetscCall(PetscLogEventBegin(NS_SetUp, (PetscObject)ns, 0, 0, 0));
 
-  /* Set default type */
   if (!((PetscObject)ns)->type_name) PetscCall(NSSetType(ns, NSCNLINEAR));
+  PetscCheck(ns->phys, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "Phys not set. Call NSSetPhys() first");
+  PetscCall(PhysSetUp(ns->phys));
+  PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  PetscCall(DMGetDimension(dm, &dim));
 
-  /* Validate */
-  PetscCheck(ns->mesh, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "Mesh not set");
+  PetscCall(CheckField_Private(ns, PHYS_FIELD_VELOCITY, PHYS_FIELD_ELEMENT, dim));
+  PetscCall(CheckField_Private(ns, PHYS_FIELD_FACE_VELOCITY, PHYS_FIELD_FACE, 1));
+  PetscCall(CheckField_Private(ns, PHYS_FIELD_PRESSURE, PHYS_FIELD_ELEMENT, 1));
+  /* The one-sided wall gradient and T G_c reach two cells */
+  PetscCall(DMStagGetStencilWidth(dm, &sw));
+  PetscCheck(sw >= 2, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_OUTOFRANGE, "NS requires a base DM stencil width of at least 2, got %" PetscInt_FMT, sw);
 
-  /* Create fields and solution vector */
-  PetscCall(PetscObjectGetComm((PetscObject)ns, &comm));
+  PetscCall(CreateNullSpace_Private(ns));
+  PetscCall(NSSetUpSpatialOperators_Internal(ns));
 
-  PetscCall(AddField_Private(ns, NS_FIELD_VELOCITY, MESH_DM_VECTOR));
-  PetscCall(AddField_Private(ns, NS_FIELD_FACE_NORMAL_VELOCITY, MESH_DM_STAG_SCALAR));
-  PetscCall(AddField_Private(ns, NS_FIELD_PRESSURE, MESH_DM_SCALAR));
+  PetscCall(DMCreateGlobalVector(dm, &ns->sol));
+  PetscCall(VecZeroEntries(ns->sol));
+  PetscCall(PetscObjectSetName((PetscObject)ns->sol, "Solution"));
+  PetscCall(VecDuplicate(ns->sol, &ns->sol0));
+  PetscCall(VecDuplicate(ns->sol, &ns->x));
+  PetscCall(VecDuplicate(ns->sol, &ns->r));
+  PetscCall(DMCreateMatrix(dm, &ns->J));
+  PetscCall(MatSetOption(ns->J, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscCall(MatSetNullSpace(ns->J, ns->nullspace));
 
-  PetscCall(DMCompositeCreate(comm, &ns->soldm));
-  for (link = ns->fieldlink; link; link = link->next) {
-    PetscCall(MeshGetDM(ns->mesh, link->dmtype, &dm));
-    PetscCall(DMCompositeAddDM(ns->soldm, dm));
-  }
-  PetscCall(DMSetUp(ns->soldm));
+  PetscTryTypeMethod(ns, setup);
 
-  PetscCall(DMCompositeGetGlobalISs(ns->soldm, &is));
-  for (link = ns->fieldlink, i = 0; link; link = link->next, ++i) link->is = is[i];
-
-  PetscCall(NSGetNumFields(ns, &nf));
-  PetscCall(PetscMalloc1(nf, &subvecs));
-  for (link = ns->fieldlink, i = 0; link; link = link->next, ++i) {
-    PetscCall(MeshCreateGlobalVector(ns->mesh, link->dmtype, &subvecs[i]));
-    PetscCall(PetscObjectSetName((PetscObject)subvecs[i], link->fieldname));
-  }
-  PetscCall(VecCreateNest(comm, nf, is, subvecs, &ns->sol));
-
-  /* Create Jacobian */
-  PetscCall(MatCreateNest(comm, nf, is, nf, is, NULL, &ns->J));
-  PetscCall(MatSetUp(ns->J));
-  PetscCall(MatNestSetVecType(ns->J, VECNEST));
-  /* Initialize Jacobian */
-  PetscCall(NSFormJacobian(ns, ns->x, ns->J, NS_INIT_JACOBIAN));
-  PetscCall(MatCreateVecs(ns->J, &ns->x, &ns->r));
-
-  PetscCall(PetscFree(is));
-  for (i = 0; i < nf; ++i) PetscCall(VecDestroy(&subvecs[i]));
-  PetscCall(PetscFree(subvecs));
-
-  /* Create null space for pressure */
-  neednullspace = PETSC_TRUE;
-  PetscCall(MeshGetNumberBoundaries(ns->mesh, &nb));
-  for (i = 0; i < nb; ++i) switch (ns->bcs[i].type) {
-    case NS_BC_VELOCITY:
-    case NS_BC_PERIODIC:
-    case NS_BC_SYMMETRY:
-      /* Need null space */
-      break;
-    case NS_BC_PRESSURE_OUTLET:
-      /* Does not need null space */
-      neednullspace = PETSC_FALSE;
-      break;
-    default:
-      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unsupported boundary condition type");
-    }
-  if (neednullspace) {
-    IS       is;
-    Vec      vecs[1], subvec;
-    PetscInt subvecsize;
-
-    PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, NULL, NULL, &is));
-    PetscCall(MatCreateVecs(ns->J, NULL, &vecs[0]));
-    PetscCall(VecGetSubVector(vecs[0], is, &subvec));
-    PetscCall(VecGetSize(subvec, &subvecsize));
-    PetscCall(VecSet(subvec, 1. / PetscSqrtReal((PetscReal)subvecsize)));
-    PetscCall(VecRestoreSubVector(vecs[0], is, &subvec));
-    PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, 1, vecs, &ns->nullspace));
-    PetscCall(VecDestroy(&vecs[0]));
-    PetscCall(MatSetNullSpace(ns->J, ns->nullspace));
-  }
-
-  /* Create solver */
   PetscCall(NSGetSNES(ns, &snes));
   PetscCall(SNESSetPicard(snes, ns->r, FormFunction_Private, ns->J, ns->J, FormJacobian_Private, ns));
-  if (neednullspace) PetscCall(SNESSetFunction(snes, ns->r, PicardComputeFunction_Private, ns));
+  PetscCall(SNESSetFunction(snes, ns->r, PicardComputeFunction_Private, ns));
   /* Need zero initial guess to ensure least-square solution of pressure */
   PetscCall(SNESSetComputeInitialGuess(snes, FormInitialGuess_Private, NULL));
 
@@ -254,16 +221,11 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(KSPGetPC(ksp, &pc));
   PetscCall(PetscObjectTypeCompare((PetscObject)pc, PCABF, &isabf));
   if (isabf) {
-    PetscInt vidx, Vidx, pidx;
-
-    PetscCall(NSGetField(ns, NS_FIELD_VELOCITY, &vidx, NULL, NULL));
-    PetscCall(NSGetField(ns, NS_FIELD_FACE_NORMAL_VELOCITY, &Vidx, NULL, NULL));
-    PetscCall(NSGetField(ns, NS_FIELD_PRESSURE, &pidx, NULL, NULL));
-    PetscCall(PCABFSetFields(pc, vidx, Vidx, pidx));
+    PetscCall(NSGetField(ns, PHYS_FIELD_VELOCITY, &is_vel));
+    PetscCall(NSGetField(ns, PHYS_FIELD_FACE_VELOCITY, &is_U));
+    PetscCall(NSGetField(ns, PHYS_FIELD_PRESSURE, &is_p));
+    PetscCall(PCABFSetFieldIS(pc, is_vel, is_U, is_p));
   }
-
-  /* Call specific type setup */
-  PetscTryTypeMethod(ns, setup);
 
   PetscCall(PetscLogEventEnd(NS_SetUp, (PetscObject)ns, 0, 0, 0));
 
@@ -277,8 +239,8 @@ PetscErrorCode NSStep(NS ns)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscCheck(ns->setupcalled, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "Must call NSSetUp() before NSStep()");
 
-  if (!ns->sol0) PetscCall(VecDuplicate(ns->sol, &ns->sol0));
   PetscCall(VecCopy(ns->sol, ns->sol0));
 
   PetscCall(PetscLogEventBegin(NS_Step, (PetscObject)ns, 0, 0, 0));
@@ -298,15 +260,15 @@ PetscErrorCode NSStep(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode NSFormJacobian(NS ns, Vec x, Mat J, NSFormJacobianType type)
+PetscErrorCode NSFormJacobian(NS ns, Vec x, Mat J)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   if (x) PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
   PetscValidHeaderSpecific(J, MAT_CLASSID, 3);
-  PetscLogEventBegin(NS_FormJacobian, ns, x, J, NULL);
-  PetscUseTypeMethod(ns, formjacobian, x, J, type);
-  PetscLogEventEnd(NS_FormJacobian, ns, x, J, NULL);
+  PetscCall(PetscLogEventBegin(NS_FormJacobian, ns, x, J, NULL));
+  PetscUseTypeMethod(ns, formjacobian, x, J);
+  PetscCall(PetscLogEventEnd(NS_FormJacobian, ns, x, J, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -316,9 +278,9 @@ PetscErrorCode NSFormFunction(NS ns, Vec x, Vec f)
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   if (x) PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
   PetscValidHeaderSpecific(f, VEC_CLASSID, 3);
-  PetscLogEventBegin(NS_FormFunction, ns, x, f, NULL);
+  PetscCall(PetscLogEventBegin(NS_FormFunction, ns, x, f, NULL));
   PetscUseTypeMethod(ns, formfunction, x, f);
-  PetscLogEventEnd(NS_FormFunction, ns, x, f, NULL);
+  PetscCall(PetscLogEventEnd(NS_FormFunction, ns, x, f, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -337,7 +299,6 @@ PetscErrorCode NSSolve(NS ns)
     PetscCall(NSMonitor(ns));
     PetscCall(NSStep(ns));
 
-    /* Check convergence */
     if (ns->reason == NS_CONVERGED_ITERATING) {
       if (ns->step >= ns->max_steps) ns->reason = NS_CONVERGED_ITS;
       else if (ns->t >= ns->max_time) ns->reason = NS_CONVERGED_TIME;
@@ -361,12 +322,12 @@ PetscErrorCode NSView(NS ns, PetscViewer viewer)
   PetscCheckSameComm(ns, 1, viewer, 2);
 
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &isascii));
-
   if (isascii) {
     PetscCall(PetscObjectPrintClassNamePrefixType((PetscObject)ns, viewer));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "Density: %g, Viscosity: %g, Time step size: %g\n", ns->rho, ns->mu, ns->dt));
-    PetscCall(PetscViewerASCIIPrintf(viewer, "Current time step: %d, Current time: %g\n", ns->step, ns->t));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Time step size: %g\n", (double)ns->dt));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Current time step: %" PetscInt_FMT ", Current time: %g\n", ns->step, (double)ns->t));
     PetscCall(PetscViewerASCIIPushTab(viewer));
+    if (ns->phys) PetscCall(PhysView(ns->phys, viewer));
     PetscTryTypeMethod(ns, view, viewer);
     PetscCall(PetscViewerASCIIPopTab(viewer));
   }
@@ -383,8 +344,6 @@ PetscErrorCode NSViewFromOptions(NS ns, PetscObject obj, const char name[])
 
 PetscErrorCode NSDestroy(NS *ns)
 {
-  NSFieldLink link, nextlink;
-
   PetscFunctionBegin;
   if (!*ns) PetscFunctionReturn(PETSC_SUCCESS);
   PetscValidHeaderSpecific((*ns), NS_CLASSID, 1);
@@ -394,18 +353,7 @@ PetscErrorCode NSDestroy(NS *ns)
     PetscFunctionReturn(PETSC_SUCCESS);
   }
 
-  PetscCall(MeshDestroy(&(*ns)->mesh));
-  PetscCall(PetscFree((*ns)->bcs));
-
-  link = (*ns)->fieldlink;
-  while (link) {
-    PetscCall(PetscFree(link->fieldname));
-    PetscCall(ISDestroy(&link->is));
-    nextlink = link->next;
-    PetscCall(PetscFree(link));
-    link = nextlink;
-  }
-  PetscCall(DMDestroy(&(*ns)->soldm));
+  PetscCall(NSDestroySpatialOperators_Internal(*ns));
   PetscCall(VecDestroy(&(*ns)->sol));
   PetscCall(VecDestroy(&(*ns)->sol0));
 
@@ -418,6 +366,7 @@ PetscErrorCode NSDestroy(NS *ns)
   PetscCall(NSMonitorCancel(*ns));
 
   PetscTryTypeMethod((*ns), destroy);
+  PetscCall(PhysDestroy(&(*ns)->phys));
   PetscCall(PetscHeaderDestroy(ns));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

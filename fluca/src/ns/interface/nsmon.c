@@ -39,7 +39,6 @@ PetscErrorCode NSMonitor(NS ns)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
-  PetscCall(MeshSetOutputSequenceNumber(ns->mesh, ns->step, ns->t));
   for (i = 0; i < ns->num_mons; ++i) PetscCall((*ns->mons[i])(ns, ns->mon_ctxs[i]));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -83,17 +82,6 @@ PetscErrorCode NSMonitorDefault(NS ns, PetscViewerAndFormat *vf)
       PetscCall(PetscViewerASCIISubtractTab(vf->viewer, ((PetscObject)ns)->tablevel));
     }
     PetscCall(PetscViewerPopFormat(viewer));
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode NSMonitorSolution(NS ns, PetscViewerAndFormat *vf)
-{
-  PetscFunctionBegin;
-  if (vf->view_interval > 0 && ns->step % vf->view_interval == 0) {
-    PetscCall(PetscViewerPushFormat(vf->viewer, vf->format));
-    PetscCall(NSViewSolution(ns, vf->viewer));
-    PetscCall(PetscViewerPopFormat(vf->viewer));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

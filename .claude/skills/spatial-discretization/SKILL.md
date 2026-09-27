@@ -293,4 +293,5 @@ FlucaFDSetOptionsPrefix(fd_y, "y_");  /* -y_flucafd_deriv_order */
 | `src/fd/impls/scale/scale.c` | Constant/vector scaling |
 | `src/fd/impls/sum/sum.c` | Additive combination |
 | `src/fd/impls/secondordertvd/secondordertvd.c` | TVD interpolation |
-| `src/mesh/impl/cart/cart.c` | DMStag grid creation |
+
+DMStag grid creation is done directly with PETSc's `DMStagCreate2d`/`DMStagCreate3d` (see `fluca/tutorials/ns/ex1.c`) — the `Mesh`/`MeshCart` module (`src/mesh/`) is unused and pending removal.
