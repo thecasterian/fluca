@@ -2,9 +2,8 @@
 
 #include <fluca/private/flucaimpl.h>
 #include <flucamesh.h>
-#include <petscdm.h>
 
-#define MESH_MIN_DIM 2
+#define MESH_MIN_DIM 1
 #define MESH_MAX_DIM 3
 
 FLUCA_EXTERN PetscBool      MeshRegisterAllCalled;
@@ -15,30 +14,20 @@ typedef struct _MeshOps *MeshOps;
 
 struct _MeshOps {
   PetscErrorCode (*setfromoptions)(Mesh, PetscOptionItems);
-  PetscErrorCode (*setup)(Mesh);
+  PetscErrorCode (*setup)(Mesh); /* validates mesh->dm */
   PetscErrorCode (*destroy)(Mesh);
   PetscErrorCode (*view)(Mesh, PetscViewer);
-  PetscErrorCode (*load)(Mesh, PetscViewer);
-  PetscErrorCode (*createglobalvector)(Mesh, MeshDMType, Vec *);
-  PetscErrorCode (*creatematrix)(Mesh, MeshDMType, MeshDMType, Mat *);
-  PetscErrorCode (*getnumberboundaries)(Mesh, PetscInt *);
+  PetscErrorCode (*load)(Mesh, PetscViewer); /* replaces mesh->dm */
 };
 
 struct _p_Mesh {
   PETSCHEADER(struct _MeshOps);
 
-  /* Parameters ----------------------------------------------------------- */
-  PetscInt dim; /* dimension */
-
   /* Data ----------------------------------------------------------------- */
-  DM    sdm;  /* DM for cell-centered scalar variables */
-  DM    vdm;  /* DM for cell-centered vector variables */
-  DM    Sdm;  /* DM for face-centered scalar variables */
-  DM    Vdm;  /* DM for face-centered vector variables */
-  void *data; /* implementation-specific data */
+  DM       dm;   /* user-provided or loaded DMStag; referenced */
+  PetscInt dim;  /* spatial dimension, from dm */
+  void    *data; /* implementation-specific data */
 
   /* Status --------------------------------------------------------------- */
-  PetscInt  outputseqnum; /* output sequence number */
-  PetscReal outputseqval; /* output sequence value */
-  PetscBool setupcalled;  /* whether MeshSetUp() has been called */
+  PetscBool setupcalled; /* after MeshSetUp() the DM can no longer change */
 };
