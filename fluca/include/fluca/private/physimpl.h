@@ -36,7 +36,7 @@ struct _p_Phys {
   PETSCHEADER(struct _PhysOps);
 
   /* Parameters */
-  DM               base_dm; /* user-provided DMStag (grid topology + coordinates) */
+  Mesh             mesh; /* problem domain; referenced */
   PhysBodyForceFn *bodyforce;
   void            *bodyforce_ctx;
   PhysBC           bcs[PHYS_MAX_FACES];
@@ -45,7 +45,7 @@ struct _p_Phys {
 
   /* Data */
   DM        sol_dm; /* solution DMStag */
-  PetscInt  dim;    /* spatial dimension (extracted from base_dm) */
+  PetscInt  dim;    /* spatial dimension (from the mesh) */
   void     *data;   /* subtype-specific */
   PetscInt  nfields;
   PhysField fields[PHYS_MAX_FIELDS]; /* in declaration order */

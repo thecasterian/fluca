@@ -1,4 +1,5 @@
 #include <fluca/private/physimpl.h>
+#include <fluca/private/meshimpl.h>
 #include <flucaviewer.h>
 
 PetscClassId  PHYS_CLASSID = 0;
@@ -19,7 +20,7 @@ PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
 
   PetscCall(PhysInitializePackage());
   PetscCall(FlucaHeaderCreate(p, PHYS_CLASSID, "Phys", "Physical Model", "Phys", comm, PhysDestroy, PhysView));
-  p->base_dm       = NULL;
+  p->mesh          = NULL;
   p->bodyforce     = NULL;
   p->bodyforce_ctx = NULL;
   p->nprops        = 0;
@@ -97,7 +98,7 @@ PetscErrorCode PhysDestroy(Phys *phys)
 
   for (p = 0; p < (*phys)->nprops; ++p) PetscCall(PetscFree((*phys)->props[p].name));
   PetscCall(PhysResetFields(*phys));
-  PetscCall(DMDestroy(&(*phys)->base_dm));
+  PetscCall(MeshDestroy(&(*phys)->mesh));
 
   PetscCall(PetscHeaderDestroy(phys));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -105,18 +106,15 @@ PetscErrorCode PhysDestroy(Phys *phys)
 
 PetscErrorCode PhysSetUp(Phys phys)
 {
-  PetscBool isdmstag;
-
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
   if (phys->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
 
   PetscCall(PetscLogEventBegin(PHYS_SetUp, (PetscObject)phys, 0, 0, 0));
 
-  PetscCheck(phys->base_dm, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Base DM not set. Call PhysSetBaseDM() first");
-  PetscCall(PetscObjectTypeCompare((PetscObject)phys->base_dm, DMSTAG, &isdmstag));
-  PetscCheck(isdmstag, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONG, "Base DM must be DMStag");
-  PetscCall(DMGetDimension(phys->base_dm, &phys->dim));
+  PetscCheck(phys->mesh, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Mesh not set. Call PhysSetMesh() first");
+  PetscCheck(phys->mesh->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Mesh not set up. Call MeshSetUp() first");
+  PetscCall(MeshGetDimension(phys->mesh, &phys->dim));
 
   PetscCheck(phys->nfields > 0, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "No field declared. Call PhysDeclareField() first");
   PetscTryTypeMethod(phys, setup);
@@ -150,6 +148,7 @@ PetscErrorCode PhysView(Phys phys, PetscViewer viewer)
     PetscCall(PetscViewerASCIIPrintf(viewer, "Density: %g\n", (double)rho));
     PetscCall(PetscViewerASCIIPrintf(viewer, "Viscosity: %g\n", (double)mu));
     if (phys->setupcalled) PetscCall(PetscViewerASCIIPrintf(viewer, "Dimension: %" PetscInt_FMT "\n", phys->dim));
+    if (phys->mesh) PetscCall(MeshView(phys->mesh, viewer));
     PetscCall(PetscViewerASCIIPopTab(viewer));
   }
 

@@ -19,6 +19,7 @@ static PetscErrorCode LidVelocity_Private(PetscInt dim, PetscReal t, const Petsc
 int main(int argc, char **argv)
 {
   DM        dm;
+  Mesh      mesh;
   Phys      phys;
   NS        ns;
   Vec       sol;
@@ -35,9 +36,13 @@ int main(int argc, char **argv)
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
 
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetFromOptions(mesh));
+  PetscCall(MeshSetUp(mesh));
+
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
   PetscCall(PhysSetType(phys, PHYSLAMINAR));
-  PetscCall(PhysSetBaseDM(phys, dm));
+  PetscCall(PhysSetMesh(phys, mesh));
   PetscCall(PhysSetDensity(phys, 1.));
   PetscCall(PhysSetViscosity(phys, 1. / Re));
   for (f = 0; f < 3; f++) PetscCall(PhysSetBoundaryCondition(phys, f, wall));
@@ -56,6 +61,7 @@ int main(int argc, char **argv)
 
   PetscCall(NSDestroy(&ns));
   PetscCall(PhysDestroy(&phys));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
   PetscCall(FlucaFinalize());
   return 0;

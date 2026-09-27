@@ -1,24 +1,24 @@
 #include <fluca/private/physimpl.h>
 
-PetscErrorCode PhysSetBaseDM(Phys phys, DM dm)
+PetscErrorCode PhysSetMesh(Phys phys, Mesh mesh)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscValidHeaderSpecificType(dm, DM_CLASSID, 2, DMSTAG);
-  PetscCheckSameComm(phys, 1, dm, 2);
-  PetscCheck(!phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Cannot change base DM after PhysSetUp()");
-  PetscCall(DMDestroy(&phys->base_dm));
-  phys->base_dm = dm;
-  PetscCall(PetscObjectReference((PetscObject)dm));
+  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 2);
+  PetscCheckSameComm(phys, 1, mesh, 2);
+  PetscCheck(!phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the mesh after PhysSetUp()");
+  PetscCall(PetscObjectReference((PetscObject)mesh));
+  PetscCall(MeshDestroy(&phys->mesh));
+  phys->mesh = mesh;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PhysGetBaseDM(Phys phys, DM *dm)
+PetscErrorCode PhysGetMesh(Phys phys, Mesh *mesh)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(phys, PHYS_CLASSID, 1);
-  PetscAssertPointer(dm, 2);
-  *dm = phys->base_dm;
+  PetscAssertPointer(mesh, 2);
+  *mesh = phys->mesh;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

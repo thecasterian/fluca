@@ -114,22 +114,23 @@ PetscErrorCode PhysCreateSolutionDM_Internal(Phys phys)
 {
   PetscInt dof[2] = {0, 0};
   PetscInt f;
-  DM       cdm;
+  DM       base_dm, cdm;
 
   PetscFunctionBegin;
+  PetscCall(MeshGetDM(phys->mesh, &base_dm));
   for (f = 0; f < phys->nfields; ++f) dof[phys->fields[f].loc] += PhysFieldNComp_Private(phys, &phys->fields[f]);
   switch (phys->dim) {
   case 2:
-    PetscCall(DMStagCreateCompatibleDMStag(phys->base_dm, 0, dof[PHYS_FIELD_FACE], dof[PHYS_FIELD_ELEMENT], 0, &phys->sol_dm));
+    PetscCall(DMStagCreateCompatibleDMStag(base_dm, 0, dof[PHYS_FIELD_FACE], dof[PHYS_FIELD_ELEMENT], 0, &phys->sol_dm));
     break;
   case 3:
-    PetscCall(DMStagCreateCompatibleDMStag(phys->base_dm, 0, 0, dof[PHYS_FIELD_FACE], dof[PHYS_FIELD_ELEMENT], &phys->sol_dm));
+    PetscCall(DMStagCreateCompatibleDMStag(base_dm, 0, 0, dof[PHYS_FIELD_FACE], dof[PHYS_FIELD_ELEMENT], &phys->sol_dm));
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)phys), PETSC_ERR_SUP, "Unsupported dimension %" PetscInt_FMT, phys->dim);
   }
   PetscCall(DMStagSetCoordinateDMType(phys->sol_dm, DMPRODUCT));
-  PetscCall(DMGetCoordinateDM(phys->base_dm, &cdm));
+  PetscCall(DMGetCoordinateDM(base_dm, &cdm));
   PetscCall(DMSetCoordinateDM(phys->sol_dm, cdm));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

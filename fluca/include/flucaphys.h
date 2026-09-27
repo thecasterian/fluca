@@ -1,6 +1,7 @@
 #pragma once
 
 #include <flucasys.h>
+#include <flucamesh.h>
 #include <petscdmstag.h>
 
 /* Phys - Statement of the continuous problem: fields, boundary conditions and material properties */
@@ -44,8 +45,8 @@ typedef struct {
 FLUCA_EXTERN PetscErrorCode PhysCreate(MPI_Comm, Phys *);
 FLUCA_EXTERN PetscErrorCode PhysSetType(Phys, PhysType);
 FLUCA_EXTERN PetscErrorCode PhysGetType(Phys, PhysType *);
-FLUCA_EXTERN PetscErrorCode PhysSetBaseDM(Phys, DM);
-FLUCA_EXTERN PetscErrorCode PhysGetBaseDM(Phys, DM *);
+FLUCA_EXTERN PetscErrorCode PhysSetMesh(Phys, Mesh);
+FLUCA_EXTERN PetscErrorCode PhysGetMesh(Phys, Mesh *);
 FLUCA_EXTERN PetscErrorCode PhysGetSolutionDM(Phys, DM *);
 FLUCA_EXTERN PetscErrorCode PhysSetFromOptions(Phys);
 FLUCA_EXTERN PetscErrorCode PhysSetUp(Phys);
