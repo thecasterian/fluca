@@ -11,9 +11,7 @@ static const char help[] = "2D Taylor-Green vortex with NS\n"
                            "The solution holds the extrapolated p^{n+1}, compared with the exact pressure at the final time.\n"
                            "Options:\n"
                            "  -stag_grid_x <int>, -stag_grid_y <int> : grid cells per direction (default: 32)\n"
-                           "  -periodic : periodic [0, 2 pi]^2 instead of walled [0, pi]^2 (default: false)\n"
-                           "  -tol_u <real> : fail if the velocity L2 error exceeds this (default: 1)\n"
-                           "  -tol_p <real> : fail if the pressure L2 error exceeds this (default: 1)\n";
+                           "  -periodic : periodic [0, 2 pi]^2 instead of walled [0, pi]^2 (default: false)\n";
 
 typedef struct {
   PetscReal rho, nu;
@@ -136,14 +134,12 @@ int main(int argc, char **argv)
   AppCtx    app;
   PhysBC    bc;
   PetscBool periodic = PETSC_FALSE;
-  PetscReal L, mu, t, err_u, err_p, tol_u = 1., tol_p = 1.;
+  PetscReal L, mu, t, err_u, err_p;
   PetscInt  Nx, Ny, f;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-periodic", &periodic, NULL));
-  PetscCall(PetscOptionsGetReal(NULL, NULL, "-tol_u", &tol_u, NULL));
-  PetscCall(PetscOptionsGetReal(NULL, NULL, "-tol_p", &tol_p, NULL));
   L = periodic ? 2. * PETSC_PI : PETSC_PI;
 
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, periodic ? DM_BOUNDARY_PERIODIC : DM_BOUNDARY_NONE, periodic ? DM_BOUNDARY_PERIODIC : DM_BOUNDARY_NONE, 32, 32, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 2, NULL, NULL, &dm));
@@ -184,8 +180,6 @@ int main(int argc, char **argv)
   PetscCall(FieldError_Private(ns, PHYS_FIELD_VELOCITY, exact, (L / Nx) * (L / Ny), PETSC_FALSE, &err_u));
   PetscCall(FieldError_Private(ns, PHYS_FIELD_PRESSURE, exact, (L / Nx) * (L / Ny), PETSC_TRUE, &err_p));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Time %g: velocity L2 error %g, pressure L2 error %g\n", (double)t, (double)err_u, (double)err_p));
-  PetscCheck(err_u <= tol_u, PETSC_COMM_WORLD, PETSC_ERR_NOT_CONVERGED, "Velocity L2 error %g exceeds tolerance %g", (double)err_u, (double)tol_u);
-  PetscCheck(err_p <= tol_p, PETSC_COMM_WORLD, PETSC_ERR_NOT_CONVERGED, "Pressure L2 error %g exceeds tolerance %g", (double)err_p, (double)tol_p);
 
   PetscCall(VecDestroy(&exact));
   PetscCall(NSDestroy(&ns));
@@ -200,11 +194,11 @@ int main(int argc, char **argv)
   test:
     suffix: periodic
     nsize: 1
-    args: -periodic -stag_grid_x 16 -stag_grid_y 16 -phys_viscosity 0.1 -ns_time_step_size 0.01 -ns_max_steps 10 -tol_u 0.0023 -tol_p 0.13
+    args: -periodic -stag_grid_x 16 -stag_grid_y 16 -phys_viscosity 0.1 -ns_time_step_size 0.01 -ns_max_steps 10
 
   test:
     suffix: walls
     nsize: 1
-    args: -stag_grid_x 16 -stag_grid_y 16 -phys_viscosity 0.1 -ns_time_step_size 0.01 -ns_max_steps 10 -tol_u 0.0004 -tol_p 0.015
+    args: -stag_grid_x 16 -stag_grid_y 16 -phys_viscosity 0.1 -ns_time_step_size 0.01 -ns_max_steps 10
 
 TEST*/

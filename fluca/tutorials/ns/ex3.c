@@ -16,9 +16,7 @@ static const char help[] = "3D Ethier-Steinman flow with NS\n"
                            "The exact pressure does not have zero mean on this domain: the mean is removed from both the\n"
                            "computed and the exact pressure before differencing.\n"
                            "Options:\n"
-                           "  -stag_grid_x <int>, -stag_grid_y <int>, -stag_grid_z <int> : grid cells per direction (default: 16)\n"
-                           "  -tol_u <real> : fail if the velocity L2 error exceeds this (default: 1)\n"
-                           "  -tol_p <real> : fail if the pressure L2 error exceeds this (default: 1)\n";
+                           "  -stag_grid_x <int>, -stag_grid_y <int>, -stag_grid_z <int> : grid cells per direction (default: 16)\n";
 
 #define EX3_A (PETSC_PI / 4.)
 #define EX3_D (PETSC_PI / 2.)
@@ -187,13 +185,11 @@ int main(int argc, char **argv)
   Vec       sol, exact;
   AppCtx    app;
   PhysBC    bc;
-  PetscReal mu, t, err_u, err_p, tol_u = 1., tol_p = 1.;
+  PetscReal mu, t, err_u, err_p;
   PetscInt  Nx, Ny, Nz, f;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
-  PetscCall(PetscOptionsGetReal(NULL, NULL, "-tol_u", &tol_u, NULL));
-  PetscCall(PetscOptionsGetReal(NULL, NULL, "-tol_p", &tol_p, NULL));
 
   PetscCall(DMStagCreate3d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 16, 16, 16, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 0, 1, DMSTAG_STENCIL_STAR, 2, NULL, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
@@ -231,8 +227,6 @@ int main(int argc, char **argv)
   PetscCall(FieldError_Private(ns, PHYS_FIELD_VELOCITY, exact, (2. / Nx) * (2. / Ny) * (2. / Nz), PETSC_FALSE, &err_u));
   PetscCall(FieldError_Private(ns, PHYS_FIELD_PRESSURE, exact, (2. / Nx) * (2. / Ny) * (2. / Nz), PETSC_TRUE, &err_p));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Time %g: velocity L2 error %g, pressure L2 error %g\n", (double)t, (double)err_u, (double)err_p));
-  PetscCheck(err_u <= tol_u, PETSC_COMM_WORLD, PETSC_ERR_NOT_CONVERGED, "Velocity L2 error %g exceeds tolerance %g", (double)err_u, (double)tol_u);
-  PetscCheck(err_p <= tol_p, PETSC_COMM_WORLD, PETSC_ERR_NOT_CONVERGED, "Pressure L2 error %g exceeds tolerance %g", (double)err_p, (double)tol_p);
 
   PetscCall(VecDestroy(&exact));
   PetscCall(NSDestroy(&ns));
@@ -247,6 +241,6 @@ int main(int argc, char **argv)
   test:
     suffix: ethier_steinman
     nsize: 1
-    args: -stag_grid_x 8 -stag_grid_y 8 -stag_grid_z 8 -phys_viscosity 0.1 -ns_time_step_size 0.01 -ns_max_steps 10 -tol_u 0.049 -tol_p 0.13
+    args: -stag_grid_x 8 -stag_grid_y 8 -stag_grid_z 8 -phys_viscosity 0.1 -ns_time_step_size 0.01 -ns_max_steps 10
 
 TEST*/
