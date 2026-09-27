@@ -75,7 +75,7 @@ static PetscErrorCode FlucaFDSetUp_SecondOrderTVD(FlucaFD fd)
   PetscCheck(fd->output_loc == expected_output_loc, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Output location must match direction (LEFT for X, DOWN for Y, BACK for Z)");
 
   /* Create internal gradient operator for dphi/dx (element -> face) */
-  PetscCall(FlucaFDDerivativeCreate(fd->dm, tvd->dir, 1, 1, fd->input_loc, fd->input_c, fd->output_loc, 0, &tvd->fd_grad));
+  PetscCall(FlucaFDDerivativeCreate(fd->mesh, tvd->dir, 1, 1, fd->input_loc, fd->input_c, fd->output_loc, 0, &tvd->fd_grad));
   PetscCall(FlucaFDSetBoundaryConditions(tvd->fd_grad, fd->input_c, fd->bcs[fd->input_c]));
   PetscCall(FlucaFDSetUp(tvd->fd_grad));
 
@@ -331,12 +331,12 @@ PetscErrorCode FlucaFDCreate_SecondOrderTVD(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDSecondOrderTVDCreate(DM dm, FlucaFDDirection dir, PetscInt input_c, PetscInt output_c, FlucaFD *fd)
+PetscErrorCode FlucaFDSecondOrderTVDCreate(Mesh mesh, FlucaFDDirection dir, PetscInt input_c, PetscInt output_c, FlucaFD *fd)
 {
   DMStagStencilLocation output_loc;
 
   PetscFunctionBegin;
-  PetscValidHeaderSpecificType(dm, DM_CLASSID, 1, DMSTAG);
+  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
   PetscAssertPointer(fd, 5);
 
   switch (dir) {
@@ -350,12 +350,12 @@ PetscErrorCode FlucaFDSecondOrderTVDCreate(DM dm, FlucaFDDirection dir, PetscInt
     output_loc = DMSTAG_BACK;
     break;
   default:
-    SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_ARG_OUTOFRANGE, "Invalid direction");
+    SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_OUTOFRANGE, "Invalid direction");
   }
 
-  PetscCall(FlucaFDCreate(PetscObjectComm((PetscObject)dm), fd));
+  PetscCall(FlucaFDCreate(PetscObjectComm((PetscObject)mesh), fd));
   PetscCall(FlucaFDSetType(*fd, FLUCAFDSECONDORDERTVD));
-  PetscCall(FlucaFDSetDM(*fd, dm));
+  PetscCall(FlucaFDSetMesh(*fd, mesh));
   PetscCall(FlucaFDSetInputLocation(*fd, DMSTAG_ELEMENT, input_c));
   PetscCall(FlucaFDSetOutputLocation(*fd, output_loc, output_c));
   PetscCall(FlucaFDSecondOrderTVDSetDirection(*fd, dir));

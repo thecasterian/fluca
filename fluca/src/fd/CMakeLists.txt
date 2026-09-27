@@ -20,5 +20,6 @@ target_include_directories(fluca_fd PUBLIC
 )
 target_link_libraries(fluca_fd PUBLIC
     fluca::sys
+    fluca::mesh
 )
 add_library(fluca::fd ALIAS fluca_fd)

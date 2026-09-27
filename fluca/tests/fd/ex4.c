@@ -12,6 +12,7 @@ static const char help[] = "Test FlucaFD composition operator\n"
 int main(int argc, char **argv)
 {
   DM                  dm;
+  Mesh                mesh;
   FlucaFD             fd_inner, fd_outer, fd_comp;
   PetscInt            d, npoints;
   PetscInt            N[2], idx[2];
@@ -23,10 +24,12 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetUp(mesh));
 
   PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_inner));
   PetscCall(FlucaFDSetType(fd_inner, FLUCAFDDERIVATIVE));
-  PetscCall(FlucaFDSetDM(fd_inner, dm));
+  PetscCall(FlucaFDSetMesh(fd_inner, mesh));
   PetscCall(FlucaFDSetInputLocation(fd_inner, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOutputLocation(fd_inner, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOptionsPrefix(fd_inner, "inner_"));
@@ -35,7 +38,7 @@ int main(int argc, char **argv)
 
   PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_outer));
   PetscCall(FlucaFDSetType(fd_outer, FLUCAFDDERIVATIVE));
-  PetscCall(FlucaFDSetDM(fd_outer, dm));
+  PetscCall(FlucaFDSetMesh(fd_outer, mesh));
   PetscCall(FlucaFDSetInputLocation(fd_outer, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOutputLocation(fd_outer, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOptionsPrefix(fd_outer, "outer_"));
@@ -64,6 +67,7 @@ int main(int argc, char **argv)
   PetscCall(FlucaFDDestroy(&fd_comp));
   PetscCall(FlucaFDDestroy(&fd_outer));
   PetscCall(FlucaFDDestroy(&fd_inner));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
 
   PetscCall(FlucaFinalize());

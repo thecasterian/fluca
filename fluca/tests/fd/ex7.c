@@ -12,6 +12,7 @@ static const char help[] = "Test FlucaFDSecondOrderTVD operator\n"
 int main(int argc, char **argv)
 {
   DM                  input_dm, output_dm;
+  Mesh                mesh;
   FlucaFD             fd_tvd;
   Vec                 phi, mass_flux;
   PetscInt            M, x, m, nExtrax, i, npoints, idx, slot_elem, slot_face;
@@ -27,6 +28,8 @@ int main(int argc, char **argv)
   PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, 8, 0, 1, DMSTAG_STENCIL_BOX, 1, NULL, &input_dm));
   PetscCall(DMSetUp(input_dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(input_dm, 0., 1., 0., 0., 0., 0.));
+  PetscCall(MeshCartesianCreate(input_dm, &mesh));
+  PetscCall(MeshSetUp(mesh));
 
   PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, 8, 1, 0, DMSTAG_STENCIL_BOX, 1, NULL, &output_dm));
   PetscCall(DMSetUp(output_dm));
@@ -61,7 +64,7 @@ int main(int argc, char **argv)
   PetscCall(DMStagRestoreProductCoordinateArraysRead(input_dm, &arr_coord, NULL, NULL));
 
   /* Create TVD operator: element phi -> face phi */
-  PetscCall(FlucaFDSecondOrderTVDCreate(input_dm, FLUCAFD_X, 0, 0, &fd_tvd));
+  PetscCall(FlucaFDSecondOrderTVDCreate(mesh, FLUCAFD_X, 0, 0, &fd_tvd));
 
   /* Set boundary conditions */
   {
@@ -119,6 +122,7 @@ int main(int argc, char **argv)
   PetscCall(FlucaFDDestroy(&fd_tvd));
   PetscCall(VecDestroy(&mass_flux));
   PetscCall(VecDestroy(&phi));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&output_dm));
   PetscCall(DMDestroy(&input_dm));
 

@@ -11,6 +11,7 @@ static const char help[] = "Test FlucaFD derivative operator\n"
 int main(int argc, char **argv)
 {
   DM                  dm;
+  Mesh                mesh;
   FlucaFD             fd;
   PetscInt            M, idx, npoints;
   FlucaFDStencilPoint points[64];
@@ -21,8 +22,10 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 0., 0., 0.));
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetUp(mesh));
 
-  PetscCall(FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd));
+  PetscCall(FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd));
   PetscCall(FlucaFDSetFromOptions(fd));
   PetscCall(FlucaFDSetUp(fd));
 
@@ -36,6 +39,7 @@ int main(int argc, char **argv)
   PetscCall(PrintStencil(1, npoints, points));
 
   PetscCall(FlucaFDDestroy(&fd));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
 
   PetscCall(FlucaFinalize());

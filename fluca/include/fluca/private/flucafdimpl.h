@@ -45,7 +45,8 @@ struct _p_FlucaFD {
   FlucaFDBoundaryCondition bcs[FLUCAFD_MAX_COMPONENT][2 * FLUCAFD_MAX_DIM];
 
   /* Data ----------------------------------------------------------------- */
-  DM                  dm;
+  Mesh                mesh; /* reference grid; referenced */
+  DM                  dm;   /* mesh DM, cached by FlucaFDSetUp(); referenced */
   PetscInt            dim;
   PetscInt            N[FLUCAFD_MAX_DIM];
   PetscInt            xs[FLUCAFD_MAX_DIM];

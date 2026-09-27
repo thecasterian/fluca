@@ -63,9 +63,11 @@ static PetscErrorCode CreateNegR_Private(NS ns)
   Mat                      negTmat, Gmat, Gstmat;
   FlucaFD                  Gst;
   DM                       dm;
+  Mesh                     mesh;
 
   PetscFunctionBegin;
   PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  PetscCall(PhysGetMesh(ns->phys, &mesh));
   PetscCall(DMGetDimension(dm, &dim));
   PetscCall(PhysGetField(ns->phys, PHYS_FIELD_PRESSURE, NULL, &c_p, NULL));
   PetscCall(PhysGetField(ns->phys, PHYS_FIELD_FACE_VELOCITY, NULL, &c_U, NULL));
@@ -84,7 +86,7 @@ static PetscErrorCode CreateNegR_Private(NS ns)
   for (e = 0; e < dim; e++) {
     PetscCall(FlucaFDGetOperator(ns->fd_negT[e], dm, dm, negTmat));
     PetscCall(FlucaFDGetOperator(ns->fd_grad_p[e], dm, dm, Gmat));
-    PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, c_p, face_loc[e], c_U, &Gst));
+    PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, c_p, face_loc[e], c_U, &Gst));
     PetscCall(FlucaFDSetBoundaryConditions(Gst, c_p, pbcs));
     PetscCall(FlucaFDSetUp(Gst));
     PetscCall(FlucaFDGetOperator(Gst, dm, dm, Gstmat));
@@ -113,9 +115,11 @@ PetscErrorCode NSSetUpSpatialOperators_Internal(NS ns)
   PetscScalar mu;
   FlucaFD     ops[PHYS_MAX_DIM];
   DM          dm;
+  Mesh        mesh;
 
   PetscFunctionBegin;
   PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  PetscCall(PhysGetMesh(ns->phys, &mesh));
   PetscCall(DMGetDimension(dm, &dim));
   PetscCall(PhysGetField(ns->phys, PHYS_FIELD_VELOCITY, NULL, &c_vel, NULL));
   PetscCall(PhysGetField(ns->phys, PHYS_FIELD_FACE_VELOCITY, NULL, &c_U, NULL));
@@ -127,11 +131,11 @@ PetscErrorCode NSSetUpSpatialOperators_Internal(NS ns)
     for (e = 0; e < dim; e++) {
       FlucaFD inner, outer;
 
-      PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, c_vel + d, face_loc[e], c_U, &inner));
+      PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, c_vel + d, face_loc[e], c_U, &inner));
       PetscCall(FlucaFDSetUp(inner));
       PetscCall(FlucaFDScaleCreateConstant(inner, -mu, &ns->fd_negmu[d][e]));
       PetscCall(FlucaFDSetUp(ns->fd_negmu[d][e]));
-      PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)e, 1, 2, face_loc[e], c_U, DMSTAG_ELEMENT, c_vel + d, &outer));
+      PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)e, 1, 2, face_loc[e], c_U, DMSTAG_ELEMENT, c_vel + d, &outer));
       PetscCall(FlucaFDSetUp(outer));
       PetscCall(FlucaFDCompositionCreate(ns->fd_negmu[d][e], outer, &ops[e]));
       PetscCall(FlucaFDSetUp(ops[e]));
@@ -146,7 +150,7 @@ PetscErrorCode NSSetUpSpatialOperators_Internal(NS ns)
 
   /* fd_grad_p[d] = dp/dx_d; no BC, so FlucaFD closes it one-sided at walls */
   for (d = 0; d < dim; d++) {
-    PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, c_p, DMSTAG_ELEMENT, c_vel + d, &ns->fd_grad_p[d]));
+    PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)d, 1, 2, DMSTAG_ELEMENT, c_p, DMSTAG_ELEMENT, c_vel + d, &ns->fd_grad_p[d]));
     PetscCall(FlucaFDSetUp(ns->fd_grad_p[d]));
   }
 
@@ -154,7 +158,7 @@ PetscErrorCode NSSetUpSpatialOperators_Internal(NS ns)
   for (e = 0; e < dim; e++) {
     FlucaFD T;
 
-    PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, c_vel + e, face_loc[e], c_U, &T));
+    PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, c_vel + e, face_loc[e], c_U, &T));
     PetscCall(FlucaFDSetUp(T));
     PetscCall(FlucaFDScaleCreateConstant(T, -1., &ns->fd_negT[e]));
     PetscCall(NSSetVelocityBCs_Internal(ns, ns->fd_negT[e], e));
@@ -164,7 +168,7 @@ PetscErrorCode NSSetUpSpatialOperators_Internal(NS ns)
 
   /* fd_D = sum_e d/dx_e(U_e) */
   for (e = 0; e < dim; e++) {
-    PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)e, 1, 2, face_loc[e], c_U, DMSTAG_ELEMENT, c_p, &ops[e]));
+    PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)e, 1, 2, face_loc[e], c_U, DMSTAG_ELEMENT, c_p, &ops[e]));
     PetscCall(FlucaFDSetUp(ops[e]));
   }
   PetscCall(FlucaFDSumCreate(dim, ops, &ns->fd_D));

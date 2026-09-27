@@ -11,6 +11,7 @@ static const char help[] = "Solve 1D unsteady convection equation using TVD sche
 
 typedef struct {
   DM      dm, dm_vel;
+  Mesh    mesh;
   Vec     vel;
   FlucaFD fd_tvd, fd;
 } AppCtx;
@@ -48,12 +49,12 @@ static PetscErrorCode CreateConvectionOperator(AppCtx *ctx, FlucaFD *fd_conv)
   PetscFunctionBegin;
 
   /* TVD interpolation operator (rho = 1, so no scaling needed) */
-  PetscCall(FlucaFDSecondOrderTVDCreate(ctx->dm, FLUCAFD_X, 0, 0, &ctx->fd_tvd));
+  PetscCall(FlucaFDSecondOrderTVDCreate(ctx->mesh, FLUCAFD_X, 0, 0, &ctx->fd_tvd));
   PetscCall(FlucaFDSetFromOptions(ctx->fd_tvd));
   PetscCall(FlucaFDSetUp(ctx->fd_tvd));
 
   /* Derivative operator: d/dx */
-  PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_conv_deriv));
+  PetscCall(FlucaFDDerivativeCreate(ctx->mesh, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_conv_deriv));
   PetscCall(FlucaFDSetUp(fd_conv_deriv));
 
   /* Compose: d/dx(u * phi) */
@@ -142,6 +143,8 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(ctx.dm));
   PetscCall(DMSetUp(ctx.dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(ctx.dm, 0., 1., 0., 0., 0., 0.));
+  PetscCall(MeshCartesianCreate(ctx.dm, &ctx.mesh));
+  PetscCall(MeshSetUp(ctx.mesh));
 
   /* Create solution vector and matrix */
   PetscCall(DMCreateGlobalVector(ctx.dm, &u));
@@ -177,6 +180,7 @@ int main(int argc, char **argv)
   PetscCall(FlucaFDDestroy(&ctx.fd_tvd));
   PetscCall(VecDestroy(&ctx.vel));
   PetscCall(DMDestroy(&ctx.dm_vel));
+  PetscCall(MeshDestroy(&ctx.mesh));
   PetscCall(DMDestroy(&ctx.dm));
 
   PetscCall(FlucaFinalize());

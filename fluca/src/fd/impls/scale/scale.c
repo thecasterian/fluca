@@ -205,7 +205,7 @@ PetscErrorCode FlucaFDScaleCreateConstant(FlucaFD operand, PetscScalar constant,
   PetscCall(PetscObjectGetComm((PetscObject)operand, &comm));
   PetscCall(FlucaFDCreate(comm, fd));
   PetscCall(FlucaFDSetType(*fd, FLUCAFDSCALE));
-  PetscCall(FlucaFDSetDM(*fd, operand->dm));
+  PetscCall(FlucaFDSetMesh(*fd, operand->mesh));
   PetscCall(FlucaFDSetInputLocation(*fd, operand->output_loc, operand->output_c));
   PetscCall(FlucaFDSetOutputLocation(*fd, operand->output_loc, operand->output_c));
   PetscCall(FlucaFDScaleSetOperand(*fd, operand));
@@ -227,7 +227,7 @@ PetscErrorCode FlucaFDScaleCreateVector(FlucaFD operand, Vec vec, PetscInt vec_c
   PetscCall(PetscObjectGetComm((PetscObject)operand, &comm));
   PetscCall(FlucaFDCreate(comm, fd));
   PetscCall(FlucaFDSetType(*fd, FLUCAFDSCALE));
-  PetscCall(FlucaFDSetDM(*fd, operand->dm));
+  PetscCall(FlucaFDSetMesh(*fd, operand->mesh));
   PetscCall(FlucaFDSetInputLocation(*fd, operand->output_loc, operand->output_c));
   PetscCall(FlucaFDSetOutputLocation(*fd, operand->output_loc, operand->output_c));
   PetscCall(FlucaFDScaleSetOperand(*fd, operand));
