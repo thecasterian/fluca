@@ -119,6 +119,44 @@ PetscErrorCode MeshLoad(Mesh mesh, PetscViewer viewer)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode MeshCheckVecComponents_Private(Mesh mesh, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp)
+{
+  DM dm;
+
+  PetscFunctionBegin;
+  PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Must call MeshSetUp() first");
+  PetscCheck(loc == DMSTAG_ELEMENT || loc == DMSTAG_LEFT, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_OUTOFRANGE, "Location must be DMSTAG_ELEMENT or DMSTAG_LEFT");
+  PetscCheck(c0 >= 0 && ncomp > 0, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_OUTOFRANGE, "Invalid component range [%" PetscInt_FMT ", %" PetscInt_FMT ")", c0, c0 + ncomp);
+  PetscCall(VecGetDM(v, &dm));
+  PetscCheck(dm, PetscObjectComm((PetscObject)v), PETSC_ERR_ARG_WRONG, "Vector has no DM");
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshViewVecComponents_Internal(Mesh mesh, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp, const char name[], PetscViewer viewer)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+  PetscValidHeaderSpecific(v, VEC_CLASSID, 2);
+  PetscAssertPointer(name, 6);
+  PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 7);
+  PetscCall(MeshCheckVecComponents_Private(mesh, v, loc, c0, ncomp));
+  PetscUseTypeMethod(mesh, viewveccomponents, v, loc, c0, ncomp, name, viewer);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshLoadVecComponents_Internal(Mesh mesh, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp, const char name[], PetscViewer viewer)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
+  PetscValidHeaderSpecific(v, VEC_CLASSID, 2);
+  PetscAssertPointer(name, 6);
+  PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 7);
+  PetscCall(PetscViewerCheckReadable(viewer));
+  PetscCall(MeshCheckVecComponents_Private(mesh, v, loc, c0, ncomp));
+  PetscUseTypeMethod(mesh, loadveccomponents, v, loc, c0, ncomp, name, viewer);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode MeshDestroy(Mesh *mesh)
 {
   PetscFunctionBegin;

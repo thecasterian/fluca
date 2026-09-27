@@ -1,4 +1,5 @@
 #include <fluca/private/meshimpl.h>
+#include <flucaviewer.h>
 #include <petscdmstag.h>
 
 static PetscErrorCode MeshSetUp_Cartesian(Mesh mesh)
@@ -42,13 +43,18 @@ static PetscErrorCode MeshCartesianGetDomain_Private(Mesh mesh, PetscReal lo[], 
 
 static PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer viewer)
 {
-  PetscBool      isascii;
+  PetscBool      isascii, iscgns;
   PetscInt       M[3], d;
   DMBoundaryType bt[3];
   PetscReal      lo[3], hi[3];
 
   PetscFunctionBegin;
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &isascii));
+  PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERFLUCACGNS, &iscgns));
+  if (iscgns) {
+    PetscCall(MeshView_Cartesian_CGNS(mesh, viewer));
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
   if (!isascii || !mesh->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
   PetscCall(DMStagGetGlobalSizes(mesh->dm, &M[0], &M[1], &M[2]));
   PetscCall(DMStagGetBoundaryTypes(mesh->dm, &bt[0], &bt[1], &bt[2]));
@@ -78,9 +84,12 @@ static PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer viewer)
 PetscErrorCode MeshCreate_Cartesian(Mesh mesh)
 {
   PetscFunctionBegin;
-  mesh->data       = NULL;
-  mesh->ops->setup = MeshSetUp_Cartesian;
-  mesh->ops->view  = MeshView_Cartesian;
+  mesh->data                   = NULL;
+  mesh->ops->setup             = MeshSetUp_Cartesian;
+  mesh->ops->view              = MeshView_Cartesian;
+  mesh->ops->load              = MeshLoad_Cartesian_CGNS;
+  mesh->ops->viewveccomponents = MeshViewVecComponents_Cartesian;
+  mesh->ops->loadveccomponents = MeshLoadVecComponents_Cartesian;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
