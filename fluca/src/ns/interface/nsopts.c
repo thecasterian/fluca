@@ -124,6 +124,7 @@ PetscErrorCode NSSetFromOptions(NS ns)
   PetscCall(PetscOptionsBool("-ns_error_if_step_failed", "Error if step fails", "NSSetErrorIfStepFailed", ns->errorifstepfailed, &ns->errorifstepfailed, NULL));
 
   PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor", "Monitor current step and time", "NSMonitorDefault", NSMonitorDefault, NULL));
+  PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor_solution", "Monitor solution", "NSMonitorSolution", NSMonitorSolution, NULL));
   flg = PETSC_FALSE;
   PetscCall(PetscOptionsBool("-ns_monitor_cancel", "Remove all monitors", "NSMonitorCancel", flg, &flg, &opt));
   if (opt && flg) PetscCall(NSMonitorCancel(ns));

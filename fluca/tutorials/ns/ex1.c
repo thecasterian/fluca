@@ -6,7 +6,8 @@
 static const char help[] = "2D lid-driven cavity flow with NS\n"
                            "Options:\n"
                            "  -stag_grid_x <int>, -stag_grid_y <int> : grid cells per direction (default: 256)\n"
-                           "  -Re <real> : Reynolds number; density 1, viscosity 1/Re (default: 100)\n";
+                           "  -Re <real> : Reynolds number; density 1, viscosity 1/Re (default: 100)\n"
+                           "  -ns_monitor_solution cgns:cavity-%d.cgns : write the solution to CGNS every step (see -ns_monitor_solution_interval)\n";
 
 /* u = 1 on the lid (the up face, where this BC is attached) */
 static PetscErrorCode LidVelocity_Private(PetscInt dim, PetscReal t, const PetscReal x[], PetscInt comp, PetscScalar *val, void *ctx)

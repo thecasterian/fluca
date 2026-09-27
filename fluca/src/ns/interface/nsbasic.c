@@ -199,7 +199,7 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(CreateNullSpace_Private(ns));
   PetscCall(NSSetUpSpatialOperators_Internal(ns));
 
-  PetscCall(DMCreateGlobalVector(dm, &ns->sol));
+  PetscCall(PhysCreateSolutionVector(ns->phys, &ns->sol));
   PetscCall(VecZeroEntries(ns->sol));
   PetscCall(PetscObjectSetName((PetscObject)ns->sol, "Solution"));
   PetscCall(VecDuplicate(ns->sol, &ns->sol0));

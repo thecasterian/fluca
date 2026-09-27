@@ -85,3 +85,14 @@ PetscErrorCode NSMonitorDefault(NS ns, PetscViewerAndFormat *vf)
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode NSMonitorSolution(NS ns, PetscViewerAndFormat *vf)
+{
+  PetscFunctionBegin;
+  if (vf->view_interval > 0 && ns->step % vf->view_interval == 0) {
+    PetscCall(PetscViewerPushFormat(vf->viewer, vf->format));
+    PetscCall(NSViewSolution(ns, vf->viewer));
+    PetscCall(PetscViewerPopFormat(vf->viewer));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
