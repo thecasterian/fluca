@@ -95,6 +95,7 @@ FLUCA_EXTERN PetscErrorCode PhysGetNumFields(Phys, PetscInt *);
 FLUCA_EXTERN PetscErrorCode PhysGetFieldName(Phys, PetscInt, const char *[]);
 FLUCA_EXTERN PetscErrorCode PhysGetField(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);
 FLUCA_EXTERN PetscErrorCode PhysGetFieldIS(Phys, const char[], IS *);
+FLUCA_EXTERN PetscErrorCode PhysCreateSolutionVector(Phys, Vec *);
 
 /* Registration */
 FLUCA_EXTERN PetscFunctionList PhysList;
