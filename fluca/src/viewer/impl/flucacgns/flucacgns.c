@@ -116,8 +116,11 @@ PetscErrorCode PetscViewerFlucaCGNSCheckBatch_Internal(PetscViewer viewer)
 
 static PetscErrorCode PetscViewerDestroy_FlucaCGNS(PetscViewer viewer)
 {
+  PetscViewer_FlucaCGNS *cgv = (PetscViewer_FlucaCGNS *)viewer->data;
+
   PetscFunctionBegin;
   PetscCall(PetscViewerFileClose_FlucaCGNS_Private(viewer));
+  PetscCall(PetscFree(cgv->filename_template));
   PetscCall(PetscFree(viewer->data));
   PetscCall(PetscObjectComposeFunction((PetscObject)viewer, "PetscViewerFileSetName_C", NULL));
   PetscCall(PetscObjectComposeFunction((PetscObject)viewer, "PetscViewerFileGetName_C", NULL));
