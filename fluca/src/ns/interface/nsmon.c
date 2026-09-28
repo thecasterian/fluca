@@ -86,13 +86,31 @@ PetscErrorCode NSMonitorDefault(NS ns, PetscViewerAndFormat *vf)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* mon_setup for NSMonitorSolution: caches the last step written through this viewer, so that
+   viewing the same step twice (e.g. NSMonitor() called again at the start of a second NSSolve())
+   does not rewrite it */
+PetscErrorCode NSMonitorSolutionSetUp_Internal(NS ns, PetscViewerAndFormat *vf)
+{
+  PetscInt *last_step;
+
+  PetscFunctionBegin;
+  PetscCall(PetscNew(&last_step));
+  *last_step       = -1;
+  vf->data         = last_step;
+  vf->data_destroy = PetscCtxDestroyDefault;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSMonitorSolution(NS ns, PetscViewerAndFormat *vf)
 {
+  PetscInt *last_step = (PetscInt *)vf->data;
+
   PetscFunctionBegin;
-  if (vf->view_interval > 0 && ns->step % vf->view_interval == 0) {
+  if (vf->view_interval > 0 && ns->step % vf->view_interval == 0 && (!last_step || *last_step != ns->step)) {
     PetscCall(PetscViewerPushFormat(vf->viewer, vf->format));
     PetscCall(NSViewSolution(ns, vf->viewer));
     PetscCall(PetscViewerPopFormat(vf->viewer));
+    if (last_step) *last_step = ns->step;
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

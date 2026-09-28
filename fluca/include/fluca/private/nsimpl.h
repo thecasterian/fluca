@@ -92,3 +92,6 @@ struct _p_NS {
 FLUCA_INTERN PetscErrorCode NSSetUpSpatialOperators_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSDestroySpatialOperators_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSSetVelocityBCs_Internal(NS, FlucaFD, PetscInt);
+
+/* Defined in interface/nsmon.c */
+FLUCA_INTERN PetscErrorCode NSMonitorSolutionSetUp_Internal(NS, PetscViewerAndFormat *);

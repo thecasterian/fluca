@@ -582,6 +582,55 @@ PetscErrorCode MeshLoad_Cartesian_CGNS(Mesh mesh, PetscViewer viewer)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+#define MESH_CGNS_MAX_SOL_NAMES 64 /* generous bound: at most PHYS_MAX_FIELDS fields, each with a few components */
+
+/* Component names already written to the current FlowSolution of a viewer. CGNS metadata
+   (cg_nfields()/cg_narrays()) cannot be queried while the file is open for writing, so this is
+   tracked here instead of re-reading it from the file; composed onto the PetscViewer itself
+   since the FlowSolution (and file) outlive a single MeshViewVecComponents_Cartesian() call. */
+typedef struct {
+  int      sol; /* the FlowSolution these names belong to */
+  PetscInt n;
+  char     names[MESH_CGNS_MAX_SOL_NAMES][CGIO_MAX_NAME_LENGTH + 1];
+} MeshCGNSSolNames;
+
+#define MESH_CGNS_SOL_NAMES_COMPOSED_NAME "Fluca_MeshCGNSSolNames"
+
+/* Fail if name was already written to FlowSolution sol of viewer; otherwise record it */
+static PetscErrorCode MeshCGNSCheckAndRecordSolName_Private(PetscViewer viewer, int sol, PetscInt step, const char name[])
+{
+  PetscContainer    container;
+  MeshCGNSSolNames *sn;
+  PetscInt          i;
+  PetscBool         same;
+
+  PetscFunctionBegin;
+  PetscCall(PetscObjectQuery((PetscObject)viewer, MESH_CGNS_SOL_NAMES_COMPOSED_NAME, (PetscObject *)&container));
+  if (container) {
+    PetscCall(PetscContainerGetPointer(container, (void **)&sn));
+  } else {
+    PetscCall(PetscNew(&sn));
+    PetscCall(PetscContainerCreate(PetscObjectComm((PetscObject)viewer), &container));
+    PetscCall(PetscContainerSetPointer(container, sn));
+    PetscCall(PetscContainerSetCtxDestroy(container, PetscCtxDestroyDefault));
+    PetscCall(PetscObjectCompose((PetscObject)viewer, MESH_CGNS_SOL_NAMES_COMPOSED_NAME, (PetscObject)container));
+    PetscCall(PetscContainerDestroy(&container));
+    sn->sol = -1;
+  }
+  if (sn->sol != sol) {
+    sn->sol = sol;
+    sn->n   = 0;
+  }
+  for (i = 0; i < sn->n; ++i) {
+    PetscCall(PetscStrcmp(sn->names[i], name, &same));
+    PetscCheck(!same, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_WRONGSTATE, "Field %s of step %" PetscInt_FMT " is already written to this viewer", name, step);
+  }
+  PetscCheck(sn->n < MESH_CGNS_MAX_SOL_NAMES, PetscObjectComm((PetscObject)viewer), PETSC_ERR_SUP, "Cannot track more than %d field names written to one CGNS solution", MESH_CGNS_MAX_SOL_NAMES);
+  PetscCall(PetscStrncpy(sn->names[sn->n], name, sizeof(sn->names[sn->n])));
+  ++sn->n;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode MeshViewVecComponents_Cartesian(Mesh mesh, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp, const char name[], PetscViewer viewer)
 {
   PetscViewer_FlucaCGNS *cgv;
@@ -634,6 +683,9 @@ PetscErrorCode MeshViewVecComponents_Cartesian(Mesh mesh, Vec v, DMStagStencilLo
   for (c = 0; c < ncomp; ++c) {
     if (ncomp == 1) PetscCall(PetscStrncpy(comp_name, name, sizeof(comp_name)));
     else PetscCall(PetscSNPrintf(comp_name, sizeof(comp_name), "%s%c", name, (char)('X' + c)));
+
+    PetscCall(MeshCGNSCheckAndRecordSolName_Private(viewer, cgv->sol, step, comp_name));
+
     if (loc == DMSTAG_ELEMENT) PetscCall(DMStagWriteCellCenteredSolution_Private(dm, v, c0 + c, cgv->file_num, cgv->base, cgv->zone, cgv->sol, comp_name));
     else PetscCall(DMStagWriteFaceCenteredSolution_Private(dm, v, c0 + c, cgv->file_num, cgv->base, cgv->zone, cgv->sol, comp_name));
   }
