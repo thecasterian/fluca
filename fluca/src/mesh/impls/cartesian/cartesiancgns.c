@@ -269,7 +269,7 @@ static PetscErrorCode DMStagLoadCellCenteredSolution_Private(DM dm, Vec v, Petsc
     PetscBool flg;
 
     PetscCall(FindCellCenteredSolutionFieldInfo_Private(file_num, base, zone, sol, name, &field, &data_type, &flg));
-    PetscCheck(flg, PETSC_COMM_SELF, PETSC_ERR_LIB, "Cannot find field %s in base %d zone %d solution %d", name, base, zone, sol);
+    PetscCheck(flg, PetscObjectComm((PetscObject)dm), PETSC_ERR_FILE_UNEXPECTED, "Cannot find field %s in base %d zone %d solution %d", name, base, zone, sol);
   }
 
   rsize = 1;
@@ -334,7 +334,7 @@ static PetscErrorCode DMStagLoadFaceCenteredSolution_Private(DM dm, Vec v, Petsc
     PetscBool flg;
 
     PetscCall(FindFaceCenteredSolutionArrayInfo_Private(file_num, base, zone, sol, user_data[d], name, &array[d], &data_type[d], &flg));
-    PetscCheck(flg, PETSC_COMM_SELF, PETSC_ERR_LIB, "Cannot find array %s in base %d zone %d solution %d user data %d", name, base, zone, sol, user_data[d]);
+    PetscCheck(flg, PetscObjectComm((PetscObject)dm), PETSC_ERR_FILE_UNEXPECTED, "Cannot find array %s in base %d zone %d solution %d user data %d", name, base, zone, sol, user_data[d]);
   }
 
   for (l = 0; l < dim; ++l) {
@@ -484,6 +484,7 @@ PetscErrorCode MeshView_Cartesian_CGNS(Mesh mesh, PetscViewer viewer)
   PetscInt step;
 
   PetscFunctionBegin;
+  PetscCheck(mesh->dm, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "DM not set. Call MeshSetDM() or MeshLoad() first");
   PetscCall(DMGetOutputSequenceNumber(mesh->dm, &step, NULL));
   PetscCall(MeshWriteZone_Cartesian_Private(mesh, viewer, step < 0 ? 0 : step));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -555,7 +556,10 @@ PetscErrorCode MeshLoad_Cartesian_CGNS(Mesh mesh, PetscViewer viewer)
 
       CGNSCall(cg_gorel(cgv->file_num, "UserDefinedData_t", u, NULL));
       CGNSCall(cg_array_read_as(1, CGNS_ENUMV(Integer), bt_int));
-      for (d = 0; d < cell_dim; ++d) bt[d] = (DMBoundaryType)bt_int[d];
+      for (d = 0; d < cell_dim; ++d) {
+        PetscCheck(bt_int[d] >= (int)DM_BOUNDARY_NONE && bt_int[d] <= (int)DM_BOUNDARY_TWIST, comm, PETSC_ERR_FILE_UNEXPECTED, "Invalid DM boundary type %d for direction %" PetscInt_FMT, bt_int[d], d);
+        bt[d] = (DMBoundaryType)bt_int[d];
+      }
     }
   }
   /* Files without the FlucaMesh node (written before boundary types were stored) load as non-periodic */
