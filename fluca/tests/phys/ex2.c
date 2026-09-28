@@ -5,9 +5,11 @@
 
 static const char help[] = "Test Phys solution vectors: CGNS round trip of every field\n"
                            "Options:\n"
-                           "  -file <name>   : write the solution to this CGNS file and load it back into a duplicate\n"
-                           "  -ascii         : view the solution vector with the ASCII viewer instead\n"
-                           "  -binary <name> : view and load the solution vector through a PETSc binary viewer instead\n";
+                           "  -file <name>     : write the solution to this CGNS file and load it back into a duplicate\n"
+                           "  -ascii           : view the solution vector with the ASCII viewer instead\n"
+                           "  -binary <name>   : view and load the solution vector through a PETSc binary viewer instead\n"
+                           "  -template <name> : view the solution at 3 steps through one viewer opened with this %d filename\n"
+                           "                     template (default batch size), then load the last step back\n";
 
 /* Field values at point coordinates: velocity (x + 2y, xy), face velocity (x on x-faces, y on y-faces), pressure x - y */
 static PetscErrorCode FillSolution_Private(Phys phys, Vec u)
@@ -65,16 +67,19 @@ int main(int argc, char **argv)
   PetscInt    nfields, f, step;
   PetscReal   time, nrm;
   const char *name;
-  char        file[PETSC_MAX_PATH_LEN]    = "phys_ex2.cgns";
-  char        binfile[PETSC_MAX_PATH_LEN] = "";
-  PetscBool   ascii                       = PETSC_FALSE;
-  PetscBool   binary                      = PETSC_FALSE;
+  char        file[PETSC_MAX_PATH_LEN]     = "phys_ex2.cgns";
+  char        binfile[PETSC_MAX_PATH_LEN]  = "";
+  char        tmplfile[PETSC_MAX_PATH_LEN] = "";
+  PetscBool   ascii                        = PETSC_FALSE;
+  PetscBool   binary                       = PETSC_FALSE;
+  PetscBool   tmpl                         = PETSC_FALSE;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
   PetscCall(PetscOptionsGetString(NULL, NULL, "-file", file, sizeof(file), NULL));
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-ascii", &ascii, NULL));
   PetscCall(PetscOptionsGetString(NULL, NULL, "-binary", binfile, sizeof(binfile), &binary));
+  PetscCall(PetscOptionsGetString(NULL, NULL, "-template", tmplfile, sizeof(tmplfile), &tmpl));
 
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 4, 3, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 2, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
@@ -104,6 +109,37 @@ int main(int argc, char **argv)
     PetscCall(VecLoad(w, viewer));
     PetscCall(PetscViewerDestroy(&viewer));
 
+    PetscCall(VecAXPY(w, -1., u));
+    PetscCall(VecNorm(w, NORM_INFINITY, &nrm));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Max |loaded - written|: %g\n", (double)nrm));
+    PetscCall(VecDestroy(&w));
+  } else if (tmpl) {
+    PetscInt k;
+    char     lastfile[PETSC_MAX_PATH_LEN];
+
+    /* Views the same solution vector at 3 steps through one viewer, with the default batch
+       size (1): every step's VecView rolls over to a new file named from the %d template.
+       Regression check: the CGNS FlowSolution index restarts at 1 in each newly opened file,
+       so a previous fix that keyed a per-viewer "names already written" list on that index
+       would wrongly reject the first field of every step after the first. */
+    PetscCall(PhysGetSolutionDM(phys, &sol_dm));
+    PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, tmplfile, FILE_MODE_WRITE, &viewer));
+    for (k = 0; k < 3; ++k) {
+      PetscCall(DMSetOutputSequenceNumber(sol_dm, k, 0.1 * k));
+      PetscCall(VecView(u, viewer));
+    }
+    PetscCall(PetscViewerDestroy(&viewer));
+
+    PetscCall(PetscSNPrintf(lastfile, sizeof(lastfile), tmplfile, 2));
+    PetscCall(DMSetOutputSequenceNumber(sol_dm, -1, 0.));
+    PetscCall(VecDuplicate(u, &w));
+    PetscCall(VecZeroEntries(w));
+    PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, lastfile, FILE_MODE_READ, &viewer));
+    PetscCall(FlucaVecLoad(w, viewer));
+    PetscCall(PetscViewerDestroy(&viewer));
+
+    PetscCall(DMGetOutputSequenceNumber(sol_dm, &step, &time));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Loaded step %" PetscInt_FMT " time %g\n", step, (double)time));
     PetscCall(VecAXPY(w, -1., u));
     PetscCall(VecNorm(w, NORM_INFINITY, &nrm));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Max |loaded - written|: %g\n", (double)nrm));
@@ -164,5 +200,10 @@ int main(int argc, char **argv)
     suffix: binary_roundtrip
     nsize: 1
     args: -binary phys_ex2.bin
+
+  test:
+    suffix: cgns_template
+    nsize: 1
+    args: -template phys_ex2_tmpl-%d.cgns
 
 TEST*/

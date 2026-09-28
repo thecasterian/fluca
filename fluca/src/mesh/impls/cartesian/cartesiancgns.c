@@ -591,40 +591,61 @@ PetscErrorCode MeshLoad_Cartesian_CGNS(Mesh mesh, PetscViewer viewer)
 /* Component names already written to the current FlowSolution of a viewer. CGNS metadata
    (cg_nfields()/cg_narrays()) cannot be queried while the file is open for writing, so this is
    tracked here instead of re-reading it from the file; composed onto the PetscViewer itself
-   since the FlowSolution (and file) outlive a single MeshViewVecComponents_Cartesian() call. */
+   since the FlowSolution (and file) outlive a single MeshViewVecComponents_Cartesian() call.
+   The FlowSolution's own CGNS index cannot be used to detect a new FlowSolution: it restarts
+   at 1 in every newly opened file (e.g. a batch_size-1 filename template rolls over to a new
+   file at every step), so the list is reset explicitly whenever a new FlowSolution is created
+   rather than being keyed on that index. */
 typedef struct {
-  int      sol; /* the FlowSolution these names belong to */
   PetscInt n;
   char     names[MESH_CGNS_MAX_SOL_NAMES][CGIO_MAX_NAME_LENGTH + 1];
 } MeshCGNSSolNames;
 
 #define MESH_CGNS_SOL_NAMES_COMPOSED_NAME "Fluca_MeshCGNSSolNames"
 
-/* Fail if name was already written to FlowSolution sol of viewer; otherwise record it */
-static PetscErrorCode MeshCGNSCheckAndRecordSolName_Private(PetscViewer viewer, int sol, PetscInt step, const char name[])
+/* Get (creating if necessary) the list of component names already written to the current
+   FlowSolution of viewer */
+static PetscErrorCode MeshCGNSGetSolNames_Private(PetscViewer viewer, MeshCGNSSolNames **sn)
 {
-  PetscContainer    container;
+  PetscContainer container;
+
+  PetscFunctionBegin;
+  PetscCall(PetscObjectQuery((PetscObject)viewer, MESH_CGNS_SOL_NAMES_COMPOSED_NAME, (PetscObject *)&container));
+  if (!container) {
+    PetscCall(PetscNew(sn));
+    PetscCall(PetscContainerCreate(PetscObjectComm((PetscObject)viewer), &container));
+    PetscCall(PetscContainerSetPointer(container, *sn));
+    PetscCall(PetscContainerSetCtxDestroy(container, PetscCtxDestroyDefault));
+    PetscCall(PetscObjectCompose((PetscObject)viewer, MESH_CGNS_SOL_NAMES_COMPOSED_NAME, (PetscObject)container));
+    PetscCall(PetscContainerDestroy(&container));
+  } else {
+    PetscCall(PetscContainerGetPointer(container, (void **)sn));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Clear the list of component names already written to the current FlowSolution of viewer.
+   Must be called whenever a new FlowSolution is created. */
+static PetscErrorCode MeshCGNSResetSolNames_Private(PetscViewer viewer)
+{
+  MeshCGNSSolNames *sn;
+
+  PetscFunctionBegin;
+  PetscCall(MeshCGNSGetSolNames_Private(viewer, &sn));
+  sn->n = 0;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Fail if name was already written to the current FlowSolution of viewer since the last
+   MeshCGNSResetSolNames_Private() call; otherwise record it */
+static PetscErrorCode MeshCGNSCheckAndRecordSolName_Private(PetscViewer viewer, PetscInt step, const char name[])
+{
   MeshCGNSSolNames *sn;
   PetscInt          i;
   PetscBool         same;
 
   PetscFunctionBegin;
-  PetscCall(PetscObjectQuery((PetscObject)viewer, MESH_CGNS_SOL_NAMES_COMPOSED_NAME, (PetscObject *)&container));
-  if (container) {
-    PetscCall(PetscContainerGetPointer(container, (void **)&sn));
-  } else {
-    PetscCall(PetscNew(&sn));
-    PetscCall(PetscContainerCreate(PetscObjectComm((PetscObject)viewer), &container));
-    PetscCall(PetscContainerSetPointer(container, sn));
-    PetscCall(PetscContainerSetCtxDestroy(container, PetscCtxDestroyDefault));
-    PetscCall(PetscObjectCompose((PetscObject)viewer, MESH_CGNS_SOL_NAMES_COMPOSED_NAME, (PetscObject)container));
-    PetscCall(PetscContainerDestroy(&container));
-    sn->sol = -1;
-  }
-  if (sn->sol != sol) {
-    sn->sol = sol;
-    sn->n   = 0;
-  }
+  PetscCall(MeshCGNSGetSolNames_Private(viewer, &sn));
   for (i = 0; i < sn->n; ++i) {
     PetscCall(PetscStrcmp(sn->names[i], name, &same));
     PetscCheck(!same, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_WRONGSTATE, "Field %s of step %" PetscInt_FMT " is already written to this viewer", name, step);
@@ -675,6 +696,7 @@ PetscErrorCode MeshViewVecComponents_Cartesian(Mesh mesh, Vec v, DMStagStencilLo
     /* One FlowSolution per step: cell fields directly under it, face arrays under one UserDefinedData per direction */
     PetscCall(PetscSNPrintf(sol_name, sizeof(sol_name), "FlowSolution%" PetscInt_FMT, step));
     CGNSCall(cg_sol_write(cgv->file_num, cgv->base, cgv->zone, sol_name, CGNS_ENUMV(CellCenter), &cgv->sol));
+    PetscCall(MeshCGNSResetSolNames_Private(viewer));
     CGNSCall(cg_goto(cgv->file_num, cgv->base, "Zone_t", cgv->zone, "FlowSolution_t", cgv->sol, NULL));
     for (d = 0; d < mesh->dim; ++d) {
       CGNSCall(cg_user_data_write(face_sol_names[d]));
@@ -688,7 +710,7 @@ PetscErrorCode MeshViewVecComponents_Cartesian(Mesh mesh, Vec v, DMStagStencilLo
     if (ncomp == 1) PetscCall(PetscStrncpy(comp_name, name, sizeof(comp_name)));
     else PetscCall(PetscSNPrintf(comp_name, sizeof(comp_name), "%s%c", name, (char)('X' + c)));
 
-    PetscCall(MeshCGNSCheckAndRecordSolName_Private(viewer, cgv->sol, step, comp_name));
+    PetscCall(MeshCGNSCheckAndRecordSolName_Private(viewer, step, comp_name));
 
     if (loc == DMSTAG_ELEMENT) PetscCall(DMStagWriteCellCenteredSolution_Private(dm, v, c0 + c, cgv->file_num, cgv->base, cgv->zone, cgv->sol, comp_name));
     else PetscCall(DMStagWriteFaceCenteredSolution_Private(dm, v, c0 + c, cgv->file_num, cgv->base, cgv->zone, cgv->sol, comp_name));
