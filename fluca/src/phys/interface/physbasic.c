@@ -29,6 +29,7 @@ PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
   p->dim             = PETSC_DETERMINE;
   p->data            = NULL;
   p->vecview_default = NULL;
+  p->vecload_default = NULL;
   p->setupcalled     = PETSC_FALSE;
   for (f = 0; f < PHYS_MAX_FACES; f++) {
     p->bcs[f].type       = PHYS_BC_NONE;

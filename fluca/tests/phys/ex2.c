@@ -5,8 +5,9 @@
 
 static const char help[] = "Test Phys solution vectors: CGNS round trip of every field\n"
                            "Options:\n"
-                           "  -file <name> : write the solution to this CGNS file and load it back into a duplicate\n"
-                           "  -ascii       : view the solution vector with the ASCII viewer instead\n";
+                           "  -file <name>   : write the solution to this CGNS file and load it back into a duplicate\n"
+                           "  -ascii         : view the solution vector with the ASCII viewer instead\n"
+                           "  -binary <name> : view and load the solution vector through a PETSc binary viewer instead\n";
 
 /* Field values at point coordinates: velocity (x + 2y, xy), face velocity (x on x-faces, y on y-faces), pressure x - y */
 static PetscErrorCode FillSolution_Private(Phys phys, Vec u)
@@ -64,13 +65,16 @@ int main(int argc, char **argv)
   PetscInt    nfields, f, step;
   PetscReal   time, nrm;
   const char *name;
-  char        file[PETSC_MAX_PATH_LEN] = "phys_ex2.cgns";
-  PetscBool   ascii                    = PETSC_FALSE;
+  char        file[PETSC_MAX_PATH_LEN]    = "phys_ex2.cgns";
+  char        binfile[PETSC_MAX_PATH_LEN] = "";
+  PetscBool   ascii                       = PETSC_FALSE;
+  PetscBool   binary                      = PETSC_FALSE;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
   PetscCall(PetscOptionsGetString(NULL, NULL, "-file", file, sizeof(file), NULL));
   PetscCall(PetscOptionsGetBool(NULL, NULL, "-ascii", &ascii, NULL));
+  PetscCall(PetscOptionsGetString(NULL, NULL, "-binary", binfile, sizeof(binfile), &binary));
 
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 4, 3, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 2, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
@@ -88,7 +92,23 @@ int main(int argc, char **argv)
   PetscCall(FillSolution_Private(phys, u));
 
   if (ascii) PetscCall(VecView(u, PETSC_VIEWER_STDOUT_WORLD));
-  else {
+  else if (binary) {
+    PetscCall(PetscViewerBinaryOpen(PETSC_COMM_WORLD, binfile, FILE_MODE_WRITE, &viewer));
+    PetscCall(VecView(u, viewer));
+    PetscCall(PetscViewerDestroy(&viewer));
+
+    /* Load into a duplicate through a non-CGNS viewer: VecLoad must fall back to the vector's default load op */
+    PetscCall(VecDuplicate(u, &w));
+    PetscCall(VecZeroEntries(w));
+    PetscCall(PetscViewerBinaryOpen(PETSC_COMM_WORLD, binfile, FILE_MODE_READ, &viewer));
+    PetscCall(VecLoad(w, viewer));
+    PetscCall(PetscViewerDestroy(&viewer));
+
+    PetscCall(VecAXPY(w, -1., u));
+    PetscCall(VecNorm(w, NORM_INFINITY, &nrm));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Max |loaded - written|: %g\n", (double)nrm));
+    PetscCall(VecDestroy(&w));
+  } else {
     PetscCall(PhysGetSolutionDM(phys, &sol_dm));
     PetscCall(DMSetOutputSequenceNumber(sol_dm, 3, 0.5));
     PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, file, FILE_MODE_WRITE, &viewer));
@@ -139,5 +159,10 @@ int main(int argc, char **argv)
     suffix: ascii
     nsize: 1
     args: -ascii
+
+  test:
+    suffix: binary_roundtrip
+    nsize: 1
+    args: -binary phys_ex2.bin
 
 TEST*/

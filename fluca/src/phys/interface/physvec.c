@@ -47,7 +47,10 @@ static PetscErrorCode VecLoad_Phys_Private(Vec v, PetscViewer viewer)
   PetscFunctionBegin;
   PetscCall(VecGetPhys_Private(v, &phys));
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERFLUCACGNS, &iscgns));
-  PetscCheck(iscgns, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_WRONG, "Solution vectors load only from a CGNS viewer; open it with PetscViewerFlucaCGNSOpen()");
+  if (!iscgns) {
+    PetscCall((*phys->vecload_default)(v, viewer));
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
   for (f = 0; f < phys->nfields; ++f) {
     PetscCall(PhysGetField(phys, phys->fields[f].name, &loc, &c0, &ncomp));
     PetscCall(MeshLoadVecComponents_Internal(phys->mesh, v, loc == PHYS_FIELD_FACE ? DMSTAG_LEFT : DMSTAG_ELEMENT, c0, ncomp, phys->fields[f].name, viewer));
@@ -63,6 +66,7 @@ PetscErrorCode PhysCreateSolutionVector(Phys phys, Vec *v)
   PetscCheck(phys->setupcalled, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "Must call PhysSetUp() before PhysCreateSolutionVector()");
   PetscCall(DMCreateGlobalVector(phys->sol_dm, v));
   if (!phys->vecview_default) phys->vecview_default = (*v)->ops->view;
+  if (!phys->vecload_default) phys->vecload_default = (*v)->ops->load;
   PetscCall(PetscObjectCompose((PetscObject)*v, "Fluca_Phys", (PetscObject)phys));
   PetscCall(VecSetOperation(*v, VECOP_VIEW, (void (*)(void))VecView_Phys_Private));
   PetscCall(VecSetOperation(*v, VECOP_LOAD, (void (*)(void))VecLoad_Phys_Private));
