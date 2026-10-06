@@ -48,9 +48,7 @@ struct _p_Phys {
   PetscInt  dim;    /* spatial dimension (from the mesh) */
   void     *data;   /* subtype-specific */
   PetscInt  nfields;
-  PhysField fields[PHYS_MAX_FIELDS];                   /* in declaration order */
-  PetscErrorCode (*vecview_default)(Vec, PetscViewer); /* VECOP_VIEW of a plain solution-DM vector, for non-CGNS viewers */
-  PetscErrorCode (*vecload_default)(Vec, PetscViewer); /* VECOP_LOAD of a plain solution-DM vector, for non-CGNS viewers */
+  PhysField fields[PHYS_MAX_FIELDS]; /* in declaration order */
 
   /* State */
   PetscBool setupcalled;

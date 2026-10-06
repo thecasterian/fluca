@@ -20,17 +20,15 @@ PetscErrorCode PhysCreate(MPI_Comm comm, Phys *phys)
 
   PetscCall(PhysInitializePackage());
   PetscCall(FlucaHeaderCreate(p, PHYS_CLASSID, "Phys", "Physical Model", "Phys", comm, PhysDestroy, PhysView));
-  p->mesh            = NULL;
-  p->bodyforce       = NULL;
-  p->bodyforce_ctx   = NULL;
-  p->nprops          = 0;
-  p->nfields         = 0;
-  p->sol_dm          = NULL;
-  p->dim             = PETSC_DETERMINE;
-  p->data            = NULL;
-  p->vecview_default = NULL;
-  p->vecload_default = NULL;
-  p->setupcalled     = PETSC_FALSE;
+  p->mesh          = NULL;
+  p->bodyforce     = NULL;
+  p->bodyforce_ctx = NULL;
+  p->nprops        = 0;
+  p->nfields       = 0;
+  p->sol_dm        = NULL;
+  p->dim           = PETSC_DETERMINE;
+  p->data          = NULL;
+  p->setupcalled   = PETSC_FALSE;
   for (f = 0; f < PHYS_MAX_FACES; f++) {
     p->bcs[f].type       = PHYS_BC_NONE;
     p->bcs[f].fn         = NULL;

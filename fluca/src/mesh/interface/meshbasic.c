@@ -1,6 +1,5 @@
 #include <fluca/private/meshimpl.h>
 #include <flucaviewer.h>
-#include <petscdmstag.h>
 
 PetscClassId  MESH_CLASSID = 0;
 PetscLogEvent MESH_SetUp   = 0;
@@ -117,60 +116,6 @@ PetscErrorCode MeshLoad(Mesh mesh, PetscViewer viewer)
   PetscCheck(iscgns, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_WRONG, "Invalid viewer; open viewer with PetscViewerFlucaCGNSOpen()");
   if (!((PetscObject)mesh)->type_name) PetscCall(MeshSetType(mesh, MESHCARTESIAN));
   PetscUseTypeMethod(mesh, load, viewer);
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode MeshCheckVecComponents_Private(Mesh mesh, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp)
-{
-  DM             dm;
-  PetscBool      isstag;
-  PetscInt       d, M[3], vM[3], dof[4], ndof;
-  DMBoundaryType bt[3], vbt[3];
-
-  PetscFunctionBegin;
-  PetscCheck(mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Must call MeshSetUp() first");
-  PetscCheck(loc == DMSTAG_ELEMENT || loc == DMSTAG_LEFT, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_OUTOFRANGE, "Location must be DMSTAG_ELEMENT or DMSTAG_LEFT");
-  PetscCheck(c0 >= 0 && ncomp > 0, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_OUTOFRANGE, "Invalid component range [%" PetscInt_FMT ", %" PetscInt_FMT ")", c0, c0 + ncomp);
-  PetscCall(VecGetDM(v, &dm));
-  PetscCheck(dm, PetscObjectComm((PetscObject)v), PETSC_ERR_ARG_WRONG, "Vector has no DM");
-  PetscCall(PetscObjectTypeCompare((PetscObject)dm, DMSTAG, &isstag));
-  PetscCheck(isstag, PetscObjectComm((PetscObject)v), PETSC_ERR_ARG_INCOMP, "Vector's DM is not a DMSTAG");
-  PetscCall(DMStagGetGlobalSizes(mesh->dm, &M[0], &M[1], &M[2]));
-  PetscCall(DMStagGetGlobalSizes(dm, &vM[0], &vM[1], &vM[2]));
-  PetscCall(DMStagGetBoundaryTypes(mesh->dm, &bt[0], &bt[1], &bt[2]));
-  PetscCall(DMStagGetBoundaryTypes(dm, &vbt[0], &vbt[1], &vbt[2]));
-  for (d = 0; d < mesh->dim; ++d) {
-    PetscCheck(vM[d] == M[d], PetscObjectComm((PetscObject)v), PETSC_ERR_ARG_INCOMP, "Vector's DM global size %" PetscInt_FMT " in direction %" PetscInt_FMT " does not match the Mesh DM's %" PetscInt_FMT, vM[d], d, M[d]);
-    PetscCheck(vbt[d] == bt[d], PetscObjectComm((PetscObject)v), PETSC_ERR_ARG_INCOMP, "Vector's DM boundary type %s in direction %" PetscInt_FMT " does not match the Mesh DM's %s", DMBoundaryTypes[vbt[d]], d, DMBoundaryTypes[bt[d]]);
-  }
-  PetscCall(DMStagGetDOF(dm, &dof[0], &dof[1], &dof[2], &dof[3]));
-  ndof = loc == DMSTAG_ELEMENT ? dof[mesh->dim] : dof[mesh->dim - 1];
-  PetscCheck(c0 + ncomp <= ndof, PetscObjectComm((PetscObject)v), PETSC_ERR_ARG_OUTOFRANGE, "Component range [%" PetscInt_FMT ", %" PetscInt_FMT ") exceeds the %" PetscInt_FMT " DOF available at this location", c0, c0 + ncomp, ndof);
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode MeshViewVecComponents_Internal(Mesh mesh, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp, const char name[], PetscViewer viewer)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscValidHeaderSpecific(v, VEC_CLASSID, 2);
-  PetscAssertPointer(name, 6);
-  PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 7);
-  PetscCall(MeshCheckVecComponents_Private(mesh, v, loc, c0, ncomp));
-  PetscUseTypeMethod(mesh, viewveccomponents, v, loc, c0, ncomp, name, viewer);
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode MeshLoadVecComponents_Internal(Mesh mesh, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp, const char name[], PetscViewer viewer)
-{
-  PetscFunctionBegin;
-  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 1);
-  PetscValidHeaderSpecific(v, VEC_CLASSID, 2);
-  PetscAssertPointer(name, 6);
-  PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 7);
-  PetscCall(PetscViewerCheckReadable(viewer));
-  PetscCall(MeshCheckVecComponents_Private(mesh, v, loc, c0, ncomp));
-  PetscUseTypeMethod(mesh, loadveccomponents, v, loc, c0, ncomp, name, viewer);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

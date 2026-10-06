@@ -35,11 +35,20 @@ struct _p_Mesh {
   PetscBool setupcalled; /* after MeshSetUp() the DM can no longer change */
 };
 
-/* Write or read components [c0, c0 + ncomp) of a vector on a DMStag compatible with the Mesh DM, under the CGNS name
-   name (suffixed X, Y, Z when ncomp > 1). loc is DMSTAG_ELEMENT for cell data or DMSTAG_LEFT for face data, which
-   covers the faces normal to every direction. Exported for Phys; not part of the public API. */
-FLUCA_EXTERN PetscErrorCode MeshViewVecComponents_Internal(Mesh, Vec, DMStagStencilLocation, PetscInt, PetscInt, const char[], PetscViewer);
-FLUCA_EXTERN PetscErrorCode MeshLoadVecComponents_Internal(Mesh, Vec, DMStagStencilLocation, PetscInt, PetscInt, const char[], PetscViewer);
+/* A named field of a vector on a DMStag compatible with the Mesh DM: components [c0, c0 + ncomp) at loc, which is
+   DMSTAG_ELEMENT for cell data or DMSTAG_LEFT for face data covering the faces normal to every direction. Written to
+   CGNS under name, suffixed X, Y, Z when ncomp > 1. */
+typedef struct {
+  const char           *name;
+  DMStagStencilLocation loc;
+  PetscInt              c0;
+  PetscInt              ncomp;
+} MeshField;
+
+/* Describe the fields of v and make VecView()/FlucaVecLoad() on a CGNS viewer write/read them through the Mesh; other
+   viewers keep the default Vec behavior. The description is composed on v, so VecDuplicate() carries it.
+   Exported for Phys; not part of the public API. */
+FLUCA_EXTERN PetscErrorCode MeshVecSetFields_Internal(Mesh, Vec, PetscInt, const MeshField[]);
 
 /* MESHCARTESIAN CGNS I/O, defined in impls/cartesian/cartesiancgns.c */
 FLUCA_INTERN PetscErrorCode MeshView_Cartesian_CGNS(Mesh, PetscViewer);
