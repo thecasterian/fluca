@@ -10,7 +10,7 @@ Pure C project (not C++). Follows PETSc coding conventions — see `petsc-conven
 - **Error handling**: `PetscCall()`, `PetscCheck()` — no exceptions, no `assert()`
 - **Testing**: Golden-output comparison via `ctest` — not googletest
 - **Build**: `cmake --build build && ctest --test-dir build`
-- **Dependencies**: PETSc >= 3.23, HDF5, CGNS (parallel I/O)
+- **Dependencies**: PETSc >= 3.25, HDF5, CGNS (parallel I/O)
 
 ## Source Layout
 
@@ -23,8 +23,8 @@ fluca/
 │   ├── fd/            Finite difference operators (FlucaFD) on DMStag
 │   │   ├── interface/ Base class (create, setup, apply, options)
 │   │   └── impls/     Subtypes: derivative, composition, scale, sum, secondordertvd
-│   ├── phys/          Problem statement (Phys): base DM, properties, BCs, solution fields
-│   ├── mesh/          Mesh abstraction (Mesh, MeshCart) — unused, no longer referenced by ns/; pending removal
+│   ├── phys/          Problem statement (Phys): mesh, properties, BCs, solution fields
+│   ├── mesh/          Mesh (MeshCartesian): the grid, a user-provided DMStag; CGNS grid I/O
 │   ├── ns/            Navier-Stokes solver (NS): solves the problem stated by a Phys
 │   ├── seg/           Segregated solver framework
 │   └── viewer/        CGNS I/O via PetscViewer
@@ -48,7 +48,7 @@ fluca/
 ## Key Modules
 
 - **FlucaFD**: Polymorphic finite difference operator on PETSc DMStag. Subtypes compute stencils for derivatives, compositions, scaling, sums, and TVD schemes.
-- **Phys**: States the continuous problem — base DMStag, density/viscosity, per-face boundary conditions (`PhysSetBoundaryCondition`), and the solution fields (velocity, face velocity, pressure) that `PhysSetUp` lays out on one DMStag.
+- **Phys**: States the continuous problem — the Mesh, density/viscosity, per-face boundary conditions (`PhysSetBoundaryCondition`), and the solution fields (velocity, face velocity, pressure) that `PhysSetUp` lays out on one DMStag. `PhysCreateSolutionVector` returns vectors that `VecView`/`VecLoad` write and read per field in CGNS.
 - **NS**: Incompressible Navier-Stokes solver that solves the problem a `Phys` states — Crank-Nicolson time integration of a monolithic system built from FlucaFD operators, with the PCABF preconditioner for the coupled solve.
-- **Mesh / MeshCart**: Cartesian grid with boundary types, coordinate setup, and DM access. Unused by any other module; kept in the tree pending removal.
-- **Viewer**: CGNS file I/O for solution data.
+- **Mesh**: Wraps the user's DMStag (`MeshCartesianCreate`); `Phys` and `FlucaFD` take a Mesh. Subtype `MESHCARTESIAN` (no immersed boundary yet). Purely the grid: frozen after `MeshSetUp`; `MeshView`/`MeshLoad` write/read the grid in CGNS. Other modules may check `mesh->setupcalled` but use no other Mesh internals.
+- **Viewer**: CGNS file I/O: the `PetscViewer` type plus internal routines that write/read fields of DMStag vectors per output step (used by Phys).

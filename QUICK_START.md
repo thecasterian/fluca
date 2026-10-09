@@ -42,9 +42,9 @@ int main(int argc, char **argv)
 
 ## Data Structures
 
-### DM (PETSc DMStag)
+### Mesh (on a PETSc DMStag)
 
-Fluca does not provide its own mesh abstraction. The computational grid is a plain PETSc `DMStag`, which you create and configure directly:
+The computational grid is a PETSc `DMStag` that you create and configure directly, then wrap in a `Mesh`:
 
 ```c
 DM dm;
@@ -56,22 +56,30 @@ PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,
 PetscCall(DMSetFromOptions(dm));  // e.g. -stag_grid_x, -stag_grid_y
 PetscCall(DMSetUp(dm));
 PetscCall(DMStagSetUniformCoordinatesProduct(dm, xmin, xmax, ymin, ymax, 0., 0.));
+
+Mesh mesh;
+
+PetscCall(MeshCartesianCreate(dm, &mesh));
+PetscCall(MeshSetFromOptions(mesh));
+PetscCall(MeshSetUp(mesh));  // the Mesh (and its DM) cannot change after this
 ```
+
+The coordinates may be non-uniform: edit them through `DMStagGetProductCoordinateArrays` before `MeshSetUp`. `MeshLoad(mesh, viewer)` instead builds the DMStag (sizes, coordinates, boundary types) from a CGNS file written by `MeshView`.
 
 Periodicity is expressed through the `DM_BOUNDARY_*` type passed at creation — there is no separate periodic flag elsewhere in the API.
 
 ### Phys (Problem Statement)
 
-The `Phys` object states the continuous problem: the base grid, material properties, boundary conditions, and (once set up) the solution fields. Fluca currently provides one type, `PHYSLAMINAR` (isothermal laminar incompressible flow).
+The `Phys` object states the continuous problem: the mesh, material properties, boundary conditions, and (once set up) the solution fields. Fluca currently provides one type, `PHYSLAMINAR` (isothermal laminar incompressible flow).
 
 #### Key Functions
 
-- **Creation and base grid**:
+- **Creation and mesh**:
   ```c
   Phys phys;
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
   PetscCall(PhysSetType(phys, PHYSLAMINAR));
-  PetscCall(PhysSetBaseDM(phys, dm));
+  PetscCall(PhysSetMesh(phys, mesh));
   ```
 
 - **Material properties** (also settable via `-phys_density`, `-phys_viscosity`):
@@ -80,7 +88,7 @@ The `Phys` object states the continuous problem: the base grid, material propert
   PetscCall(PhysSetViscosity(phys, mu));
   ```
 
-- **Boundary conditions**: set per face of the base DM. Faces are indexed `0`=left, `1`=right, `2`=down, `3`=up, `4`=back, `5`=front. Periodicity comes from the DMStag boundary type, not from a BC entry.
+- **Boundary conditions**: set per face of the mesh. Faces are indexed `0`=left, `1`=right, `2`=down, `3`=up, `4`=back, `5`=front. Periodicity comes from the DMStag boundary type, not from a BC entry.
   ```c
   PhysBC wall = {PHYS_BC_VELOCITY, NULL, NULL, NULL, NULL};  // fn == NULL means zero velocity
   PetscCall(PhysSetBoundaryCondition(phys, 0, wall));  // left
@@ -174,8 +182,8 @@ The `NS` object solves the problem stated by a `Phys`. It manages time integrati
 A typical Fluca simulation follows this workflow:
 
 1. Initialize Fluca
-2. Create and configure the base DMStag grid
-3. Create the `Phys` (base DM, density, viscosity, boundary conditions)
+2. Create the DMStag grid and wrap it in a `Mesh`
+3. Create the `Phys` (mesh, density, viscosity, boundary conditions)
 4. Create and configure the `NS` solver on that `Phys`
 5. Set the initial condition on the solution vector
 6. Solve
@@ -204,6 +212,7 @@ static PetscErrorCode LidVelocity(PetscInt dim, PetscReal t, const PetscReal x[]
 int main(int argc, char **argv)
 {
   DM        dm;
+  Mesh      mesh;
   Phys      phys;
   NS        ns;
   Vec       sol;
@@ -215,17 +224,20 @@ int main(int argc, char **argv)
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-Re", &Re, NULL));
 
-  // 1. Create the base DMStag grid (256x256 cells in default)
+  // 1. Create the DMStag grid (256x256 cells in default) and its Mesh
   PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 256, 256,
                             PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, DMSTAG_STENCIL_STAR, 2, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetFromOptions(mesh));
+  PetscCall(MeshSetUp(mesh));
 
   // 2. Create and configure the Phys (density 1, viscosity 1/Re)
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
   PetscCall(PhysSetType(phys, PHYSLAMINAR));
-  PetscCall(PhysSetBaseDM(phys, dm));
+  PetscCall(PhysSetMesh(phys, mesh));
   PetscCall(PhysSetDensity(phys, 1.));
   PetscCall(PhysSetViscosity(phys, 1. / Re));
   for (f = 0; f < 3; f++) PetscCall(PhysSetBoundaryCondition(phys, f, wall)); // left, right, down
@@ -247,6 +259,7 @@ int main(int argc, char **argv)
   // 5. Clean up
   PetscCall(NSDestroy(&ns));
   PetscCall(PhysDestroy(&phys));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
   PetscCall(FlucaFinalize());
   return 0;
@@ -263,7 +276,7 @@ See `fluca/tutorials/ns/ex1.c` (lid-driven cavity) and `fluca/tutorials/ns/ex2.c
 
 ## Output and Visualization
 
-`NSViewSolution(ns, viewer)` is a plain `VecView` of the solution vector on the Phys solution DM — it accepts any `PetscViewer` (e.g. ASCII, binary):
+`NSViewSolution(ns, viewer)` views the solution vector at the current step and time. With a CGNS viewer (`PetscViewerFlucaCGNSOpen`) it writes the grid and every field by name (`VelocityX`/`VelocityY`/`VelocityZ`, `VelocityNormal` on faces, `Pressure`; CGNS SIDS identifiers); any other `PetscViewer` (e.g. ASCII, binary) gets the plain vector:
 
 ```c
 PetscViewer viewer;
@@ -273,7 +286,9 @@ PetscCall(NSViewSolution(ns, viewer));
 PetscCall(PetscViewerDestroy(&viewer));
 ```
 
-There is currently no dedicated CGNS solution I/O or a solution-loading entry point on `NS` — those were removed along with the standalone application target. Use the fields of the solution vector directly (`NSGetSolutionSubVector`) for post-processing within your own program.
+To write the solution during a run, use `-ns_monitor_solution cgns:out-%d.cgns` (one file per output step; `-ns_monitor_solution_interval <n>` writes every n steps).
+
+To restart, set up the same problem and call `NSLoadSolution(ns, viewer)` after `NSSetUp` with a CGNS viewer opened in `FILE_MODE_READ`; it loads the last step in the file and restores the step number and time.
 
 ## Next Steps
 

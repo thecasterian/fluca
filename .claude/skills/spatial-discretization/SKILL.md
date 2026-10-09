@@ -229,7 +229,7 @@ Off-grid stencil points are resolved by `FlucaFDRemoveOffGridPoints_Internal()`:
 
 **Derivative** (element ↔ face transition):
 ```c
-FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 2,
+FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 2,
     DMSTAG_ELEMENT, 0, DMSTAG_LEFT, 0, &ddx);  /* d/dx: elem→face */
 ```
 
@@ -238,9 +238,9 @@ FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 2,
 TVD(ELEMENT→face) → Scale(ρ) → d/dx(face→ELEMENT)
 ```
 ```c
-FlucaFDSecondOrderTVDCreate(dm, FLUCAFD_X, 0, 0, &tvd);
+FlucaFDSecondOrderTVDCreate(mesh, FLUCAFD_X, 0, 0, &tvd);
 FlucaFDScaleCreateConstant(tvd, rho, &scaled);
-FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &ddx);
+FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &ddx);
 FlucaFDCompositionCreate(scaled, ddx, &conv_x);
 ```
 
@@ -249,9 +249,9 @@ FlucaFDCompositionCreate(scaled, ddx, &conv_x);
 d/dx(ELEMENT→face) → Scale(μ) → d/dx(face→ELEMENT)
 ```
 ```c
-FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 2, DMSTAG_ELEMENT, 0, DMSTAG_LEFT, 0, &inner);
+FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 2, DMSTAG_ELEMENT, 0, DMSTAG_LEFT, 0, &inner);
 FlucaFDScaleCreateConstant(inner, mu, &scaled);
-FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &outer);
+FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &outer);
 FlucaFDCompositionCreate(scaled, outer, &diff_x);
 ```
 
@@ -294,4 +294,4 @@ FlucaFDSetOptionsPrefix(fd_y, "y_");  /* -y_flucafd_deriv_order */
 | `src/fd/impls/sum/sum.c` | Additive combination |
 | `src/fd/impls/secondordertvd/secondordertvd.c` | TVD interpolation |
 
-DMStag grid creation is done directly with PETSc's `DMStagCreate2d`/`DMStagCreate3d` (see `fluca/tutorials/ns/ex1.c`) — the `Mesh`/`MeshCart` module (`src/mesh/`) is unused and pending removal.
+The grid is a user-created DMStag (`DMStagCreate1d/2d/3d` + `DMStagSetUniformCoordinatesProduct`) wrapped in a `Mesh`: `MeshCartesianCreate(dm, &mesh); MeshSetUp(mesh);`. FlucaFD operators reference the Mesh (`FlucaFDSetMesh`, `FlucaFD*Create(mesh, ...)`); `FlucaFDApply`/`FlucaFDGetOperator` still take the DMs of the input and output vectors. All operators combined into one composite must share the same Mesh object.
