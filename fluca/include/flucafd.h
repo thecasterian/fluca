@@ -1,6 +1,7 @@
 #pragma once
 
 #include <flucasys.h>
+#include <flucamesh.h>
 #include <petscmat.h>
 #include <petscdmstag.h>
 
@@ -111,7 +112,8 @@ FLUCA_EXTERN PetscErrorCode FlucaFDDestroy(FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDView(FlucaFD, PetscViewer);
 FLUCA_EXTERN PetscErrorCode FlucaFDViewFromOptions(FlucaFD, PetscObject, const char[]);
 
-FLUCA_EXTERN PetscErrorCode FlucaFDSetDM(FlucaFD, DM);
+FLUCA_EXTERN PetscErrorCode FlucaFDSetMesh(FlucaFD, Mesh);
+FLUCA_EXTERN PetscErrorCode FlucaFDGetMesh(FlucaFD, Mesh *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetInputLocation(FlucaFD, DMStagStencilLocation, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetOutputLocation(FlucaFD, DMStagStencilLocation, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSetBoundaryConditions(FlucaFD, PetscInt, const FlucaFDBoundaryCondition[]);
@@ -128,7 +130,7 @@ FLUCA_EXTERN PetscErrorCode FlucaFDApplyDot(FlucaFD, PetscReal, DM, DM, Vec, Vec
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperator(FlucaFD, DM, DM, Mat);
 
 /* FLUCAFDDERIVATIVE specific */
-FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeCreate(DM, FlucaFDDirection, PetscInt, PetscInt, DMStagStencilLocation, PetscInt, DMStagStencilLocation, PetscInt, FlucaFD *);
+FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeCreate(Mesh, FlucaFDDirection, PetscInt, PetscInt, DMStagStencilLocation, PetscInt, DMStagStencilLocation, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeSetDerivativeOrder(FlucaFD, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeSetAccuracyOrder(FlucaFD, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeSetDirection(FlucaFD, FlucaFDDirection);
@@ -152,7 +154,7 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSumAddOperand(FlucaFD, FlucaFD);
 /* FLUCAFDSECONDORDERTVD specific */
 FLUCA_EXTERN PetscFunctionList FlucaFDLimiterList;
 
-FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDCreate(DM, FlucaFDDirection, PetscInt, PetscInt, FlucaFD *);
+FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDCreate(Mesh, FlucaFDDirection, PetscInt, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetDirection(FlucaFD, FlucaFDDirection);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetLimiter(FlucaFD, const char *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetMassFlux(FlucaFD, Vec, PetscInt);

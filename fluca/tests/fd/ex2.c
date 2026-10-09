@@ -13,6 +13,7 @@ static const char help[] = "Test FlucaFD sum operator\n"
 int main(int argc, char **argv)
 {
   DM                  dm;
+  Mesh                mesh;
   FlucaFD             fd_deriv[3], fd_sum;
   PetscInt            d, npoints;
   PetscInt            N[3], idx[3];
@@ -24,13 +25,15 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 1.));
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetUp(mesh));
 
   for (d = 0; d < 3; ++d) {
     char prefix[PETSC_MAX_OPTION_NAME];
 
     PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_deriv[d]));
     PetscCall(FlucaFDSetType(fd_deriv[d], FLUCAFDDERIVATIVE));
-    PetscCall(FlucaFDSetDM(fd_deriv[d], dm));
+    PetscCall(FlucaFDSetMesh(fd_deriv[d], mesh));
     PetscCall(FlucaFDSetInputLocation(fd_deriv[d], DMSTAG_ELEMENT, 0));
     PetscCall(FlucaFDSetOutputLocation(fd_deriv[d], DMSTAG_ELEMENT, 0));
     PetscCall(FlucaFDDerivativeSetDirection(fd_deriv[d], (FlucaFDDirection)d));
@@ -61,6 +64,7 @@ int main(int argc, char **argv)
 
   PetscCall(FlucaFDDestroy(&fd_sum));
   for (d = 0; d < 3; ++d) PetscCall(FlucaFDDestroy(&fd_deriv[d]));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
 
   PetscCall(FlucaFinalize());

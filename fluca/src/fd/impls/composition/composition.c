@@ -147,7 +147,7 @@ PetscErrorCode FlucaFDCompositionCreate(FlucaFD inner, FlucaFD outer, FlucaFD *f
   PetscCall(PetscObjectGetComm((PetscObject)inner, &comm));
   PetscCall(FlucaFDCreate(comm, fd));
   PetscCall(FlucaFDSetType(*fd, FLUCAFDCOMPOSITION));
-  PetscCall(FlucaFDSetDM(*fd, inner->dm));
+  PetscCall(FlucaFDSetMesh(*fd, inner->mesh));
   PetscCall(FlucaFDSetInputLocation(*fd, inner->input_loc, inner->input_c));
   PetscCall(FlucaFDSetOutputLocation(*fd, outer->output_loc, outer->output_c));
   PetscCall(FlucaFDCompositionSetOperands(*fd, inner, outer));

@@ -22,7 +22,7 @@ Fluca is a high-performance CFD solver designed for simulating incompressible vi
 
 - **CMake**: >= 3.20
 - **C Compiler**: Compatible with PETSc
-- **PETSc**: >= 3.23
+- **PETSc**: >= 3.25
 - **HDF5**: Required by CGNS
 - **CGNS**: Must be built with parallel I/O support enabled
 

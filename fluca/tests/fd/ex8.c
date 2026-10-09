@@ -13,6 +13,7 @@ static PetscErrorCode FillScaleVector(DM, Vec);
 int main(int argc, char **argv)
 {
   DM                  dm;
+  Mesh                mesh;
   FlucaFD             fd_deriv, fd_scale;
   Vec                 vec;
   PetscInt            M, idx, npoints_raw, npoints;
@@ -25,10 +26,12 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 0., 0., 0.));
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetUp(mesh));
 
   PetscCall(FlucaFDCreate(PETSC_COMM_WORLD, &fd_deriv));
   PetscCall(FlucaFDSetType(fd_deriv, FLUCAFDDERIVATIVE));
-  PetscCall(FlucaFDSetDM(fd_deriv, dm));
+  PetscCall(FlucaFDSetMesh(fd_deriv, mesh));
   PetscCall(FlucaFDSetInputLocation(fd_deriv, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOutputLocation(fd_deriv, DMSTAG_ELEMENT, 0));
   PetscCall(FlucaFDSetOptionsPrefix(fd_deriv, "deriv_"));
@@ -74,6 +77,7 @@ int main(int argc, char **argv)
   PetscCall(VecDestroy(&vec));
   PetscCall(FlucaFDDestroy(&fd_scale));
   PetscCall(FlucaFDDestroy(&fd_deriv));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
 
   PetscCall(FlucaFinalize());

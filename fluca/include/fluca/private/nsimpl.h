@@ -84,11 +84,14 @@ struct _p_NS {
   /* Monitor -------------------------------------------------------------- */
   PetscInt num_mons;
   PetscErrorCode (*mons[MAXNSMONITORS])(NS, void *);
-  void *mon_ctxs[MAXNSMONITORS];
-  PetscErrorCode (*mon_ctx_destroys[MAXNSMONITORS])(void **);
+  void              *mon_ctxs[MAXNSMONITORS];
+  PetscCtxDestroyFn *mon_ctx_destroys[MAXNSMONITORS];
 };
 
 /* Defined in interface/nsops.c */
 FLUCA_INTERN PetscErrorCode NSSetUpSpatialOperators_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSDestroySpatialOperators_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSSetVelocityBCs_Internal(NS, FlucaFD, PetscInt);
+
+/* Defined in interface/nsmon.c */
+FLUCA_INTERN PetscErrorCode NSMonitorSolutionSetUp_Internal(NS, PetscViewerAndFormat *);

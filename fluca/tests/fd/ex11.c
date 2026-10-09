@@ -57,6 +57,7 @@ static PetscErrorCode FillInputVector(DM dm, Vec u)
 int main(int argc, char **argv)
 {
   DM                       dm;
+  Mesh                     mesh;
   FlucaFD                  fd_test, fd_ref;
   FlucaFDBoundaryCondition bcs_test[2], bcs_ref[2];
   Vec                      u, y_test, y_ref;
@@ -71,6 +72,8 @@ int main(int argc, char **argv)
   PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, 8, 0, 1, DMSTAG_STENCIL_BOX, 1, NULL, &dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 0., 0., 0.));
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetUp(mesh));
 
   PetscCall(DMCreateGlobalVector(dm, &u));
   PetscCall(FillInputVector(dm, u));
@@ -137,11 +140,11 @@ int main(int argc, char **argv)
     SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_OUTOFRANGE, "Invalid -case %" PetscInt_FMT "; must be 1-4", cas);
   }
 
-  PetscCall(FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_test));
+  PetscCall(FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_test));
   PetscCall(FlucaFDSetBoundaryConditions(fd_test, 0, bcs_test));
   PetscCall(FlucaFDSetUp(fd_test));
 
-  PetscCall(FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_ref));
+  PetscCall(FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_ref));
   PetscCall(FlucaFDSetBoundaryConditions(fd_ref, 0, bcs_ref));
   PetscCall(FlucaFDSetUp(fd_ref));
 
@@ -159,6 +162,7 @@ int main(int argc, char **argv)
   PetscCall(VecDestroy(&y_ref));
   PetscCall(VecDestroy(&y_test));
   PetscCall(VecDestroy(&u));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
 
   PetscCall(FlucaFinalize());

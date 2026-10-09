@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 add_library(fluca_viewer SHARED
     interface/viewerbasic.c
-    interface/viewervec.c
     impl/flucacgns/flucacgns.c
+    impl/flucacgns/flucacgnsdmstag.c
 )
 
 target_include_directories(fluca_viewer PUBLIC

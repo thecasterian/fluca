@@ -1,7 +1,7 @@
 #include <fluca/private/nsimpl.h>
 #include <flucaviewer.h>
 
-PetscErrorCode NSMonitorSet(NS ns, PetscErrorCode (*mon)(NS, void *), void *mon_ctx, PetscErrorCode (*mon_ctx_destroy)(void **))
+PetscErrorCode NSMonitorSet(NS ns, PetscErrorCode (*mon)(NS, void *), void *mon_ctx, PetscCtxDestroyFn *mon_ctx_destroy)
 {
   PetscInt  i;
   PetscBool identical;
@@ -62,7 +62,7 @@ PetscErrorCode NSMonitorSetFromOptions(NS ns, const char name[], const char help
 
     PetscCall(PetscViewerDestroy(&viewer));
     if (mon_setup) PetscCall((*mon_setup)(ns, vf));
-    PetscCall(NSMonitorSet(ns, (PetscErrorCode(*)(NS, void *))mon, vf, (PetscErrorCode(*)(void **))PetscViewerAndFormatDestroy));
+    PetscCall(NSMonitorSet(ns, (PetscErrorCode(*)(NS, void *))mon, vf, (PetscCtxDestroyFn *)PetscViewerAndFormatDestroy));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -82,6 +82,35 @@ PetscErrorCode NSMonitorDefault(NS ns, PetscViewerAndFormat *vf)
       PetscCall(PetscViewerASCIISubtractTab(vf->viewer, ((PetscObject)ns)->tablevel));
     }
     PetscCall(PetscViewerPopFormat(viewer));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* mon_setup for NSMonitorSolution: caches the last step written through this viewer, so that
+   viewing the same step twice (e.g. NSMonitor() called again at the start of a second NSSolve())
+   does not rewrite it */
+PetscErrorCode NSMonitorSolutionSetUp_Internal(NS ns, PetscViewerAndFormat *vf)
+{
+  PetscInt *last_step;
+
+  PetscFunctionBegin;
+  PetscCall(PetscNew(&last_step));
+  *last_step       = -1;
+  vf->data         = last_step;
+  vf->data_destroy = PetscCtxDestroyDefault;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSMonitorSolution(NS ns, PetscViewerAndFormat *vf)
+{
+  PetscInt *last_step = (PetscInt *)vf->data;
+
+  PetscFunctionBegin;
+  if (vf->view_interval > 0 && ns->step % vf->view_interval == 0 && (!last_step || *last_step != ns->step)) {
+    PetscCall(PetscViewerPushFormat(vf->viewer, vf->format));
+    PetscCall(NSViewSolution(ns, vf->viewer));
+    PetscCall(PetscViewerPopFormat(vf->viewer));
+    if (last_step) *last_step = ns->step;
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

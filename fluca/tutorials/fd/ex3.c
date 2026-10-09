@@ -13,6 +13,7 @@ static const char help[] = "Solve 2D unsteady convection-diffusion equation usin
 
 typedef struct {
   DM          dm, dm_vel;
+  Mesh        mesh;
   Vec         vel;
   PetscScalar mu;
   FlucaFD     fd_tvd_x, fd_tvd_y, fd;
@@ -60,11 +61,11 @@ static PetscErrorCode CreateOperator(AppCtx *ctx, FlucaFD *fd_rhs)
   PetscFunctionBegin;
 
   /* Convection x: -d/dx(u*phi) */
-  PetscCall(FlucaFDSecondOrderTVDCreate(ctx->dm, FLUCAFD_X, 0, 0, &ctx->fd_tvd_x));
+  PetscCall(FlucaFDSecondOrderTVDCreate(ctx->mesh, FLUCAFD_X, 0, 0, &ctx->fd_tvd_x));
   PetscCall(FlucaFDSetFromOptions(ctx->fd_tvd_x));
   PetscCall(FlucaFDSetUp(ctx->fd_tvd_x));
 
-  PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_conv_deriv_x));
+  PetscCall(FlucaFDDerivativeCreate(ctx->mesh, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_conv_deriv_x));
   PetscCall(FlucaFDSetUp(fd_conv_deriv_x));
 
   PetscCall(FlucaFDCompositionCreate(ctx->fd_tvd_x, fd_conv_deriv_x, &fd_conv_x));
@@ -74,11 +75,11 @@ static PetscErrorCode CreateOperator(AppCtx *ctx, FlucaFD *fd_rhs)
   PetscCall(FlucaFDSetUp(fd_neg_conv_x));
 
   /* Convection y: -d/dy(v*phi) */
-  PetscCall(FlucaFDSecondOrderTVDCreate(ctx->dm, FLUCAFD_Y, 0, 0, &ctx->fd_tvd_y));
+  PetscCall(FlucaFDSecondOrderTVDCreate(ctx->mesh, FLUCAFD_Y, 0, 0, &ctx->fd_tvd_y));
   PetscCall(FlucaFDSetFromOptions(ctx->fd_tvd_y));
   PetscCall(FlucaFDSetUp(ctx->fd_tvd_y));
 
-  PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_Y, 1, 2, DMSTAG_DOWN, 0, DMSTAG_ELEMENT, 0, &fd_conv_deriv_y));
+  PetscCall(FlucaFDDerivativeCreate(ctx->mesh, FLUCAFD_Y, 1, 2, DMSTAG_DOWN, 0, DMSTAG_ELEMENT, 0, &fd_conv_deriv_y));
   PetscCall(FlucaFDSetUp(fd_conv_deriv_y));
 
   PetscCall(FlucaFDCompositionCreate(ctx->fd_tvd_y, fd_conv_deriv_y, &fd_conv_y));
@@ -88,26 +89,26 @@ static PetscErrorCode CreateOperator(AppCtx *ctx, FlucaFD *fd_rhs)
   PetscCall(FlucaFDSetUp(fd_neg_conv_y));
 
   /* Diffusion x: d/dx(mu*dphi/dx) */
-  PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_X, 1, 2, DMSTAG_ELEMENT, 0, DMSTAG_LEFT, 0, &fd_diff_inner_x));
+  PetscCall(FlucaFDDerivativeCreate(ctx->mesh, FLUCAFD_X, 1, 2, DMSTAG_ELEMENT, 0, DMSTAG_LEFT, 0, &fd_diff_inner_x));
   PetscCall(FlucaFDSetUp(fd_diff_inner_x));
 
   PetscCall(FlucaFDScaleCreateConstant(fd_diff_inner_x, ctx->mu, &fd_diff_scaled_x));
   PetscCall(FlucaFDSetUp(fd_diff_scaled_x));
 
-  PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_diff_outer_x));
+  PetscCall(FlucaFDDerivativeCreate(ctx->mesh, FLUCAFD_X, 1, 2, DMSTAG_LEFT, 0, DMSTAG_ELEMENT, 0, &fd_diff_outer_x));
   PetscCall(FlucaFDSetUp(fd_diff_outer_x));
 
   PetscCall(FlucaFDCompositionCreate(fd_diff_scaled_x, fd_diff_outer_x, &fd_diff_x));
   PetscCall(FlucaFDSetUp(fd_diff_x));
 
   /* Diffusion y: d/dy(mu*dphi/dy) */
-  PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_Y, 1, 2, DMSTAG_ELEMENT, 0, DMSTAG_DOWN, 0, &fd_diff_inner_y));
+  PetscCall(FlucaFDDerivativeCreate(ctx->mesh, FLUCAFD_Y, 1, 2, DMSTAG_ELEMENT, 0, DMSTAG_DOWN, 0, &fd_diff_inner_y));
   PetscCall(FlucaFDSetUp(fd_diff_inner_y));
 
   PetscCall(FlucaFDScaleCreateConstant(fd_diff_inner_y, ctx->mu, &fd_diff_scaled_y));
   PetscCall(FlucaFDSetUp(fd_diff_scaled_y));
 
-  PetscCall(FlucaFDDerivativeCreate(ctx->dm, FLUCAFD_Y, 1, 2, DMSTAG_DOWN, 0, DMSTAG_ELEMENT, 0, &fd_diff_outer_y));
+  PetscCall(FlucaFDDerivativeCreate(ctx->mesh, FLUCAFD_Y, 1, 2, DMSTAG_DOWN, 0, DMSTAG_ELEMENT, 0, &fd_diff_outer_y));
   PetscCall(FlucaFDSetUp(fd_diff_outer_y));
 
   PetscCall(FlucaFDCompositionCreate(fd_diff_scaled_y, fd_diff_outer_y, &fd_diff_y));
@@ -245,6 +246,8 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(ctx.dm));
   PetscCall(DMSetUp(ctx.dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(ctx.dm, 0., 1., 0., 1., 0., 0.));
+  PetscCall(MeshCartesianCreate(ctx.dm, &ctx.mesh));
+  PetscCall(MeshSetUp(ctx.mesh));
 
   /* Create solution vector and matrix */
   PetscCall(DMCreateGlobalVector(ctx.dm, &u));
@@ -282,6 +285,7 @@ int main(int argc, char **argv)
   PetscCall(FlucaFDDestroy(&ctx.fd_tvd_x));
   PetscCall(VecDestroy(&ctx.vel));
   PetscCall(DMDestroy(&ctx.dm_vel));
+  PetscCall(MeshDestroy(&ctx.mesh));
   PetscCall(DMDestroy(&ctx.dm));
 
   PetscCall(FlucaFinalize());

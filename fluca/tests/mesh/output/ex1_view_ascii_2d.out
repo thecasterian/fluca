@@ -1,0 +1,6 @@
+Mesh Object: 1 MPI process
+  type: cartesian
+  Dimension: 2
+  Global sizes: 8 x 4
+  Boundary types: NONE PERIODIC
+  Domain: [0., 1.] x [0., 2.]

@@ -1,6 +1,6 @@
 Default density: 1., viscosity: 1.
 Density: 2., viscosity: 0.5
 Solution DM DOF per face: 1, per element: 3
-velocity: location ELEMENT, c0 0, ncomp 2, entries 32
-face_velocity: location FACE, c0 0, ncomp 1, entries 40
-pressure: location ELEMENT, c0 2, ncomp 1, entries 16
+Velocity: location ELEMENT, c0 0, ncomp 2, entries 32
+VelocityNormal: location FACE, c0 0, ncomp 1, entries 40
+Pressure: location ELEMENT, c0 2, ncomp 1, entries 16

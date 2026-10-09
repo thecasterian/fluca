@@ -53,6 +53,7 @@ static PetscErrorCode FillInputVector(DM dm, Vec u)
 int main(int argc, char **argv)
 {
   DM                       dm_in, dm_out;
+  Mesh                     mesh;
   FlucaFD                  fd_a, fd_b, fd_sum;
   FlucaFD                  operands[2];
   FlucaFDBoundaryCondition bcs_comp0[2] = {{0}}, bcs_comp1[2] = {{0}};
@@ -67,6 +68,8 @@ int main(int argc, char **argv)
   PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, 8, 0, 2, DMSTAG_STENCIL_BOX, 1, NULL, &dm_in));
   PetscCall(DMSetUp(dm_in));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm_in, 0., 1., 0., 0., 0., 0.));
+  PetscCall(MeshCartesianCreate(dm_in, &mesh));
+  PetscCall(MeshSetUp(mesh));
 
   /* Output DM: 1 element DOF */
   PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, 8, 0, 1, DMSTAG_STENCIL_BOX, 1, NULL, &dm_out));
@@ -74,9 +77,9 @@ int main(int argc, char **argv)
   PetscCall(DMStagSetUniformCoordinatesProduct(dm_out, 0., 1., 0., 0., 0., 0.));
 
   /* fd_a: d/dx on input component 0 -> output component 0 */
-  PetscCall(FlucaFDDerivativeCreate(dm_in, FLUCAFD_X, 1, 2, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_a));
+  PetscCall(FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 2, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_a));
   /* fd_b: d/dx on input component 1 -> output component 0 */
-  PetscCall(FlucaFDDerivativeCreate(dm_in, FLUCAFD_X, 1, 2, DMSTAG_ELEMENT, 1, DMSTAG_ELEMENT, 0, &fd_b));
+  PetscCall(FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 2, DMSTAG_ELEMENT, 1, DMSTAG_ELEMENT, 0, &fd_b));
 
   /* BCs for component 0 (u=x^2): Dirichlet u(0)=0, u(1)=1 */
   bcs_comp0[0].type  = FLUCAFD_BC_DIRICHLET;
@@ -146,6 +149,7 @@ int main(int argc, char **argv)
   PetscCall(FlucaFDDestroy(&fd_sum));
   PetscCall(FlucaFDDestroy(&fd_b));
   PetscCall(FlucaFDDestroy(&fd_a));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm_out));
   PetscCall(DMDestroy(&dm_in));
 

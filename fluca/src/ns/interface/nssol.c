@@ -75,11 +75,16 @@ PetscErrorCode NSRestoreSolutionSubVector(NS ns, const char name[], Vec *subvec)
 
 PetscErrorCode NSViewSolution(NS ns, PetscViewer viewer)
 {
+  DM dm;
+
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   if (!viewer) PetscCall(PetscViewerASCIIGetStdout(PetscObjectComm((PetscObject)ns), &viewer));
   PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
   PetscCheckSameComm(ns, 1, viewer, 2);
+  PetscCheck(ns->setupcalled, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "Must call NSSetUp() before NSViewSolution()");
+  PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  PetscCall(DMSetOutputSequenceNumber(dm, ns->step, ns->t));
   PetscCall(VecView(ns->sol, viewer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -103,5 +108,21 @@ PetscErrorCode NSViewSolutionFromOptions(NS ns, PetscObject obj, const char name
     PetscCall(PetscViewerPopFormat(viewer));
     PetscCall(PetscViewerDestroy(&viewer));
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSLoadSolution(NS ns, PetscViewer viewer)
+{
+  DM dm;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
+  PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
+  PetscCheckSameComm(ns, 1, viewer, 2);
+  PetscCheck(ns->setupcalled, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "Must call NSSetUp() before NSLoadSolution()");
+  PetscCall(PetscViewerCheckReadable(viewer));
+  PetscCall(VecLoad(ns->sol, viewer));
+  PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  PetscCall(DMGetOutputSequenceNumber(dm, &ns->step, &ns->t));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -47,6 +47,7 @@ static PetscErrorCode FillInputVector(DM dm, Vec u)
 int main(int argc, char **argv)
 {
   DM                       dm;
+  Mesh                     mesh;
   FlucaFD                  fd_const, fd_fn;
   FlucaFDBoundaryCondition bcs_const[2] = {{0}}, bcs_fn[2] = {{0}};
   Vec                      u, y_const, y_fn;
@@ -62,9 +63,11 @@ int main(int argc, char **argv)
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 0., 0., 0.));
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetUp(mesh));
 
   /* Reference operator with constant BC values */
-  PetscCall(FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_const));
+  PetscCall(FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_const));
   bcs_const[0].value = left_val;
   bcs_const[1].value = right_val;
   PetscCall(FlucaFDSetBoundaryConditions(fd_const, 0, bcs_const));
@@ -73,7 +76,7 @@ int main(int argc, char **argv)
 
   /* Function-based operator: ConstValBCFn returns the same values from ctx.
      Set value=99 to verify fn takes priority over value. */
-  PetscCall(FlucaFDDerivativeCreate(dm, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_fn));
+  PetscCall(FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 1, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &fd_fn));
   bcs_fn[0].value  = 99.;
   bcs_fn[0].fn     = ConstValBCFn;
   bcs_fn[0].fn_ctx = &left_val;
@@ -104,6 +107,7 @@ int main(int argc, char **argv)
   PetscCall(VecDestroy(&u));
   PetscCall(FlucaFDDestroy(&fd_fn));
   PetscCall(FlucaFDDestroy(&fd_const));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
   PetscCall(FlucaFinalize());
 }

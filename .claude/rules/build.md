@@ -17,10 +17,10 @@ Each module is a shared library with an alias target:
 | Target | Alias | Dependencies |
 |--------|-------|-------------|
 | `fluca_sys` | `fluca::sys` | PETSc, HDF5, CGNS |
-| `fluca_fd` | `fluca::fd` | `fluca::sys` |
-| `fluca_phys` | `fluca::phys` | `fluca::sys` |
+| `fluca_fd` | `fluca::fd` | `fluca::mesh` |
+| `fluca_phys` | `fluca::phys` | `fluca::mesh` |
 | `fluca_ns` | `fluca::ns` | `fluca::phys`, `fluca::fd` |
-| `fluca_mesh` | `fluca::mesh` | `fluca::sys` — unused by any other module; pending removal |
+| `fluca_mesh` | `fluca::mesh` | `fluca::sys`, `fluca::viewer` |
 | `fluca_viewer` | `fluca::viewer` | `fluca::sys` |
 
 Always link against `fluca::*` alias targets, not the raw `fluca_*` names.

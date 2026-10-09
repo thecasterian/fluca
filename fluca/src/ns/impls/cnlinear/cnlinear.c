@@ -179,9 +179,11 @@ static PetscErrorCode NSSetUp_CNLinear(NS ns)
   NS_CNLinear *cn = (NS_CNLinear *)ns->data;
   PetscInt     dim, c_vel, c_U, d, e;
   DM           dm, cdm;
+  Mesh         mesh;
 
   PetscFunctionBegin;
   PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  PetscCall(PhysGetMesh(ns->phys, &mesh));
   PetscCall(DMGetDimension(dm, &dim));
   PetscCall(PhysGetField(ns->phys, PHYS_FIELD_VELOCITY, NULL, &c_vel, NULL));
   PetscCall(PhysGetField(ns->phys, PHYS_FIELD_FACE_VELOCITY, NULL, &c_U, NULL));
@@ -205,7 +207,7 @@ static PetscErrorCode NSSetUp_CNLinear(NS ns)
   for (d = 0; d < dim; d++) {
     PetscCall(DMCreateGlobalVector(cn->dm_face, &cn->ubar[d]));
     for (e = 0; e < dim; e++) {
-      PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, c_vel + d, face_loc[e], 0, &cn->fd_interp_vel[d][e]));
+      PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, c_vel + d, face_loc[e], 0, &cn->fd_interp_vel[d][e]));
       PetscCall(NSSetVelocityBCs_Internal(ns, cn->fd_interp_vel[d][e], d));
       PetscCall(FlucaFDSetUp(cn->fd_interp_vel[d][e]));
     }
@@ -228,15 +230,15 @@ static PetscErrorCode NSSetUp_CNLinear(NS ns)
     for (e = 0; e < dim; e++) {
       FlucaFD interp_d, interp_e, outer;
 
-      PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, c_vel + d, face_loc[e], c_U, &interp_d));
+      PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, c_vel + d, face_loc[e], c_U, &interp_d));
       PetscCall(FlucaFDSetUp(interp_d));
       PetscCall(FlucaFDScaleCreateVector(interp_d, ns->zero, c_U, &cn->fd_conv_U[d][e]));
       PetscCall(FlucaFDSetUp(cn->fd_conv_U[d][e]));
-      PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, c_vel + e, face_loc[e], c_U, &interp_e));
+      PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)e, 0, 2, DMSTAG_ELEMENT, c_vel + e, face_loc[e], c_U, &interp_e));
       PetscCall(FlucaFDSetUp(interp_e));
       PetscCall(FlucaFDScaleCreateVector(interp_e, cn->ubar[d], 0, &cn->fd_conv_ubar[d][e]));
       PetscCall(FlucaFDSetUp(cn->fd_conv_ubar[d][e]));
-      PetscCall(FlucaFDDerivativeCreate(dm, (FlucaFDDirection)e, 1, 2, face_loc[e], c_U, DMSTAG_ELEMENT, c_vel + d, &outer));
+      PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)e, 1, 2, face_loc[e], c_U, DMSTAG_ELEMENT, c_vel + d, &outer));
       PetscCall(FlucaFDSetUp(outer));
       PetscCall(FlucaFDCompositionCreate(cn->fd_conv_U[d][e], outer, &terms[2 * e]));
       PetscCall(FlucaFDSetUp(terms[2 * e]));

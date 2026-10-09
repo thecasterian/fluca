@@ -5,19 +5,21 @@
 
 static const char help[] = "Test the pressure null space NS derives from the boundary condition types\n";
 
-/* A PHYSLAMINAR Phys on dm; every non-periodic side gets a zero-velocity BC */
-static PetscErrorCode CreatePhys_Private(DM dm, Phys *phys)
+/* A PHYSLAMINAR Phys on mesh's DM; every non-periodic side gets a zero-velocity BC */
+static PetscErrorCode CreatePhys_Private(Mesh mesh, Phys *phys)
 {
+  DM             dm;
   DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
   PhysBC         bc    = {PHYS_BC_VELOCITY, NULL, NULL, NULL, NULL};
   PetscInt       dim, d;
 
   PetscFunctionBeginUser;
+  PetscCall(MeshGetDM(mesh, &dm));
   PetscCall(DMGetDimension(dm, &dim));
   PetscCall(DMStagGetBoundaryTypes(dm, &bt[0], &bt[1], &bt[2]));
   PetscCall(PhysCreate(PetscObjectComm((PetscObject)dm), phys));
   PetscCall(PhysSetType(*phys, PHYSLAMINAR));
-  PetscCall(PhysSetBaseDM(*phys, dm));
+  PetscCall(PhysSetMesh(*phys, mesh));
   for (d = 0; d < dim; ++d) {
     if (bt[d] == DM_BOUNDARY_PERIODIC) continue;
     PetscCall(PhysSetBoundaryCondition(*phys, 2 * d, bc));
@@ -29,6 +31,7 @@ static PetscErrorCode CreatePhys_Private(DM dm, Phys *phys)
 int main(int argc, char **argv)
 {
   DM           dm;
+  Mesh         mesh;
   Phys         phys;
   NS           ns;
   SNES         snes;
@@ -49,7 +52,11 @@ int main(int argc, char **argv)
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
 
-  PetscCall(CreatePhys_Private(dm, &phys));
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetFromOptions(mesh));
+  PetscCall(MeshSetUp(mesh));
+
+  PetscCall(CreatePhys_Private(mesh, &phys));
   PetscCall(NSCreate(PETSC_COMM_WORLD, &ns));
   PetscCall(NSSetPhys(ns, phys));
   PetscCall(NSSetFromOptions(ns));
@@ -72,6 +79,7 @@ int main(int argc, char **argv)
 
   PetscCall(NSDestroy(&ns));
   PetscCall(PhysDestroy(&phys));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
   PetscCall(FlucaFinalize());
   return 0;

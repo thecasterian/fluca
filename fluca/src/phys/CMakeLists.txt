@@ -8,9 +8,10 @@ add_library(fluca_phys SHARED
     interface/physpkg.c
     interface/physprop.c
     interface/physreg.c
+    interface/physvec.c
 )
 target_include_directories(fluca_phys PUBLIC
     ${CMAKE_SOURCE_DIR}/fluca/include
 )
-target_link_libraries(fluca_phys PUBLIC fluca::sys)
+target_link_libraries(fluca_phys PUBLIC fluca::sys fluca::mesh)
 add_library(fluca::phys ALIAS fluca_phys)

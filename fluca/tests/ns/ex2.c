@@ -37,6 +37,7 @@ static PetscErrorCode CheckField_Private(IS is, const char name[], Vec a, Vec b,
 int main(int argc, char **argv)
 {
   DM           dm, sol_dm;
+  Mesh         mesh;
   Phys         phys;
   NS           ns;
   SNES         snes;
@@ -58,9 +59,13 @@ int main(int argc, char **argv)
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 0.));
 
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetFromOptions(mesh));
+  PetscCall(MeshSetUp(mesh));
+
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
   PetscCall(PhysSetType(phys, PHYSLAMINAR));
-  PetscCall(PhysSetBaseDM(phys, dm));
+  PetscCall(PhysSetMesh(phys, mesh));
   PetscCall(PhysSetViscosity(phys, 0.1));
   for (k = 0; k < 3; ++k) PetscCall(PhysSetBoundaryCondition(phys, k, wall));
   PetscCall(PhysSetBoundaryCondition(phys, 3, lid));
@@ -177,6 +182,7 @@ int main(int argc, char **argv)
   PetscCall(MatDestroy(&M));
   PetscCall(NSDestroy(&ns));
   PetscCall(PhysDestroy(&phys));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
   PetscCall(FlucaFinalize());
   return 0;

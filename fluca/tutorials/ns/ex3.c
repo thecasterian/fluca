@@ -180,6 +180,7 @@ static PetscErrorCode FieldError_Private(NS ns, const char name[], Vec exact, Pe
 int main(int argc, char **argv)
 {
   DM        dm;
+  Mesh      mesh;
   Phys      phys;
   NS        ns;
   Vec       sol, exact;
@@ -197,9 +198,13 @@ int main(int argc, char **argv)
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, -1., 1., -1., 1., -1., 1.));
   PetscCall(DMStagGetGlobalSizes(dm, &Nx, &Ny, &Nz));
 
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetFromOptions(mesh));
+  PetscCall(MeshSetUp(mesh));
+
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
   PetscCall(PhysSetType(phys, PHYSLAMINAR));
-  PetscCall(PhysSetBaseDM(phys, dm));
+  PetscCall(PhysSetMesh(phys, mesh));
   bc.type       = PHYS_BC_VELOCITY;
   bc.fn         = ExactVelocity_Private;
   bc.ctx        = &app;
@@ -231,6 +236,7 @@ int main(int argc, char **argv)
   PetscCall(VecDestroy(&exact));
   PetscCall(NSDestroy(&ns));
   PetscCall(PhysDestroy(&phys));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
   PetscCall(FlucaFinalize());
   return 0;

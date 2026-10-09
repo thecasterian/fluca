@@ -5,7 +5,7 @@
 static const char help[] = "Test Phys: material properties and the field table of the solution DM\n"
                            "Options:\n"
                            "  -dim <int>      : spatial dimension, 2 or 3 (default: 2)\n"
-                           "  -custom_fields  : remove face_velocity, declare a temperature field, and print the field table again\n";
+                           "  -custom_fields  : remove VelocityNormal, declare a Temperature field, and print the field table again\n";
 
 static PetscErrorCode PrintFields_Private(Phys phys, PetscInt dim)
 {
@@ -34,6 +34,7 @@ static PetscErrorCode PrintFields_Private(Phys phys, PetscInt dim)
 int main(int argc, char **argv)
 {
   DM          dm;
+  Mesh        mesh;
   Phys        phys;
   PhysBC      bc;
   PetscReal   rho, mu;
@@ -52,9 +53,13 @@ int main(int argc, char **argv)
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 1.));
 
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetFromOptions(mesh));
+  PetscCall(MeshSetUp(mesh));
+
   PetscCall(PhysCreate(PETSC_COMM_WORLD, &phys));
   PetscCall(PhysSetType(phys, PHYSLAMINAR));
-  PetscCall(PhysSetBaseDM(phys, dm));
+  PetscCall(PhysSetMesh(phys, mesh));
 
   PetscCall(PhysGetDensity(phys, &rho));
   PetscCall(PhysGetViscosity(phys, &mu));
@@ -79,13 +84,14 @@ int main(int argc, char **argv)
 
   if (custom_fields) {
     PetscCall(PhysRemoveField(phys, PHYS_FIELD_FACE_VELOCITY));
-    PetscCall(PhysDeclareField(phys, "temperature", PHYS_FIELD_ELEMENT, 1));
+    PetscCall(PhysDeclareField(phys, "Temperature", PHYS_FIELD_ELEMENT, 1));
     PetscCall(PhysSetUp(phys));
-    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "After removing face_velocity and declaring temperature:\n"));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "After removing VelocityNormal and declaring Temperature:\n"));
     PetscCall(PrintFields_Private(phys, dim));
   }
 
   PetscCall(PhysDestroy(&phys));
+  PetscCall(MeshDestroy(&mesh));
   PetscCall(DMDestroy(&dm));
   PetscCall(FlucaFinalize());
   return 0;
@@ -106,5 +112,10 @@ int main(int argc, char **argv)
     suffix: custom_fields
     nsize: 1
     args: -custom_fields
+
+  test:
+    suffix: view_ascii
+    nsize: 1
+    args: -phys_view
 
 TEST*/

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <flucasys.h>
+#include <flucamesh.h>
 #include <petscdmstag.h>
 
 /* Phys - Statement of the continuous problem: fields, boundary conditions and material properties */
@@ -44,8 +45,8 @@ typedef struct {
 FLUCA_EXTERN PetscErrorCode PhysCreate(MPI_Comm, Phys *);
 FLUCA_EXTERN PetscErrorCode PhysSetType(Phys, PhysType);
 FLUCA_EXTERN PetscErrorCode PhysGetType(Phys, PhysType *);
-FLUCA_EXTERN PetscErrorCode PhysSetBaseDM(Phys, DM);
-FLUCA_EXTERN PetscErrorCode PhysGetBaseDM(Phys, DM *);
+FLUCA_EXTERN PetscErrorCode PhysSetMesh(Phys, Mesh);
+FLUCA_EXTERN PetscErrorCode PhysGetMesh(Phys, Mesh *);
 FLUCA_EXTERN PetscErrorCode PhysGetSolutionDM(Phys, DM *);
 FLUCA_EXTERN PetscErrorCode PhysSetFromOptions(Phys);
 FLUCA_EXTERN PetscErrorCode PhysSetUp(Phys);
@@ -83,9 +84,12 @@ typedef enum {
 } PhysFieldLocation;
 FLUCA_EXTERN const char *PhysFieldLocations[];
 
-#define PHYS_FIELD_VELOCITY      "velocity"
-#define PHYS_FIELD_FACE_VELOCITY "face_velocity"
-#define PHYS_FIELD_PRESSURE      "pressure"
+/* Field names are CGNS data-name identifiers (SIDS Appendix A), since solution vectors are written to CGNS under them; a
+   field with 2 or 3 components is written as <name>X, <name>Y, <name>Z. Declare custom fields the same way, e.g.
+   "Temperature". */
+#define PHYS_FIELD_VELOCITY      "Velocity"
+#define PHYS_FIELD_FACE_VELOCITY "VelocityNormal" /* velocity normal to each face, q.n */
+#define PHYS_FIELD_PRESSURE      "Pressure"
 
 FLUCA_EXTERN PetscErrorCode PhysDeclareField(Phys, const char[], PhysFieldLocation, PetscInt);
 FLUCA_EXTERN PetscErrorCode PhysRemoveField(Phys, const char[]);
@@ -94,6 +98,7 @@ FLUCA_EXTERN PetscErrorCode PhysGetNumFields(Phys, PetscInt *);
 FLUCA_EXTERN PetscErrorCode PhysGetFieldName(Phys, PetscInt, const char *[]);
 FLUCA_EXTERN PetscErrorCode PhysGetField(Phys, const char[], PhysFieldLocation *, PetscInt *, PetscInt *);
 FLUCA_EXTERN PetscErrorCode PhysGetFieldIS(Phys, const char[], IS *);
+FLUCA_EXTERN PetscErrorCode PhysCreateSolutionVector(Phys, Vec *);
 
 /* Registration */
 FLUCA_EXTERN PetscFunctionList PhysList;

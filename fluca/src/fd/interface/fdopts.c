@@ -1,14 +1,24 @@
 #include <fluca/private/flucafdimpl.h>
 
-PetscErrorCode FlucaFDSetDM(FlucaFD fd, DM dm)
+PetscErrorCode FlucaFDSetMesh(FlucaFD fd, Mesh mesh)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscValidHeaderSpecificType(dm, DM_CLASSID, 2, DMSTAG);
-  PetscCheckSameComm(fd, 1, dm, 2);
-  PetscCall(DMDestroy(&fd->dm));
-  fd->dm = dm;
-  PetscCall(PetscObjectReference((PetscObject)dm));
+  PetscValidHeaderSpecific(mesh, MESH_CLASSID, 2);
+  PetscCheckSameComm(fd, 1, mesh, 2);
+  PetscCheck(!fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the mesh after FlucaFDSetUp()");
+  PetscCall(PetscObjectReference((PetscObject)mesh));
+  PetscCall(MeshDestroy(&fd->mesh));
+  fd->mesh = mesh;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDGetMesh(FlucaFD fd, Mesh *mesh)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscAssertPointer(mesh, 2);
+  *mesh = fd->mesh;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -36,6 +46,7 @@ PetscErrorCode FlucaFDSetOutputLocation(FlucaFD fd, DMStagStencilLocation loc, P
 
 PetscErrorCode FlucaFDSetBoundaryConditions(FlucaFD fd, PetscInt component, const FlucaFDBoundaryCondition bcs[])
 {
+  DM       dm;
   PetscInt dim, nb;
 
   PetscFunctionBegin;
@@ -43,8 +54,9 @@ PetscErrorCode FlucaFDSetBoundaryConditions(FlucaFD fd, PetscInt component, cons
   PetscAssertPointer(bcs, 3);
 
   PetscCheck(component >= 0 && component < FLUCAFD_MAX_COMPONENT, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "component %" PetscInt_FMT " out of range [0, %d)", component, FLUCAFD_MAX_COMPONENT);
-  PetscCheck(fd->dm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Reference DM must be set before setting boundary conditions");
-  PetscCall(DMGetDimension(fd->dm, &dim));
+  PetscCheck(fd->mesh, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Mesh not set. Call FlucaFDSetMesh() first");
+  PetscCall(MeshGetDM(fd->mesh, &dm));
+  PetscCall(DMGetDimension(dm, &dim));
   nb = 2 * dim;
   PetscCall(PetscArraycpy(fd->bcs[component], bcs, nb));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -52,6 +64,7 @@ PetscErrorCode FlucaFDSetBoundaryConditions(FlucaFD fd, PetscInt component, cons
 
 PetscErrorCode FlucaFDGetBoundaryConditions(FlucaFD fd, PetscInt component, FlucaFDBoundaryCondition bcs[])
 {
+  DM       dm;
   PetscInt dim, nb;
 
   PetscFunctionBegin;
@@ -59,8 +72,9 @@ PetscErrorCode FlucaFDGetBoundaryConditions(FlucaFD fd, PetscInt component, Fluc
   PetscAssertPointer(bcs, 3);
 
   PetscCheck(component >= 0 && component < FLUCAFD_MAX_COMPONENT, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "component %" PetscInt_FMT " out of range [0, %d)", component, FLUCAFD_MAX_COMPONENT);
-  PetscCheck(fd->dm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Reference DM must be set before getting boundary conditions");
-  PetscCall(DMGetDimension(fd->dm, &dim));
+  PetscCheck(fd->mesh, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Mesh not set. Call FlucaFDSetMesh() first");
+  PetscCall(MeshGetDM(fd->mesh, &dm));
+  PetscCall(DMGetDimension(dm, &dim));
   nb = 2 * dim;
   PetscCall(PetscArraycpy(bcs, fd->bcs[component], nb));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -73,6 +87,7 @@ PetscErrorCode FlucaFDSetFromOptions(FlucaFD fd)
   char              opt[PETSC_MAX_OPTION_NAME];
   char              text[PETSC_MAX_PATH_LEN];
   PetscBool         flg;
+  DM                dm;
   PetscInt          dim, d, comp;
   DMBoundaryType    bt[3];
   const char *const boundary_names[] = {"left", "right", "down", "up", "back", "front"};
@@ -93,9 +108,10 @@ PetscErrorCode FlucaFDSetFromOptions(FlucaFD fd)
   PetscCall(PetscOptionsEnum("-flucafd_output_loc", "Output stencil location", "FlucaFDSetOutputLocation", DMStagStencilLocations, (PetscEnum)fd->output_loc, (PetscEnum *)&fd->output_loc, NULL));
   PetscCall(PetscOptionsInt("-flucafd_output_c", "Output component", "FlucaFDSetOutputLocation", fd->output_c, &fd->output_c, NULL));
   PetscCheck(fd->output_c >= 0 && fd->output_c < FLUCAFD_MAX_COMPONENT, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Output component %" PetscInt_FMT " out of range [0, %d)", fd->output_c, FLUCAFD_MAX_COMPONENT);
-  PetscCheck(fd->dm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Reference DM not set. Call FlucaFDSetDM() first");
-  PetscCall(DMGetDimension(fd->dm, &dim));
-  PetscCall(DMStagGetBoundaryTypes(fd->dm, &bt[0], &bt[1], &bt[2]));
+  PetscCheck(fd->mesh, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Mesh not set. Call FlucaFDSetMesh() first");
+  PetscCall(MeshGetDM(fd->mesh, &dm));
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(DMStagGetBoundaryTypes(dm, &bt[0], &bt[1], &bt[2]));
   /* Per-component BC type option: -flucafd_<c>_<boundary>_bc_type (only for this operator's input_c) */
   for (d = 0; d < 2 * dim; ++d) {
     if (bt[d / 2] == DM_BOUNDARY_PERIODIC) continue;

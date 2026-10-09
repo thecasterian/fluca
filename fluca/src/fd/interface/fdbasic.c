@@ -1,4 +1,5 @@
 #include <fluca/private/flucafdimpl.h>
+#include <fluca/private/meshimpl.h>
 #include <flucaviewer.h>
 
 PetscClassId FLUCAFD_CLASSID = 0;
@@ -23,6 +24,7 @@ PetscErrorCode FlucaFDCreate(MPI_Comm comm, FlucaFD *fd)
   f->input_loc  = DMSTAG_ELEMENT;
   f->output_c   = 0;
   f->output_loc = DMSTAG_ELEMENT;
+  f->mesh       = NULL;
   f->dm         = NULL;
   for (comp = 0; comp < FLUCAFD_MAX_COMPONENT; ++comp) {
     for (d = 0; d < 2 * FLUCAFD_MAX_DIM; ++d) {
@@ -105,6 +107,7 @@ PetscErrorCode FlucaFDDestroy(FlucaFD *fd)
   /* Restore coordinate arrays (only if setup was called) */
   if ((*fd)->setupcalled) PetscCall(DMStagRestoreProductCoordinateArraysRead((*fd)->dm, &(*fd)->arr_coord[0], &(*fd)->arr_coord[1], &(*fd)->arr_coord[2]));
   PetscCall(DMDestroy(&(*fd)->dm));
+  PetscCall(MeshDestroy(&(*fd)->mesh));
 
   /* Destroy term list */
   PetscCall(FlucaFDTermLinkDestroy_Internal(&(*fd)->termlink));
@@ -174,7 +177,7 @@ PetscErrorCode FlucaFDViewFromOptions(FlucaFD fd, PetscObject obj, const char na
 
 PetscErrorCode FlucaFDSetUp(FlucaFD fd)
 {
-  PetscBool      isdmstag;
+  DM             dm;
   PetscInt       comp, d;
   DMBoundaryType bt[FLUCAFD_MAX_DIM];
 
@@ -182,10 +185,13 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   if (fd->setupcalled) PetscFunctionReturn(PETSC_SUCCESS);
 
-  /* Validate reference DM */
-  PetscCheck(fd->dm, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Reference DM not set. Call FlucaFDSetDM() first");
-  PetscCall(PetscObjectTypeCompare((PetscObject)fd->dm, DMSTAG, &isdmstag));
-  PetscCheck(isdmstag, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONG, "Reference DM must be DMStag");
+  /* Cache the mesh DM; the mesh cannot change it after MeshSetUp() */
+  PetscCheck(fd->mesh, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Mesh not set. Call FlucaFDSetMesh() first");
+  PetscCheck(fd->mesh->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Mesh not set up. Call MeshSetUp() first");
+  PetscCall(MeshGetDM(fd->mesh, &dm));
+  PetscCall(PetscObjectReference((PetscObject)dm));
+  PetscCall(DMDestroy(&fd->dm));
+  fd->dm = dm;
 
   /* Get grid info directly from DMStag */
   PetscCall(DMGetDimension(fd->dm, &fd->dim));
