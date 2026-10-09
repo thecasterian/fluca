@@ -84,9 +84,12 @@ typedef enum {
 } PhysFieldLocation;
 FLUCA_EXTERN const char *PhysFieldLocations[];
 
-#define PHYS_FIELD_VELOCITY      "velocity"
-#define PHYS_FIELD_FACE_VELOCITY "face_velocity"
-#define PHYS_FIELD_PRESSURE      "pressure"
+/* Field names are CGNS data-name identifiers (SIDS Appendix A), since solution vectors are written to CGNS under them; a
+   field with 2 or 3 components is written as <name>X, <name>Y, <name>Z. Declare custom fields the same way, e.g.
+   "Temperature". */
+#define PHYS_FIELD_VELOCITY      "Velocity"
+#define PHYS_FIELD_FACE_VELOCITY "VelocityNormal" /* velocity normal to each face, q.n */
+#define PHYS_FIELD_PRESSURE      "Pressure"
 
 FLUCA_EXTERN PetscErrorCode PhysDeclareField(Phys, const char[], PhysFieldLocation, PetscInt);
 FLUCA_EXTERN PetscErrorCode PhysRemoveField(Phys, const char[]);

@@ -28,7 +28,7 @@ FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSCheckBatch_Internal(PetscViewer)
 
 /* Fields of a vector on a DMStag, written to or read from the FlowSolution of the current output step. A field is the
    components [c0, c0 + ncomp) at loc, which is DMSTAG_ELEMENT for cell data or DMSTAG_LEFT for face data covering the
-   faces normal to every direction, stored under name (suffixed X, Y, Z when ncomp > 1). Writing needs
+   faces normal to every direction, stored under name (suffixed X, Y, Z when ncomp > 1; ncomp is at most 3). Writing needs
    PetscViewerFlucaCGNSBeginStep_Internal() and then the grid zone (MeshView()) first; reading takes the last step in the
    file and sets the DM's output sequence number from it. */
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSBeginStep_Internal(PetscViewer, PetscInt, PetscReal);

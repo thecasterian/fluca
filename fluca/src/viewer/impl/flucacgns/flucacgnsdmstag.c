@@ -471,6 +471,7 @@ PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponents_Internal(PetscViewer vi
   PetscAssertPointer(name, 6);
   cgv = (PetscViewer_FlucaCGNS *)viewer->data;
   PetscCheck(loc == DMSTAG_ELEMENT || loc == DMSTAG_LEFT, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_OUTOFRANGE, "Location must be DMSTAG_ELEMENT or DMSTAG_LEFT");
+  PetscCheck(ncomp >= 1 && ncomp <= 3, PetscObjectComm((PetscObject)viewer), PETSC_ERR_SUP, "Field %s has %" PetscInt_FMT " components; CGNS names components X, Y, Z, so 1 to 3 are supported", name, ncomp);
   PetscCheck(cgv->last_step >= 0 && cgv->zone, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ORDER, "Call PetscViewerFlucaCGNSBeginStep_Internal() and write the grid zone first");
   PetscCall(VecGetDM(v, &dm));
   PetscCall(DMGetDimension(dm, &dim));
@@ -524,6 +525,7 @@ PetscErrorCode PetscViewerFlucaCGNSReadDMStagComponents_Internal(PetscViewer vie
   PetscAssertPointer(name, 6);
   PetscCall(PetscViewerCheckReadable(viewer));
   PetscCheck(loc == DMSTAG_ELEMENT || loc == DMSTAG_LEFT, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_OUTOFRANGE, "Location must be DMSTAG_ELEMENT or DMSTAG_LEFT");
+  PetscCheck(ncomp >= 1 && ncomp <= 3, PetscObjectComm((PetscObject)viewer), PETSC_ERR_SUP, "Field %s has %" PetscInt_FMT " components; CGNS names components X, Y, Z, so 1 to 3 are supported", name, ncomp);
   cgv = (PetscViewer_FlucaCGNS *)viewer->data;
   PetscCall(VecGetDM(v, &dm));
   PetscCall(DMGetDimension(dm, &dim));
