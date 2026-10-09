@@ -121,7 +121,7 @@ PetscErrorCode NSLoadSolution(NS ns, PetscViewer viewer)
   PetscCheckSameComm(ns, 1, viewer, 2);
   PetscCheck(ns->setupcalled, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "Must call NSSetUp() before NSLoadSolution()");
   PetscCall(PetscViewerCheckReadable(viewer));
-  PetscCall(FlucaVecLoad(ns->sol, viewer));
+  PetscCall(VecLoad(ns->sol, viewer));
   PetscCall(PhysGetSolutionDM(ns->phys, &dm));
   PetscCall(DMGetOutputSequenceNumber(dm, &ns->step, &ns->t));
   PetscFunctionReturn(PETSC_SUCCESS);

@@ -16,5 +16,3 @@ FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSSetIncludeCoord(PetscViewer, Pet
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSGetIncludeCoord(PetscViewer, PetscBool *);
 
 FLUCA_EXTERN PetscViewer PETSC_VIEWER_FLUCACGNS_(MPI_Comm);
-
-FLUCA_EXTERN PetscErrorCode FlucaVecLoad(Vec, PetscViewer);

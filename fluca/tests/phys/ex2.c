@@ -135,7 +135,7 @@ int main(int argc, char **argv)
     PetscCall(VecDuplicate(u, &w));
     PetscCall(VecZeroEntries(w));
     PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, lastfile, FILE_MODE_READ, &viewer));
-    PetscCall(FlucaVecLoad(w, viewer));
+    PetscCall(VecLoad(w, viewer));
     PetscCall(PetscViewerDestroy(&viewer));
 
     PetscCall(DMGetOutputSequenceNumber(sol_dm, &step, &time));
@@ -156,7 +156,7 @@ int main(int argc, char **argv)
     PetscCall(VecDuplicate(u, &w));
     PetscCall(VecZeroEntries(w));
     PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, file, FILE_MODE_READ, &viewer));
-    PetscCall(FlucaVecLoad(w, viewer));
+    PetscCall(VecLoad(w, viewer));
     PetscCall(PetscViewerDestroy(&viewer));
 
     PetscCall(DMGetOutputSequenceNumber(sol_dm, &step, &time));
