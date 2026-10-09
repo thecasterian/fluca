@@ -1,5 +1,4 @@
 #include <fluca/private/flucafdimpl.h>
-#include <fluca/private/meshimpl.h>
 
 PetscErrorCode FlucaFDSetMesh(FlucaFD fd, Mesh mesh)
 {

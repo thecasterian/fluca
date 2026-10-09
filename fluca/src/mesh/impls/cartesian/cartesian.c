@@ -84,12 +84,10 @@ static PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer viewer)
 PetscErrorCode MeshCreate_Cartesian(Mesh mesh)
 {
   PetscFunctionBegin;
-  mesh->data                   = NULL;
-  mesh->ops->setup             = MeshSetUp_Cartesian;
-  mesh->ops->view              = MeshView_Cartesian;
-  mesh->ops->load              = MeshLoad_Cartesian_CGNS;
-  mesh->ops->viewveccomponents = MeshViewVecComponents_Cartesian;
-  mesh->ops->loadveccomponents = MeshLoadVecComponents_Cartesian;
+  mesh->data       = NULL;
+  mesh->ops->setup = MeshSetUp_Cartesian;
+  mesh->ops->view  = MeshView_Cartesian;
+  mesh->ops->load  = MeshLoad_Cartesian_CGNS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

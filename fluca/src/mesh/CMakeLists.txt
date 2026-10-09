@@ -7,7 +7,6 @@ add_library(fluca_mesh SHARED
     interface/meshopts.c
     interface/meshpkg.c
     interface/meshreg.c
-    interface/meshvec.c
 )
 
 target_include_directories(fluca_mesh PUBLIC
