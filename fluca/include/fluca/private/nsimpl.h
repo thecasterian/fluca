@@ -84,8 +84,8 @@ struct _p_NS {
   /* Monitor -------------------------------------------------------------- */
   PetscInt num_mons;
   PetscErrorCode (*mons[MAXNSMONITORS])(NS, void *);
-  void *mon_ctxs[MAXNSMONITORS];
-  PetscErrorCode (*mon_ctx_destroys[MAXNSMONITORS])(void **);
+  void              *mon_ctxs[MAXNSMONITORS];
+  PetscCtxDestroyFn *mon_ctx_destroys[MAXNSMONITORS];
 };
 
 /* Defined in interface/nsops.c */

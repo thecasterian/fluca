@@ -1,7 +1,7 @@
 #include <fluca/private/nsimpl.h>
 #include <flucaviewer.h>
 
-PetscErrorCode NSMonitorSet(NS ns, PetscErrorCode (*mon)(NS, void *), void *mon_ctx, PetscErrorCode (*mon_ctx_destroy)(void **))
+PetscErrorCode NSMonitorSet(NS ns, PetscErrorCode (*mon)(NS, void *), void *mon_ctx, PetscCtxDestroyFn *mon_ctx_destroy)
 {
   PetscInt  i;
   PetscBool identical;
@@ -62,7 +62,7 @@ PetscErrorCode NSMonitorSetFromOptions(NS ns, const char name[], const char help
 
     PetscCall(PetscViewerDestroy(&viewer));
     if (mon_setup) PetscCall((*mon_setup)(ns, vf));
-    PetscCall(NSMonitorSet(ns, (PetscErrorCode(*)(NS, void *))mon, vf, (PetscErrorCode(*)(void **))PetscViewerAndFormatDestroy));
+    PetscCall(NSMonitorSet(ns, (PetscErrorCode(*)(NS, void *))mon, vf, (PetscCtxDestroyFn *)PetscViewerAndFormatDestroy));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
