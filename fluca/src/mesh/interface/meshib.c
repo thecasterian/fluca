@@ -31,9 +31,9 @@ PetscErrorCode MeshIBGetLocalIndex_Internal(Mesh mesh, const MeshIBLocation *l, 
 PetscErrorCode MeshIBIsOnGrid_Internal(Mesh mesh, DMStagStencilLocation loc, PetscInt dir, PetscInt idx, PetscBool *on)
 {
   PetscFunctionBegin;
-  if (dir >= mesh->dim) *on = (PetscBool)(idx == 0);
+  if (dir >= mesh->dim) *on = idx == 0;
   else if (mesh->ib.periodic[dir]) *on = PETSC_TRUE;
-  else *on = (PetscBool)(0 <= idx && idx < mesh->ib.N[dir] + (MeshIBIsFaceInDir_Private(loc, dir) ? 1 : 0));
+  else *on = 0 <= idx && idx < mesh->ib.N[dir] + (MeshIBIsFaceInDir_Private(loc, dir) ? 1 : 0);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

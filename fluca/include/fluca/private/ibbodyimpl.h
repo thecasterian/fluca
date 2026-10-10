@@ -50,7 +50,12 @@ typedef struct {
   PetscInt  *prim;  /* vertex indices, nprim * dim */
 } IBBody_Surface;
 
-/* STL reader, defined in impls/surface/surfacestl.c; *x holds 9 coordinates per triangle */
+/* STL reader, defined in impls/surface/surfacestl.c; *x holds 9 coordinates per triangle.
+   On a file error *nt is one of these negative codes and *x is NULL. */
+#define IBBODY_STL_ERR_OPEN      -1 /* missing or unreadable */
+#define IBBODY_STL_ERR_ENDIAN    -2 /* binary STL on a big-endian host */
+#define IBBODY_STL_ERR_TRUNCATED -3 /* binary STL shorter than its triangle count */
+#define IBBODY_STL_ERR_MALFORMED -4 /* ASCII STL with a bad vertex line or a vertex count that is not a positive multiple of 3 */
 FLUCA_INTERN PetscErrorCode IBBodySurfaceReadSTL_Internal(const char[], PetscInt *, PetscReal **);
 
 /* Sample phi on the tensor-product points (coord[0][i], coord[1][j], coord[2][k]); n[d] = 1 for d >= dim.

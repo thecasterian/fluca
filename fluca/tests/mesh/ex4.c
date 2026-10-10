@@ -206,7 +206,7 @@ int main(int argc, char **argv)
 
   PetscCall(CreateMesh_Private(dim, surf, &ms));
   PetscCall(CreateMesh_Private(dim, ls, &ml));
-  PetscCall(Compare_Private(ms, ml, DMSTAG_ELEMENT, (PetscBool)(dim == 2)));
+  PetscCall(Compare_Private(ms, ml, DMSTAG_ELEMENT, dim == 2));
   PetscCall(Compare_Private(ms, ml, DMSTAG_LEFT, PETSC_FALSE));
   PetscCall(Compare_Private(ms, ml, DMSTAG_DOWN, PETSC_FALSE));
   if (dim == 3) PetscCall(Compare_Private(ms, ml, DMSTAG_BACK, PETSC_FALSE));

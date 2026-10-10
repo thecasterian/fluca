@@ -34,11 +34,12 @@ PetscErrorCode IBBodySetType(IBBody body, IBBodyType type)
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(body, IBBODY_CLASSID, 1);
-  PetscCheck(!body->sampled, PetscObjectComm((PetscObject)body), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the type of a body that a Mesh has sampled");
+  PetscAssertPointer(type, 2);
 
   PetscCall(IBBodyGetType(body, &old_type));
   PetscCall(PetscObjectTypeCompare((PetscObject)body, type, &match));
   if (match) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCheck(!body->sampled, PetscObjectComm((PetscObject)body), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the type of a body that a Mesh has sampled");
 
   PetscCall(PetscFunctionListFind(IBBodyList, type, &impl_create));
   PetscCheck(impl_create, PetscObjectComm((PetscObject)body), PETSC_ERR_ARG_UNKNOWN_TYPE, "Unknown IBBody type: %s", type);

@@ -366,8 +366,13 @@ PetscErrorCode IBBodySurfaceLoadSTL(IBBody body, const char filename[])
   PetscAssertPointer(filename, 2);
   PetscCall(PetscObjectGetComm((PetscObject)body, &comm));
   PetscCallMPI(MPI_Comm_rank(comm, &rank));
+  /* Rank 0 reports a file error through nt, so every rank raises it after the broadcast */
   if (rank == 0) PetscCall(IBBodySurfaceReadSTL_Internal(filename, &nt, &x));
   PetscCallMPI(MPI_Bcast(&nt, 1, MPIU_INT, 0, comm));
+  PetscCheck(nt != IBBODY_STL_ERR_OPEN, comm, PETSC_ERR_FILE_OPEN, "Cannot open STL file %s", filename);
+  PetscCheck(nt != IBBODY_STL_ERR_ENDIAN, comm, PETSC_ERR_SUP, "Binary STL is only supported on little-endian hosts: %s", filename);
+  PetscCheck(nt != IBBODY_STL_ERR_TRUNCATED, comm, PETSC_ERR_FILE_READ, "Truncated binary STL file %s", filename);
+  PetscCheck(nt >= 0, comm, PETSC_ERR_FILE_UNEXPECTED, "Malformed ASCII STL file %s: a bad vertex line, or a vertex count that is not a positive multiple of 3", filename);
   if (rank != 0) PetscCall(PetscMalloc1(9 * nt, &x));
   PetscCall(PetscMPIIntCast(9 * nt, &cnt));
   PetscCallMPI(MPI_Bcast(x, cnt, MPIU_REAL, 0, comm));

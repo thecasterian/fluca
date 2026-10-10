@@ -63,7 +63,7 @@ typedef struct {
 /* Whether loc lies on the faces normal to direction d */
 static inline PetscBool MeshIBIsFaceInDir_Private(DMStagStencilLocation loc, PetscInt d)
 {
-  return (PetscBool)((d == 0 && loc == DMSTAG_LEFT) || (d == 1 && loc == DMSTAG_DOWN) || (d == 2 && loc == DMSTAG_BACK));
+  return (d == 0 && loc == DMSTAG_LEFT) || (d == 1 && loc == DMSTAG_DOWN) || (d == 2 && loc == DMSTAG_BACK);
 }
 
 typedef struct _MeshOps *MeshOps;
