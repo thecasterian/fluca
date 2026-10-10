@@ -31,7 +31,8 @@ static PetscErrorCode MeshWriteIBFields_Cartesian_Private(Mesh mesh, PetscViewer
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Write the base, the zone (vertex coordinates and DM boundary types) and the CellInfo solution (rank, and the immersed-boundary level set and body ids when the mesh has bodies), once per file */
+/* Write the base, the zone (vertex coordinates and DM boundary types) and the CellInfo solution (rank, and the
+   immersed-boundary level set and body ids when the mesh has bodies), once per file */
 static PetscErrorCode MeshWriteZone_Cartesian_Private(Mesh mesh, PetscViewer viewer, PetscInt step)
 {
   PetscViewer_FlucaCGNS *cgv = (PetscViewer_FlucaCGNS *)viewer->data;

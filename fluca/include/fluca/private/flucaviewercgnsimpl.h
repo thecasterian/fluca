@@ -28,15 +28,15 @@ FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSCheckBatch_Internal(PetscViewer)
 
 /* Fields of a vector on a DMStag, written to or read from the FlowSolution of the current output step. A field is the
    components [c0, c0 + ncomp) at loc, which is DMSTAG_ELEMENT for cell data or DMSTAG_LEFT for face data covering the
-   faces normal to every direction, stored under name (suffixed X, Y, Z when ncomp > 1; ncomp is at most 3). Writing needs
-   PetscViewerFlucaCGNSBeginStep_Internal() and then the grid zone (MeshView()) first; reading takes the last step in the
-   file and sets the DM's output sequence number from it. */
+   faces normal to every direction, stored under name (suffixed X, Y, Z when ncomp > 1; ncomp is at most 3). Writing with
+   the per-step functions below needs PetscViewerFlucaCGNSBeginStep_Internal() and then the grid zone (MeshView()) first;
+   reading takes the last step in the file and sets the DM's output sequence number from it. */
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSBeginStep_Internal(PetscViewer, PetscInt, PetscReal);
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponents_Internal(PetscViewer, Vec, DMStagStencilLocation, PetscInt, PetscInt, const char[]);
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSReadDMStagComponents_Internal(PetscViewer, Vec, DMStagStencilLocation, PetscInt, PetscInt, const char[]);
 /* Write components [c0, c0 + ncomp) of v at loc (DMSTAG_ELEMENT, or DMSTAG_LEFT for the faces normal to every direction)
    into FlowSolution sol of the current zone, named as for PetscViewerFlucaCGNSWriteDMStagComponents_Internal(). Values
-   are written as CGNS Integer (rounded to nearest) when as_int is true, otherwise as PetscScalar. Face arrays go under the
+   are written as CGNS Integer (rounded half up) when as_int is true, otherwise as PetscScalar. Face arrays go under the
    I/J/KFaceCenteredSolution UserDefinedData nodes of sol, created on first use. The grid zone must be written first. */
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(PetscViewer, Vec, DMStagStencilLocation, PetscInt, PetscInt, const char[], int, PetscBool);
 

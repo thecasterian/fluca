@@ -166,6 +166,7 @@ static PetscErrorCode WriteFaceSolutionNodes_Private(int file_num, int base, int
 
   PetscFunctionBegin;
   CGNSCall(cg_goto(file_num, base, "Zone_t", zone, "FlowSolution_t", sol, NULL));
+  /* Reads the in-memory node tree, so it works while the file is open for writing (unlike cg_nfields/cg_narrays) */
   CGNSCall(cg_nuser_data(&nuser));
   if (nuser > 0) {
     PetscCheck(nuser == dim, PETSC_COMM_SELF, PETSC_ERR_PLIB, "FlowSolution %d has %d UserDefinedData nodes, expected %" PetscInt_FMT, sol, nuser, dim);
