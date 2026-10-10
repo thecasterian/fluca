@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 
 add_library(fluca_mesh SHARED
+    ib/impls/levelset/levelset.c
+    ib/interface/ibbodybasic.c
+    ib/interface/ibbodypkg.c
+    ib/interface/ibbodyreg.c
     impls/cartesian/cartesian.c
     impls/cartesian/cartesiancgns.c
     interface/meshbasic.c
