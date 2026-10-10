@@ -8,7 +8,7 @@
 typedef struct _p_Mesh *Mesh;
 
 typedef const char *MeshType;
-#define MESHCARTESIAN "cartesian" /* Rectilinear grid given by the DMStag product coordinates, no immersed boundary */
+#define MESHCARTESIAN "cartesian" /* Rectilinear grid given by the DMStag product coordinates; immersed bodies via MeshAddBody */
 
 FLUCA_EXTERN PetscClassId MESH_CLASSID;
 

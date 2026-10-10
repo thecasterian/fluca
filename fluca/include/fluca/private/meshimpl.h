@@ -12,7 +12,7 @@ FLUCA_EXTERN PetscBool      MeshRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode MeshRegisterAll(void);
 FLUCA_EXTERN PetscLogEvent  MESH_SetUp;
 
-#define MESH_IB_MAX_LOC    4   /* element and up to three face locations */
+#define MESH_IB_MAX_LOC    4   /* element and one face location per direction */
 #define MESH_IB_MAX_BODIES 127 /* body ids are stored as int8_t */
 
 /* Crossing of the segment from a forcing point to its solid star neighbour.

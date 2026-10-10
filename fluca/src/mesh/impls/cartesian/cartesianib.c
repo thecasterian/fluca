@@ -141,8 +141,7 @@ static PetscErrorCode BuildForcingRecords_Private(Mesh mesh, MeshIBLocation *l)
 PetscErrorCode MeshSetUpIB_Cartesian(Mesh mesh)
 {
   MeshIB                     *ib = &mesh->ib;
-  PetscInt                    dof[4], d, n, nlocal;
-  PetscBool                   hasface;
+  PetscInt                    d, n, nlocal;
   DMBoundaryType              bt[3];
   PetscScalar                *arr;
   const DMStagStencilLocation faces[3] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
@@ -150,18 +149,16 @@ PetscErrorCode MeshSetUpIB_Cartesian(Mesh mesh)
   PetscFunctionBegin;
   for (n = 0; n < ib->nbodies; ++n) PetscCall(IBBodySetUp(ib->bodies[n]));
 
-  /* Locations: element always, faces when the mesh DM has face dofs */
-  PetscCall(DMStagGetDOF(mesh->dm, &dof[0], &dof[1], &dof[2], &dof[3]));
-  hasface = (PetscBool)(dof[mesh->dim - 1] > 0);
+  /* Locations: the element and every face location, whatever dofs the mesh DM has */
   switch (mesh->dim) {
   case 1:
-    PetscCall(DMStagCreateCompatibleDMStag(mesh->dm, hasface ? 1 : 0, 1, 0, 0, &ib->dm_phi));
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->dm, 1, 1, 0, 0, &ib->dm_phi));
     break;
   case 2:
-    PetscCall(DMStagCreateCompatibleDMStag(mesh->dm, 0, hasface ? 1 : 0, 1, 0, &ib->dm_phi));
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->dm, 0, 1, 1, 0, &ib->dm_phi));
     break;
   case 3:
-    PetscCall(DMStagCreateCompatibleDMStag(mesh->dm, 0, 0, hasface ? 1 : 0, 1, &ib->dm_phi));
+    PetscCall(DMStagCreateCompatibleDMStag(mesh->dm, 0, 0, 1, 1, &ib->dm_phi));
     break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_SUP, "Unsupported dimension %" PetscInt_FMT, mesh->dim);
@@ -169,8 +166,7 @@ PetscErrorCode MeshSetUpIB_Cartesian(Mesh mesh)
   ib->nloc        = 0;
   ib->locs[0].loc = DMSTAG_ELEMENT;
   ++ib->nloc;
-  if (hasface)
-    for (d = 0; d < mesh->dim; ++d) ib->locs[ib->nloc++].loc = faces[d];
+  for (d = 0; d < mesh->dim; ++d) ib->locs[ib->nloc++].loc = faces[d];
   for (n = 0; n < ib->nloc; ++n) PetscCall(DMStagGetLocationSlot(ib->dm_phi, ib->locs[n].loc, 0, &ib->locs[n].slot));
 
   /* Layout and coordinates */
@@ -184,7 +180,7 @@ PetscErrorCode MeshSetUpIB_Cartesian(Mesh mesh)
       ib->gn[d]       = 1;
       ib->N[d]        = 1;
       ib->periodic[d] = PETSC_FALSE;
-    } else ib->periodic[d] = (PetscBool)(bt[d] == DM_BOUNDARY_PERIODIC);
+    } else ib->periodic[d] = bt[d] == DM_BOUNDARY_PERIODIC;
   }
   PetscCall(DMStagGetProductCoordinateArraysRead(mesh->dm, &ib->arr_coord[0], &ib->arr_coord[1], &ib->arr_coord[2]));
   PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_LEFT, &ib->slot_coord_prev));

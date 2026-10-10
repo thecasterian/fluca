@@ -5,7 +5,8 @@
 
 static const char help[] = "Test Mesh immersed-boundary classification from level-set bodies\n"
                            "Options:\n"
-                           "  -case <circle2d|sphere3d|twocircles|wall|none> : geometry (default: circle2d)\n"
+                           "  -case <circle2d|sphere3d|twocircles|wall|none|noface> : geometry (default: circle2d;\n"
+                           "    noface is circle2d on a DM without face dofs)\n"
                            "  (DMStag options such as -stag_grid_x set the grid)\n";
 
 static PetscErrorCode Circle_Private(PetscInt dim, const PetscReal x[], void *ctx, PetscReal *phi)
@@ -153,7 +154,7 @@ int main(int argc, char **argv)
   Vec         phi;
   char        cs[64]    = "circle2d";
   PetscReal   circle[3] = {0.5, 0.5, 0.3}, left[3] = {0.3, 0.5, 0.15}, right[3] = {0.7, 0.5, 0.15};
-  PetscBool   is3d, istwo, iswall, isnone;
+  PetscBool   is3d, istwo, iswall, isnone, isnoface;
   PetscMPIInt size;
   PetscInt    nb;
 
@@ -165,9 +166,10 @@ int main(int argc, char **argv)
   PetscCall(PetscStrcmp(cs, "twocircles", &istwo));
   PetscCall(PetscStrcmp(cs, "wall", &iswall));
   PetscCall(PetscStrcmp(cs, "none", &isnone));
+  PetscCall(PetscStrcmp(cs, "noface", &isnoface));
 
   if (is3d) PetscCall(DMStagCreate3d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, 8, 8, 8, PETSC_DECIDE, PETSC_DECIDE, PETSC_DECIDE, 0, 0, 1, 1, DMSTAG_STENCIL_STAR, 2, NULL, NULL, NULL, &dm));
-  else PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, iswall ? 8 : 12, iswall ? 8 : 12, PETSC_DECIDE, PETSC_DECIDE, 0, 1, 1, DMSTAG_STENCIL_STAR, 2, NULL, NULL, &dm));
+  else PetscCall(DMStagCreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, iswall ? 8 : 12, iswall ? 8 : 12, PETSC_DECIDE, PETSC_DECIDE, 0, isnoface ? 0 : 1, 1, DMSTAG_STENCIL_STAR, 2, NULL, NULL, &dm));
   PetscCall(DMSetFromOptions(dm));
   PetscCall(DMSetUp(dm));
   PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 1., 0., 1., 0., 1.));
@@ -189,7 +191,7 @@ int main(int argc, char **argv)
   PetscCall(PrintCounts_Private(mesh, DMSTAG_LEFT));
   PetscCall(PrintCounts_Private(mesh, DMSTAG_DOWN));
   if (is3d) PetscCall(PrintCounts_Private(mesh, DMSTAG_BACK));
-  if (size == 1 && !is3d && !isnone) {
+  if (size == 1 && !is3d && !isnone && !isnoface) {
     PetscCall(PrintMap_Private(mesh, DMSTAG_ELEMENT, PETSC_FALSE));
     PetscCall(PrintMap_Private(mesh, DMSTAG_LEFT, PETSC_FALSE));
     PetscCall(PrintMap_Private(mesh, DMSTAG_DOWN, PETSC_FALSE));
@@ -233,5 +235,10 @@ int main(int argc, char **argv)
     suffix: none
     nsize: 1
     args: -case none
+
+  test:
+    suffix: noface
+    nsize: 1
+    args: -case noface
 
 TEST*/
