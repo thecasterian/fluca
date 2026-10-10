@@ -34,6 +34,11 @@ FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSCheckBatch_Internal(PetscViewer)
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSBeginStep_Internal(PetscViewer, PetscInt, PetscReal);
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponents_Internal(PetscViewer, Vec, DMStagStencilLocation, PetscInt, PetscInt, const char[]);
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSReadDMStagComponents_Internal(PetscViewer, Vec, DMStagStencilLocation, PetscInt, PetscInt, const char[]);
+/* Write components [c0, c0 + ncomp) of v at loc (DMSTAG_ELEMENT, or DMSTAG_LEFT for the faces normal to every direction)
+   into FlowSolution sol of the current zone, named as for PetscViewerFlucaCGNSWriteDMStagComponents_Internal(). Values
+   are written as CGNS Integer (rounded to nearest) when as_int is true, otherwise as PetscScalar. Face arrays go under the
+   I/J/KFaceCenteredSolution UserDefinedData nodes of sol, created on first use. The grid zone must be written first. */
+FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(PetscViewer, Vec, DMStagStencilLocation, PetscInt, PetscInt, const char[], int, PetscBool);
 
 #define CGNSCall(ierr) \
   do { \

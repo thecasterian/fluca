@@ -57,12 +57,13 @@ static PetscErrorCode DMStagGetLocalEntries3d_Private(DM dm, Vec v, DMStagStenci
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMStagWriteCellCenteredSolution_Private(DM dm, Vec v, PetscInt c, int file_num, int base, int zone, int sol, const char *name)
+static PetscErrorCode DMStagWriteCellCenteredSolution_Private(DM dm, Vec v, PetscInt c, int file_num, int base, int zone, int sol, const char *name, PetscBool as_int)
 {
   PetscInt               dim, x[3], m[3], d;
-  cgsize_t               rmin[3], rmax[3], rsize;
+  cgsize_t               rmin[3], rmax[3], rsize, i;
   int                    field;
   PetscScalar           *e;
+  int                   *ie;
   CGNS_ENUMT(DataType_t) datatype;
 
   PetscFunctionBegin;
@@ -88,19 +89,28 @@ static PetscErrorCode DMStagWriteCellCenteredSolution_Private(DM dm, Vec v, Pets
   default:
     SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
   }
-  CGNSCall(cgp_field_write(file_num, base, zone, sol, datatype, name, &field));
-  CGNSCall(cgp_field_write_data(file_num, base, zone, sol, field, rmin, rmax, e));
+  if (as_int) {
+    PetscCall(PetscMalloc1(rsize, &ie));
+    for (i = 0; i < rsize; ++i) ie[i] = (int)PetscFloorReal(PetscRealPart(e[i]) + 0.5);
+    CGNSCall(cgp_field_write(file_num, base, zone, sol, CGNS_ENUMV(Integer), name, &field));
+    CGNSCall(cgp_field_write_data(file_num, base, zone, sol, field, rmin, rmax, ie));
+    PetscCall(PetscFree(ie));
+  } else {
+    CGNSCall(cgp_field_write(file_num, base, zone, sol, datatype, name, &field));
+    CGNSCall(cgp_field_write_data(file_num, base, zone, sol, field, rmin, rmax, e));
+  }
   PetscCall(PetscFree(e));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMStagWriteFaceCenteredSolution_Private(DM dm, Vec v, PetscInt c, int file_num, int base, int zone, int sol, const char *names)
+static PetscErrorCode DMStagWriteFaceCenteredSolution_Private(DM dm, Vec v, PetscInt c, int file_num, int base, int zone, int sol, const char *names, PetscBool as_int)
 {
   PetscInt                    dim, M[3], x[3], m[3], nExtra[3], d, l;
   PetscBool                   isLastRank[3];
-  cgsize_t                    array_size[3], rmin[3], rmax[3], rsize;
+  cgsize_t                    array_size[3], rmin[3], rmax[3], rsize, i;
   int                         array;
   PetscScalar                *e;
+  int                        *ie;
   CGNS_ENUMT(DataType_t)      datatype;
   const DMStagStencilLocation locs[3] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
 
@@ -133,10 +143,49 @@ static PetscErrorCode DMStagWriteFaceCenteredSolution_Private(DM dm, Vec v, Pets
       SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported mesh dimension");
     }
     CGNSCall(cg_goto(file_num, base, "Zone_t", zone, "FlowSolution_t", sol, "UserDefinedData_t", l + 1, NULL));
-    CGNSCall(cgp_array_write(names, datatype, dim, array_size, &array));
-    CGNSCall(cgp_array_write_data(array, rmin, rmax, e));
+    if (as_int) {
+      PetscCall(PetscMalloc1(rsize, &ie));
+      for (i = 0; i < rsize; ++i) ie[i] = (int)PetscFloorReal(PetscRealPart(e[i]) + 0.5);
+      CGNSCall(cgp_array_write(names, CGNS_ENUMV(Integer), dim, array_size, &array));
+      CGNSCall(cgp_array_write_data(array, rmin, rmax, ie));
+      PetscCall(PetscFree(ie));
+    } else {
+      CGNSCall(cgp_array_write(names, datatype, dim, array_size, &array));
+      CGNSCall(cgp_array_write_data(array, rmin, rmax, e));
+    }
     PetscCall(PetscFree(e));
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Create the I/J/KFaceCenteredSolution UserDefinedData nodes under sol unless they already exist */
+static PetscErrorCode WriteFaceSolutionNodes_Private(int file_num, int base, int zone, int sol, PetscInt dim)
+{
+  int      nuser;
+  PetscInt d;
+
+  PetscFunctionBegin;
+  CGNSCall(cg_goto(file_num, base, "Zone_t", zone, "FlowSolution_t", sol, NULL));
+  CGNSCall(cg_nuser_data(&nuser));
+  if (nuser > 0) {
+    PetscCheck(nuser == dim, PETSC_COMM_SELF, PETSC_ERR_PLIB, "FlowSolution %d has %d UserDefinedData nodes, expected %" PetscInt_FMT, sol, nuser, dim);
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
+  for (d = 0; d < dim; ++d) {
+    CGNSCall(cg_user_data_write(face_sol_names[d]));
+    CGNSCall(cg_gorel(file_num, "UserDefinedData_t", (int)d + 1, NULL));
+    CGNSCall(cg_gridlocation_write(face_sol_grid_locs[d]));
+    CGNSCall(cg_gorel(file_num, "..", 0, NULL));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Component c of an ncomp-component field: name itself, or name suffixed X, Y, Z */
+static PetscErrorCode GetComponentName_Private(const char name[], PetscInt ncomp, PetscInt c, char comp_name[], size_t len)
+{
+  PetscFunctionBegin;
+  if (ncomp == 1) PetscCall(PetscStrncpy(comp_name, name, len));
+  else PetscCall(PetscSNPrintf(comp_name, len, "%s%c", name, (char)('X' + c)));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -458,11 +507,37 @@ PetscErrorCode PetscViewerFlucaCGNSBeginStep_Internal(PetscViewer viewer, PetscI
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(PetscViewer viewer, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp, const char name[], int sol, PetscBool as_int)
+{
+  PetscViewer_FlucaCGNS *cgv;
+  DM                     dm;
+  PetscInt               dim, c;
+  char                   comp_name[PETSC_MAX_PATH_LEN];
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(viewer, PETSC_VIEWER_CLASSID, 1, PETSCVIEWERFLUCACGNS);
+  PetscValidHeaderSpecific(v, VEC_CLASSID, 2);
+  PetscAssertPointer(name, 6);
+  cgv = (PetscViewer_FlucaCGNS *)viewer->data;
+  PetscCheck(loc == DMSTAG_ELEMENT || loc == DMSTAG_LEFT, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_OUTOFRANGE, "Location must be DMSTAG_ELEMENT or DMSTAG_LEFT");
+  PetscCheck(ncomp >= 1 && ncomp <= 3, PetscObjectComm((PetscObject)viewer), PETSC_ERR_SUP, "Field %s has %" PetscInt_FMT " components; CGNS names components X, Y, Z, so 1 to 3 are supported", name, ncomp);
+  PetscCheck(cgv->file_num && cgv->zone && sol > 0, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ORDER, "Write the grid zone and the FlowSolution first");
+  PetscCall(VecGetDM(v, &dm));
+  PetscCall(DMGetDimension(dm, &dim));
+  if (loc == DMSTAG_LEFT) PetscCall(WriteFaceSolutionNodes_Private(cgv->file_num, cgv->base, cgv->zone, sol, dim));
+  for (c = 0; c < ncomp; ++c) {
+    PetscCall(GetComponentName_Private(name, ncomp, c, comp_name, sizeof(comp_name)));
+    if (loc == DMSTAG_ELEMENT) PetscCall(DMStagWriteCellCenteredSolution_Private(dm, v, c0 + c, cgv->file_num, cgv->base, cgv->zone, sol, comp_name, as_int));
+    else PetscCall(DMStagWriteFaceCenteredSolution_Private(dm, v, c0 + c, cgv->file_num, cgv->base, cgv->zone, sol, comp_name, as_int));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponents_Internal(PetscViewer viewer, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp, const char name[])
 {
   PetscViewer_FlucaCGNS *cgv;
   DM                     dm;
-  PetscInt               dim, step, c, d;
+  PetscInt               dim, step, c;
   char                   sol_name[PETSC_MAX_PATH_LEN], comp_name[PETSC_MAX_PATH_LEN];
 
   PetscFunctionBegin;
@@ -485,22 +560,14 @@ PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponents_Internal(PetscViewer vi
     CGNSCall(cg_sol_write(cgv->file_num, cgv->base, cgv->zone, sol_name, CGNS_ENUMV(CellCenter), &cgv->sol));
     PetscCall(PetscViewerFlucaCGNSGetSolNames_Private(viewer, &sn));
     sn->n = 0;
-    CGNSCall(cg_goto(cgv->file_num, cgv->base, "Zone_t", cgv->zone, "FlowSolution_t", cgv->sol, NULL));
-    for (d = 0; d < dim; ++d) {
-      CGNSCall(cg_user_data_write(face_sol_names[d]));
-      CGNSCall(cg_gorel(cgv->file_num, "UserDefinedData_t", d + 1, NULL));
-      CGNSCall(cg_gridlocation_write(face_sol_grid_locs[d]));
-      CGNSCall(cg_gorel(cgv->file_num, "..", 0, NULL));
-    }
+    PetscCall(WriteFaceSolutionNodes_Private(cgv->file_num, cgv->base, cgv->zone, cgv->sol, dim));
   }
 
   for (c = 0; c < ncomp; ++c) {
-    if (ncomp == 1) PetscCall(PetscStrncpy(comp_name, name, sizeof(comp_name)));
-    else PetscCall(PetscSNPrintf(comp_name, sizeof(comp_name), "%s%c", name, (char)('X' + c)));
+    PetscCall(GetComponentName_Private(name, ncomp, c, comp_name, sizeof(comp_name)));
     PetscCall(PetscViewerFlucaCGNSRecordSolName_Private(viewer, step, comp_name));
-    if (loc == DMSTAG_ELEMENT) PetscCall(DMStagWriteCellCenteredSolution_Private(dm, v, c0 + c, cgv->file_num, cgv->base, cgv->zone, cgv->sol, comp_name));
-    else PetscCall(DMStagWriteFaceCenteredSolution_Private(dm, v, c0 + c, cgv->file_num, cgv->base, cgv->zone, cgv->sol, comp_name));
   }
+  PetscCall(PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(viewer, v, loc, c0, ncomp, name, cgv->sol, PETSC_FALSE));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
