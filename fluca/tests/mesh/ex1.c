@@ -1,13 +1,15 @@
 #include <flucamesh.h>
 #include <flucasys.h>
 #include <flucaviewer.h>
+#include <fluca/private/flucaviewercgnsimpl.h> /* pcgnslib and CGNSCall, to read the file back */
 #include <petscdmstag.h>
 
 static const char help[] = "Test Mesh: MeshCartesian on a user-provided DMStag\n"
                            "Options:\n"
                            "  -dim <int> : spatial dimension, 1, 2 or 3 (default: 2)\n"
                            "  (DMStag options such as -stag_grid_x and -stag_boundary_type_y set the grid)\n"
-                           "  -roundtrip <file> : write the stretched grid to a CGNS file, reload it into a new Mesh and print it\n";
+                           "  -roundtrip <file> : write the stretched grid to a CGNS file, reload it into a new Mesh and print it\n"
+                           "  -levelset <file> : add level-set bodies, write the mesh to a CGNS file and print the LevelSet and BodyId arrays read back from CellInfo\n";
 
 static PetscErrorCode CreateDM_Private(PetscInt dim, DM *dm)
 {
@@ -76,6 +78,184 @@ static PetscErrorCode PrintCoordinates_Private(Mesh mesh)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Bodies: two circles in 2D on [0, 1] x [0, 2], one sphere in 3D on [0, 1] x [0, 2] x [0, 3] */
+static const PetscReal circles[2][3] = {
+  {0.3, 0.6, 0.2 },
+  {0.7, 1.4, 0.25}
+};
+static const PetscReal sphere[4] = {0.5, 1., 1.5, 0.6};
+
+static PetscErrorCode Circle_Private(PetscInt dim, const PetscReal x[], void *ctx, PetscReal *phi)
+{
+  const PetscReal *c = (const PetscReal *)ctx;
+
+  PetscFunctionBeginUser;
+  *phi = PetscSqrtReal((x[0] - c[0]) * (x[0] - c[0]) + (x[1] - c[1]) * (x[1] - c[1])) - c[2];
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode Sphere_Private(PetscInt dim, const PetscReal x[], void *ctx, PetscReal *phi)
+{
+  const PetscReal *c = (const PetscReal *)ctx;
+
+  PetscFunctionBeginUser;
+  *phi = PetscSqrtReal((x[0] - c[0]) * (x[0] - c[0]) + (x[1] - c[1]) * (x[1] - c[1]) + (x[2] - c[2]) * (x[2] - c[2])) - c[3];
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode AddBodies_Private(Mesh mesh, PetscInt dim)
+{
+  IBBody   body;
+  PetscInt b, nb = dim == 2 ? 2 : 1;
+
+  PetscFunctionBeginUser;
+  for (b = 0; b < nb; ++b) {
+    PetscCall(IBBodyCreate(PETSC_COMM_WORLD, &body));
+    PetscCall(IBBodySetType(body, IBBODYLEVELSET));
+    if (dim == 2) PetscCall(IBBodyLevelSetSetFunction(body, Circle_Private, (void *)circles[b]));
+    else PetscCall(IBBodyLevelSetSetFunction(body, Sphere_Private, (void *)sphere));
+    PetscCall(MeshAddBody(mesh, body));
+    PetscCall(IBBodyDestroy(&body));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Minimum phi over the bodies and its argmin (first body on ties), as Mesh computes it */
+static PetscErrorCode ExactLevelSet_Private(PetscInt dim, const PetscReal x[], PetscReal *phi, PetscInt *body)
+{
+  PetscReal p;
+  PetscInt  b, nb = dim == 2 ? 2 : 1;
+
+  PetscFunctionBeginUser;
+  for (b = 0; b < nb; ++b) {
+    if (dim == 2) PetscCall(Circle_Private(dim, x, (void *)circles[b], &p));
+    else PetscCall(Sphere_Private(dim, x, (void *)sphere, &p));
+    if (b == 0 || p < *phi) {
+      *phi  = p;
+      *body = b;
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscReal Clean_Private(PetscReal v)
+{
+  return PetscAbsReal(v) < 1e-12 ? 0. : v;
+}
+
+/* Point (i, j, k) of a location: face_dir < 0 for the cell centre, otherwise the face normal to face_dir */
+static void PointCoordinate_Private(PetscInt dim, const PetscReal h[], const PetscInt p[], PetscInt face_dir, PetscReal x[])
+{
+  PetscInt d;
+
+  for (d = 0; d < 3; ++d) x[d] = d < dim ? (p[d] + (d == face_dir ? 0. : 0.5)) * h[d] : 0.;
+}
+
+static PetscErrorCode PrintValue_Private(PetscInt dim, const PetscReal h[], const char what[], const PetscInt p[], PetscInt face_dir, PetscReal phi, PetscInt body)
+{
+  PetscReal x[3], ephi;
+  PetscInt  ebody = -1;
+
+  PetscFunctionBeginUser;
+  PointCoordinate_Private(dim, h, p, face_dir, x);
+  PetscCall(ExactLevelSet_Private(dim, x, &ephi, &ebody));
+  if (dim == 2)
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  %s (%" PetscInt_FMT ", %" PetscInt_FMT "): LevelSet %.6f (exact %.6f), BodyId %" PetscInt_FMT " (exact %" PetscInt_FMT ")\n", what, p[0], p[1], (double)Clean_Private(phi), (double)Clean_Private(ephi), body, ebody));
+  else
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  %s (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT "): LevelSet %.6f (exact %.6f), BodyId %" PetscInt_FMT " (exact %" PetscInt_FMT ")\n", what, p[0], p[1], p[2], (double)Clean_Private(phi), (double)Clean_Private(ephi), body, ebody));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Read CellInfo back with serial CGNS calls (one rank) and print its fields, the face array shapes and fixed values */
+static PetscErrorCode ReadLevelSet_Private(const char file[], PetscInt dim, const PetscInt M[], const PetscReal h[])
+{
+  int                        fn, nsols, nfields, nuser, narrays, s, f, u, a, sol = 0, rank_a, ia_phi = 0, ia_body = 0;
+  char                       name[CGIO_MAX_NAME_LENGTH + 1];
+  CGNS_ENUMT(GridLocation_t) gloc;
+  CGNS_ENUMT(DataType_t)     type;
+  cgsize_t                   rmin[3] = {1, 1, 1}, rmax[3] = {1, 1, 1}, adims[3], ncell = 1, nface;
+  double                    *phi;
+  int                       *body;
+  PetscInt                   d, p[3];
+  PetscBool                  same;
+
+  PetscFunctionBeginUser;
+  CGNSCall(cg_open(file, CG_MODE_READ, &fn));
+  CGNSCall(cg_nsols(fn, 1, 1, &nsols));
+  for (s = 1; s <= nsols; ++s) {
+    CGNSCall(cg_sol_info(fn, 1, 1, s, name, &gloc));
+    PetscCall(PetscStrcmp(name, "CellInfo", &same));
+    if (same) sol = s;
+  }
+  PetscCheck(sol, PETSC_COMM_SELF, PETSC_ERR_FILE_UNEXPECTED, "No CellInfo solution in %s", file);
+
+  CGNSCall(cg_nfields(fn, 1, 1, sol, &nfields));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "CellInfo fields:"));
+  for (f = 1; f <= nfields; ++f) {
+    CGNSCall(cg_field_info(fn, 1, 1, sol, f, &type, name));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, " %s(%s)", name, cg_DataTypeName(type)));
+  }
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "\n"));
+
+  for (d = 0; d < dim; ++d) {
+    rmax[d] = M[d];
+    ncell *= M[d];
+  }
+  PetscCall(PetscMalloc1(ncell, &phi));
+  PetscCall(PetscMalloc1(ncell, &body));
+  CGNSCall(cg_field_read(fn, 1, 1, sol, "LevelSet", CGNS_ENUMV(RealDouble), rmin, rmax, phi));
+  CGNSCall(cg_field_read(fn, 1, 1, sol, "BodyId", CGNS_ENUMV(Integer), rmin, rmax, body));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Cells:\n"));
+  for (s = 0; s < 3; ++s) {
+    for (d = 0; d < 3; ++d) p[d] = d < dim ? (s == 0 ? 0 : s == 1 ? M[d] / 2 : M[d] - 1) : 0;
+    PetscCall(PrintValue_Private(dim, h, "cell", p, -1, phi[p[0] + M[0] * (p[1] + M[1] * p[2])], body[p[0] + M[0] * (p[1] + M[1] * p[2])]));
+  }
+  PetscCall(PetscFree(body));
+  PetscCall(PetscFree(phi));
+
+  CGNSCall(cg_goto(fn, 1, "Zone_t", 1, "FlowSolution_t", sol, NULL));
+  CGNSCall(cg_nuser_data(&nuser));
+  PetscCheck(nuser == dim, PETSC_COMM_SELF, PETSC_ERR_FILE_UNEXPECTED, "CellInfo has %d UserDefinedData nodes", nuser);
+  for (u = 1; u <= nuser; ++u) {
+    ia_phi  = 0;
+    ia_body = 0;
+    CGNSCall(cg_goto(fn, 1, "Zone_t", 1, "FlowSolution_t", sol, NULL));
+    CGNSCall(cg_user_data_read(u, name));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s:", name));
+    CGNSCall(cg_goto(fn, 1, "Zone_t", 1, "FlowSolution_t", sol, "UserDefinedData_t", u, NULL));
+    CGNSCall(cg_narrays(&narrays));
+    for (a = 1; a <= narrays; ++a) {
+      CGNSCall(cg_array_info(a, name, &type, &rank_a, adims));
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD, " %s(%s)", name, cg_DataTypeName(type)));
+      for (d = 0; d < rank_a; ++d) PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s%" PetscInt_FMT, d ? " x " : " [", (PetscInt)adims[d]));
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD, "]"));
+      PetscCall(PetscStrcmp(name, "LevelSet", &same));
+      if (same) ia_phi = a;
+      PetscCall(PetscStrcmp(name, "BodyId", &same));
+      if (same) ia_body = a;
+    }
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "\n"));
+    PetscCheck(ia_phi && ia_body, PETSC_COMM_SELF, PETSC_ERR_FILE_UNEXPECTED, "Missing LevelSet or BodyId face array");
+    nface = 1;
+    for (d = 0; d < dim; ++d) nface *= M[d] + (d == u - 1 ? 1 : 0);
+    PetscCall(PetscMalloc1(nface, &phi));
+    PetscCall(PetscMalloc1(nface, &body));
+    CGNSCall(cg_array_read_as(ia_phi, CGNS_ENUMV(RealDouble), phi));
+    CGNSCall(cg_array_read_as(ia_body, CGNS_ENUMV(Integer), body));
+    /* The last face in the face direction (owned by the last rank), at the middle of the other directions */
+    for (d = 0; d < 3; ++d) p[d] = d < dim ? (d == u - 1 ? M[d] : M[d] / 2) : 0;
+    {
+      PetscInt n0 = M[0] + (u == 1 ? 1 : 0), n1 = dim > 1 ? M[1] + (u == 2 ? 1 : 0) : 1, idx = p[0] + n0 * (p[1] + n1 * p[2]);
+
+      PetscCall(PrintValue_Private(dim, h, "face", p, u - 1, phi[idx], body[idx]));
+    }
+    PetscCall(PetscFree(body));
+    PetscCall(PetscFree(phi));
+  }
+  CGNSCall(cg_close(fn));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char **argv)
 {
   DM          dm;
@@ -84,18 +264,33 @@ int main(int argc, char **argv)
   char        file[PETSC_MAX_PATH_LEN];
   PetscBool   roundtrip;
   PetscViewer viewer;
+  char        lsfile[PETSC_MAX_PATH_LEN];
+  PetscBool   levelset;
+  PetscInt    M[3] = {1, 1, 1};
+  PetscReal   h[3];
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-dim", &dim, NULL));
   PetscCall(PetscOptionsGetString(NULL, NULL, "-roundtrip", file, sizeof(file), &roundtrip));
+  PetscCall(PetscOptionsGetString(NULL, NULL, "-levelset", lsfile, sizeof(lsfile), &levelset));
 
   PetscCall(CreateDM_Private(dim, &dm));
   if (roundtrip) PetscCall(StretchX_Private(dm));
   PetscCall(MeshCartesianCreate(dm, &mesh));
+  if (levelset) PetscCall(AddBodies_Private(mesh, dim));
   PetscCall(MeshSetFromOptions(mesh));
   PetscCall(MeshSetUp(mesh));
-  if (!roundtrip) PetscCall(MeshView(mesh, PETSC_VIEWER_STDOUT_WORLD));
+  if (levelset) {
+    PetscCall(DMStagGetGlobalSizes(dm, &M[0], &M[1], &M[2]));
+    h[0] = 1. / M[0];
+    h[1] = 2. / M[1];
+    h[2] = 3. / M[2];
+    PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, lsfile, FILE_MODE_WRITE, &viewer));
+    PetscCall(MeshView(mesh, viewer));
+    PetscCall(PetscViewerDestroy(&viewer));
+    PetscCall(ReadLevelSet_Private(lsfile, dim, M, h));
+  } else if (!roundtrip) PetscCall(MeshView(mesh, PETSC_VIEWER_STDOUT_WORLD));
   else {
     PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, file, FILE_MODE_WRITE, &viewer));
     PetscCall(MeshView(mesh, viewer));
@@ -143,5 +338,15 @@ int main(int argc, char **argv)
     suffix: cgns_roundtrip_3d
     nsize: 1
     args: -dim 3 -stag_grid_x 3 -stag_grid_y 2 -stag_grid_z 2 -stag_boundary_type_x periodic -roundtrip mesh_ex1_3d.cgns
+
+  test:
+    suffix: cgns_levelset_2d
+    nsize: 1
+    args: -dim 2 -stag_grid_x 8 -stag_grid_y 6 -levelset mesh_ex1_ls_2d.cgns
+
+  test:
+    suffix: cgns_levelset_3d
+    nsize: 1
+    args: -dim 3 -stag_grid_x 4 -stag_grid_y 4 -stag_grid_z 4 -levelset mesh_ex1_ls_3d.cgns
 
 TEST*/

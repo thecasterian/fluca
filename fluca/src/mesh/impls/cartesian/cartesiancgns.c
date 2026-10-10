@@ -5,7 +5,33 @@
 #define MESH_CGNS_INFO_NAME "FlucaMesh"       /* UserDefinedData_t under the zone */
 #define MESH_CGNS_BT_NAME   "DMBoundaryTypes" /* int array, one entry per direction */
 
-/* Write the base, the zone (vertex coordinates and DM boundary types) and the CellInfo solution, once per file */
+/* LevelSet (phi) and BodyId (argmin body) at elements and faces, into FlowSolution sol */
+static PetscErrorCode MeshWriteIBFields_Cartesian_Private(Mesh mesh, PetscViewer viewer, int sol)
+{
+  MeshIB      *ib = &mesh->ib;
+  Vec          body_local, body;
+  PetscScalar *arr;
+  PetscInt     n, i;
+
+  PetscFunctionBegin;
+  PetscCall(PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(viewer, ib->phi_global, DMSTAG_ELEMENT, 0, 1, "LevelSet", sol, PETSC_FALSE));
+  PetscCall(PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(viewer, ib->phi_global, DMSTAG_LEFT, 0, 1, "LevelSet", sol, PETSC_FALSE));
+
+  PetscCall(DMGetLocalVector(ib->dm_phi, &body_local));
+  PetscCall(VecGetLocalSize(body_local, &n));
+  PetscCall(VecGetArray(body_local, &arr));
+  for (i = 0; i < n; ++i) arr[i] = ib->body_id[i];
+  PetscCall(VecRestoreArray(body_local, &arr));
+  PetscCall(DMGetGlobalVector(ib->dm_phi, &body));
+  PetscCall(DMLocalToGlobal(ib->dm_phi, body_local, INSERT_VALUES, body));
+  PetscCall(PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(viewer, body, DMSTAG_ELEMENT, 0, 1, "BodyId", sol, PETSC_TRUE));
+  PetscCall(PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(viewer, body, DMSTAG_LEFT, 0, 1, "BodyId", sol, PETSC_TRUE));
+  PetscCall(DMRestoreGlobalVector(ib->dm_phi, &body));
+  PetscCall(DMRestoreLocalVector(ib->dm_phi, &body_local));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Write the base, the zone (vertex coordinates and DM boundary types) and the CellInfo solution (rank, and the immersed-boundary level set and body ids when the mesh has bodies), once per file */
 static PetscErrorCode MeshWriteZone_Cartesian_Private(Mesh mesh, PetscViewer viewer, PetscInt step)
 {
   PetscViewer_FlucaCGNS *cgv = (PetscViewer_FlucaCGNS *)viewer->data;
@@ -98,6 +124,7 @@ static PetscErrorCode MeshWriteZone_Cartesian_Private(Mesh mesh, PetscViewer vie
     CGNSCall(cgp_field_write(cgv->file_num, cgv->base, cgv->zone, sol, CGNS_ENUMV(Integer), "Rank", &field));
     CGNSCall(cgp_field_write_data(cgv->file_num, cgv->base, cgv->zone, sol, field, rmin, rmax, e));
     PetscCall(PetscFree(e));
+    if (mesh->setupcalled && mesh->ib.nbodies) PetscCall(MeshWriteIBFields_Cartesian_Private(mesh, viewer, sol));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
