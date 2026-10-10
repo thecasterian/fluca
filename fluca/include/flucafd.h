@@ -163,12 +163,14 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetLimiter(FlucaFD, const char 
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetMassFlux(FlucaFD, Vec, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD, Vec);
 
-/* FLUCAFDIBFORCING specific */
+/* FLUCAFDIBFORCING specific
+   Rows at forcing points exist only at owned points: use it as the outermost operator or a summand, not as an inner operand */
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingCreate(Mesh, DMStagStencilLocation, PetscInt, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetInterpolationOrder(FlucaFD, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetVelocityComponent(FlucaFD, PetscInt);
 
-/* FLUCAFDIBMASK specific */
+/* FLUCAFDIBMASK specific
+   Point types are exact only at owned points: use it as the outermost operator or a summand, not as an inner operand */
 FLUCA_EXTERN PetscErrorCode FlucaFDIBMaskCreate(FlucaFD, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBMaskSetOperand(FlucaFD, FlucaFD);
 

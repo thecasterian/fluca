@@ -4,12 +4,20 @@ static PetscErrorCode FlucaFDSetUp_IBMask(FlucaFD fd)
 {
   FlucaFD_IBMask *mask = (FlucaFD_IBMask *)fd->data;
   FlucaFDTermLink src, dst;
+  PetscInt        nb, s[3];
+  MeshIBPointType type;
 
   PetscFunctionBegin;
   PetscCheck(mask->operand, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Operand not set");
   PetscCall(FlucaFDValidateOperand_Internal(fd, mask->operand));
   PetscCheck(mask->operand->input_loc == fd->input_loc && mask->operand->input_c == fd->input_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "Mask input must match the operand input");
   PetscCheck(mask->operand->output_loc == fd->output_loc && mask->operand->output_c == fd->output_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "Mask output must match the operand output");
+  /* Fail in setup, not at the first stencil query, when the output location is not classified */
+  PetscCall(MeshGetNumBodies(fd->mesh, &nb));
+  if (nb) {
+    PetscCall(DMStagGetCorners(fd->dm, &s[0], &s[1], &s[2], NULL, NULL, NULL, NULL, NULL, NULL));
+    PetscCall(MeshGetIBPointType(fd->mesh, fd->output_loc, s[0], fd->dim > 1 ? s[1] : 0, fd->dim > 2 ? s[2] : 0, &type));
+  }
 
   /* The mask is transparent at fluid points: same domain boundary conditions and terms as the operand */
   PetscCall(PetscArraycpy(&fd->bcs[0][0], &mask->operand->bcs[0][0], FLUCAFD_MAX_COMPONENT * 2 * FLUCAFD_MAX_DIM));

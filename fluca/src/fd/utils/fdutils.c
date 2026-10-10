@@ -255,7 +255,8 @@ static PetscBool FlucaFDStencilPointsSame_Private(const FlucaFDStencilPoint *a, 
     return FlucaFDTVDRefsSame_Private(a, b);
   case FLUCAFD_STENCIL_IB:
     if (!(a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc && a->boundary_face == b->boundary_face)) return PETSC_FALSE;
-    return FlucaFDScaleRefsSame_Private(a, b);
+    if (!FlucaFDScaleRefsSame_Private(a, b)) return PETSC_FALSE;
+    return FlucaFDTVDRefsSame_Private(a, b);
   case FLUCAFD_STENCIL_GRID:
     if (!(a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc)) return PETSC_FALSE;
     if (!FlucaFDScaleRefsSame_Private(a, b)) return PETSC_FALSE;

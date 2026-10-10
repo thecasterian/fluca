@@ -74,9 +74,11 @@ static PetscErrorCode FlucaFDSetFromOptions_IBForcing(FlucaFD fd, PetscOptionIte
 static PetscErrorCode FlucaFDSetUp_IBForcing(FlucaFD fd)
 {
   FlucaFD_IBForcing        *ibf = (FlucaFD_IBForcing *)fd->data;
+  MPI_Comm                  comm;
+  PetscMPIInt               rank, size, first, root;
   PetscInt                  s[3], e[3], m[3], ne[3], p[3], d, nb, nuse, use[2 * FLUCAFD_MAX_DIM], nnodes[2 * FLUCAFD_MAX_DIM];
-  PetscReal                 w[2 * FLUCAFD_MAX_DIM], a[2 * FLUCAFD_MAX_DIM][3], x[3];
-  PetscBool                 face;
+  PetscReal                 w[2 * FLUCAFD_MAX_DIM], a[2 * FLUCAFD_MAX_DIM][3], x[3] = {0., 0., 0.};
+  PetscBool                 face, bad = PETSC_FALSE;
   MeshIBPointType           type;
   const MeshIBForcingPoint *fp;
 
@@ -88,7 +90,10 @@ static PetscErrorCode FlucaFDSetUp_IBForcing(FlucaFD fd)
   PetscCall(MeshGetNumBodies(fd->mesh, &nb));
   if (!nb) PetscFunctionReturn(PETSC_SUCCESS);
 
-  /* Fail early, not in the solve, when a forcing point has no usable grid line */
+  /* Fail early, not in the solve, when a forcing point has no usable grid line; the lowest offending rank reports its first point */
+  PetscCall(PetscObjectGetComm((PetscObject)fd, &comm));
+  PetscCallMPI(MPI_Comm_rank(comm, &rank));
+  PetscCallMPI(MPI_Comm_size(comm, &size));
   PetscCall(DMStagGetCorners(fd->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], &ne[0], &ne[1], &ne[2]));
   for (d = 0; d < 3; ++d) {
     if (d >= fd->dim) {
@@ -99,17 +104,23 @@ static PetscErrorCode FlucaFDSetUp_IBForcing(FlucaFD fd)
     PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, d, &face));
     e[d] = s[d] + m[d] + (face ? ne[d] : 0);
   }
-  for (p[2] = s[2]; p[2] < e[2]; ++p[2])
-    for (p[1] = s[1]; p[1] < e[1]; ++p[1])
-      for (p[0] = s[0]; p[0] < e[0]; ++p[0]) {
+  for (p[2] = s[2]; p[2] < e[2] && !bad; ++p[2])
+    for (p[1] = s[1]; p[1] < e[1] && !bad; ++p[1])
+      for (p[0] = s[0]; p[0] < e[0] && !bad; ++p[0]) {
         PetscCall(MeshGetIBPointType(fd->mesh, fd->output_loc, p[0], p[1], p[2], &type));
         if (type != MESH_IB_FORCING) continue;
         PetscCall(MeshIBGetForcingPoint_Internal(fd->mesh, fd->output_loc, p[0], p[1], p[2], &fp));
         PetscCall(GetForcingRow_Private(fd, p, fp, &nuse, use, w, nnodes, a));
         if (nuse) continue;
         PetscCall(MeshIBGetPointCoordinate_Internal(fd->mesh, fd->output_loc, p[0], p[1], p[2], x));
-        SETERRQ(PETSC_COMM_SELF, PETSC_ERR_USER, "Grid too coarse at the immersed boundary near (%g, %g, %g): no grid line with a fluid neighbour", (double)x[0], (double)x[1], (double)x[2]);
+        bad = PETSC_TRUE;
       }
+  first = bad ? rank : size;
+  PetscCallMPI(MPIU_Allreduce(&first, &root, 1, MPI_INT, MPI_MIN, comm));
+  if (root < size) {
+    PetscCallMPI(MPI_Bcast(x, 3, MPIU_REAL, root, comm));
+    SETERRQ(comm, PETSC_ERR_USER, "Grid too coarse at the immersed boundary near (%g, %g, %g): no grid line with a fluid neighbour", (double)x[0], (double)x[1], (double)x[2]);
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -150,7 +161,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_IBForcing(FlucaFD fd, PetscInt i, Pet
   p[1] = j;
   p[2] = k;
   PetscCall(MeshIBGetForcingPoint_Internal(fd->mesh, fd->output_loc, i, j, k, &fp));
-  PetscCheck(fp, PETSC_COMM_SELF, PETSC_ERR_PLIB, "No forcing record at (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ")", i, j, k);
+  PetscCheck(fp, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "No forcing record at (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT "): FLUCAFDIBFORCING rows exist only at owned points, so use it as the outermost operator or a summand, not as an inner operand", i, j, k);
   PetscCall(GetForcingRow_Private(fd, p, fp, &nuse, use, w, nnodes, a));
   PetscCheck(nuse > 0, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Forcing point (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ") has no usable grid line", i, j, k);
   for (u = 0; u < nuse; ++u) {
@@ -240,6 +251,7 @@ PetscErrorCode FlucaFDIBForcingSetInterpolationOrder(FlucaFD fd, PetscInt order)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(fd, FLUCAFD_CLASSID, 1, FLUCAFDIBFORCING);
+  PetscValidLogicalCollectiveInt(fd, order, 2);
   PetscCheck(!fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the interpolation order after FlucaFDSetUp()");
   ((FlucaFD_IBForcing *)fd->data)->order = order;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -249,6 +261,7 @@ PetscErrorCode FlucaFDIBForcingSetVelocityComponent(FlucaFD fd, PetscInt vel_com
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecificType(fd, FLUCAFD_CLASSID, 1, FLUCAFDIBFORCING);
+  PetscValidLogicalCollectiveInt(fd, vel_comp, 2);
   PetscCheck(!fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the velocity component after FlucaFDSetUp()");
   ((FlucaFD_IBForcing *)fd->data)->vel_comp = vel_comp;
   PetscFunctionReturn(PETSC_SUCCESS);
