@@ -111,6 +111,11 @@ typedef struct {
   FlucaFDSumOperandLink oplink;
 } FlucaFD_Sum;
 
+typedef struct {
+  PetscInt vel_comp; /* body velocity component imposed on the rows */
+  PetscInt order;    /* interpolation order along grid lines: 1 or 2 */
+} FlucaFD_IBForcing;
+
 FLUCA_EXTERN PetscBool      FlucaFDLimiterRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode FlucaFDLimiterRegisterAll(void);
 
@@ -165,6 +170,7 @@ FLUCA_INTERN PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscReal, PetscInt, 
 
 FLUCA_INTERN PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD, PetscReal, PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar *);
 FLUCA_INTERN PetscErrorCode FlucaFDEvaluateBCValueDot_Internal(FlucaFD, PetscReal, PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar *);
+FLUCA_INTERN PetscErrorCode FlucaFDEvaluateIBValue_Internal(FlucaFD, PetscReal, const FlucaFDStencilPoint *, PetscBool, PetscScalar *);
 
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *);
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkDuplicate_Internal(FlucaFDTermLink, FlucaFDTermLink *);

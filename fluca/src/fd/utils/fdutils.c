@@ -1,4 +1,5 @@
 #include <fluca/private/flucafdimpl.h>
+#include <fluca/private/meshimpl.h>
 #include <petscdmda.h>
 
 #define FLUCAFD_FD_DOT_STEP 1e-5
@@ -85,6 +86,33 @@ PetscErrorCode FlucaFDEvaluateBCValueDot_Internal(FlucaFD fd, PetscReal t, Petsc
   } else {
     *value = 0.;
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDEvaluateIBValue_Internal(FlucaFD fd, PetscReal t, const FlucaFDStencilPoint *point, PetscBool dot, PetscScalar *value)
+{
+  const MeshIBForcingPoint *fp;
+  PetscReal                 x[3];
+  PetscScalar               u[3];
+  PetscInt                  body = -1, n;
+
+  PetscFunctionBegin;
+  if (point->boundary_face < 0) {
+    PetscCall(MeshIBGetPointCoordinate_Internal(fd->mesh, point->loc, point->i, point->j, point->k, x));
+    PetscCall(MeshIBGetBodyId_Internal(fd->mesh, point->loc, point->i, point->j, point->k, &body));
+  } else {
+    PetscCall(MeshIBGetForcingPoint_Internal(fd->mesh, point->loc, point->i, point->j, point->k, &fp));
+    PetscCheck(fp, PETSC_COMM_SELF, PETSC_ERR_PLIB, "No forcing record at (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ")", point->i, point->j, point->k);
+    for (n = 0; n < fp->ncut; ++n) {
+      if (2 * fp->cuts[n].dir + fp->cuts[n].side != point->boundary_face) continue;
+      body = fp->cuts[n].body;
+      PetscCall(PetscArraycpy(x, fp->cuts[n].x_ib, 3));
+    }
+    PetscCheck(body >= 0, PETSC_COMM_SELF, PETSC_ERR_PLIB, "No cut %" PetscInt_FMT " at forcing point (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ")", point->boundary_face, point->i, point->j, point->k);
+  }
+  PetscCheck(point->c >= 0 && point->c < fd->dim, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Velocity component %" PetscInt_FMT " out of range [0, %" PetscInt_FMT ")", point->c, fd->dim);
+  PetscCall(MeshIBEvaluateBodyVelocity_Internal(fd->mesh, body, t, x, dot, u));
+  *value = u[point->c];
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -225,6 +253,9 @@ static PetscBool FlucaFDStencilPointsSame_Private(const FlucaFDStencilPoint *a, 
     if (!(a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc && a->boundary_face == b->boundary_face)) return PETSC_FALSE;
     if (!FlucaFDScaleRefsSame_Private(a, b)) return PETSC_FALSE;
     return FlucaFDTVDRefsSame_Private(a, b);
+  case FLUCAFD_STENCIL_IB:
+    if (!(a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc && a->boundary_face == b->boundary_face)) return PETSC_FALSE;
+    return FlucaFDScaleRefsSame_Private(a, b);
   case FLUCAFD_STENCIL_GRID:
     if (!(a->i == b->i && a->j == b->j && a->k == b->k && a->c == b->c && a->loc == b->loc)) return PETSC_FALSE;
     if (!FlucaFDScaleRefsSame_Private(a, b)) return PETSC_FALSE;
@@ -716,6 +747,8 @@ static PetscErrorCode EvaluateGradient_Private(FlucaFD fd_grad, PetscReal t, Pet
     }
     case FLUCAFD_STENCIL_CONSTANT:
       SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unexpected constant in gradient stencil");
+    case FLUCAFD_STENCIL_IB:
+      SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Unexpected immersed-boundary point in gradient stencil");
     }
   }
   PetscFunctionReturn(PETSC_SUCCESS);

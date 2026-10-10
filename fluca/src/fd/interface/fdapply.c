@@ -119,6 +119,10 @@ static PetscErrorCode FlucaFDApply_Private(FlucaFD fd, PetscReal t, DM input_dm,
             }
             result += points[c].v * bc_val;
             break;
+          case FLUCAFD_STENCIL_IB:
+            PetscCall(FlucaFDEvaluateIBValue_Internal(fd, t, &points[c], use_dot_bc, &bc_val));
+            result += points[c].v * bc_val;
+            break;
           }
         }
 

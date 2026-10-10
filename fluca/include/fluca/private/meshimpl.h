@@ -15,7 +15,9 @@ FLUCA_EXTERN PetscLogEvent  MESH_SetUp;
 #define MESH_IB_MAX_LOC    4   /* element and up to three face locations */
 #define MESH_IB_MAX_BODIES 127 /* body ids are stored as int8_t */
 
-/* Crossing of the segment from a forcing point to its solid star neighbour */
+/* Crossing of the segment from a forcing point to its solid star neighbour.
+   theta is the linear root of phi along the segment; on curved walls x_ib is O(h^2) off
+   the surface, which limits the forcing-row residual to O(h^2) for both interpolation orders. */
 typedef struct {
   PetscInt  dir;   /* 0, 1, 2 */
   PetscInt  side;  /* 0: neighbour at index - 1, 1: at index + 1 */
