@@ -16,6 +16,7 @@ typedef const char *FlucaFDType;
 #define FLUCAFDSUM            "sum"
 #define FLUCAFDSECONDORDERTVD "secondordertvd"
 #define FLUCAFDIBFORCING      "ibforcing"
+#define FLUCAFDIBMASK         "ibmask"
 
 FLUCA_EXTERN PetscClassId   FLUCAFD_CLASSID;
 FLUCA_EXTERN PetscErrorCode FlucaFDInitializePackage(void);
@@ -166,6 +167,10 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD, Vec
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingCreate(Mesh, DMStagStencilLocation, PetscInt, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetInterpolationOrder(FlucaFD, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetVelocityComponent(FlucaFD, PetscInt);
+
+/* FLUCAFDIBMASK specific */
+FLUCA_EXTERN PetscErrorCode FlucaFDIBMaskCreate(FlucaFD, FlucaFD *);
+FLUCA_EXTERN PetscErrorCode FlucaFDIBMaskSetOperand(FlucaFD, FlucaFD);
 
 FLUCA_EXTERN PetscFunctionList FlucaFDList;
 FLUCA_EXTERN PetscErrorCode    FlucaFDRegister(const char[], PetscErrorCode (*)(FlucaFD));

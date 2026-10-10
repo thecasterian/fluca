@@ -13,6 +13,7 @@ set(TEST_SRCS
     ex10.c
     ex11.c
     ex12.c
+    ex13.c
 )
 
 foreach(test_src ${TEST_SRCS})

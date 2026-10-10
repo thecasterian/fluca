@@ -1,0 +1,32 @@
+Row sizes along j = 4:
+  i = 0 FLUID   operand 4, mask 4, mask + forcing 4
+  i = 1 FLUID   operand 3, mask 3, mask + forcing 3
+  i = 2 FLUID   operand 3, mask 3, mask + forcing 3
+  i = 3 FLUID   operand 3, mask 3, mask + forcing 3
+  i = 4 FLUID   operand 3, mask 3, mask + forcing 3
+  i = 5 FORCING operand 3, mask 0, mask + forcing 4
+  i = 6 SOLID   operand 3, mask 0, mask + forcing 2
+  i = 7 SOLID   operand 4, mask 0, mask + forcing 2
+Operand stencil at (0, 4):
+  npoints = 4
+  points[0]: type=grid, i=0, j=4, loc=ELEMENT, c=0, v=-320.
+  points[1]: type=grid, i=1, j=4, loc=ELEMENT, c=0, v=128.
+  points[2]: type=grid, i=2, j=4, loc=ELEMENT, c=0, v=-12.8
+  points[3]: type=boundary(left), i=0, j=4, loc=LEFT, c=0, v=204.8
+Mask stencil at (0, 4):
+  npoints = 4
+  points[0]: type=grid, i=0, j=4, loc=ELEMENT, c=0, v=-320.
+  points[1]: type=grid, i=1, j=4, loc=ELEMENT, c=0, v=128.
+  points[2]: type=grid, i=2, j=4, loc=ELEMENT, c=0, v=-12.8
+  points[3]: type=boundary(left), i=0, j=4, loc=LEFT, c=0, v=204.8
+Mask + forcing stencil at (4, 4):
+  npoints = 3
+  points[0]: type=grid, i=3, j=4, loc=ELEMENT, c=0, v=64.
+  points[1]: type=grid, i=4, j=4, loc=ELEMENT, c=0, v=-128.
+  points[2]: type=grid, i=5, j=4, loc=ELEMENT, c=0, v=64.
+Mask + forcing stencil at (5, 4):
+  npoints = 4
+  points[0]: type=grid, i=3, j=4, loc=ELEMENT, c=0, v=0.111111
+  points[1]: type=grid, i=4, j=4, loc=ELEMENT, c=0, v=-0.4
+  points[2]: type=grid, i=5, j=4, loc=ELEMENT, c=0, v=1.
+  points[3]: type=ib(right), i=5, j=4, loc=ELEMENT, c=0, v=-0.711111
