@@ -42,6 +42,17 @@ typedef struct {
   void             *ctx;
 } IBBody_LevelSet;
 
+typedef struct {
+  PetscInt   dim;   /* 2: closed polyline, 3: closed triangle surface, 0: not set */
+  PetscInt   nv;    /* number of vertices */
+  PetscInt   nprim; /* number of segments (2D) or triangles (3D) */
+  PetscReal *v;     /* vertex coordinates, nv * dim */
+  PetscInt  *prim;  /* vertex indices, nprim * dim */
+} IBBody_Surface;
+
+/* STL reader, defined in impls/surface/surfacestl.c; *x holds 9 coordinates per triangle */
+FLUCA_INTERN PetscErrorCode IBBodySurfaceReadSTL_Internal(const char[], PetscInt *, PetscReal **);
+
 /* Sample phi on the tensor-product points (coord[0][i], coord[1][j], coord[2][k]); n[d] = 1 for d >= dim.
    phi is indexed by i + n[0] * (j + n[1] * k). */
 FLUCA_EXTERN PetscErrorCode IBBodySample_Internal(IBBody, PetscInt, const PetscInt[], const PetscReal *const[], PetscReal[]);

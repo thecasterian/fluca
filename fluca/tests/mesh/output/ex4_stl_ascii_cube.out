@@ -1,0 +1,9 @@
+IBBody Object: 1 MPI process
+  type: surface
+  Velocity: (0., 0., 0.)
+  Surface: 3D, 36 vertices, 12 triangles
+ELEMENT: fluid 352, forcing 96, solid 64, mismatches 0
+LEFT: fluid 448, forcing 80, solid 48, mismatches 0
+DOWN: fluid 448, forcing 80, solid 48, mismatches 0
+BACK: fluid 448, forcing 80, solid 48, mismatches 0
+element phi at j = k = 4: 0.187500 0.062500 -0.062500 -0.187500 -0.187500 -0.062500 0.062500 0.187500
