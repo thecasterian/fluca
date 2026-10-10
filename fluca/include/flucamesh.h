@@ -2,6 +2,7 @@
 
 #include <flucasys.h>
 #include <petscdmstag.h>
+#include <flucaibbody.h>
 
 /* Mesh - The computational grid: a user-provided DMStag plus what the solver needs to know about it */
 typedef struct _p_Mesh *Mesh;
@@ -29,6 +30,22 @@ FLUCA_EXTERN PetscErrorCode MeshDestroy(Mesh *);
 
 /* MESHCARTESIAN */
 FLUCA_EXTERN PetscErrorCode MeshCartesianCreate(DM, Mesh *);
+
+/* Immersed boundary */
+typedef enum {
+  MESH_IB_FLUID,
+  MESH_IB_FORCING, /* not solid, with a solid star neighbour; carries a forcing record */
+  MESH_IB_SOLID,
+} MeshIBPointType;
+FLUCA_EXTERN const char *MeshIBPointTypes[];
+
+/* In periodic directions phi is sampled at unwrapped ghost coordinates, so a body crossing a periodic boundary needs a periodic level set */
+FLUCA_EXTERN PetscErrorCode MeshAddBody(Mesh, IBBody);
+FLUCA_EXTERN PetscErrorCode MeshGetNumBodies(Mesh, PetscInt *);
+FLUCA_EXTERN PetscErrorCode MeshGetBody(Mesh, PetscInt, IBBody *);
+FLUCA_EXTERN PetscErrorCode MeshGetIBLevelSet(Mesh, Vec *);
+/* Exact for owned points. At ghost points whose star neighbour lies outside the local ghosted range, that neighbour is not examined, so a FORCING point may be reported as FLUID. */
+FLUCA_EXTERN PetscErrorCode MeshGetIBPointType(Mesh, DMStagStencilLocation, PetscInt, PetscInt, PetscInt, MeshIBPointType *);
 
 FLUCA_EXTERN PetscFunctionList MeshList;
 FLUCA_EXTERN PetscErrorCode    MeshRegister(const char[], PetscErrorCode (*)(Mesh));

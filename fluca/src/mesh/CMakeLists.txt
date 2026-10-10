@@ -7,7 +7,9 @@ add_library(fluca_mesh SHARED
     ib/interface/ibbodyreg.c
     impls/cartesian/cartesian.c
     impls/cartesian/cartesiancgns.c
+    impls/cartesian/cartesianib.c
     interface/meshbasic.c
+    interface/meshib.c
     interface/meshopts.c
     interface/meshpkg.c
     interface/meshreg.c

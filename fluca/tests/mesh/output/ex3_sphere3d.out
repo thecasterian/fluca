@@ -1,0 +1,12 @@
+bodies: 1, level set: yes
+ELEMENT: fluid 376, forcing 80, solid 56
+LEFT: fluid 440, forcing 80, solid 56
+DOWN: fluid 440, forcing 80, solid 56
+BACK: fluid 440, forcing 80, solid 56
+ELEMENT forcing records:
+  (3, 2, 1): normal (-0.164328, -0.498416, -0.851221)
+    cut dir 2 side 1 theta 0.716731 body 0 x_ib (0.437500, 0.312500, 0.277091)
+  (4, 2, 1): normal (0.164328, -0.498416, -0.851221)
+    cut dir 2 side 1 theta 0.716731 body 0 x_ib (0.562500, 0.312500, 0.277091)
+  (2, 3, 1): normal (-0.498416, -0.164328, -0.851221)
+    cut dir 2 side 1 theta 0.716731 body 0 x_ib (0.312500, 0.437500, 0.277091)

@@ -16,9 +16,10 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh)
 
   PetscCall(MeshInitializePackage());
   PetscCall(FlucaHeaderCreate(m, MESH_CLASSID, "Mesh", "Mesh", "Mesh", comm, MeshDestroy, MeshView));
-  m->dm          = NULL;
-  m->dim         = PETSC_DETERMINE;
-  m->data        = NULL;
+  m->dm   = NULL;
+  m->dim  = PETSC_DETERMINE;
+  m->data = NULL;
+  PetscCall(PetscMemzero(&m->ib, sizeof(MeshIB)));
   m->setupcalled = PETSC_FALSE;
 
   *mesh = m;
@@ -131,6 +132,7 @@ PetscErrorCode MeshDestroy(Mesh *mesh)
   }
 
   PetscTryTypeMethod((*mesh), destroy);
+  PetscCall(MeshIBDestroy_Internal(*mesh));
   PetscCall(DMDestroy(&(*mesh)->dm));
   PetscCall(PetscHeaderDestroy(mesh));
   PetscFunctionReturn(PETSC_SUCCESS);
