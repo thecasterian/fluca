@@ -268,6 +268,7 @@ PetscErrorCode NSFormJacobian(NS ns, Vec x, Mat J)
   PetscValidHeaderSpecific(J, MAT_CLASSID, 3);
   PetscCall(PetscLogEventBegin(NS_FormJacobian, ns, x, J, NULL));
   PetscUseTypeMethod(ns, formjacobian, x, J);
+  PetscCall(NSIBReplaceJacobianRows_Internal(ns, J));
   PetscCall(PetscLogEventEnd(NS_FormJacobian, ns, x, J, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -280,6 +281,7 @@ PetscErrorCode NSFormFunction(NS ns, Vec x, Vec f)
   PetscValidHeaderSpecific(f, VEC_CLASSID, 3);
   PetscCall(PetscLogEventBegin(NS_FormFunction, ns, x, f, NULL));
   PetscUseTypeMethod(ns, formfunction, x, f);
+  PetscCall(NSIBReplaceFunctionRows_Internal(ns, f));
   PetscCall(PetscLogEventEnd(NS_FormFunction, ns, x, f, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

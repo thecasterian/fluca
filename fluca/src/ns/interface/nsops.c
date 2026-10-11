@@ -175,6 +175,7 @@ PetscErrorCode NSSetUpSpatialOperators_Internal(NS ns)
   PetscCall(FlucaFDSetUp(ns->fd_D));
   for (e = 0; e < dim; e++) PetscCall(FlucaFDDestroy(&ops[e]));
 
+  PetscCall(NSSetUpIB_Internal(ns));
   PetscCall(CreateNegR_Private(ns));
 
   PetscCall(DMCreateGlobalVector(dm, &ns->zero));
@@ -192,7 +193,13 @@ PetscErrorCode NSDestroySpatialOperators_Internal(NS ns)
     PetscCall(FlucaFDDestroy(&ns->fd_laplacian[d]));
     PetscCall(FlucaFDDestroy(&ns->fd_grad_p[d]));
     PetscCall(FlucaFDDestroy(&ns->fd_negT[d]));
+    PetscCall(FlucaFDDestroy(&ns->fd_ibforcing[d]));
   }
+  PetscCall(ISDestroy(&ns->is_ib_mom));
+  PetscCall(ISDestroy(&ns->is_ib_face));
+  PetscCall(ISDestroy(&ns->is_ib_unit));
+  PetscCall(PetscFree(ns->ibface));
+  ns->nibface = 0;
   PetscCall(FlucaFDDestroy(&ns->fd_D));
   PetscCall(MatDestroy(&ns->negR));
   PetscCall(VecDestroy(&ns->zero));
