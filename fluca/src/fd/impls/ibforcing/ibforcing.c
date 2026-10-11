@@ -3,16 +3,22 @@
 
 #define FLUCAFD_IB_NORMAL_TOL 1e-12
 
-/* Lagrange weights at x_f for one cut: a[0] for the crossing, a[m] for the fluid node m steps away from the cut side.
-   *nnodes counts the crossing plus the usable fluid nodes; it is 0 when the first fluid node is solid or off the grid. */
-static PetscErrorCode GetCutWeights_Private(FlucaFD fd, PetscInt order, const PetscInt p[], const MeshIBCut *cut, PetscInt *nnodes, PetscReal a[])
+/* Face location normal to each direction, where the boundary node of an ELEMENT forcing row lives */
+static const DMStagStencilLocation wall_loc[] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
+
+/* Lagrange weights at x_f for one cut: a[0] for the crossing, a[m] for the m-th node away from the cut side.
+   The nodes are the fluid points f - s and f - 2s on the grid; when f - s is off the grid at a domain face that has a
+   Dirichlet BC on fd (ELEMENT output only), that face is the single node and *wall is set.
+   *nnodes counts the crossing plus the usable nodes; it is 0 when the cut has no usable node. */
+static PetscErrorCode GetCutWeights_Private(FlucaFD fd, PetscInt order, const PetscInt p[], const MeshIBCut *cut, PetscInt *nnodes, PetscReal a[], PetscBool *wall)
 {
-  PetscInt  sigma, m, b, c, q[3];
+  PetscInt  sigma, m, b, c, q[3], wf;
   PetscReal s[3], xf[3], xq[3], phi;
   PetscBool on;
 
   PetscFunctionBegin;
   *nnodes = 0;
+  *wall   = PETSC_FALSE;
   sigma   = cut->side ? 1 : -1;
   s[0]    = cut->x_ib[cut->dir];
   PetscCall(MeshIBGetPointCoordinate_Internal(fd->mesh, fd->output_loc, p[0], p[1], p[2], xf));
@@ -22,7 +28,17 @@ static PetscErrorCode GetCutWeights_Private(FlucaFD fd, PetscInt order, const Pe
     q[2] = p[2];
     q[cut->dir] -= m * sigma;
     PetscCall(MeshIBIsOnGrid_Internal(fd->mesh, fd->output_loc, cut->dir, q[cut->dir], &on));
-    if (!on) break;
+    if (!on) {
+      wf = 2 * cut->dir + (1 - cut->side);
+      if (m == 1 && fd->output_loc == DMSTAG_ELEMENT && fd->bcs[fd->output_c][wf].type == FLUCAFD_BC_DIRICHLET) {
+        q[cut->dir] = cut->side ? 0 : fd->mesh->ib.N[cut->dir];
+        PetscCall(MeshIBGetPointCoordinate_Internal(fd->mesh, wall_loc[cut->dir], q[0], q[1], q[2], xq));
+        s[1]  = xq[cut->dir];
+        *wall = PETSC_TRUE;
+        m     = 2;
+      }
+      break;
+    }
     PetscCall(MeshIBGetLevelSet_Internal(fd->mesh, fd->output_loc, q[0], q[1], q[2], &phi));
     if (phi < 0.) break;
     PetscCall(MeshIBGetPointCoordinate_Internal(fd->mesh, fd->output_loc, q[0], q[1], q[2], xq));
@@ -38,23 +54,39 @@ static PetscErrorCode GetCutWeights_Private(FlucaFD fd, PetscInt order, const Pe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Usable cuts of a forcing point, their blend weights n_d^2 / sum n_d^2, and their interpolation weights */
-static PetscErrorCode GetForcingRow_Private(FlucaFD fd, const PetscInt p[], const MeshIBForcingPoint *fp, PetscInt *nuse, PetscInt use[], PetscReal w[], PetscInt nnodes[], PetscReal a[][3])
+/* Usable cuts of a forcing point, their blend weights n_d^2 / sum n_d^2, their interpolation weights, and whether each
+   uses a domain wall node. With no usable cut the row is zero order (*zero): every cut, a[n][0] = 1, no other node. */
+static PetscErrorCode GetForcingRow_Private(FlucaFD fd, const PetscInt p[], const MeshIBForcingPoint *fp, PetscInt *nuse, PetscInt use[], PetscReal w[], PetscInt nnodes[], PetscReal a[][3], PetscBool wall[], PetscBool *zero)
 {
   FlucaFD_IBForcing *ibf = (FlucaFD_IBForcing *)fd->data;
   PetscInt           n, nn, u;
   PetscReal          sum = 0.;
+  PetscBool          wl;
 
   PetscFunctionBegin;
   *nuse = 0;
+  *zero = PETSC_FALSE;
   for (n = 0; n < fp->ncut; ++n) {
-    PetscCall(GetCutWeights_Private(fd, ibf->order, p, &fp->cuts[n], &nn, a[*nuse]));
+    PetscCall(GetCutWeights_Private(fd, ibf->order, p, &fp->cuts[n], &nn, a[*nuse], &wl));
     if (!nn) continue;
     use[*nuse]    = n;
     nnodes[*nuse] = nn;
+    wall[*nuse]   = wl;
     w[*nuse]      = fp->normal[fp->cuts[n].dir] * fp->normal[fp->cuts[n].dir];
     sum += w[*nuse];
     ++(*nuse);
+  }
+  if (!*nuse) {
+    *zero = PETSC_TRUE;
+    for (n = 0; n < fp->ncut; ++n) {
+      use[n]    = n;
+      nnodes[n] = 1;
+      wall[n]   = PETSC_FALSE;
+      a[n][0]   = 1.;
+      w[n]      = fp->normal[fp->cuts[n].dir] * fp->normal[fp->cuts[n].dir];
+      sum += w[n];
+    }
+    *nuse = fp->ncut;
   }
   for (u = 0; u < *nuse; ++u) w[u] = sum < FLUCAFD_IB_NORMAL_TOL ? 1. / *nuse : w[u] / sum;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -75,10 +107,9 @@ static PetscErrorCode FlucaFDSetUp_IBForcing(FlucaFD fd)
 {
   FlucaFD_IBForcing        *ibf = (FlucaFD_IBForcing *)fd->data;
   MPI_Comm                  comm;
-  PetscMPIInt               rank, size, first, root;
-  PetscInt                  s[3], e[3], m[3], ne[3], p[3], d, nb, nuse, use[2 * FLUCAFD_MAX_DIM], nnodes[2 * FLUCAFD_MAX_DIM];
-  PetscReal                 w[2 * FLUCAFD_MAX_DIM], a[2 * FLUCAFD_MAX_DIM][3], x[3] = {0., 0., 0.};
-  PetscBool                 face, bad = PETSC_FALSE;
+  PetscInt                  s[3], e[3], m[3], ne[3], p[3], d, u, nb, nuse, use[2 * FLUCAFD_MAX_DIM], nnodes[2 * FLUCAFD_MAX_DIM], cnt[2] = {0, 0};
+  PetscReal                 w[2 * FLUCAFD_MAX_DIM], a[2 * FLUCAFD_MAX_DIM][3];
+  PetscBool                 face, wall[2 * FLUCAFD_MAX_DIM], zero;
   MeshIBPointType           type;
   const MeshIBForcingPoint *fp;
 
@@ -90,10 +121,8 @@ static PetscErrorCode FlucaFDSetUp_IBForcing(FlucaFD fd)
   PetscCall(MeshGetNumBodies(fd->mesh, &nb));
   if (!nb) PetscFunctionReturn(PETSC_SUCCESS);
 
-  /* Fail early, not in the solve, when a forcing point has no usable grid line; the lowest offending rank reports its first point */
+  /* Report how many forcing points use a fallback: cnt[0] a domain wall node, cnt[1] zero order */
   PetscCall(PetscObjectGetComm((PetscObject)fd, &comm));
-  PetscCallMPI(MPI_Comm_rank(comm, &rank));
-  PetscCallMPI(MPI_Comm_size(comm, &size));
   PetscCall(DMStagGetCorners(fd->dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], &ne[0], &ne[1], &ne[2]));
   for (d = 0; d < 3; ++d) {
     if (d >= fd->dim) {
@@ -104,23 +133,22 @@ static PetscErrorCode FlucaFDSetUp_IBForcing(FlucaFD fd)
     PetscCall(FlucaFDUseFaceCoordinate_Internal(fd->output_loc, d, &face));
     e[d] = s[d] + m[d] + (face ? ne[d] : 0);
   }
-  for (p[2] = s[2]; p[2] < e[2] && !bad; ++p[2])
-    for (p[1] = s[1]; p[1] < e[1] && !bad; ++p[1])
-      for (p[0] = s[0]; p[0] < e[0] && !bad; ++p[0]) {
+  for (p[2] = s[2]; p[2] < e[2]; ++p[2])
+    for (p[1] = s[1]; p[1] < e[1]; ++p[1])
+      for (p[0] = s[0]; p[0] < e[0]; ++p[0]) {
         PetscCall(MeshGetIBPointType(fd->mesh, fd->output_loc, p[0], p[1], p[2], &type));
         if (type != MESH_IB_FORCING) continue;
         PetscCall(MeshIBGetForcingPoint_Internal(fd->mesh, fd->output_loc, p[0], p[1], p[2], &fp));
-        PetscCall(GetForcingRow_Private(fd, p, fp, &nuse, use, w, nnodes, a));
-        if (nuse) continue;
-        PetscCall(MeshIBGetPointCoordinate_Internal(fd->mesh, fd->output_loc, p[0], p[1], p[2], x));
-        bad = PETSC_TRUE;
+        PetscCall(GetForcingRow_Private(fd, p, fp, &nuse, use, w, nnodes, a, wall, &zero));
+        if (zero) ++cnt[1];
+        for (u = 0; u < nuse; ++u)
+          if (wall[u]) {
+            ++cnt[0];
+            break;
+          }
       }
-  first = bad ? rank : size;
-  PetscCallMPI(MPIU_Allreduce(&first, &root, 1, MPI_INT, MPI_MIN, comm));
-  if (root < size) {
-    PetscCallMPI(MPI_Bcast(x, 3, MPIU_REAL, root, comm));
-    SETERRQ(comm, PETSC_ERR_USER, "Grid too coarse at the immersed boundary near (%g, %g, %g): no grid line with a fluid neighbour", (double)x[0], (double)x[1], (double)x[2]);
-  }
+  PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, cnt, 2, MPIU_INT, MPI_SUM, comm));
+  PetscCall(PetscInfo(fd, "%" PetscInt_FMT " forcing points use a domain wall node, %" PetscInt_FMT " fall back to zero order\n", cnt[0], cnt[1]));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -129,6 +157,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_IBForcing(FlucaFD fd, PetscInt i, Pet
   FlucaFD_IBForcing        *ibf = (FlucaFD_IBForcing *)fd->data;
   PetscInt                  p[3], u, mm, sigma, nuse, use[2 * FLUCAFD_MAX_DIM], nnodes[2 * FLUCAFD_MAX_DIM];
   PetscReal                 w[2 * FLUCAFD_MAX_DIM], a[2 * FLUCAFD_MAX_DIM][3];
+  PetscBool                 wall[2 * FLUCAFD_MAX_DIM], zero;
   MeshIBPointType           type;
   const MeshIBForcingPoint *fp;
   const MeshIBCut          *cut;
@@ -162,13 +191,14 @@ static PetscErrorCode FlucaFDGetStencilRaw_IBForcing(FlucaFD fd, PetscInt i, Pet
   p[2] = k;
   PetscCall(MeshIBGetForcingPoint_Internal(fd->mesh, fd->output_loc, i, j, k, &fp));
   PetscCheck(fp, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "No forcing record at (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT "): FLUCAFDIBFORCING rows exist only at owned points, so use it as the outermost operator or a summand, not as an inner operand", i, j, k);
-  PetscCall(GetForcingRow_Private(fd, p, fp, &nuse, use, w, nnodes, a));
+  PetscCall(GetForcingRow_Private(fd, p, fp, &nuse, use, w, nnodes, a, wall, &zero));
   PetscCheck(nuse > 0, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Forcing point (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ") has no usable grid line", i, j, k);
   for (u = 0; u < nuse; ++u) {
     cut   = &fp->cuts[use[u]];
     sigma = cut->side ? 1 : -1;
 
     pt.type          = FLUCAFD_STENCIL_IB;
+    pt.loc           = fd->output_loc;
     pt.i             = i;
     pt.j             = j;
     pt.k             = k;
@@ -178,13 +208,24 @@ static PetscErrorCode FlucaFDGetStencilRaw_IBForcing(FlucaFD fd, PetscInt i, Pet
     PetscCall(FlucaFDAddStencilPoint_Internal(&pt, npoints, points));
 
     for (mm = 1; mm < nnodes[u]; ++mm) {
-      pt.type          = FLUCAFD_STENCIL_GRID;
-      pt.i             = cut->dir == 0 ? i - mm * sigma : i;
-      pt.j             = cut->dir == 1 ? j - mm * sigma : j;
-      pt.k             = cut->dir == 2 ? k - mm * sigma : k;
-      pt.c             = fd->output_c;
-      pt.boundary_face = 0;
-      pt.v             = -w[u] * a[u][mm];
+      if (wall[u]) {
+        pt.type          = FLUCAFD_STENCIL_BOUNDARY;
+        pt.loc           = wall_loc[cut->dir];
+        pt.i             = cut->dir == 0 ? (cut->side ? 0 : fd->mesh->ib.N[0]) : i;
+        pt.j             = cut->dir == 1 ? (cut->side ? 0 : fd->mesh->ib.N[1]) : j;
+        pt.k             = cut->dir == 2 ? (cut->side ? 0 : fd->mesh->ib.N[2]) : k;
+        pt.c             = fd->output_c;
+        pt.boundary_face = 2 * cut->dir + (1 - cut->side);
+      } else {
+        pt.type          = FLUCAFD_STENCIL_GRID;
+        pt.loc           = fd->output_loc;
+        pt.i             = cut->dir == 0 ? i - mm * sigma : i;
+        pt.j             = cut->dir == 1 ? j - mm * sigma : j;
+        pt.k             = cut->dir == 2 ? k - mm * sigma : k;
+        pt.c             = fd->output_c;
+        pt.boundary_face = 0;
+      }
+      pt.v = -w[u] * a[u][mm];
       PetscCall(FlucaFDAddStencilPoint_Internal(&pt, npoints, points));
     }
   }

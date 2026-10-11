@@ -1,0 +1,4 @@
+Stencil at (0, 4):
+  npoints = 2
+  points[0]: type=grid, i=0, j=4, loc=ELEMENT, c=0, v=1.
+  points[1]: type=ib(right), i=0, j=4, loc=ELEMENT, c=0, v=-1.
