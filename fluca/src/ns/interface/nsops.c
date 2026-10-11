@@ -98,8 +98,11 @@ static PetscErrorCode CreateNegR_Private(NS ns)
   PetscCall(MatAssemblyEnd(Gmat, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyBegin(Gstmat, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(Gstmat, MAT_FINAL_ASSEMBLY));
+  PetscCall(NSIBCloseGradient_Internal(ns, Gmat));
   PetscCall(MatMatMult(negTmat, Gmat, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &ns->negR));
   PetscCall(MatAXPY(ns->negR, 1., Gstmat, DIFFERENT_NONZERO_PATTERN));
+  /* IB face rows are replaced by U = u_body . e_e, so negR must not couple them to (solid) pressures */
+  if (ns->is_ib_face) PetscCall(MatZeroRowsIS(ns->negR, ns->is_ib_face, 0., NULL, NULL));
   /* DMCreateMatrix() lays out explicit zeros; drop them so negR stays inside the star stencil */
   PetscCall(MatEliminateZeros(ns->negR, PETSC_FALSE));
   PetscCall(MatDestroy(&Gstmat));
@@ -176,6 +179,7 @@ PetscErrorCode NSSetUpSpatialOperators_Internal(NS ns)
   for (e = 0; e < dim; e++) PetscCall(FlucaFDDestroy(&ops[e]));
 
   PetscCall(NSSetUpIB_Internal(ns));
+  PetscCall(NSIBCheckWallGap_Internal(ns));
   PetscCall(CreateNegR_Private(ns));
 
   PetscCall(DMCreateGlobalVector(dm, &ns->zero));

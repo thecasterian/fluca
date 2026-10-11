@@ -242,4 +242,14 @@ int main(int argc, char **argv)
     nsize: 1
     args: -case function_rows
 
+  test:
+    suffix: rhie_chow
+    nsize: 1
+    args: -case rhie_chow
+
+  test:
+    suffix: nullspace
+    nsize: 1
+    args: -case nullspace
+
 TEST*/

@@ -115,6 +115,8 @@ FLUCA_INTERN PetscErrorCode NSIBReplaceJacobianRows_Internal(NS, Mat);
 FLUCA_INTERN PetscErrorCode NSIBReplaceFunctionRows_Internal(NS, Vec);
 FLUCA_INTERN PetscErrorCode NSIBIsSolidCell_Internal(Mesh, PetscInt, const PetscInt[], PetscBool *);
 FLUCA_INTERN PetscErrorCode NSIBGetGlobalIndex_Internal(DM, const DMStagStencil *, PetscInt *);
+FLUCA_INTERN PetscErrorCode NSIBCloseGradient_Internal(NS, Mat);
+FLUCA_INTERN PetscErrorCode NSIBCheckWallGap_Internal(NS);
 
 /* Defined in interface/nsmon.c */
 FLUCA_INTERN PetscErrorCode NSMonitorSolutionSetUp_Internal(NS, PetscViewerAndFormat *);
