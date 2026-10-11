@@ -15,6 +15,8 @@ typedef const char *FlucaFDType;
 #define FLUCAFDSCALE          "scale"
 #define FLUCAFDSUM            "sum"
 #define FLUCAFDSECONDORDERTVD "secondordertvd"
+#define FLUCAFDIBFORCING      "ibforcing"
+#define FLUCAFDIBMASK         "ibmask"
 
 FLUCA_EXTERN PetscClassId   FLUCAFD_CLASSID;
 FLUCA_EXTERN PetscErrorCode FlucaFDInitializePackage(void);
@@ -51,6 +53,7 @@ typedef enum {
   FLUCAFD_STENCIL_GRID,
   FLUCAFD_STENCIL_BOUNDARY,
   FLUCAFD_STENCIL_CONSTANT,
+  FLUCAFD_STENCIL_IB, /* body velocity at an immersed-boundary crossing (boundary_face = 2 * dir + side) or at a solid point (-1) */
 } FlucaFDStencilPointType;
 
 /* Deferred vector scale reference. Array pointers are borrowed from FlucaFD_Scale's
@@ -159,6 +162,17 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetDirection(FlucaFD, FlucaFDDi
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetLimiter(FlucaFD, const char *);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetMassFlux(FlucaFD, Vec, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD, Vec);
+
+/* FLUCAFDIBFORCING specific
+   Rows at forcing points exist only at owned points: use it as the outermost operator or a summand, not as an inner operand */
+FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingCreate(Mesh, DMStagStencilLocation, PetscInt, PetscInt, FlucaFD *);
+FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetInterpolationOrder(FlucaFD, PetscInt);
+FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetVelocityComponent(FlucaFD, PetscInt);
+
+/* FLUCAFDIBMASK specific
+   Point types are exact only at owned points: use it as the outermost operator or a summand, not as an inner operand */
+FLUCA_EXTERN PetscErrorCode FlucaFDIBMaskCreate(FlucaFD, FlucaFD *);
+FLUCA_EXTERN PetscErrorCode FlucaFDIBMaskSetOperand(FlucaFD, FlucaFD);
 
 FLUCA_EXTERN PetscFunctionList FlucaFDList;
 FLUCA_EXTERN PetscErrorCode    FlucaFDRegister(const char[], PetscErrorCode (*)(FlucaFD));

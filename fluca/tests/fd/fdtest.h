@@ -17,6 +17,8 @@ static int CompareFlucaFDStencilPoint(const void *a, const void *b, void *ctx)
     if (sb->type == FLUCAFD_STENCIL_GRID) return 1;
     if (sa->type == FLUCAFD_STENCIL_BOUNDARY) return -1;
     if (sb->type == FLUCAFD_STENCIL_BOUNDARY) return 1;
+    if (sa->type == FLUCAFD_STENCIL_IB) return -1;
+    if (sb->type == FLUCAFD_STENCIL_IB) return 1;
   }
 
   if (sa->type == FLUCAFD_STENCIL_CONSTANT) return 0;
@@ -36,7 +38,7 @@ static int CompareFlucaFDStencilPoint(const void *a, const void *b, void *ctx)
   if (sa->k < sb->k) return -1;
   if (sa->k > sb->k) return 1;
 
-  if (sa->type == FLUCAFD_STENCIL_BOUNDARY) {
+  if (sa->type == FLUCAFD_STENCIL_BOUNDARY || sa->type == FLUCAFD_STENCIL_IB) {
     if (sa->boundary_face < sb->boundary_face) return -1;
     if (sa->boundary_face > sb->boundary_face) return 1;
   }
@@ -86,6 +88,8 @@ static PetscErrorCode PrintStencil(PetscInt dim, PetscInt npoints, FlucaFDStenci
       PetscCall(PetscSNPrintf(comp, sizeof(comp), "type=constant"));
     } else if (points[c].type == FLUCAFD_STENCIL_BOUNDARY) {
       PetscCall(PetscSNPrintf(comp, sizeof(comp), "type=boundary(%s), %sc=%" PetscInt_FMT, FlucaFDBoundaryNames[points[c].boundary_face], coord, points[c].c));
+    } else if (points[c].type == FLUCAFD_STENCIL_IB) {
+      PetscCall(PetscSNPrintf(comp, sizeof(comp), "type=ib(%s), %sc=%" PetscInt_FMT, points[c].boundary_face < 0 ? "self" : FlucaFDBoundaryNames[points[c].boundary_face], coord, points[c].c));
     } else {
       PetscCall(PetscSNPrintf(comp, sizeof(comp), "type=grid, %sc=%" PetscInt_FMT, coord, points[c].c));
     }

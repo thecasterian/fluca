@@ -1,0 +1,42 @@
+#pragma once
+
+#include <flucasys.h>
+#include <petscviewer.h>
+
+/* IBBody - A rigid body immersed in the flow, described by a level set (phi < 0 inside the solid) */
+typedef struct _p_IBBody *IBBody;
+
+typedef const char *IBBodyType;
+#define IBBODYLEVELSET   "levelset"   /* phi given by a user callback */
+#define IBBODYSURFACE    "surface"    /* phi computed from a closed polyline (2D) or triangle surface (3D) */
+#define IBBODYPRESAMPLED "presampled" /* phi already sampled on the points of a Mesh, e.g. loaded by MeshLoad(); holds only the velocity */
+
+typedef PetscErrorCode IBBodyLevelSetFn(PetscInt dim, const PetscReal x[], void *ctx, PetscReal *phi);
+typedef PetscErrorCode IBBodyVelocityFn(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar u[]);
+
+FLUCA_EXTERN PetscClassId IBBODY_CLASSID;
+
+FLUCA_EXTERN PetscErrorCode IBBodyInitializePackage(void);
+FLUCA_EXTERN PetscErrorCode IBBodyFinalizePackage(void);
+
+FLUCA_EXTERN PetscErrorCode IBBodyCreate(MPI_Comm, IBBody *);
+FLUCA_EXTERN PetscErrorCode IBBodySetType(IBBody, IBBodyType);
+FLUCA_EXTERN PetscErrorCode IBBodyGetType(IBBody, IBBodyType *);
+FLUCA_EXTERN PetscErrorCode IBBodySetFromOptions(IBBody);
+FLUCA_EXTERN PetscErrorCode IBBodySetUp(IBBody);
+FLUCA_EXTERN PetscErrorCode IBBodyView(IBBody, PetscViewer);
+FLUCA_EXTERN PetscErrorCode IBBodyDestroy(IBBody *);
+
+FLUCA_EXTERN PetscErrorCode IBBodySetVelocity(IBBody, PetscInt, const PetscScalar[]);
+FLUCA_EXTERN PetscErrorCode IBBodySetVelocityFunction(IBBody, IBBodyVelocityFn *, IBBodyVelocityFn *, void *);
+
+/* IBBODYLEVELSET */
+FLUCA_EXTERN PetscErrorCode IBBodyLevelSetSetFunction(IBBody, IBBodyLevelSetFn *, void *);
+
+/* IBBODYSURFACE: every rank holds the full surface until the Mesh releases it after sampling in MeshSetUp() */
+FLUCA_EXTERN PetscErrorCode IBBodySurfaceSetPolyline(IBBody, PetscInt, const PetscReal[]);
+FLUCA_EXTERN PetscErrorCode IBBodySurfaceSetTriangles(IBBody, PetscInt, const PetscReal[], PetscInt, const PetscInt[]);
+FLUCA_EXTERN PetscErrorCode IBBodySurfaceLoadSTL(IBBody, const char[]);
+
+FLUCA_EXTERN PetscFunctionList IBBodyList;
+FLUCA_EXTERN PetscErrorCode    IBBodyRegister(const char[], PetscErrorCode (*)(IBBody));

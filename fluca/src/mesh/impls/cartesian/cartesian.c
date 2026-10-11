@@ -14,6 +14,7 @@ static PetscErrorCode MeshSetUp_Cartesian(Mesh mesh)
   PetscCall(DMGetCoordinateDM(mesh->dm, &cdm));
   PetscCall(PetscObjectTypeCompare((PetscObject)cdm, DMPRODUCT, &isproduct));
   PetscCheck(isproduct, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONG, "MeshCartesian requires product coordinates; call DMStagSetUniformCoordinatesProduct() on the DM first");
+  if (mesh->ib.nbodies) PetscCall(MeshSetUpIB_Cartesian(mesh));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -77,6 +78,14 @@ static PetscErrorCode MeshView_Cartesian(Mesh mesh, PetscViewer viewer)
   for (d = 1; d < mesh->dim; ++d) PetscCall(PetscViewerASCIIPrintf(viewer, " x [%g, %g]", (double)lo[d], (double)hi[d]));
   PetscCall(PetscViewerASCIIPrintf(viewer, "\n"));
   PetscCall(PetscViewerASCIIUseTabs(viewer, PETSC_TRUE));
+  if (mesh->ib.nbodies) {
+    PetscInt n;
+
+    PetscCall(PetscViewerASCIIPrintf(viewer, "Immersed bodies: %" PetscInt_FMT "\n", mesh->ib.nbodies));
+    PetscCall(PetscViewerASCIIPushTab(viewer));
+    for (n = 0; n < mesh->ib.nbodies; ++n) PetscCall(IBBodyView(mesh->ib.bodies[n], viewer));
+    PetscCall(PetscViewerASCIIPopTab(viewer));
+  }
   PetscCall(PetscViewerASCIIPopTab(viewer));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -4,8 +4,37 @@
 
 #define MESH_CGNS_INFO_NAME "FlucaMesh"       /* UserDefinedData_t under the zone */
 #define MESH_CGNS_BT_NAME   "DMBoundaryTypes" /* int array, one entry per direction */
+#define MESH_CGNS_NB_NAME   "NumBodies"       /* int, written with the CellInfo LevelSet and BodyId */
+#define MESH_CGNS_CELL_INFO "CellInfo"        /* static FlowSolution_t linked to every step */
 
-/* Write the base, the zone (vertex coordinates and DM boundary types) and the CellInfo solution, once per file */
+/* LevelSet (phi) and BodyId (argmin body) at elements and faces, into FlowSolution sol */
+static PetscErrorCode MeshWriteIBFields_Cartesian_Private(Mesh mesh, PetscViewer viewer, int sol)
+{
+  MeshIB      *ib = &mesh->ib;
+  Vec          body_local, body;
+  PetscScalar *arr;
+  PetscInt     n, i;
+
+  PetscFunctionBegin;
+  PetscCall(PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(viewer, ib->phi_global, DMSTAG_ELEMENT, 0, 1, "LevelSet", sol, PETSC_FALSE));
+  PetscCall(PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(viewer, ib->phi_global, DMSTAG_LEFT, 0, 1, "LevelSet", sol, PETSC_FALSE));
+
+  PetscCall(DMGetLocalVector(ib->dm_phi, &body_local));
+  PetscCall(VecGetLocalSize(body_local, &n));
+  PetscCall(VecGetArray(body_local, &arr));
+  for (i = 0; i < n; ++i) arr[i] = ib->body_id[i];
+  PetscCall(VecRestoreArray(body_local, &arr));
+  PetscCall(DMGetGlobalVector(ib->dm_phi, &body));
+  PetscCall(DMLocalToGlobal(ib->dm_phi, body_local, INSERT_VALUES, body));
+  PetscCall(PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(viewer, body, DMSTAG_ELEMENT, 0, 1, "BodyId", sol, PETSC_TRUE));
+  PetscCall(PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(viewer, body, DMSTAG_LEFT, 0, 1, "BodyId", sol, PETSC_TRUE));
+  PetscCall(DMRestoreGlobalVector(ib->dm_phi, &body));
+  PetscCall(DMRestoreLocalVector(ib->dm_phi, &body_local));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Write the base, the zone (vertex coordinates and DM boundary types) and the CellInfo solution (rank, and the
+   immersed-boundary level set and body ids when the mesh has bodies, with their count in FlucaMesh), once per file */
 static PetscErrorCode MeshWriteZone_Cartesian_Private(Mesh mesh, PetscViewer viewer, PetscInt step)
 {
   PetscViewer_FlucaCGNS *cgv = (PetscViewer_FlucaCGNS *)viewer->data;
@@ -44,6 +73,12 @@ static PetscErrorCode MeshWriteZone_Cartesian_Private(Mesh mesh, PetscViewer vie
     CGNSCall(cg_user_data_write(MESH_CGNS_INFO_NAME));
     CGNSCall(cg_gorel(cgv->file_num, "UserDefinedData_t", 1, NULL));
     CGNSCall(cg_array_write(MESH_CGNS_BT_NAME, CGNS_ENUMV(Integer), 1, &n, bt_int));
+    if (mesh->setupcalled && mesh->ib.nbodies) {
+      int      nb  = (int)mesh->ib.nbodies;
+      cgsize_t one = 1;
+
+      CGNSCall(cg_array_write(MESH_CGNS_NB_NAME, CGNS_ENUMV(Integer), 1, &one, &nb));
+    }
   }
 
   {
@@ -94,10 +129,11 @@ static PetscErrorCode MeshWriteZone_Cartesian_Private(Mesh mesh, PetscViewer vie
     }
     PetscCall(PetscMalloc1(rsize, &e));
     for (i = 0; i < rsize; ++i) e[i] = rank;
-    CGNSCall(cg_sol_write(cgv->file_num, cgv->base, cgv->zone, "CellInfo", CGNS_ENUMV(CellCenter), &sol));
+    CGNSCall(cg_sol_write(cgv->file_num, cgv->base, cgv->zone, MESH_CGNS_CELL_INFO, CGNS_ENUMV(CellCenter), &sol));
     CGNSCall(cgp_field_write(cgv->file_num, cgv->base, cgv->zone, sol, CGNS_ENUMV(Integer), "Rank", &field));
     CGNSCall(cgp_field_write_data(cgv->file_num, cgv->base, cgv->zone, sol, field, rmin, rmax, e));
     PetscCall(PetscFree(e));
+    if (mesh->setupcalled && mesh->ib.nbodies) PetscCall(MeshWriteIBFields_Cartesian_Private(mesh, viewer, sol));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -126,12 +162,73 @@ static PetscScalar MeshCartesianVertex_Private(const PetscScalar xv[], PetscInt 
   return i < 0 ? 2. * xv[0] - xv[-i] : 2. * xv[N] - xv[2 * N - i];
 }
 
+/* LevelSet and BodyId of CellInfo into dm_phi vectors, and nbodies presampled bodies (nbodies < 0: the file has no
+   NumBodies). A file with neither NumBodies nor a CellInfo LevelSet has no bodies. */
+static PetscErrorCode MeshLoadIB_Cartesian_Private(Mesh mesh, PetscViewer viewer, int nbodies)
+{
+  PetscViewer_FlucaCGNS     *cgv  = (PetscViewer_FlucaCGNS *)viewer->data;
+  MPI_Comm                   comm = PetscObjectComm((PetscObject)mesh);
+  MeshIB                    *ib   = &mesh->ib;
+  int                        nsols, nfields, s, f, sol = 0;
+  char                       name[CGIO_MAX_NAME_LENGTH + 1];
+  CGNS_ENUMT(GridLocation_t) gloc;
+  CGNS_ENUMT(DataType_t)     type;
+  PetscBool                  same, has_phi = PETSC_FALSE;
+  IBBody                     body;
+  PetscInt                   b;
+  PetscReal                  bmin, bmax;
+
+  PetscFunctionBegin;
+  CGNSCall(cg_nsols(cgv->file_num, 1, 1, &nsols));
+  for (s = 1; s <= nsols && !sol; ++s) {
+    CGNSCall(cg_sol_info(cgv->file_num, 1, 1, s, name, &gloc));
+    PetscCall(PetscStrcmp(name, MESH_CGNS_CELL_INFO, &same));
+    if (same) sol = s;
+  }
+  if (sol) {
+    CGNSCall(cg_nfields(cgv->file_num, 1, 1, sol, &nfields));
+    for (f = 1; f <= nfields && !has_phi; ++f) {
+      CGNSCall(cg_field_info(cgv->file_num, 1, 1, sol, f, &type, name));
+      PetscCall(PetscStrcmp(name, "LevelSet", &has_phi));
+    }
+  }
+  if (nbodies < 0 && !has_phi) PetscFunctionReturn(PETSC_SUCCESS);
+  PetscCheck(nbodies >= 0 && has_phi, comm, PETSC_ERR_FILE_UNEXPECTED, "The file has %s but no %s", has_phi ? "a CellInfo LevelSet" : MESH_CGNS_NB_NAME, has_phi ? MESH_CGNS_NB_NAME : "CellInfo LevelSet");
+  PetscCheck(nbodies >= 1 && nbodies <= MESH_IB_MAX_BODIES, comm, PETSC_ERR_FILE_UNEXPECTED, "Invalid number of bodies %d", nbodies);
+
+  PetscCall(MeshIBCreatePhiDM_Cartesian(mesh));
+  PetscCall(DMCreateGlobalVector(ib->dm_phi, &ib->phi_global));
+  PetscCall(PetscObjectSetName((PetscObject)ib->phi_global, "LevelSet"));
+  PetscCall(DMCreateGlobalVector(ib->dm_phi, &ib->body_loaded));
+  PetscCall(PetscViewerFlucaCGNSReadDMStagComponentsFromSolution_Internal(viewer, ib->phi_global, DMSTAG_ELEMENT, 0, 1, "LevelSet", sol));
+  PetscCall(PetscViewerFlucaCGNSReadDMStagComponentsFromSolution_Internal(viewer, ib->phi_global, DMSTAG_LEFT, 0, 1, "LevelSet", sol));
+  PetscCall(PetscViewerFlucaCGNSReadDMStagComponentsFromSolution_Internal(viewer, ib->body_loaded, DMSTAG_ELEMENT, 0, 1, "BodyId", sol));
+  PetscCall(PetscViewerFlucaCGNSReadDMStagComponentsFromSolution_Internal(viewer, ib->body_loaded, DMSTAG_LEFT, 0, 1, "BodyId", sol));
+
+  /* Every id, in the ghost-free global vector, is a body index or -1 (outside every body) */
+  PetscCall(VecMin(ib->body_loaded, NULL, &bmin));
+  PetscCall(VecMax(ib->body_loaded, NULL, &bmax));
+  PetscCheck(bmin >= -0.5 && bmax < nbodies - 0.5, comm, PETSC_ERR_FILE_UNEXPECTED, "Loaded body ids must be -1 or in [0, %d], found range [%g, %g]", nbodies - 1, (double)bmin, (double)bmax);
+
+  /* Count bodies as they are created so a failure frees the ones that exist */
+  PetscCall(PetscMalloc1(nbodies, &ib->bodies));
+  for (b = 0; b < nbodies; ++b) {
+    PetscCall(IBBodyCreate(comm, &body));
+    ib->bodies[b] = body;
+    ib->nbodies   = b + 1;
+    ib->nloaded   = b + 1;
+    PetscCall(IBBodySetType(body, IBBODYPRESAMPLED));
+    body->sampled = PETSC_TRUE; /* cannot be added to another Mesh */
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode MeshLoad_Cartesian_CGNS(Mesh mesh, PetscViewer viewer)
 {
   PetscViewer_FlucaCGNS *cgv  = (PetscViewer_FlucaCGNS *)viewer->data;
   MPI_Comm               comm = PetscObjectComm((PetscObject)mesh);
   const int              base = 1, zone = 1;
-  int                    num_bases, num_zones, num_coords, num_user_data, cell_dim, phys_dim, u, d;
+  int                    num_bases, num_zones, num_coords, num_user_data, cell_dim, phys_dim, u, d, nbodies = -1;
   char                   name[CGIO_MAX_NAME_LENGTH + 1];
   CGNS_ENUMT(ZoneType_t) zone_type;
   CGNS_ENUMT(DataType_t) datatype, file_datatype;
@@ -175,13 +272,30 @@ PetscErrorCode MeshLoad_Cartesian_CGNS(Mesh mesh, PetscViewer viewer)
     CGNSCall(cg_user_data_read(u, name));
     PetscCall(PetscStrcmp(name, MESH_CGNS_INFO_NAME, &found));
     if (found) {
-      int bt_int[3];
+      int                    na, a, rank_a, bt_int[3];
+      cgsize_t               adims[CGIO_MAX_DIMENSIONS];
+      CGNS_ENUMT(DataType_t) atype;
+      char                   aname[CGIO_MAX_NAME_LENGTH + 1];
+      PetscBool              is;
 
       CGNSCall(cg_gorel(cgv->file_num, "UserDefinedData_t", u, NULL));
-      CGNSCall(cg_array_read_as(1, CGNS_ENUMV(Integer), bt_int));
-      for (d = 0; d < cell_dim; ++d) {
-        PetscCheck(bt_int[d] >= (int)DM_BOUNDARY_NONE && bt_int[d] <= (int)DM_BOUNDARY_TWIST, comm, PETSC_ERR_FILE_UNEXPECTED, "Invalid DM boundary type %d for direction %" PetscInt_FMT, bt_int[d], d);
-        bt[d] = (DMBoundaryType)bt_int[d];
+      CGNSCall(cg_narrays(&na));
+      for (a = 1; a <= na; ++a) {
+        CGNSCall(cg_array_info(a, aname, &atype, &rank_a, adims));
+        PetscCall(PetscStrcmp(aname, MESH_CGNS_BT_NAME, &is));
+        if (is) {
+          PetscCheck(rank_a == 1 && adims[0] == cell_dim, comm, PETSC_ERR_FILE_UNEXPECTED, "%s must be a 1D array of %d entries", MESH_CGNS_BT_NAME, cell_dim);
+          CGNSCall(cg_array_read_as(a, CGNS_ENUMV(Integer), bt_int));
+          for (d = 0; d < cell_dim; ++d) {
+            PetscCheck(bt_int[d] >= (int)DM_BOUNDARY_NONE && bt_int[d] <= (int)DM_BOUNDARY_TWIST, comm, PETSC_ERR_FILE_UNEXPECTED, "Invalid DM boundary type %d for direction %" PetscInt_FMT, bt_int[d], d);
+            bt[d] = (DMBoundaryType)bt_int[d];
+          }
+        }
+        PetscCall(PetscStrcmp(aname, MESH_CGNS_NB_NAME, &is));
+        if (is) {
+          PetscCheck(rank_a == 1 && adims[0] == 1, comm, PETSC_ERR_FILE_UNEXPECTED, "%s must be a 1D array of one entry", MESH_CGNS_NB_NAME);
+          CGNSCall(cg_array_read_as(a, CGNS_ENUMV(Integer), &nbodies));
+        }
       }
     }
   }
@@ -206,5 +320,6 @@ PetscErrorCode MeshLoad_Cartesian_CGNS(Mesh mesh, PetscViewer viewer)
   PetscCall(DMDestroy(&mesh->dm));
   mesh->dm  = dm;
   mesh->dim = cell_dim;
+  PetscCall(MeshLoadIB_Cartesian_Private(mesh, viewer, nbodies));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

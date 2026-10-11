@@ -16,9 +16,10 @@ PetscErrorCode MeshCreate(MPI_Comm comm, Mesh *mesh)
 
   PetscCall(MeshInitializePackage());
   PetscCall(FlucaHeaderCreate(m, MESH_CLASSID, "Mesh", "Mesh", "Mesh", comm, MeshDestroy, MeshView));
-  m->dm          = NULL;
-  m->dim         = PETSC_DETERMINE;
-  m->data        = NULL;
+  m->dm   = NULL;
+  m->dim  = PETSC_DETERMINE;
+  m->data = NULL;
+  PetscCall(PetscMemzero(&m->ib, sizeof(MeshIB)));
   m->setupcalled = PETSC_FALSE;
 
   *mesh = m;
@@ -111,6 +112,7 @@ PetscErrorCode MeshLoad(Mesh mesh, PetscViewer viewer)
   PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
   PetscCheckSameComm(mesh, 1, viewer, 2);
   PetscCheck(!mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Cannot load a mesh after MeshSetUp()");
+  PetscCheck(!mesh->ib.nbodies, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Cannot load a mesh that already has bodies; add bodies after MeshLoad()");
   PetscCall(PetscViewerCheckReadable(viewer));
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERFLUCACGNS, &iscgns));
   PetscCheck(iscgns, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_WRONG, "Invalid viewer; open viewer with PetscViewerFlucaCGNSOpen()");
@@ -131,6 +133,7 @@ PetscErrorCode MeshDestroy(Mesh *mesh)
   }
 
   PetscTryTypeMethod((*mesh), destroy);
+  PetscCall(MeshIBDestroy_Internal(*mesh));
   PetscCall(DMDestroy(&(*mesh)->dm));
   PetscCall(PetscHeaderDestroy(mesh));
   PetscFunctionReturn(PETSC_SUCCESS);

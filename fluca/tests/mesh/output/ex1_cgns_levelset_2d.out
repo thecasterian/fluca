@@ -1,0 +1,9 @@
+CellInfo fields: Rank(Integer) LevelSet(RealDouble) BodyId(Integer)
+Cells:
+  cell (0, 0): LevelSet 0.294150 (exact 0.294150), BodyId 0 (exact 0)
+  cell (4, 3): LevelSet 0.020833 (exact 0.020833), BodyId 1 (exact 1)
+  cell (7, 5): LevelSet 0.244150 (exact 0.244150), BodyId 1 (exact 1)
+IFaceCenteredSolution: LevelSet(RealDouble) [9 x 6] BodyId(Integer) [9 x 6]
+  face (8, 3): LevelSet 0.130058 (exact 0.130058), BodyId 1 (exact 1)
+JFaceCenteredSolution: LevelSet(RealDouble) [8 x 7] BodyId(Integer) [8 x 7]
+  face (4, 6): LevelSet 0.365554 (exact 0.365554), BodyId 1 (exact 1)

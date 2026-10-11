@@ -7,6 +7,8 @@ add_library(fluca_fd SHARED
     impls/sum/sum.c
     impls/secondordertvd/secondordertvd.c
     impls/secondordertvd/secondordertvdlimiter.c
+    impls/ibforcing/ibforcing.c
+    impls/ibmask/ibmask.c
     interface/fdbasic.c
     interface/fdpkg.c
     interface/fdreg.c

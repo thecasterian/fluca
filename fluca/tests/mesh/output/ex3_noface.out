@@ -1,0 +1,4 @@
+bodies: 1, level set: yes
+ELEMENT: fluid 76, forcing 24, solid 44
+LEFT: fluid 94, forcing 22, solid 40
+DOWN: fluid 94, forcing 22, solid 40

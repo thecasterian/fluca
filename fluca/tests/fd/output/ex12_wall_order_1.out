@@ -1,0 +1,14 @@
+Stencil at (1, 4):
+  npoints = 2
+  points[0]: type=grid, i=1, j=4, loc=ELEMENT, c=0, v=1.
+  points[1]: type=ib(self), i=1, j=4, loc=ELEMENT, c=0, v=-1.
+Stencil at (2, 4):
+  npoints = 3
+  points[0]: type=grid, i=2, j=4, loc=ELEMENT, c=0, v=1.
+  points[1]: type=grid, i=3, j=4, loc=ELEMENT, c=0, v=-0.2
+  points[2]: type=ib(left), i=2, j=4, loc=ELEMENT, c=0, v=-0.8
+Stencil at (5, 4):
+  npoints = 0
+Residual, solid at (1, 4): -0.093750
+Residual, forcing at (2, 4): 0.000000
+Residual, fluid at (5, 4): 0.000000

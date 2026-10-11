@@ -1,0 +1,10 @@
+Stencil at (4, 4):
+  npoints = 7
+  points[0]: type=grid, i=4, j=4, loc=ELEMENT, c=0, v=1.
+  points[1]: type=grid, i=4, j=5, loc=ELEMENT, c=0, v=-0.295385
+  points[2]: type=grid, i=4, j=6, loc=ELEMENT, c=0, v=0.0834783
+  points[3]: type=grid, i=5, j=4, loc=ELEMENT, c=0, v=-0.205714
+  points[4]: type=grid, i=6, j=4, loc=ELEMENT, c=0, v=0.06
+  points[5]: type=ib(left), i=4, j=4, loc=ELEMENT, c=0, v=-0.214286
+  points[6]: type=ib(down), i=4, j=4, loc=ELEMENT, c=0, v=-0.428094
+Residual, forcing at (4, 4): 0.000000

@@ -1,0 +1,9 @@
+IBBody Object: 1 MPI process
+  type: levelset
+  Velocity: function with time derivative
+phi on {0, 0.5, 1}^2 (rows from y = 1 down):
+ 0.457107 0.250000 0.457107
+ 0.250000 -0.250000 0.250000
+ 0.457107 0.250000 0.457107
+u(x = (1, 0.5), t = 2) = (0.000000, 1.000000)
+du/dt(x = (1, 0.5), t = 2) = (0.000000, 0.500000)

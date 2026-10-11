@@ -1,0 +1,4 @@
+bodies: 0, level set: none
+ELEMENT: fluid 144, forcing 0, solid 0
+LEFT: fluid 156, forcing 0, solid 0
+DOWN: fluid 156, forcing 0, solid 0

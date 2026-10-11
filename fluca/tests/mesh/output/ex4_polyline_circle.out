@@ -1,0 +1,21 @@
+IBBody Object: 1 MPI process
+  type: surface
+  Velocity: (0., 0., 0.)
+  Surface: 2D, 64 vertices, 64 segments
+ELEMENT map:
+  ............
+  .....ff.....
+  ...ff##ff...
+  ..f######f..
+  ..f######f..
+  .f########f.
+  .f########f.
+  ..f######f..
+  ..f######f..
+  ...ff##ff...
+  .....ff.....
+  ............
+ELEMENT: fluid 76, forcing 24, solid 44, mismatches 0
+LEFT: fluid 94, forcing 22, solid 40, mismatches 0
+DOWN: fluid 94, forcing 22, solid 40, mismatches 0
+element phi at j = 6: 0.160248 0.077416 -0.005015 -0.087425 -0.167909 -0.240784 -0.240784 -0.167909 -0.087425 -0.005015 0.077416 0.160248
