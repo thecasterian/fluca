@@ -129,7 +129,150 @@ For a two-dimensional Cartesian grid, the discrete divergence of velocity at cel
 
 ## Immersed Boundary Method
 
-<!-- TODO: -->
+Fluca represents solid bodies on the Cartesian grid by the immersed boundary (IB) method: the grid does not conform to the body, and the no-slip condition on the body surface is imposed by modifying the discrete equations at grid points next to it. Fluca uses _direct forcing by row replacement along grid lines_ [6, 7, 8]. At each grid point next to the wall, the momentum equation is replaced by an interpolation equation that makes the velocity there consistent with the prescribed wall velocity. Inside the body, the momentum equation is replaced by the identity $u = u_\text{body}$. Each interpolation uses only points along one grid line through the forcing point, so every replaced row fits the star stencil of the underlying DMStag: the IB adds no unknowns and no nonzeros to the Jacobian.
+
+The method proceeds in three stages, each owned by a different object:
+
+```mermaid
+flowchart LR
+    subgraph IBBody["IBBody: what is solid"]
+        LS["levelset<br/>user φ(x)"]
+        SF["surface<br/>polyline / triangles / STL"]
+        PS["presampled<br/>φ loaded from CGNS"]
+    end
+    subgraph Mesh["Mesh (MeshSetUp)"]
+        MIN["φ = min_b φ_b<br/>body id = argmin"]
+        CLS["classify points<br/>FLUID / FORCING / SOLID"]
+        REC["forcing records<br/>cuts θ, x_ib, normal n"]
+    end
+    subgraph FD["FlucaFD: rows"]
+        F["IBFORCING<br/>interpolation and identity rows"]
+        M["IBMASK<br/>drops operand rows at<br/>FORCING / SOLID points"]
+    end
+    LS --> MIN
+    SF --> MIN
+    PS --> MIN
+    MIN --> CLS --> REC --> F
+    CLS --> M
+```
+
+### Level-Set Representation
+
+Every body $b$ is described by a level-set function $\phi_b(\mathbf{x})$ that is negative inside the body and non-negative in the fluid. A body given as a function is evaluated directly; the user function needs only to be smooth with the correct sign, but an approximate signed distance ($|\nabla\phi| \approx 1$ near the wall) is recommended so that the wall normals are well defined. A body given as a closed surface (a polyline in 2D, a triangulation or STL file in 3D) is converted to a signed distance: the unsigned distance is computed exactly within a narrow band of three grid spacings and clamped outside it, and the sign comes from the parity of surface crossings along each grid line.
+
+The level sets are sampled at every classified grid location: the cell centers and the face centers of each direction. Several bodies are combined into one field,
+
+```math
+\phi = \min_b \phi_b, \qquad \text{body}(\mathbf{x}) = \arg\min_b \phi_b(\mathbf{x}),
+```
+
+and after setup Fluca uses only $\phi$ and the body index; the original geometry is released. Because of this, the sampled $\phi$ is a complete description of the geometry as seen by the solver: `MeshView` stores it with the grid, and `MeshLoad` restores it as _presampled_ bodies, which carry only a wall velocity.
+
+### Point Classification
+
+Each grid point is classified from the signs of $\phi$ at the point itself and at its star neighbours (the points $\pm 1$ along each coordinate direction at the same location):
+
+| Type | Condition | Equation at the point |
+|------|-----------|-----------------------|
+| SOLID | $\phi < 0$ | $u = u_\text{body}$ |
+| FORCING | $\phi \ge 0$ and at least one star neighbour has $\phi < 0$ | interpolation along the cut grid lines |
+| FLUID | otherwise | the momentum equation, unchanged |
+
+Neighbours outside a non-periodic domain are ignored, since the domain boundary condition already applies there. Neighbours across a periodic boundary are taken from the periodic image, so classification does not depend on the domain decomposition.
+
+<p align="center"><img src="images/ib-classification.svg" alt="FLUID, FORCING, and SOLID cell centers around a circular body, with the grid-line cuts of each forcing point" width="760"/></p>
+
+### Wall Crossings
+
+For a forcing point $f$ and a solid star neighbour $n = f + s\,\mathbf{e}_d$ ($s = \pm 1$), the wall crosses the grid line between them. Fluca locates the crossing by the linear root of $\phi$:
+
+```math
+\theta = \frac{\phi_f}{\phi_f - \phi_n} \in [0, 1), \qquad \mathbf{x}_\text{ib} = \mathbf{x}_f + \theta\,(\mathbf{x}_n - \mathbf{x}_f).
+```
+
+The crossing records the direction $d$, the side $s$, the fraction $\theta$, the body that owns $n$, and the point $\mathbf{x}_\text{ib}$ where the wall velocity is evaluated. The unit normal at the forcing point is computed from central differences of $\phi$ (one-sided at the domain edge). If $|\nabla\phi|$ vanishes, the normal falls back to the normalized sum of the cut directions, pointing into the fluid.
+
+The linear root locates a straight wall exactly and a smooth curved wall to $O(h^2)$. Sharp corners are rounded within about one cell.
+
+### Interpolation along a Grid Line
+
+Along the cut direction $d$, the velocity at $f$ is interpolated from the wall value at the crossing and from the fluid nodes on the other side of $f$, as shown in the figure below.
+
+<p align="center"><img src="images/ib-interpolation.svg" alt="One grid line through a forcing point: the level set locates the wall crossing, and a quadratic through the wall value and two fluid nodes gives the velocity at the forcing point" width="760"/></p>
+
+Let $\delta = \theta h_s$ be the distance from $f$ to the crossing, $h_1$ the distance from $f$ to $f - s$, and $h_2$ the distance from $f - s$ to $f - 2s$. The Lagrange interpolant through these nodes, evaluated at $\mathbf{x}_f$, gives
+
+```math
+\tilde{I}_d = a_\text{ib}\, u_\text{body}(\mathbf{x}_\text{ib}, t) + a_1\, u_{f-s} + a_2\, u_{f-2s}.
+```
+
+With second-order (quadratic) interpolation, the default, the weights are
+
+```math
+a_\text{ib} = \frac{h_1 (h_1 + h_2)}{(\delta + h_1)(\delta + h_1 + h_2)}, \qquad
+a_1 = \frac{\delta\,(h_1 + h_2)}{(\delta + h_1)\, h_2}, \qquad
+a_2 = -\frac{\delta\, h_1}{(\delta + h_1 + h_2)\, h_2}.
+```
+
+With first-order (linear) interpolation, only the crossing and $f - s$ are used:
+
+```math
+a_\text{ib} = \frac{h_1}{\delta + h_1}, \qquad a_1 = \frac{\delta}{\delta + h_1}, \qquad a_2 = 0.
+```
+
+Because $f$ lies between the crossing and $f - s$, both are interpolations rather than extrapolations. The weights stay bounded as $\theta \to 0$ and reduce to $a_\text{ib} = 1$ when the wall passes through $f$. Unlike ghost-cell methods, the scheme needs no special treatment for small $\theta$.
+
+A node is usable if it lies on the grid and is not SOLID. Quadratic interpolation falls back to linear for a direction where $f - 2s$ is not usable. A direction where $f - s$ is not usable is dropped, which includes a point that is cut on both sides along $d$. The order is selected with `-flucafd_ib_interpolation_order <1|2>`.
+
+### Blending over Cut Directions
+
+A forcing point can be cut along several directions, for example at a convex corner of the grid-line staircase. Fluca blends the one-dimensional interpolations of all usable directions, weighted by the squared components of the wall normal:
+
+```math
+u_f = \sum_d w_d\, \tilde{I}_d, \qquad w_d = \frac{n_d^2}{\sum_{d'} n_{d'}^2},
+```
+
+where the sum runs over the usable directions. Directions nearly parallel to the wall therefore contribute little. If $\sum n_d^2$ is negligible, equal weights are used.
+
+<p align="center"><img src="images/ib-blending.svg" alt="A forcing point cut along x and y; the wall normal sets the blend weights of the two one-dimensional interpolations" width="760"/></p>
+
+If no direction is usable, for example when the only cut has its fluid side outside the domain, setup fails with the message that the grid is too coarse at the immersed boundary.
+
+### Discrete Equations at IB Points
+
+Let $\mathbf{P}_F$ be the diagonal matrix that selects FLUID rows, and let $\mathbf{B}$ be the matrix of IB rows: at a SOLID point $s$ its row is $u_s$, and at a FORCING point $f$ it is $u_f - \sum_d w_d (a_1 u_{f-s} + a_2 u_{f-2s})$. The wall values are known, so they go to the right-hand side as $\mathbf{b}_\text{ib}(t)$. A momentum equation $\mathbf{A}\mathbf{u} = \mathbf{r}$ then becomes
+
+```math
+\left[\mathbf{P}_F \mathbf{A} + \mathbf{B}\right] \mathbf{u} = \mathbf{P}_F \mathbf{r} + \mathbf{b}_\text{ib}(t).
+```
+
+These two pieces are the FlucaFD operator types `IBMASK` and `IBFORCING`. `IBMASK` wraps any operator and keeps its rows at FLUID points only ($\mathbf{P}_F \mathbf{A}$). `IBFORCING` produces $\mathbf{B}$, with the wall values as stencil entries that are evaluated at apply time, so a wall velocity $u_\text{body}(\mathbf{x}, t)$ may vary in time (for example a rotating cylinder). Masking the sum of all momentum terms and adding `IBFORCING` once guarantees that every IB row appears exactly once, however many operators contribute to the momentum equation:
+
+```mermaid
+flowchart LR
+    T1["time derivative"] --> S(("Σ"))
+    T2["convection"] --> S
+    T3["diffusion"] --> S
+    T4["pressure gradient"] --> S
+    S --> MK["IBMASK<br/>keep FLUID rows"]
+    MK --> J(("+"))
+    IBF["IBFORCING<br/>FORCING: interpolation row<br/>SOLID: identity row"] --> J
+    J --> R["momentum rows of J"]
+```
+
+The scheme has the following known limitations:
+
+- A body thinner than the grid spacing that crosses no grid segment is not seen.
+- An operator whose stencil is wider than one cell (a TVD upwind scheme reaching $i-2$) can read a SOLID point from a FLUID row. That point then holds $u_\text{body}$, as in classical direct forcing, and accuracy there is reduced to first order.
+
+### Coupling with the Navier-Stokes Solver
+
+The IB classification, the forcing records, and the IB operators are in place, but the NS solver does not use them yet. Coupling them into the system (12) also requires choosing:
+
+- the pressure and continuity equations at SOLID and FORCING cells;
+- the face-normal velocity $U$ and the Rhie-Chow correction (11) on faces next to the body;
+- a mass-source correction for cells cut by the wall [7];
+- the evaluation of body forces and torques.
 
 ## Segregated Solvers
 
@@ -355,3 +498,6 @@ The continuity equation remains unperturbed.
 3. S. Armfield and R. Street, The pressure accuracy of fractional-step methods for the Navier-Stokes equations on staggered grids, _ANZIAM J._, 44, C20&ndash;C39 (2003).
 4. H. Elman, V. E. Howle, J. Shadid, R. Shuttleworth, and R. Tuminaro, A taxonomy and comparison of parallel block multi-level preconditioners for the incompressible Navier–Stokes equations, _J. Comput. Phys._, 227, 1790&ndash;1808 (2008)
 5. J. Perot, An analysis of the fractional step method, _J. Comput. Phys._, 108, 51&ndash;58 (1993).
+6. J. Mohd-Yusof, Combined immersed-boundary/B-spline methods for simulations of flow in complex geometries, _Annual Research Briefs_, Center for Turbulence Research, 317&ndash;327 (1997).
+7. J. Kim, D. Kim, and H. Choi, An immersed-boundary finite-volume method for simulations of flow in complex geometries, _J. Comput. Phys._, 171, 132&ndash;150 (2001).
+8. E. A. Fadlun, R. Verzicco, P. Orlandi, and J. Mohd-Yusof, Combined immersed-boundary finite-difference methods for three-dimensional complex flow simulations, _J. Comput. Phys._, 161, 35&ndash;60 (2000).
