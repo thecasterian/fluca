@@ -39,6 +39,10 @@ FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSReadDMStagComponents_Internal(Pe
    are written as CGNS Integer (rounded half up) when as_int is true, otherwise as PetscScalar. Face arrays go under the
    I/J/KFaceCenteredSolution UserDefinedData nodes of sol, created on first use. The grid zone must be written first. */
 FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(PetscViewer, Vec, DMStagStencilLocation, PetscInt, PetscInt, const char[], int, PetscBool);
+/* Read components [c0, c0 + ncomp) of v at loc (DMSTAG_ELEMENT, or DMSTAG_LEFT for the faces normal to every direction)
+   from FlowSolution sol of zone 1, named as for PetscViewerFlucaCGNSWriteDMStagComponents_Internal(). Components outside
+   [c0, c0 + ncomp) keep their values. Data stored as RealSingle, RealDouble or Integer is converted to PetscScalar. */
+FLUCA_EXTERN PetscErrorCode PetscViewerFlucaCGNSReadDMStagComponentsFromSolution_Internal(PetscViewer, Vec, DMStagStencilLocation, PetscInt, PetscInt, const char[], int);
 
 #define CGNSCall(ierr) \
   do { \

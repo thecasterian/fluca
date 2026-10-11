@@ -311,6 +311,7 @@ static PetscErrorCode DMStagLoadCellCenteredSolution_Private(DM dm, Vec v, Petsc
   cgsize_t               rmin[3], rmax[3], rsize;
   float                 *e_float;
   double                *e_double;
+  int                   *e_int;
   PetscScalar           *e;
 
   PetscFunctionBegin;
@@ -345,6 +346,12 @@ static PetscErrorCode DMStagLoadCellCenteredSolution_Private(DM dm, Vec v, Petsc
     for (i = 0; i < rsize; ++i) e[i] = e_double[i];
     PetscCall(PetscFree(e_double));
     break;
+  case CGNS_ENUMV(Integer):
+    PetscCall(PetscMalloc1(rsize, &e_int));
+    CGNSCall(cgp_field_read_data(file_num, base, zone, sol, field, rmin, rmax, e_int));
+    for (i = 0; i < rsize; ++i) e[i] = e_int[i];
+    PetscCall(PetscFree(e_int));
+    break;
   default:
     SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported data type: %s", DataTypeName[data_type]);
   }
@@ -372,6 +379,7 @@ static PetscErrorCode DMStagLoadFaceCenteredSolution_Private(DM dm, Vec v, Petsc
   cgsize_t                    rmin[3], rmax[3], rsize;
   float                      *e_float;
   double                     *e_double;
+  int                        *e_int;
   PetscScalar                *e;
   const DMStagStencilLocation locs[3] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
 
@@ -411,6 +419,12 @@ static PetscErrorCode DMStagLoadFaceCenteredSolution_Private(DM dm, Vec v, Petsc
       CGNSCall(cgp_array_read_data(array[l], rmin, rmax, e_double));
       for (i = 0; i < rsize; ++i) e[i] = e_double[i];
       PetscCall(PetscFree(e_double));
+      break;
+    case CGNS_ENUMV(Integer):
+      PetscCall(PetscMalloc1(rsize, &e_int));
+      CGNSCall(cgp_array_read_data(array[l], rmin, rmax, e_int));
+      for (i = 0; i < rsize; ++i) e[i] = e_int[i];
+      PetscCall(PetscFree(e_int));
       break;
     default:
       SETERRQ(PetscObjectComm((PetscObject)dm), PETSC_ERR_SUP, "Unsupported data type: %s", DataTypeName[data_type[l]]);
@@ -572,18 +586,58 @@ PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponents_Internal(PetscViewer vi
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode PetscViewerFlucaCGNSReadDMStagComponentsFromSolution_Internal(PetscViewer viewer, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp, const char name[], int sol)
+{
+  PetscViewer_FlucaCGNS *cgv;
+  MPI_Comm               comm = PetscObjectComm((PetscObject)v);
+  DM                     dm;
+  Vec                    locv;
+  PetscInt               dim, c, d;
+  PetscBool              flg;
+  const int              base = 1, zone = 1;
+  int                    face_sol_user_data[3];
+  char                   comp_name[PETSC_MAX_PATH_LEN];
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecificType(viewer, PETSC_VIEWER_CLASSID, 1, PETSCVIEWERFLUCACGNS);
+  PetscValidHeaderSpecific(v, VEC_CLASSID, 2);
+  PetscAssertPointer(name, 6);
+  PetscCall(PetscViewerCheckReadable(viewer));
+  PetscCheck(loc == DMSTAG_ELEMENT || loc == DMSTAG_LEFT, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_OUTOFRANGE, "Location must be DMSTAG_ELEMENT or DMSTAG_LEFT");
+  PetscCheck(ncomp >= 1 && ncomp <= 3, PetscObjectComm((PetscObject)viewer), PETSC_ERR_SUP, "Field %s has %" PetscInt_FMT " components; CGNS names components X, Y, Z, so 1 to 3 are supported", name, ncomp);
+  cgv = (PetscViewer_FlucaCGNS *)viewer->data;
+  PetscCall(VecGetDM(v, &dm));
+  PetscCall(DMGetDimension(dm, &dim));
+
+  if (loc == DMSTAG_LEFT) {
+    for (d = 0; d < dim; ++d) {
+      PetscCall(FindFaceCenteredSolutionUserData_Private(cgv->file_num, base, zone, sol, face_sol_names[d], &face_sol_user_data[d], &flg));
+      PetscCheck(flg, comm, PETSC_ERR_FILE_UNEXPECTED, "Cannot find user data %s in solution %d", face_sol_names[d], sol);
+    }
+  }
+
+  /* Start from the current values so the components outside [c0, c0 + ncomp) are kept */
+  PetscCall(DMGetLocalVector(dm, &locv));
+  PetscCall(DMGlobalToLocal(dm, v, INSERT_VALUES, locv));
+  for (c = 0; c < ncomp; ++c) {
+    PetscCall(GetComponentName_Private(name, ncomp, c, comp_name, sizeof(comp_name)));
+    if (loc == DMSTAG_ELEMENT) PetscCall(DMStagLoadCellCenteredSolution_Private(dm, locv, c0 + c, cgv->file_num, base, zone, sol, comp_name));
+    else PetscCall(DMStagLoadFaceCenteredSolution_Private(dm, locv, c0 + c, cgv->file_num, base, zone, sol, face_sol_user_data, comp_name));
+  }
+  PetscCall(DMLocalToGlobal(dm, locv, INSERT_VALUES, v));
+  PetscCall(DMRestoreLocalVector(dm, &locv));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode PetscViewerFlucaCGNSReadDMStagComponents_Internal(PetscViewer viewer, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp, const char name[])
 {
   PetscViewer_FlucaCGNS     *cgv;
   MPI_Comm                   comm = PetscObjectComm((PetscObject)v);
   DM                         dm;
-  Vec                        locv;
-  PetscInt                   dim, M[3], c, d;
-  PetscBool                  flg;
+  PetscInt                   dim, M[3], d;
   const int                  base = 1, zone = 1;
-  int                        num_sols, cell_dim, phys_dim, sol, face_sol_user_data[3];
+  int                        num_sols, cell_dim, phys_dim, sol;
   char                       base_name[CGIO_MAX_NAME_LENGTH + 1], zone_name[CGIO_MAX_NAME_LENGTH + 1], sol_name[CGIO_MAX_NAME_LENGTH + 1];
-  char                       comp_name[PETSC_MAX_PATH_LEN];
   CGNS_ENUMT(GridLocation_t) grid_loc;
   cgsize_t                   sizes[9];
 
@@ -628,23 +682,6 @@ PetscErrorCode PetscViewerFlucaCGNSReadDMStagComponents_Internal(PetscViewer vie
     PetscCall(PetscFree(times));
   }
 
-  if (loc == DMSTAG_LEFT) {
-    for (d = 0; d < dim; ++d) {
-      PetscCall(FindFaceCenteredSolutionUserData_Private(cgv->file_num, base, zone, sol, face_sol_names[d], &face_sol_user_data[d], &flg));
-      PetscCheck(flg, comm, PETSC_ERR_FILE_UNEXPECTED, "Cannot find user data %s in solution %s", face_sol_names[d], sol_name);
-    }
-  }
-
-  /* Start from the current values so the components outside [c0, c0 + ncomp) are kept */
-  PetscCall(DMGetLocalVector(dm, &locv));
-  PetscCall(DMGlobalToLocal(dm, v, INSERT_VALUES, locv));
-  for (c = 0; c < ncomp; ++c) {
-    if (ncomp == 1) PetscCall(PetscStrncpy(comp_name, name, sizeof(comp_name)));
-    else PetscCall(PetscSNPrintf(comp_name, sizeof(comp_name), "%s%c", name, (char)('X' + c)));
-    if (loc == DMSTAG_ELEMENT) PetscCall(DMStagLoadCellCenteredSolution_Private(dm, locv, c0 + c, cgv->file_num, base, zone, sol, comp_name));
-    else PetscCall(DMStagLoadFaceCenteredSolution_Private(dm, locv, c0 + c, cgv->file_num, base, zone, sol, face_sol_user_data, comp_name));
-  }
-  PetscCall(DMLocalToGlobal(dm, locv, INSERT_VALUES, v));
-  PetscCall(DMRestoreLocalVector(dm, &locv));
+  PetscCall(PetscViewerFlucaCGNSReadDMStagComponentsFromSolution_Internal(viewer, v, loc, c0, ncomp, name, sol));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
