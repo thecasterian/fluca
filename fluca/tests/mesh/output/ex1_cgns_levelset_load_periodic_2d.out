@@ -1,0 +1,9 @@
+Loaded mesh: 2 bodies
+  body 0: presampled
+  body 1: presampled
+ELEMENT: original FLUID 9 FORCING 11 SOLID 4, loaded FLUID 9 FORCING 11 SOLID 4
+  LevelSet mismatches 0, BodyId mismatches 0, body 2 points 0
+LEFT: original FLUID 9 FORCING 11 SOLID 4, loaded FLUID 9 FORCING 11 SOLID 4
+  LevelSet mismatches 0, BodyId mismatches 0, body 2 points 0
+DOWN: original FLUID 12 FORCING 12 SOLID 4, loaded FLUID 12 FORCING 12 SOLID 4
+  LevelSet mismatches 0, BodyId mismatches 0, body 2 points 0

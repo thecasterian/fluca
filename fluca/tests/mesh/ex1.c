@@ -457,4 +457,9 @@ int main(int argc, char **argv)
     nsize: 1
     args: -dim 2 -stag_grid_x 8 -stag_grid_y 6 -levelset_load mesh_ex1_ld_add_2d.cgns -levelset_load_add
 
+  test:
+    suffix: cgns_levelset_load_periodic_2d
+    nsize: 1
+    args: -dim 2 -stag_grid_x 4 -stag_grid_y 6 -stag_boundary_type_x periodic -levelset_load mesh_ex1_ld_per_2d.cgns
+
 TEST*/

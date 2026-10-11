@@ -26,7 +26,8 @@ FLUCA_EXTERN PetscErrorCode MeshSetUp(Mesh);
 FLUCA_EXTERN PetscErrorCode MeshView(Mesh, PetscViewer);
 FLUCA_EXTERN PetscErrorCode MeshViewFromOptions(Mesh, PetscObject, const char[]);
 /* Reads the grid and, when the file has them, the immersed bodies: one IBBODYPRESAMPLED body per body id, with zero
-   velocity (set it with MeshGetBody() and IBBodySetVelocity()). Bodies added after MeshLoad() follow the loaded ones. */
+   velocity (set it with MeshGetBody() and IBBodySetVelocity()). Bodies added after MeshLoad() follow the loaded ones.
+   A loaded mesh writes its bodies with MeshView() only after MeshSetUp(). */
 FLUCA_EXTERN PetscErrorCode MeshLoad(Mesh, PetscViewer);
 FLUCA_EXTERN PetscErrorCode MeshDestroy(Mesh *);
 
@@ -41,7 +42,8 @@ typedef enum {
 } MeshIBPointType;
 FLUCA_EXTERN const char *MeshIBPointTypes[];
 
-/* In periodic directions phi is sampled at unwrapped ghost coordinates, so a body crossing a periodic boundary needs a periodic level set */
+/* Ghost values (phi and body id) that have an owner, periodic images included, are taken from their owners, so owned
+   values must already be right: a body crossing a periodic boundary needs a level set that is periodic on the owned grid */
 FLUCA_EXTERN PetscErrorCode MeshAddBody(Mesh, IBBody);
 FLUCA_EXTERN PetscErrorCode MeshGetNumBodies(Mesh, PetscInt *);
 FLUCA_EXTERN PetscErrorCode MeshGetBody(Mesh, PetscInt, IBBody *);
