@@ -214,11 +214,11 @@ static PetscErrorCode MeshLoadIB_Cartesian_Private(Mesh mesh, PetscViewer viewer
   PetscCall(PetscMalloc1(nbodies, &ib->bodies));
   for (b = 0; b < nbodies; ++b) {
     PetscCall(IBBodyCreate(comm, &body));
-    PetscCall(IBBodySetType(body, IBBODYPRESAMPLED));
-    body->sampled = PETSC_TRUE; /* cannot be added to another Mesh */
     ib->bodies[b] = body;
     ib->nbodies   = b + 1;
     ib->nloaded   = b + 1;
+    PetscCall(IBBodySetType(body, IBBODYPRESAMPLED));
+    body->sampled = PETSC_TRUE; /* cannot be added to another Mesh */
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
