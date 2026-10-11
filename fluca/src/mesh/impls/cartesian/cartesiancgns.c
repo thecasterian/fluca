@@ -176,6 +176,7 @@ static PetscErrorCode MeshLoadIB_Cartesian_Private(Mesh mesh, PetscViewer viewer
   PetscBool                  same, has_phi = PETSC_FALSE;
   IBBody                     body;
   PetscInt                   b;
+  PetscReal                  bmin, bmax;
 
   PetscFunctionBegin;
   CGNSCall(cg_nsols(cgv->file_num, 1, 1, &nsols));
@@ -204,15 +205,21 @@ static PetscErrorCode MeshLoadIB_Cartesian_Private(Mesh mesh, PetscViewer viewer
   PetscCall(PetscViewerFlucaCGNSReadDMStagComponentsFromSolution_Internal(viewer, ib->body_loaded, DMSTAG_ELEMENT, 0, 1, "BodyId", sol));
   PetscCall(PetscViewerFlucaCGNSReadDMStagComponentsFromSolution_Internal(viewer, ib->body_loaded, DMSTAG_LEFT, 0, 1, "BodyId", sol));
 
+  /* Every id, in the ghost-free global vector, is a body index or -1 (outside every body) */
+  PetscCall(VecMin(ib->body_loaded, NULL, &bmin));
+  PetscCall(VecMax(ib->body_loaded, NULL, &bmax));
+  PetscCheck(bmin >= -0.5 && bmax < nbodies - 0.5, comm, PETSC_ERR_FILE_UNEXPECTED, "Loaded body ids must be -1 or in [0, %d], found range [%g, %g]", nbodies - 1, (double)bmin, (double)bmax);
+
+  /* Count bodies as they are created so a failure frees the ones that exist */
   PetscCall(PetscMalloc1(nbodies, &ib->bodies));
   for (b = 0; b < nbodies; ++b) {
     PetscCall(IBBodyCreate(comm, &body));
     PetscCall(IBBodySetType(body, IBBODYPRESAMPLED));
     body->sampled = PETSC_TRUE; /* cannot be added to another Mesh */
     ib->bodies[b] = body;
+    ib->nbodies   = b + 1;
+    ib->nloaded   = b + 1;
   }
-  ib->nbodies = nbodies;
-  ib->nloaded = nbodies;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -277,6 +284,7 @@ PetscErrorCode MeshLoad_Cartesian_CGNS(Mesh mesh, PetscViewer viewer)
         CGNSCall(cg_array_info(a, aname, &atype, &rank_a, adims));
         PetscCall(PetscStrcmp(aname, MESH_CGNS_BT_NAME, &is));
         if (is) {
+          PetscCheck(rank_a == 1 && adims[0] == cell_dim, comm, PETSC_ERR_FILE_UNEXPECTED, "%s must be a 1D array of %d entries", MESH_CGNS_BT_NAME, cell_dim);
           CGNSCall(cg_array_read_as(a, CGNS_ENUMV(Integer), bt_int));
           for (d = 0; d < cell_dim; ++d) {
             PetscCheck(bt_int[d] >= (int)DM_BOUNDARY_NONE && bt_int[d] <= (int)DM_BOUNDARY_TWIST, comm, PETSC_ERR_FILE_UNEXPECTED, "Invalid DM boundary type %d for direction %" PetscInt_FMT, bt_int[d], d);
@@ -284,7 +292,10 @@ PetscErrorCode MeshLoad_Cartesian_CGNS(Mesh mesh, PetscViewer viewer)
           }
         }
         PetscCall(PetscStrcmp(aname, MESH_CGNS_NB_NAME, &is));
-        if (is) CGNSCall(cg_array_read_as(a, CGNS_ENUMV(Integer), &nbodies));
+        if (is) {
+          PetscCheck(rank_a == 1 && adims[0] == 1, comm, PETSC_ERR_FILE_UNEXPECTED, "%s must be a 1D array of one entry", MESH_CGNS_NB_NAME);
+          CGNSCall(cg_array_read_as(a, CGNS_ENUMV(Integer), &nbodies));
+        }
       }
     }
   }
