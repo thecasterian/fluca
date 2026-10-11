@@ -2,6 +2,7 @@
 #include <flucasys.h>
 #include <flucaviewer.h>
 #include <fluca/private/flucaviewercgnsimpl.h> /* pcgnslib and CGNSCall, to read the file back */
+#include <fluca/private/meshimpl.h>            /* MeshIBGetLevelSet_Internal, MeshIBGetBodyId_Internal */
 #include <petscdmstag.h>
 
 static const char help[] = "Test Mesh: MeshCartesian on a user-provided DMStag\n"
@@ -9,7 +10,9 @@ static const char help[] = "Test Mesh: MeshCartesian on a user-provided DMStag\n
                            "  -dim <int> : spatial dimension, 1, 2 or 3 (default: 2)\n"
                            "  (DMStag options such as -stag_grid_x and -stag_boundary_type_y set the grid)\n"
                            "  -roundtrip <file> : write the stretched grid to a CGNS file, reload it into a new Mesh and print it\n"
-                           "  -levelset <file> : add level-set bodies, write the mesh to a CGNS file and print the LevelSet and BodyId arrays read back from CellInfo\n";
+                           "  -levelset <file> : add level-set bodies, write the mesh to a CGNS file and print the LevelSet and BodyId arrays read back from CellInfo\n"
+                           "  -levelset_load <file> : add level-set bodies, write the mesh to a CGNS file, load it into a new Mesh and compare the two\n"
+                           "  -levelset_load_add : with -levelset_load in 2D, add a third circle to the loaded Mesh before setting it up\n";
 
 static PetscErrorCode CreateDM_Private(PetscInt dim, DM *dm)
 {
@@ -83,7 +86,8 @@ static const PetscReal circles[2][3] = {
   {0.3, 0.6, 0.2 },
   {0.7, 1.4, 0.25}
 };
-static const PetscReal sphere[4] = {0.5, 1., 1.5, 0.6};
+static const PetscReal sphere[4]       = {0.5, 1., 1.5, 0.6};
+static const PetscReal circle_added[3] = {0.5, 1., 0.18}; /* disjoint from both circles */
 
 static PetscErrorCode Circle_Private(PetscInt dim, const PetscReal x[], void *ctx, PetscReal *phi)
 {
@@ -256,6 +260,68 @@ static PetscErrorCode ReadLevelSet_Private(const char file[], PetscInt dim, cons
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Number of bodies of a loaded mesh and their types */
+static PetscErrorCode PrintBodies_Private(Mesh mesh)
+{
+  IBBody     body;
+  IBBodyType type;
+  PetscInt   nb, b;
+
+  PetscFunctionBeginUser;
+  PetscCall(MeshGetNumBodies(mesh, &nb));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Loaded mesh: %" PetscInt_FMT " bodies\n", nb));
+  for (b = 0; b < nb; ++b) {
+    PetscCall(MeshGetBody(mesh, b, &body));
+    PetscCall(IBBodyGetType(body, &type));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  body %" PetscInt_FMT ": %s\n", b, type));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Over the owned points of every location: point-type counts on both meshes, phi and body-id mismatches, and the number
+   of points whose body id is 2 on the loaded mesh */
+static PetscErrorCode CompareIB_Private(Mesh mesh, Mesh loaded)
+{
+  DM                          dm;
+  PetscInt                    dim, s[3], m[3], ne[3], e[3], p[3], d, l, cnt[9], bm, bl;
+  PetscReal                   pm, pl;
+  MeshIBPointType             tm, tl;
+  const DMStagStencilLocation locs[4] = {DMSTAG_ELEMENT, DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
+
+  PetscFunctionBeginUser;
+  PetscCall(MeshGetDM(mesh, &dm));
+  PetscCall(MeshGetDimension(mesh, &dim));
+  PetscCall(DMStagGetCorners(dm, &s[0], &s[1], &s[2], &m[0], &m[1], &m[2], &ne[0], &ne[1], &ne[2]));
+  for (d = dim; d < 3; ++d) {
+    s[d] = 0;
+    m[d] = 1;
+  }
+  for (l = 0; l <= dim; ++l) {
+    for (d = 0; d < 3; ++d) e[d] = s[d] + m[d] + (d < dim && l == d + 1 ? ne[d] : 0);
+    /* cnt: original FLUID, FORCING, SOLID, loaded FLUID, FORCING, SOLID, phi mismatches, body-id mismatches, body-2 points */
+    for (d = 0; d < 9; ++d) cnt[d] = 0;
+    for (p[2] = s[2]; p[2] < e[2]; ++p[2])
+      for (p[1] = s[1]; p[1] < e[1]; ++p[1])
+        for (p[0] = s[0]; p[0] < e[0]; ++p[0]) {
+          PetscCall(MeshGetIBPointType(mesh, locs[l], p[0], p[1], p[2], &tm));
+          PetscCall(MeshGetIBPointType(loaded, locs[l], p[0], p[1], p[2], &tl));
+          PetscCall(MeshIBGetLevelSet_Internal(mesh, locs[l], p[0], p[1], p[2], &pm));
+          PetscCall(MeshIBGetLevelSet_Internal(loaded, locs[l], p[0], p[1], p[2], &pl));
+          PetscCall(MeshIBGetBodyId_Internal(mesh, locs[l], p[0], p[1], p[2], &bm));
+          PetscCall(MeshIBGetBodyId_Internal(loaded, locs[l], p[0], p[1], p[2], &bl));
+          ++cnt[tm];
+          ++cnt[3 + tl];
+          if (PetscAbsReal(pm - pl) > 1e-14) ++cnt[6];
+          if (bm != bl) ++cnt[7];
+          if (bl == 2) ++cnt[8];
+        }
+    PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, cnt, 9, MPIU_INT, MPI_SUM, PETSC_COMM_WORLD));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s: original FLUID %" PetscInt_FMT " FORCING %" PetscInt_FMT " SOLID %" PetscInt_FMT ", loaded FLUID %" PetscInt_FMT " FORCING %" PetscInt_FMT " SOLID %" PetscInt_FMT "\n", DMStagStencilLocations[locs[l]], cnt[0], cnt[1], cnt[2], cnt[3], cnt[4], cnt[5]));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "  LevelSet mismatches %" PetscInt_FMT ", BodyId mismatches %" PetscInt_FMT ", body 2 points %" PetscInt_FMT "\n", cnt[6], cnt[7], cnt[8]));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char **argv)
 {
   DM          dm;
@@ -266,6 +332,8 @@ int main(int argc, char **argv)
   PetscViewer viewer;
   char        lsfile[PETSC_MAX_PATH_LEN];
   PetscBool   levelset;
+  char        ldfile[PETSC_MAX_PATH_LEN];
+  PetscBool   levelset_load, levelset_load_add = PETSC_FALSE;
   PetscInt    M[3] = {1, 1, 1};
   PetscReal   h[3];
 
@@ -274,11 +342,14 @@ int main(int argc, char **argv)
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-dim", &dim, NULL));
   PetscCall(PetscOptionsGetString(NULL, NULL, "-roundtrip", file, sizeof(file), &roundtrip));
   PetscCall(PetscOptionsGetString(NULL, NULL, "-levelset", lsfile, sizeof(lsfile), &levelset));
+  PetscCall(PetscOptionsGetString(NULL, NULL, "-levelset_load", ldfile, sizeof(ldfile), &levelset_load));
+  PetscCall(PetscOptionsGetBool(NULL, NULL, "-levelset_load_add", &levelset_load_add, NULL));
+  PetscCheck(!levelset_load_add || (levelset_load && dim == 2), PETSC_COMM_WORLD, PETSC_ERR_ARG_INCOMP, "-levelset_load_add needs -levelset_load in 2D");
 
   PetscCall(CreateDM_Private(dim, &dm));
   if (roundtrip) PetscCall(StretchX_Private(dm));
   PetscCall(MeshCartesianCreate(dm, &mesh));
-  if (levelset) PetscCall(AddBodies_Private(mesh, dim));
+  if (levelset || levelset_load) PetscCall(AddBodies_Private(mesh, dim));
   PetscCall(MeshSetFromOptions(mesh));
   PetscCall(MeshSetUp(mesh));
   if (levelset) {
@@ -290,6 +361,28 @@ int main(int argc, char **argv)
     PetscCall(MeshView(mesh, viewer));
     PetscCall(PetscViewerDestroy(&viewer));
     PetscCall(ReadLevelSet_Private(lsfile, dim, M, h));
+  } else if (levelset_load) {
+    PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, ldfile, FILE_MODE_WRITE, &viewer));
+    PetscCall(MeshView(mesh, viewer));
+    PetscCall(PetscViewerDestroy(&viewer));
+
+    PetscCall(MeshCreate(PETSC_COMM_WORLD, &loaded));
+    PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, ldfile, FILE_MODE_READ, &viewer));
+    PetscCall(MeshLoad(loaded, viewer));
+    PetscCall(PetscViewerDestroy(&viewer));
+    if (levelset_load_add) {
+      IBBody body;
+
+      PetscCall(IBBodyCreate(PETSC_COMM_WORLD, &body));
+      PetscCall(IBBodySetType(body, IBBODYLEVELSET));
+      PetscCall(IBBodyLevelSetSetFunction(body, Circle_Private, (void *)circle_added));
+      PetscCall(MeshAddBody(loaded, body));
+      PetscCall(IBBodyDestroy(&body));
+    }
+    PetscCall(MeshSetUp(loaded));
+    PetscCall(PrintBodies_Private(loaded));
+    PetscCall(CompareIB_Private(mesh, loaded));
+    PetscCall(MeshDestroy(&loaded));
   } else if (!roundtrip) PetscCall(MeshView(mesh, PETSC_VIEWER_STDOUT_WORLD));
   else {
     PetscCall(PetscViewerFlucaCGNSOpen(PETSC_COMM_WORLD, file, FILE_MODE_WRITE, &viewer));
@@ -348,5 +441,20 @@ int main(int argc, char **argv)
     suffix: cgns_levelset_3d
     nsize: 1
     args: -dim 3 -stag_grid_x 4 -stag_grid_y 4 -stag_grid_z 4 -levelset mesh_ex1_ls_3d.cgns
+
+  test:
+    suffix: cgns_levelset_load_2d
+    nsize: 1
+    args: -dim 2 -stag_grid_x 8 -stag_grid_y 6 -levelset_load mesh_ex1_ld_2d.cgns
+
+  test:
+    suffix: cgns_levelset_load_3d
+    nsize: 1
+    args: -dim 3 -stag_grid_x 4 -stag_grid_y 4 -stag_grid_z 4 -levelset_load mesh_ex1_ld_3d.cgns
+
+  test:
+    suffix: cgns_levelset_load_add_2d
+    nsize: 1
+    args: -dim 2 -stag_grid_x 8 -stag_grid_y 6 -levelset_load mesh_ex1_ld_add_2d.cgns -levelset_load_add
 
 TEST*/

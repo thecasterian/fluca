@@ -9,6 +9,7 @@ PetscErrorCode MeshSetDM(Mesh mesh, DM dm)
   PetscValidHeaderSpecificType(dm, DM_CLASSID, 2, DMSTAG);
   PetscCheckSameComm(mesh, 1, dm, 2);
   PetscCheck(!mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the DM after MeshSetUp()");
+  PetscCheck(!mesh->ib.nloaded, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Cannot change the DM of a mesh whose bodies were loaded by MeshLoad()");
   PetscCall(DMGetDimension(dm, &dim));
   PetscCheck(MESH_MIN_DIM <= dim && dim <= MESH_MAX_DIM, PetscObjectComm((PetscObject)mesh), PETSC_ERR_SUP, "Unsupported mesh dimension %" PetscInt_FMT, dim);
   PetscCall(PetscObjectReference((PetscObject)dm));

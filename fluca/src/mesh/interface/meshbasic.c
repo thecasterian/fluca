@@ -112,6 +112,7 @@ PetscErrorCode MeshLoad(Mesh mesh, PetscViewer viewer)
   PetscValidHeaderSpecific(viewer, PETSC_VIEWER_CLASSID, 2);
   PetscCheckSameComm(mesh, 1, viewer, 2);
   PetscCheck(!mesh->setupcalled, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Cannot load a mesh after MeshSetUp()");
+  PetscCheck(!mesh->ib.nbodies, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "Cannot load a mesh that already has bodies; add bodies after MeshLoad()");
   PetscCall(PetscViewerCheckReadable(viewer));
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERFLUCACGNS, &iscgns));
   PetscCheck(iscgns, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_WRONG, "Invalid viewer; open viewer with PetscViewerFlucaCGNSOpen()");

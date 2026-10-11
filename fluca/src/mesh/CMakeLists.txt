@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 add_library(fluca_mesh SHARED
     ib/impls/levelset/levelset.c
+    ib/impls/presampled/presampled.c
     ib/impls/surface/surface.c
     ib/impls/surface/surfacestl.c
     ib/interface/ibbodybasic.c

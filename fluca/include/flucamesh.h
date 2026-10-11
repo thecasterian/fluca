@@ -25,6 +25,8 @@ FLUCA_EXTERN PetscErrorCode MeshSetFromOptions(Mesh);
 FLUCA_EXTERN PetscErrorCode MeshSetUp(Mesh);
 FLUCA_EXTERN PetscErrorCode MeshView(Mesh, PetscViewer);
 FLUCA_EXTERN PetscErrorCode MeshViewFromOptions(Mesh, PetscObject, const char[]);
+/* Reads the grid and, when the file has them, the immersed bodies: one IBBODYPRESAMPLED body per body id, with zero
+   velocity (set it with MeshGetBody() and IBBodySetVelocity()). Bodies added after MeshLoad() follow the loaded ones. */
 FLUCA_EXTERN PetscErrorCode MeshLoad(Mesh, PetscViewer);
 FLUCA_EXTERN PetscErrorCode MeshDestroy(Mesh *);
 

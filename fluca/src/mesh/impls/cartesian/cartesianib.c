@@ -1,7 +1,7 @@
 #include <fluca/private/meshimpl.h>
 #include <petscdmstag.h>
 
-/* Sample every body on the ghosted points of l->loc; keep the minimum and its body id */
+/* Sample every body added after MeshLoad() on the ghosted points of l->loc; keep the minimum and its body id */
 static PetscErrorCode SampleLocation_Private(Mesh mesh, const MeshIBLocation *l, PetscScalar arr[])
 {
   MeshIB    *ib       = &mesh->ib;
@@ -19,7 +19,7 @@ static PetscErrorCode SampleLocation_Private(Mesh mesh, const MeshIBLocation *l,
     for (i = 0; i < n[d]; ++i) coord[d][i] = PetscRealPart(ib->arr_coord[d][ib->gx[d] + i][slot]);
   }
   PetscCall(PetscMalloc1(n[0] * n[1] * n[2], &phi));
-  for (b = 0; b < ib->nbodies; ++b) {
+  for (b = ib->nloaded; b < ib->nbodies; ++b) {
     PetscCall(IBBodySample_Internal(ib->bodies[b], mesh->dim, n, (const PetscReal *const *)coord, phi));
     for (k = 0; k < n[2]; ++k)
       for (j = 0; j < n[1]; ++j)
@@ -138,18 +138,12 @@ static PetscErrorCode BuildForcingRecords_Private(Mesh mesh, MeshIBLocation *l)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode MeshSetUpIB_Cartesian(Mesh mesh)
+/* dm_phi: the element and every face location, one dof each, whatever dofs the mesh DM has */
+PetscErrorCode MeshIBCreatePhiDM_Cartesian(Mesh mesh)
 {
-  MeshIB                     *ib = &mesh->ib;
-  PetscInt                    d, n, nlocal;
-  DMBoundaryType              bt[3];
-  PetscScalar                *arr;
-  const DMStagStencilLocation faces[3] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
+  MeshIB *ib = &mesh->ib;
 
   PetscFunctionBegin;
-  for (n = 0; n < ib->nbodies; ++n) PetscCall(IBBodySetUp(ib->bodies[n]));
-
-  /* Locations: the element and every face location, whatever dofs the mesh DM has */
   switch (mesh->dim) {
   case 1:
     PetscCall(DMStagCreateCompatibleDMStag(mesh->dm, 1, 1, 0, 0, &ib->dm_phi));
@@ -163,6 +157,49 @@ PetscErrorCode MeshSetUpIB_Cartesian(Mesh mesh)
   default:
     SETERRQ(PetscObjectComm((PetscObject)mesh), PETSC_ERR_SUP, "Unsupported dimension %" PetscInt_FMT, mesh->dim);
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* phi and body ids loaded by MeshLoad() into every ghosted entry; entries outside a non-periodic domain keep phi = 1 and
+   body id -1, and are never read (neighbours are gated by MeshIBIsOnGrid_Internal) */
+static PetscErrorCode FillLoaded_Private(Mesh mesh)
+{
+  MeshIB            *ib = &mesh->ib;
+  Vec                body_local;
+  const PetscScalar *arr;
+  PetscInt           n, i, b;
+
+  PetscFunctionBegin;
+  PetscCall(DMGlobalToLocal(ib->dm_phi, ib->phi_global, INSERT_VALUES, ib->phi_local));
+  PetscCall(DMGetLocalVector(ib->dm_phi, &body_local));
+  PetscCall(VecSet(body_local, -1.));
+  PetscCall(DMGlobalToLocal(ib->dm_phi, ib->body_loaded, INSERT_VALUES, body_local));
+  PetscCall(VecGetLocalSize(body_local, &n));
+  PetscCall(VecGetArrayRead(body_local, &arr));
+  for (i = 0; i < n; ++i) {
+    b = (PetscInt)PetscFloorReal(PetscRealPart(arr[i]) + 0.5);
+    PetscCheck(b >= -1 && b < ib->nloaded, PETSC_COMM_SELF, PETSC_ERR_FILE_UNEXPECTED, "Loaded body id %" PetscInt_FMT " out of range [0, %" PetscInt_FMT ")", b, ib->nloaded);
+    ib->body_id[i] = (int8_t)b;
+  }
+  PetscCall(VecRestoreArrayRead(body_local, &arr));
+  PetscCall(DMRestoreLocalVector(ib->dm_phi, &body_local));
+  PetscCall(VecDestroy(&ib->body_loaded));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode MeshSetUpIB_Cartesian(Mesh mesh)
+{
+  MeshIB                     *ib = &mesh->ib;
+  PetscInt                    d, n, nlocal;
+  DMBoundaryType              bt[3];
+  PetscScalar                *arr;
+  const DMStagStencilLocation faces[3] = {DMSTAG_LEFT, DMSTAG_DOWN, DMSTAG_BACK};
+
+  PetscFunctionBegin;
+  for (n = 0; n < ib->nbodies; ++n) PetscCall(IBBodySetUp(ib->bodies[n]));
+
+  /* Locations: the element and every face location; MeshLoad() creates dm_phi when it loads bodies */
+  if (!ib->dm_phi) PetscCall(MeshIBCreatePhiDM_Cartesian(mesh));
   ib->nloc        = 0;
   ib->locs[0].loc = DMSTAG_ELEMENT;
   ++ib->nloc;
@@ -186,17 +223,20 @@ PetscErrorCode MeshSetUpIB_Cartesian(Mesh mesh)
   PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_LEFT, &ib->slot_coord_prev));
   PetscCall(DMStagGetProductCoordinateLocationSlot(mesh->dm, DMSTAG_ELEMENT, &ib->slot_coord_elem));
 
-  /* Sample phi on every ghosted entry */
+  /* phi on every ghosted entry: loaded values first, then the bodies added after MeshLoad() sampled on top */
   PetscCall(DMCreateLocalVector(ib->dm_phi, &ib->phi_local));
   PetscCall(VecGetLocalSize(ib->phi_local, &nlocal));
   PetscCall(PetscMalloc1(nlocal, &ib->body_id));
   for (n = 0; n < nlocal; ++n) ib->body_id[n] = -1;
   PetscCall(VecSet(ib->phi_local, 1.));
+  if (ib->nloaded) PetscCall(FillLoaded_Private(mesh));
   PetscCall(VecGetArray(ib->phi_local, &arr));
   for (n = 0; n < ib->nloc; ++n) PetscCall(SampleLocation_Private(mesh, &ib->locs[n], arr));
   PetscCall(VecRestoreArray(ib->phi_local, &arr));
-  PetscCall(DMCreateGlobalVector(ib->dm_phi, &ib->phi_global));
-  PetscCall(PetscObjectSetName((PetscObject)ib->phi_global, "LevelSet"));
+  if (!ib->phi_global) {
+    PetscCall(DMCreateGlobalVector(ib->dm_phi, &ib->phi_global));
+    PetscCall(PetscObjectSetName((PetscObject)ib->phi_global, "LevelSet"));
+  }
   PetscCall(DMLocalToGlobal(ib->dm_phi, ib->phi_local, INSERT_VALUES, ib->phi_global));
   PetscCall(VecGetArrayRead(ib->phi_local, &ib->arr_phi));
 

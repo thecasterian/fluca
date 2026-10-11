@@ -219,6 +219,7 @@ PetscErrorCode MeshIBDestroy_Internal(Mesh mesh)
   PetscCall(PetscFree(ib->body_id));
   PetscCall(VecDestroy(&ib->phi_global));
   PetscCall(VecDestroy(&ib->phi_local));
+  PetscCall(VecDestroy(&ib->body_loaded));
   PetscCall(DMDestroy(&ib->dm_phi));
   for (n = 0; n < ib->nbodies; ++n) PetscCall(IBBodyDestroy(&ib->bodies[n]));
   PetscCall(PetscFree(ib->bodies));

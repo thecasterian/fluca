@@ -43,7 +43,9 @@ typedef struct {
 typedef struct {
   /* Bodies, added before MeshSetUp() */
   PetscInt nbodies;
-  IBBody  *bodies; /* referenced */
+  IBBody  *bodies;      /* referenced */
+  PetscInt nloaded;     /* bodies 0..nloaded-1 are presampled; their phi was loaded by MeshLoad() */
+  Vec      body_loaded; /* global body ids on dm_phi, from MeshLoad() to MeshSetUp() */
 
   /* Built by MeshSetUp() when nbodies > 0 */
   DM                  dm_phi;                                  /* compatible with mesh->dm, one dof per classified location */
@@ -105,4 +107,5 @@ FLUCA_EXTERN PetscErrorCode MeshIBGetForcingPoint_Internal(Mesh, DMStagStencilLo
 FLUCA_EXTERN PetscErrorCode MeshIBEvaluateBodyVelocity_Internal(Mesh, PetscInt, PetscReal, const PetscReal[], PetscBool, PetscScalar[]);
 
 /* MESHCARTESIAN immersed boundary setup, defined in impls/cartesian/cartesianib.c */
+FLUCA_INTERN PetscErrorCode MeshIBCreatePhiDM_Cartesian(Mesh);
 FLUCA_INTERN PetscErrorCode MeshSetUpIB_Cartesian(Mesh);

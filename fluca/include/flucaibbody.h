@@ -7,8 +7,9 @@
 typedef struct _p_IBBody *IBBody;
 
 typedef const char *IBBodyType;
-#define IBBODYLEVELSET "levelset" /* phi given by a user callback */
-#define IBBODYSURFACE  "surface"  /* phi computed from a closed polyline (2D) or triangle surface (3D) */
+#define IBBODYLEVELSET   "levelset"   /* phi given by a user callback */
+#define IBBODYSURFACE    "surface"    /* phi computed from a closed polyline (2D) or triangle surface (3D) */
+#define IBBODYPRESAMPLED "presampled" /* phi already sampled on the points of a Mesh, e.g. loaded by MeshLoad(); holds only the velocity */
 
 typedef PetscErrorCode IBBodyLevelSetFn(PetscInt dim, const PetscReal x[], void *ctx, PetscReal *phi);
 typedef PetscErrorCode IBBodyVelocityFn(PetscInt dim, PetscReal t, const PetscReal x[], void *ctx, PetscScalar u[]);
