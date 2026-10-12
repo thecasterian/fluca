@@ -7,6 +7,7 @@ set(TUTORIAL_SRCS
     ex2.c
     ex3.c
     ex4.c
+    ex5.c
 )
 
 foreach(tutorial_src ${TUTORIAL_SRCS})
