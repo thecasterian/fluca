@@ -41,6 +41,45 @@ static PetscErrorCode CreateSortedIS_Private(MPI_Comm comm, PetscInt n, PetscInt
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* A non-solid cell whose on-grid star neighbours are all SOLID has only domain-boundary and IB faces, which are identity
+   rows without pressure; its pressure has no coupling and the solve would fail on a zero pivot. */
+static PetscErrorCode CheckIsolatedCells_Private(NS ns, Mesh mesh, DM dm)
+{
+  MeshIBPointType type;
+  PetscInt        dim, xs[3], xm[3], p[3], q[3], d, e, s, nbad = 0;
+  PetscBool       on, solid, coupled;
+
+  PetscFunctionBegin;
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(DMStagGetCorners(dm, &xs[0], &xs[1], &xs[2], &xm[0], &xm[1], &xm[2], NULL, NULL, NULL));
+  for (d = dim; d < 3; ++d) {
+    xs[d] = 0;
+    xm[d] = 1;
+  }
+  for (p[2] = xs[2]; p[2] < xs[2] + xm[2]; ++p[2])
+    for (p[1] = xs[1]; p[1] < xs[1] + xm[1]; ++p[1])
+      for (p[0] = xs[0]; p[0] < xs[0] + xm[0]; ++p[0]) {
+        PetscCall(MeshGetIBPointType(mesh, DMSTAG_ELEMENT, p[0], p[1], p[2], &type));
+        if (type == MESH_IB_SOLID) continue;
+        coupled = PETSC_FALSE;
+        for (e = 0; e < dim && !coupled; ++e)
+          for (s = -1; s <= 1; s += 2) {
+            q[0] = p[0];
+            q[1] = p[1];
+            q[2] = p[2];
+            q[e] += s;
+            PetscCall(MeshIBIsOnGrid_Internal(mesh, DMSTAG_ELEMENT, e, q[e], &on));
+            if (!on) continue;
+            PetscCall(NSIBIsSolidCell_Internal(mesh, dim, q, &solid));
+            if (!solid) coupled = PETSC_TRUE;
+          }
+        if (!coupled) ++nbad;
+      }
+  PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &nbad, 1, MPIU_INT, MPI_SUM, PetscObjectComm((PetscObject)ns)));
+  PetscCheck(!nbad, PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "%" PetscInt_FMT " non-solid cells have no non-solid neighbour: an immersed body leaves them without pressure coupling; refine the grid or move the bodies", nbad);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* Build the IB row sets and the IBFORCING operators; nothing without bodies. The Mesh geometry is stationary, so
    this runs once. */
 PetscErrorCode NSSetUpIB_Internal(NS ns)
@@ -72,6 +111,7 @@ PetscErrorCode NSSetUpIB_Internal(NS ns)
     xm[d] = 1;
   }
   ncell = xm[0] * xm[1] * xm[2];
+  PetscCall(CheckIsolatedCells_Private(ns, mesh, dm));
   PetscCall(PetscMalloc1(dim * ncell, &mom));
   PetscCall(PetscMalloc1((dim + 1) * ncell, &unit));
   PetscCall(PetscMalloc1(dim * ncell, &face));
