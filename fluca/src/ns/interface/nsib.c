@@ -2,7 +2,7 @@
 #include <fluca/private/meshimpl.h>
 
 /* Global index of a point of the solution DM given by its ghosted-local position */
-PetscErrorCode NSIBGetGlobalIndex_Internal(DM dm, const DMStagStencil *st, PetscInt *g)
+static PetscErrorCode GetGlobalIndex_Private(DM dm, const DMStagStencil *st, PetscInt *g)
 {
   ISLocalToGlobalMapping ltog;
   PetscInt               dim, l;
@@ -16,7 +16,7 @@ PetscErrorCode NSIBGetGlobalIndex_Internal(DM dm, const DMStagStencil *st, Petsc
 }
 
 /* Whether cell q (owned or ghost) is SOLID; a cell off a non-periodic grid is not */
-PetscErrorCode NSIBIsSolidCell_Internal(Mesh mesh, PetscInt dim, const PetscInt q[], PetscBool *solid)
+static PetscErrorCode IsSolidCell_Private(Mesh mesh, PetscInt dim, const PetscInt q[], PetscBool *solid)
 {
   MeshIBPointType type;
   PetscBool       on;
@@ -29,7 +29,7 @@ PetscErrorCode NSIBIsSolidCell_Internal(Mesh mesh, PetscInt dim, const PetscInt 
     if (!on) PetscFunctionReturn(PETSC_SUCCESS);
   }
   PetscCall(MeshGetIBPointType(mesh, DMSTAG_ELEMENT, q[0], q[1], q[2], &type));
-  *solid = (PetscBool)(type == MESH_IB_SOLID);
+  *solid = type == MESH_IB_SOLID;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -70,7 +70,7 @@ static PetscErrorCode CheckIsolatedCells_Private(NS ns, Mesh mesh, DM dm)
             q[e] += s;
             PetscCall(MeshIBIsOnGrid_Internal(mesh, DMSTAG_ELEMENT, e, q[e], &on));
             if (!on) continue;
-            PetscCall(NSIBIsSolidCell_Internal(mesh, dim, q, &solid));
+            PetscCall(IsSolidCell_Private(mesh, dim, q, &solid));
             if (!solid) coupled = PETSC_TRUE;
           }
         if (!coupled) ++nbad;
@@ -128,12 +128,12 @@ PetscErrorCode NSSetUpIB_Internal(NS ns)
         if (type != MESH_IB_FLUID) {
           for (d = 0; d < dim; ++d) {
             st.c = c_vel + d;
-            PetscCall(NSIBGetGlobalIndex_Internal(dm, &st, &mom[nmom++]));
+            PetscCall(GetGlobalIndex_Private(dm, &st, &mom[nmom++]));
           }
         }
         if (type == MESH_IB_SOLID) {
           st.c = c_p;
-          PetscCall(NSIBGetGlobalIndex_Internal(dm, &st, &unit[nunit++]));
+          PetscCall(GetGlobalIndex_Private(dm, &st, &unit[nunit++]));
         }
         /* The face normal to e on the low side of this cell; domain-boundary faces keep the domain BC */
         for (e = 0; e < dim; ++e) {
@@ -143,8 +143,8 @@ PetscErrorCode NSSetUpIB_Internal(NS ns)
           --q[e];
           PetscCall(MeshIBIsOnGrid_Internal(mesh, DMSTAG_ELEMENT, e, q[e], &on));
           if (!on) continue;
-          PetscCall(NSIBIsSolidCell_Internal(mesh, dim, q, &solid_lo));
-          solid_hi = (PetscBool)(type == MESH_IB_SOLID);
+          PetscCall(IsSolidCell_Private(mesh, dim, q, &solid_lo));
+          solid_hi = type == MESH_IB_SOLID;
           if (!solid_lo && !solid_hi) continue;
           rec         = &faces[nface];
           rec->st.i   = p[0];
@@ -161,7 +161,7 @@ PetscErrorCode NSSetUpIB_Internal(NS ns)
           } else if (solid_lo) PetscCall(MeshIBGetBodyId_Internal(mesh, DMSTAG_ELEMENT, q[0], q[1], q[2], &rec->body));
           else PetscCall(MeshIBGetBodyId_Internal(mesh, DMSTAG_ELEMENT, p[0], p[1], p[2], &rec->body));
           PetscCall(MeshIBGetPointCoordinate_Internal(mesh, face_loc[e], p[0], p[1], p[2], rec->x));
-          PetscCall(NSIBGetGlobalIndex_Internal(dm, &rec->st, &face[nface]));
+          PetscCall(GetGlobalIndex_Private(dm, &rec->st, &face[nface]));
           unit[nunit++] = face[nface];
           ++nface;
         }
@@ -278,11 +278,11 @@ PetscErrorCode NSIBCheckWallGap_Internal(NS ns)
           q[1] = p[1];
           q[2] = p[2];
           q[e] = p[e] + 2 * t;
-          PetscCall(NSIBIsSolidCell_Internal(mesh, dim, q, &solid));
+          PetscCall(IsSolidCell_Private(mesh, dim, q, &solid));
           if (solid) ++nbad;
         }
       }
   PetscCallMPI(MPIU_Allreduce(MPI_IN_PLACE, &nbad, 1, MPIU_INT, MPI_SUM, PetscObjectComm((PetscObject)ns)));
-  PetscCheck(!nbad, PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "An immersed body is within two cells of a domain wall at %" PetscInt_FMT " fluid cells: the wall-closure pressure gradient would read a solid cell; refine the grid or move the body", nbad);
+  PetscCheck(!nbad, PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "An immersed body is within two cells of a domain wall at %" PetscInt_FMT " wall closures: the wall-closure pressure gradient would read a solid cell; refine the grid or move the body", nbad);
   PetscFunctionReturn(PETSC_SUCCESS);
 }

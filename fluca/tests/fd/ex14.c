@@ -28,11 +28,11 @@ static PetscErrorCode FillLinear_Private(DM dm, Vec u)
 {
   Vec                 ul;
   PetscScalar      ***arr;
-  const PetscScalar **cx, **cy;
+  const PetscScalar **cx;
   PetscInt            xs, ys, xm, ym, i, j, slot, cslot;
 
   PetscFunctionBeginUser;
-  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &cx, &cy, NULL));
+  PetscCall(DMStagGetProductCoordinateArraysRead(dm, &cx, NULL, NULL));
   PetscCall(DMStagGetProductCoordinateLocationSlot(dm, DMSTAG_ELEMENT, &cslot));
   PetscCall(DMStagGetLocationSlot(dm, DMSTAG_ELEMENT, 0, &slot));
   PetscCall(DMStagGetCorners(dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
@@ -44,7 +44,7 @@ static PetscErrorCode FillLinear_Private(DM dm, Vec u)
   PetscCall(DMStagVecRestoreArray(dm, ul, &arr));
   PetscCall(DMLocalToGlobal(dm, ul, INSERT_VALUES, u));
   PetscCall(DMRestoreLocalVector(dm, &ul));
-  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &cx, &cy, NULL));
+  PetscCall(DMStagRestoreProductCoordinateArraysRead(dm, &cx, NULL, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

@@ -73,7 +73,7 @@ struct _p_NS {
   FlucaFD      fd_grad_p[PHYS_MAX_DIM];                  /* dp/dx_d at cells, no BC (one-sided at walls) */
   FlucaFD      fd_negT[PHYS_MAX_DIM];                    /* -T: two-point u_e -> faces normal to e, velocity BCs */
   FlucaFD      fd_D;                                     /* sum_e d/dx_e(U_e): faces -> pressure rows */
-  Mat          negR;                                     /* (-T) G_c + G^st, unscaled */
+  Mat          negR;                                     /* (-T) G_c + G^st, unscaled; with bodies G has its rows at FORCING/SOLID cells zeroed (as in J) */
   Vec          zero;                                     /* evaluates the boundary (affine) part of an operator */
 
   /* Immersed boundary, built by NSSetUpIB_Internal() when the Mesh has bodies; NULL or 0 otherwise */
@@ -113,8 +113,6 @@ FLUCA_INTERN PetscErrorCode NSSetVelocityBCs_Internal(NS, FlucaFD, PetscInt);
 FLUCA_INTERN PetscErrorCode NSSetUpIB_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSIBReplaceJacobianRows_Internal(NS, Mat);
 FLUCA_INTERN PetscErrorCode NSIBReplaceFunctionRows_Internal(NS, Vec);
-FLUCA_INTERN PetscErrorCode NSIBIsSolidCell_Internal(Mesh, PetscInt, const PetscInt[], PetscBool *);
-FLUCA_INTERN PetscErrorCode NSIBGetGlobalIndex_Internal(DM, const DMStagStencil *, PetscInt *);
 FLUCA_INTERN PetscErrorCode NSIBCheckWallGap_Internal(NS);
 
 /* Defined in interface/nsmon.c */

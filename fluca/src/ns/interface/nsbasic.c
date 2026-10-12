@@ -130,7 +130,7 @@ static PetscErrorCode CheckField_Private(NS ns, const char name[], PhysFieldLoca
 
 /* The pressure null space from the boundary condition types. Only velocity boundaries and periodic
    directions are supported; neither prescribes the pressure, so the pressure is determined up to a
-   constant and the null space is the constant pressure. */
+   constant: the null space is the constant pressure, on the non-solid cells only when bodies exist. */
 static PetscErrorCode CreateNullSpace_Private(NS ns)
 {
   DMBoundaryType  bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
@@ -198,6 +198,7 @@ static PetscErrorCode CreateNullSpace_Private(NS ns)
     PetscCall(VecAssemblyEnd(nullvec));
     PetscCall(VecGetSubVector(nullvec, is_p, &sub));
     PetscCall(VecSum(sub, &cnt));
+    PetscCheck(PetscRealPart(cnt) > 0., PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Every cell is SOLID: the immersed bodies leave no pressure unknown");
     PetscCall(VecScale(sub, 1. / PetscSqrtReal(PetscRealPart(cnt))));
     PetscCall(VecRestoreSubVector(nullvec, is_p, &sub));
   }

@@ -86,8 +86,9 @@ static PetscErrorCode Report_Private(Phys phys, Vec sol, PetscReal Lx)
   xb  = XC + RAD;
   i_f = (PetscInt)PetscFloorReal(xf / hx - 0.5);
   i_b = (PetscInt)PetscCeilReal(xb / hx - 0.5);
-  pf  = p[i_f] + (p[i_f] - p[i_f - 1]) * (xf - (i_f + 0.5) * hx) / hx;
-  pb  = p[i_b] + (p[i_b] - p[i_b + 1]) * ((i_b + 0.5) * hx - xb) / hx;
+  PetscCheck(i_f >= 1 && i_b + 1 < Nx, PETSC_COMM_WORLD, PETSC_ERR_ARG_OUTOFRANGE, "The grid is too coarse or the outlet too short for the surface-pressure extrapolation (cell indices %" PetscInt_FMT " and %" PetscInt_FMT " of %" PetscInt_FMT ")", i_f, i_b, Nx);
+  pf = p[i_f] + (p[i_f] - p[i_f - 1]) * (xf - (i_f + 0.5) * hx) / hx;
+  pb = p[i_b] + (p[i_b] - p[i_b + 1]) * ((i_b + 0.5) * hx - xb) / hx;
 
   /* Recirculation: the first sign change of u from negative to non-negative behind the cylinder */
   for (i = i_b; i < Nx - 1; ++i) {

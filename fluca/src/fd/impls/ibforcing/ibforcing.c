@@ -35,7 +35,7 @@ static PetscErrorCode GetCutWeights_Private(FlucaFD fd, PetscInt order, const Pe
         PetscCall(MeshIBGetPointCoordinate_Internal(fd->mesh, wall_loc[cut->dir], q[0], q[1], q[2], xq));
         s[1]  = xq[cut->dir];
         *wall = PETSC_TRUE;
-        m     = 2;
+        m     = 2; /* with the break, *nnodes = 2: the crossing node and the wall node */
       }
       break;
     }

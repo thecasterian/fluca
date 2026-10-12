@@ -31,7 +31,7 @@ static PetscErrorCode IsOwned_Private(DM dm, const DMStagStencil *st, PetscBool 
 
   PetscFunctionBeginUser;
   PetscCall(DMStagGetCorners(dm, &xs, &ys, NULL, &xm, &ym, NULL, NULL, NULL, NULL));
-  *owned = (PetscBool)(st->i >= xs && st->i < xs + xm && st->j >= ys && st->j < ys + ym);
+  *owned = st->i >= xs && st->i < xs + xm && st->j >= ys && st->j < ys + ym;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
