@@ -50,7 +50,7 @@ PetscErrorCode NSSetUpIB_Internal(NS ns)
   DM              dm;
   MeshIBPointType type;
   DMStagStencil   st;
-  NS_IBFace      *rec;
+  NS_IBFace      *rec, *faces;
   PetscInt        nb, dim, c_vel, c_U, c_p, xs[3], xm[3], p[3], q[3], d, e, ncell, nmom = 0, nunit = 0, nface = 0;
   PetscInt       *mom, *unit, *face;
   PetscReal       phi_lo, phi_hi;
@@ -75,7 +75,7 @@ PetscErrorCode NSSetUpIB_Internal(NS ns)
   PetscCall(PetscMalloc1(dim * ncell, &mom));
   PetscCall(PetscMalloc1((dim + 1) * ncell, &unit));
   PetscCall(PetscMalloc1(dim * ncell, &face));
-  PetscCall(PetscMalloc1(dim * ncell, &ns->ibface));
+  PetscCall(PetscMalloc1(dim * ncell, &faces));
 
   for (p[2] = xs[2]; p[2] < xs[2] + xm[2]; ++p[2])
     for (p[1] = xs[1]; p[1] < xs[1] + xm[1]; ++p[1])
@@ -106,7 +106,7 @@ PetscErrorCode NSSetUpIB_Internal(NS ns)
           PetscCall(NSIBIsSolidCell_Internal(mesh, dim, q, &solid_lo));
           solid_hi = (PetscBool)(type == MESH_IB_SOLID);
           if (!solid_lo && !solid_hi) continue;
-          rec         = &ns->ibface[nface];
+          rec         = &faces[nface];
           rec->st.i   = p[0];
           rec->st.j   = p[1];
           rec->st.k   = p[2];
@@ -127,6 +127,11 @@ PetscErrorCode NSSetUpIB_Internal(NS ns)
         }
       }
   ns->nibface = nface;
+  if (nface) {
+    PetscCall(PetscMalloc1(nface, &ns->ibface));
+    PetscCall(PetscArraycpy(ns->ibface, faces, nface));
+  }
+  PetscCall(PetscFree(faces));
   PetscCall(CreateSortedIS_Private(comm, nmom, mom, &ns->is_ib_mom));
   PetscCall(CreateSortedIS_Private(comm, nface, face, &ns->is_ib_face));
   PetscCall(CreateSortedIS_Private(comm, nunit, unit, &ns->is_ib_unit));
