@@ -98,7 +98,11 @@ static PetscErrorCode CreateNegR_Private(NS ns)
   PetscCall(MatAssemblyEnd(Gmat, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyBegin(Gstmat, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(Gstmat, MAT_FINAL_ASSEMBLY));
-  PetscCall(NSIBCloseGradient_Internal(ns, Gmat));
+  /* R is built from the momentum pressure gradient as it appears in J, whose rows at FORCING and SOLID cells are replaced */
+  if (ns->is_ib_mom) {
+    PetscCall(MatSetOption(Gmat, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE));
+    PetscCall(MatZeroRowsIS(Gmat, ns->is_ib_mom, 0., NULL, NULL));
+  }
   PetscCall(MatMatMult(negTmat, Gmat, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &ns->negR));
   PetscCall(MatAXPY(ns->negR, 1., Gstmat, DIFFERENT_NONZERO_PATTERN));
   /* IB face rows are replaced by U = u_body . e_e, so negR must not couple them to (solid) pressures */
