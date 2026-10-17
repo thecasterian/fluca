@@ -123,7 +123,13 @@ static PetscErrorCode PCSetUp_ABF(PC pc)
 {
   PC_ABF      *abf = (PC_ABF *)pc->data;
   IS           isv, isV, isp;
-  Mat          Gdup, tmp;
+  Mat          Gdup, tmp, C;
+  Vec          vp, sub;
+  PetscReal    cnorm, vmin, vmax;
+  PetscBool    has_cnst;
+  PetscInt     nvec;
+  const Vec   *vecs;
+  MPI_Comm     comm;
   MatNullSpace nullspace;
 
   PetscFunctionBegin;
@@ -171,13 +177,34 @@ static PetscErrorCode PCSetUp_ABF(PC pc)
   }
   if (abf->negR) PetscCall(MatAXPY(tmp, -1., abf->negR, DIFFERENT_NONZERO_PATTERN));
   PetscCall(MatMatMult(abf->D, tmp, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &abf->S));
+  /* Pressure-pressure block, e.g. the identity rows of pressures decoupled inside an immersed body */
+  PetscCall(MatCreateSubMatrix(pc->mat, isp, isp, MAT_INITIAL_MATRIX, &C));
+  PetscCall(MatNorm(C, NORM_FROBENIUS, &cnorm));
+  if (cnorm > 0.) PetscCall(MatAXPY(abf->S, 1., C, DIFFERENT_NONZERO_PATTERN));
+  PetscCall(MatDestroy(&C));
   /* S inherits the explicit zeros of the DMStag blocks, which give ILU zero pivots */
   PetscCall(MatEliminateZeros(abf->S, PETSC_FALSE));
   PetscCall(MatDestroy(&tmp));
 
+  /* The Schur null space is the pressure part of the coupled one; a constant part keeps has_cnst */
   PetscCall(MatGetNullSpace(pc->mat, &nullspace));
   if (nullspace) {
-    PetscCall(MatNullSpaceCreate(PetscObjectComm((PetscObject)pc->mat), PETSC_TRUE, 0, NULL, &abf->nullspace));
+    PetscCall(PetscObjectGetComm((PetscObject)pc->mat, &comm));
+    PetscCall(MatNullSpaceGetVecs(nullspace, &has_cnst, &nvec, &vecs));
+    if (nvec > 0) {
+      PetscCall(VecGetSubVector(vecs[0], isp, &sub));
+      PetscCall(VecMin(sub, NULL, &vmin));
+      PetscCall(VecMax(sub, NULL, &vmax));
+      if (vmin == vmax) PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &abf->nullspace));
+      else {
+        PetscCall(MatCreateVecs(abf->S, &vp, NULL));
+        PetscCall(VecCopy(sub, vp));
+        PetscCall(VecNormalize(vp, NULL));
+        PetscCall(MatNullSpaceCreate(comm, PETSC_FALSE, 1, &vp, &abf->nullspace));
+        PetscCall(VecDestroy(&vp));
+      }
+      PetscCall(VecRestoreSubVector(vecs[0], isp, &sub));
+    } else PetscCall(MatNullSpaceCreate(comm, PETSC_TRUE, 0, NULL, &abf->nullspace));
     PetscCall(MatSetNullSpace(abf->S, abf->nullspace));
   }
 
