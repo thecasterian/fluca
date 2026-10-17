@@ -63,6 +63,10 @@ FLUCA_EXTERN PetscErrorCode NSViewSolution(NS, PetscViewer);
 FLUCA_EXTERN PetscErrorCode NSViewSolutionFromOptions(NS, PetscObject, const char[]);
 FLUCA_EXTERN PetscErrorCode NSLoadSolution(NS, PetscViewer);
 
+FLUCA_EXTERN PetscErrorCode NSComputeDivergenceNorm(NS, NormType, PetscReal *);
+FLUCA_EXTERN PetscErrorCode NSComputeKineticEnergy(NS, PetscReal *);
+FLUCA_EXTERN PetscErrorCode NSComputeMaxCFL(NS, PetscReal *);
+
 FLUCA_EXTERN PetscErrorCode NSMonitorSet(NS, PetscErrorCode (*)(NS, void *), void *, PetscCtxDestroyFn *);
 FLUCA_EXTERN PetscErrorCode NSMonitorCancel(NS);
 FLUCA_EXTERN PetscErrorCode NSMonitor(NS);
