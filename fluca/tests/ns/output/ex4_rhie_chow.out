@@ -1,7 +1,0 @@
-Rhie-Chow face next to a forcing cell row (LEFT, 2, 4, c=0):
-  (ELEMENT, 1, 4, c=0): -0.500000
-  (ELEMENT, 2, 4, c=0): -0.500000
-  (ELEMENT, 0, 4, c=2): 0.100000
-  (ELEMENT, 1, 4, c=2): -0.400000
-  (ELEMENT, 2, 4, c=2): 0.300000
-  (LEFT, 2, 4, c=0): 1.000000

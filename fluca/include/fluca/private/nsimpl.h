@@ -28,14 +28,6 @@ typedef struct {
   PetscInt  comp;
 } NS_BCAdapter;
 
-/* A face-velocity row at an interior face with a SOLID neighbour cell, replaced by U = u_body(x, t) . e_e */
-typedef struct {
-  DMStagStencil st;   /* face location and the component of U */
-  PetscInt      e;    /* face normal direction */
-  PetscInt      body; /* body of the SOLID neighbour (smaller phi when both are SOLID) */
-  PetscReal     x[3]; /* face center */
-} NS_IBFace;
-
 typedef struct _NSOps *NSOps;
 
 struct _NSOps {
@@ -73,16 +65,8 @@ struct _p_NS {
   FlucaFD      fd_grad_p[PHYS_MAX_DIM];                  /* dp/dx_d at cells, no BC (one-sided at walls) */
   FlucaFD      fd_negT[PHYS_MAX_DIM];                    /* -T: two-point u_e -> faces normal to e, velocity BCs */
   FlucaFD      fd_D;                                     /* sum_e d/dx_e(U_e): faces -> pressure rows */
-  Mat          negR;                                     /* (-T) G_c + G^st, unscaled; with bodies G has its rows at FORCING/SOLID cells zeroed (as in J) */
+  Mat          negR;                                     /* (-T) G_c + G^st, unscaled */
   Vec          zero;                                     /* evaluates the boundary (affine) part of an operator */
-
-  /* Immersed boundary, built by NSSetUpIB_Internal() when the Mesh has bodies; NULL or 0 otherwise */
-  IS         is_ib_mom;                  /* owned velocity rows at FORCING and SOLID cells, replaced by IBFORCING rows */
-  IS         is_ib_face;                 /* owned U rows at interior faces with a SOLID neighbour cell */
-  IS         is_ib_unit;                 /* is_ib_face and the owned pressure rows at SOLID cells: unit rows */
-  PetscInt   nibface;                    /* number of entries of ibface */
-  NS_IBFace *ibface;                     /* the faces of is_ib_face */
-  FlucaFD    fd_ibforcing[PHYS_MAX_DIM]; /* IBFORCING at cells for velocity component d, with the velocity BCs */
 
   /* Solver --------------------------------------------------------------- */
   SNES         snes;      /* non-linear solver */
@@ -108,12 +92,6 @@ struct _p_NS {
 FLUCA_INTERN PetscErrorCode NSSetUpSpatialOperators_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSDestroySpatialOperators_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSSetVelocityBCs_Internal(NS, FlucaFD, PetscInt);
-
-/* Defined in interface/nsib.c */
-FLUCA_INTERN PetscErrorCode NSSetUpIB_Internal(NS);
-FLUCA_INTERN PetscErrorCode NSIBReplaceJacobianRows_Internal(NS, Mat);
-FLUCA_INTERN PetscErrorCode NSIBReplaceFunctionRows_Internal(NS, Vec);
-FLUCA_INTERN PetscErrorCode NSIBCheckWallGap_Internal(NS);
 
 /* Defined in interface/nsmon.c */
 FLUCA_INTERN PetscErrorCode NSMonitorSolutionSetUp_Internal(NS, PetscViewerAndFormat *);
