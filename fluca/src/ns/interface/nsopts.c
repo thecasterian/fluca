@@ -125,6 +125,9 @@ PetscErrorCode NSSetFromOptions(NS ns)
 
   PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor", "Monitor current step and time", "NSMonitorDefault", NSMonitorDefault, NULL));
   PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor_solution", "Monitor solution", "NSMonitorSolution", NSMonitorSolution, NSMonitorSolutionSetUp_Internal));
+  PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor_divergence", "Monitor the infinity norm of the face velocity divergence", "NSMonitorDivergence", NSMonitorDivergence, NULL));
+  PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor_kinetic_energy", "Monitor the kinetic energy", "NSMonitorKineticEnergy", NSMonitorKineticEnergy, NULL));
+  PetscCall(NSMonitorSetFromOptions(ns, "-ns_monitor_cfl", "Monitor the maximum CFL number", "NSMonitorCFL", NSMonitorCFL, NULL));
   flg = PETSC_FALSE;
   PetscCall(PetscOptionsBool("-ns_monitor_cancel", "Remove all monitors", "NSMonitorCancel", flg, &flg, &opt));
   if (opt && flg) PetscCall(NSMonitorCancel(ns));

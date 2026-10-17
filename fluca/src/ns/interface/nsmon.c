@@ -9,7 +9,7 @@ PetscErrorCode NSMonitorSet(NS ns, PetscErrorCode (*mon)(NS, void *), void *mon_
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   for (i = 0; i < ns->num_mons; ++i) {
-    PetscCall(PetscMonitorCompare((PetscErrorCode(*)(void))mon, mon_ctx, mon_ctx_destroy, (PetscErrorCode(*)(void))ns->mons[i], ns->mon_ctxs[i], ns->mon_ctx_destroys[i], &identical));
+    PetscCall(PetscMonitorCompare((PetscErrorCode (*)(void))mon, mon_ctx, mon_ctx_destroy, (PetscErrorCode (*)(void))ns->mons[i], ns->mon_ctxs[i], ns->mon_ctx_destroys[i], &identical));
     if (identical) PetscFunctionReturn(PETSC_SUCCESS);
   }
   PetscCheck(ns->num_mons < MAXNSMONITORS, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Too many monitors set");
@@ -62,7 +62,7 @@ PetscErrorCode NSMonitorSetFromOptions(NS ns, const char name[], const char help
 
     PetscCall(PetscViewerDestroy(&viewer));
     if (mon_setup) PetscCall((*mon_setup)(ns, vf));
-    PetscCall(NSMonitorSet(ns, (PetscErrorCode(*)(NS, void *))mon, vf, (PetscCtxDestroyFn *)PetscViewerAndFormatDestroy));
+    PetscCall(NSMonitorSet(ns, (PetscErrorCode (*)(NS, void *))mon, vf, (PetscCtxDestroyFn *)PetscViewerAndFormatDestroy));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -112,5 +112,53 @@ PetscErrorCode NSMonitorSolution(NS ns, PetscViewerAndFormat *vf)
     PetscCall(PetscViewerPopFormat(vf->viewer));
     if (last_step) *last_step = ns->step;
   }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Prints "<step> NS <label> <value>" on ASCII viewers every view_interval steps; value comes from compute */
+static PetscErrorCode NSMonitorScalar_Private(NS ns, PetscViewerAndFormat *vf, const char label[], PetscErrorCode (*compute)(NS, PetscReal *))
+{
+  PetscViewer viewer = vf->viewer;
+  PetscBool   isascii;
+  PetscReal   value;
+
+  PetscFunctionBegin;
+  PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERASCII, &isascii));
+  if (isascii && vf->view_interval > 0 && ns->step % vf->view_interval == 0) {
+    PetscCall((*compute)(ns, &value));
+    PetscCall(PetscViewerPushFormat(viewer, vf->format));
+    PetscCall(PetscViewerASCIIAddTab(viewer, ((PetscObject)ns)->tablevel));
+    PetscCall(PetscViewerASCIIPrintf(viewer, "%" PetscInt_FMT " NS %s %g\n", ns->step, label, (double)value));
+    PetscCall(PetscViewerASCIISubtractTab(viewer, ((PetscObject)ns)->tablevel));
+    PetscCall(PetscViewerPopFormat(viewer));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode ComputeDivergenceInfinityNorm_Private(NS ns, PetscReal *nrm)
+{
+  PetscFunctionBegin;
+  PetscCall(NSComputeDivergenceNorm(ns, NORM_INFINITY, nrm));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSMonitorDivergence(NS ns, PetscViewerAndFormat *vf)
+{
+  PetscFunctionBegin;
+  PetscCall(NSMonitorScalar_Private(ns, vf, "divergence", ComputeDivergenceInfinityNorm_Private));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSMonitorKineticEnergy(NS ns, PetscViewerAndFormat *vf)
+{
+  PetscFunctionBegin;
+  PetscCall(NSMonitorScalar_Private(ns, vf, "kinetic energy", NSComputeKineticEnergy));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode NSMonitorCFL(NS ns, PetscViewerAndFormat *vf)
+{
+  PetscFunctionBegin;
+  PetscCall(NSMonitorScalar_Private(ns, vf, "CFL", NSComputeMaxCFL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

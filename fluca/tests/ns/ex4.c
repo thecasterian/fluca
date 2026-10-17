@@ -149,6 +149,7 @@ int main(int argc, char **argv)
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Kinetic energy: %g\n", (double)ke));
   PetscCall(NSComputeMaxCFL(ns, &cfl));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Max CFL: %g\n", (double)cfl));
+  PetscCall(NSMonitor(ns));
 
   PetscCall(NSDestroy(&ns));
   PetscCall(PhysDestroy(&phys));
@@ -178,5 +179,10 @@ int main(int argc, char **argv)
     suffix: 3d
     nsize: 1
     args: -dim 3
+
+  test:
+    suffix: 2d_monitor
+    nsize: 1
+    args: -ns_monitor_divergence -ns_monitor_kinetic_energy -ns_monitor_cfl
 
 TEST*/
