@@ -1,5 +1,0 @@
-Stencil at (0, 4):
-  npoints = 3
-  points[0]: type=grid, i=0, j=4, loc=ELEMENT, c=0, v=1.
-  points[1]: type=boundary(left), i=0, j=4, loc=LEFT, c=0, v=-0.6
-  points[2]: type=ib(right), i=0, j=4, loc=ELEMENT, c=0, v=-0.4

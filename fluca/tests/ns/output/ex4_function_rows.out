@@ -1,5 +1,0 @@
-Solid momentum RHS (ELEMENT, 4, 4, c=0): 1.000000
-Solid momentum RHS (ELEMENT, 4, 4, c=1): 0.000000
-Forcing momentum RHS (ELEMENT, 2, 4, c=0): 0.496971
-IB face RHS (LEFT, 3, 4, c=0): 1.000000
-Solid pressure RHS (ELEMENT, 4, 4, c=2): 0.000000

@@ -236,7 +236,7 @@ where the sum runs over the usable directions. Directions nearly parallel to the
 
 <p align="center"><img src="images/ib-blending.svg" alt="A forcing point cut along x and y; the wall normal sets the blend weights of the two one-dimensional interpolations" width="760"/></p>
 
-Near a domain wall the fluid side of a cut can leave the domain. For a cell-centered row whose first fluid node $f - s$ lies outside a wall with a Dirichlet condition, the wall value takes its place: the interpolation is linear between the crossing and the wall, with weights $a_\text{ib} = h_w/(\delta + h_w)$ and $a_\text{wall} = \delta/(\delta + h_w)$, where $h_w$ is the distance from $f$ to the wall. If no direction is usable at all, the row falls back to zero order, $u_f = \sum_n w_n\, u_\text{body}(\mathbf{x}_{\text{ib},n})$, with the blend weights taken over all cuts. Both fallbacks only remove stencil points, so the rows stay within the star stencil.
+If no direction is usable, for example when the only cut has its fluid side outside the domain, setup fails with the message that the grid is too coarse at the immersed boundary.
 
 ### Discrete Equations at IB Points
 
@@ -267,59 +267,12 @@ The scheme has the following known limitations:
 
 ### Coupling with the Navier-Stokes Solver
 
-The NS solver applies the IB to the coupled system (12) by _row replacement_: the solver type first forms the system as if there were no body, and the NS base layer then replaces three sets of rows of the Jacobian and of the right-hand side. Because SNES runs the system as a Picard iteration ($\mathbf{F} = \mathbf{J}(\mathbf{x})\mathbf{x} - \mathbf{b}$), replacing the same rows in $\mathbf{J}$ and $\mathbf{b}$ also replaces them in the residual, and the solver types need no knowledge of the IB.
+The IB classification, the forcing records, and the IB operators are in place, but the NS solver does not use them yet. Coupling them into the system (12) also requires choosing:
 
-| Rows | Where | Replacement row | Right-hand side |
-|------|-------|-----------------|-----------------|
-| momentum | FORCING and SOLID cells | the `IBFORCING` row $\mathbf{B}$ | the wall values $\mathbf{b}_\text{ib}(t^{n+1})$ |
-| face velocity | interior faces with a SOLID neighbour cell | $U = (\cdot)$ | $\mathbf{u}_\text{body}(\mathbf{x}_\text{face}, t^{n+1}) \cdot \mathbf{n}$ |
-| continuity | SOLID cells | $p' = (\cdot)$ | $0$ |
-
-This is the matrix form $\mathbf{P}_F \mathbf{A} + \mathbf{B}$ of the previous section: zeroing a row is the action of $\mathbf{P}_F$, so every momentum term, including the time-derivative identity and the pressure gradient, is removed at IB points exactly once.
-
-**Pressure and continuity: the body as a staircase wall.** For pressure and mass conservation the body acts as a wall along the faces between non-solid and SOLID cells, in the same way as the domain walls. Pressure inside the body is decoupled ($p' = 0$), and the continuity equation is solved on every non-solid cell, with the wall flux $\mathbf{u}_\text{body} \cdot \mathbf{n}$ through its IB faces. Solving pressure inside the body, as classical direct forcing does on staggered grids, is not used: the momentum rows of SOLID cells carry no pressure, so pressure there would be governed by $\mathbf{D}\mathbf{R}$ alone, the difference of the wide and the compact Laplacians, which is indefinite (in 1D its symbol is proportional to $\sin^2(k/2)\cos k$).
-
-The decoupling is exact. A FLUID cell never has a SOLID star neighbour (it would be FORCING), so the central pressure gradient of a FLUID momentum row never reads a SOLID pressure. The pressure gradients of FORCING and SOLID cells disappear with their rows, the continuity rows of SOLID cells are replaced, and the Rhie-Chow rows of IB faces are replaced.
-
-**Rhie-Chow next to the body.** The Rhie-Chow correction (11) is built from the pressure gradient as it appears in the momentum rows, $\mathbf{G}_J = \mathbf{P}_F \mathbf{G}$:
-
-```math
-\mathbf{R} = \mathbf{T}\mathbf{G}_J - \mathbf{G}^\text{st}, \qquad
-U = \mathbf{T}\left(\mathbf{u} + \mathbf{G}_J p'\right) - \mathbf{G}^\text{st} p',
-```
-
-so that $\mathbf{T}\mathbf{G}_J p'$ adds back exactly the pressure gradient that the momentum rows subtracted. A FORCING velocity is interpolated from fluid velocities, which do contain a pressure gradient that $\mathbf{G}_J$ does not add back; at a face next to a FORCING cell this leaves $U - \mathbf{T}\mathbf{u} = O(\Delta t\, \partial p')$. Because $p'$ is the pressure increment over a step, the error is $O(\Delta t^2)$ in a transient, $O(\Delta t)$ on an impulsive first step, and zero at steady state.
-
-A one-sided pressure gradient at FORCING cells, the closure used at domain walls, would look more accurate but fails: averaged with the central gradient of the neighbour, the second-order one-sided gradient reproduces the compact gradient,
-
-```math
-\tfrac{1}{2}\left[\frac{-3p_0 + 4p_1 - p_2}{2h} + \frac{p_2 - p_0}{2h}\right] = \frac{p_1 - p_0}{h},
-```
-
-so $\mathbf{R} \equiv 0$ at faces next to FORCING cells, and a FORCING cell whose non-solid neighbours are also FORCING (at a diagonal corner of a curved body) has no pressure in its own continuity row.
-
-**Null space and compatibility.** When every boundary condition prescribes the velocity, the pressure null vector is constant on the non-solid cells and zero on the SOLID cells. The face-velocity rows of IB faces and of boundary faces are identity rows, so the left null vector is also local: the cell volumes on the continuity rows of non-solid cells and $\mp A_\text{face}$ on those identity rows. The right-hand side is therefore consistent exactly when the net flux $\sum \mathbf{u}_\text{body} \cdot \mathbf{n}\, A$ through the IB faces vanishes, which holds for any rigid-body motion because the face-midpoint rule is exact for linear velocity fields. Interpolated (instead of prescribed) face velocities at IB faces would reduce the flux error but would couple these rows to the unknowns and lose this compatibility.
-
-**Preconditioning.** The SOLID pressure rows add a pressure–pressure block $\mathbf{C}$ to (12), so the approximate block factorization uses $\mathbf{S} = \mathbf{C} + \mathbf{D}(-\mathbf{T}\tilde{\mathbf{A}}^{-1}\mathbf{G}_J + \mathbf{R})$. With $\tilde{\mathbf{A}} = \mathbf{I}$ and the Rhie-Chow operator above, $\mathbf{S} = -\mathbf{D}\mathbf{G}^\text{st}$ on the non-solid cells, the compact Laplacian with homogeneous Neumann conditions at the IB faces, and the identity on the SOLID cells. Its null space is the pressure part of the null vector of the coupled system.
-
-**Setup checks.** Two configurations leave a pressure without coupling and are rejected when the solver is set up: a non-solid cell with no non-solid star neighbour (a gap narrower than about two cells), and a FLUID cell at a domain wall whose one-sided wall gradient reaches a SOLID cell two cells away (a body within two cells of the wall).
-
-**Accuracy.** Continuity holds on the staircase of non-solid cells with $\mathbf{u}_\text{body}$ prescribed at the IB faces. The center of an IB face lies a distance $d < h$ from the wall, where the velocity differs from $\mathbf{u}_\text{body}$ by $d\, \partial\mathbf{u}/\partial n$. On a curved or oblique wall the tangential shear projects onto the face normal, so the face flux is off by $O(h^2)$ (in 2D) and the divergence of a cut cell by $O(1)$. These errors cancel along the wall but do not shrink with $h$; on a grid-aligned wall the error is $O(h)$. Consistent cut-cell face fluxes with a mass-source correction [7] are the planned remedy.
-
-The circular Couette tutorial (`tutorials/ns/ex4`, $R_1 = 0.3$, $R_2 = 0.8$, $\mathrm{Re} = 10$) measures the consequence. The exact steady velocity, pushed through the staircase divergence, leaves a residual that is zero in total, one cell thick, and does not converge (maximum over cut cells 0.38, 0.17 and 0.47 on $32^2$, $64^2$ and $128^2$), while the residual away from the body shrinks with $h$. Because the stored pressure is the sum of the increments $p'$ and the Rhie-Chow term acts on $p'$ only, this source builds up an odd-even pressure mode that spans the whole gap. Its amplitude levels off at about 0.08, five times the physical pressure variation across the gap (0.016), after a slow transient whose length grows with $\Delta t$; on $64^2$ and $128^2$ the pressure error still grows between $t = 100$ and $t = 150$. The pressure error is therefore dominated by this mode and has no meaningful order. The velocity at $\Delta t = 0.025$, $t = 150$:
-
-| Grid | Interior $L_1$ | Interior $L_\infty$ | Band $L_1$ | Band $L_\infty$ |
-|------|----------------|---------------------|------------|-----------------|
-| $64^2$ | $3.59 \times 10^{-3}$ | $1.64 \times 10^{-2}$ | $4.13 \times 10^{-3}$ | $1.63 \times 10^{-2}$ |
-| $128^2$ | $1.65 \times 10^{-3}$ | $9.12 \times 10^{-3}$ | $2.59 \times 10^{-3}$ | $1.69 \times 10^{-2}$ |
-| order | 1.1 | 0.8 | 0.7 | −0.05 |
-
-The band holds the FORCING cells and the FLUID cells next to them, and the interior holds the remaining non-solid cells. The velocity also feels the pressure mode: it changes by about 15% between $\Delta t = 0.05$ and $\Delta t = 0.025$ at $t = 100$. For the confined Schäfer–Turek cylinder 2D-1 (`tutorials/ns/ex5`, $h = D/20$) the pressure drop is $\Delta p = 0.1162$ (reference 0.1175, $-1.1\%$) and the recirculation length is $L_a = 0.0766$ (reference 0.0847, $-9.6\%$).
-
-The coupling still has the following limitations:
-
-- The non-solid cells must form one connected region; a body that encloses fluid gives one pressure null vector per region, but only one is declared.
-- Body forces and torques are not computed.
+- the pressure and continuity equations at SOLID and FORCING cells;
+- the face-normal velocity $U$ and the Rhie-Chow correction (11) on faces next to the body;
+- a mass-source correction for cells cut by the wall [7];
+- the evaluation of body forces and torques.
 
 ## Segregated Solvers
 

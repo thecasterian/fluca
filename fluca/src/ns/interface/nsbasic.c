@@ -130,19 +130,15 @@ static PetscErrorCode CheckField_Private(NS ns, const char name[], PhysFieldLoca
 
 /* The pressure null space from the boundary condition types. Only velocity boundaries and periodic
    directions are supported; neither prescribes the pressure, so the pressure is determined up to a
-   constant: the null space is the constant pressure, on the non-solid cells only when bodies exist. */
+   constant and the null space is the constant pressure. */
 static PetscErrorCode CreateNullSpace_Private(NS ns)
 {
-  DMBoundaryType  bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
-  PhysBC          bc;
-  IS              is_p;
-  Vec             nullvec, sub;
-  PetscInt        dim, d, s, np, nb, xs, ys, zs, xm, ym, zm, i, j, k, c_p;
-  PetscScalar     one = 1., cnt;
-  DM              dm;
-  Mesh            mesh;
-  MeshIBPointType type;
-  DMStagStencil   st;
+  DMBoundaryType bt[3] = {DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE};
+  PhysBC         bc;
+  IS             is_p;
+  Vec            nullvec, sub;
+  PetscInt       dim, d, s, np;
+  DM             dm;
 
   PetscFunctionBegin;
   PetscCall(PhysGetSolutionDM(ns->phys, &dm));
@@ -163,45 +159,10 @@ static PetscErrorCode CreateNullSpace_Private(NS ns)
   PetscCall(PhysGetFieldIS(ns->phys, PHYS_FIELD_PRESSURE, &is_p));
   PetscCall(DMCreateGlobalVector(dm, &nullvec));
   PetscCall(VecZeroEntries(nullvec));
-  PetscCall(PhysGetMesh(ns->phys, &mesh));
-  PetscCall(MeshGetNumBodies(mesh, &nb));
-  if (!nb) {
-    PetscCall(VecGetSubVector(nullvec, is_p, &sub));
-    PetscCall(VecGetSize(sub, &np));
-    PetscCall(VecSet(sub, 1. / PetscSqrtReal((PetscReal)np)));
-    PetscCall(VecRestoreSubVector(nullvec, is_p, &sub));
-  } else {
-    /* Pressure is decoupled (p' = 0) in SOLID cells, so the null vector is constant on the other cells only */
-    PetscCall(PhysGetField(ns->phys, PHYS_FIELD_PRESSURE, NULL, &c_p, NULL));
-    PetscCall(DMStagGetCorners(dm, &xs, &ys, &zs, &xm, &ym, &zm, NULL, NULL, NULL));
-    if (dim < 2) {
-      ys = 0;
-      ym = 1;
-    }
-    if (dim < 3) {
-      zs = 0;
-      zm = 1;
-    }
-    st.loc = DMSTAG_ELEMENT;
-    st.c   = c_p;
-    for (k = zs; k < zs + zm; ++k)
-      for (j = ys; j < ys + ym; ++j)
-        for (i = xs; i < xs + xm; ++i) {
-          PetscCall(MeshGetIBPointType(mesh, DMSTAG_ELEMENT, i, j, k, &type));
-          if (type == MESH_IB_SOLID) continue;
-          st.i = i;
-          st.j = j;
-          st.k = k;
-          PetscCall(DMStagVecSetValuesStencil(dm, nullvec, 1, &st, &one, INSERT_VALUES));
-        }
-    PetscCall(VecAssemblyBegin(nullvec));
-    PetscCall(VecAssemblyEnd(nullvec));
-    PetscCall(VecGetSubVector(nullvec, is_p, &sub));
-    PetscCall(VecSum(sub, &cnt));
-    PetscCheck(PetscRealPart(cnt) > 0., PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "Every cell is SOLID: the immersed bodies leave no pressure unknown");
-    PetscCall(VecScale(sub, 1. / PetscSqrtReal(PetscRealPart(cnt))));
-    PetscCall(VecRestoreSubVector(nullvec, is_p, &sub));
-  }
+  PetscCall(VecGetSubVector(nullvec, is_p, &sub));
+  PetscCall(VecGetSize(sub, &np));
+  PetscCall(VecSet(sub, 1. / PetscSqrtReal((PetscReal)np)));
+  PetscCall(VecRestoreSubVector(nullvec, is_p, &sub));
   PetscCall(MatNullSpaceCreate(PetscObjectComm((PetscObject)ns), PETSC_FALSE, 1, &nullvec, &ns->nullspace));
   PetscCall(VecDestroy(&nullvec));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -307,7 +268,6 @@ PetscErrorCode NSFormJacobian(NS ns, Vec x, Mat J)
   PetscValidHeaderSpecific(J, MAT_CLASSID, 3);
   PetscCall(PetscLogEventBegin(NS_FormJacobian, ns, x, J, NULL));
   PetscUseTypeMethod(ns, formjacobian, x, J);
-  PetscCall(NSIBReplaceJacobianRows_Internal(ns, J));
   PetscCall(PetscLogEventEnd(NS_FormJacobian, ns, x, J, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -320,7 +280,6 @@ PetscErrorCode NSFormFunction(NS ns, Vec x, Vec f)
   PetscValidHeaderSpecific(f, VEC_CLASSID, 3);
   PetscCall(PetscLogEventBegin(NS_FormFunction, ns, x, f, NULL));
   PetscUseTypeMethod(ns, formfunction, x, f);
-  PetscCall(NSIBReplaceFunctionRows_Internal(ns, f));
   PetscCall(PetscLogEventEnd(NS_FormFunction, ns, x, f, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -98,15 +98,8 @@ static PetscErrorCode CreateNegR_Private(NS ns)
   PetscCall(MatAssemblyEnd(Gmat, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyBegin(Gstmat, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(Gstmat, MAT_FINAL_ASSEMBLY));
-  /* R is built from the momentum pressure gradient as it appears in J, whose rows at FORCING and SOLID cells are replaced */
-  if (ns->is_ib_mom) {
-    PetscCall(MatSetOption(Gmat, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE));
-    PetscCall(MatZeroRowsIS(Gmat, ns->is_ib_mom, 0., NULL, NULL));
-  }
   PetscCall(MatMatMult(negTmat, Gmat, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &ns->negR));
   PetscCall(MatAXPY(ns->negR, 1., Gstmat, DIFFERENT_NONZERO_PATTERN));
-  /* IB face rows are replaced by U = u_body . e_e, so negR must not couple them to (solid) pressures */
-  if (ns->is_ib_face) PetscCall(MatZeroRowsIS(ns->negR, ns->is_ib_face, 0., NULL, NULL));
   /* DMCreateMatrix() lays out explicit zeros; drop them so negR stays inside the star stencil */
   PetscCall(MatEliminateZeros(ns->negR, PETSC_FALSE));
   PetscCall(MatDestroy(&Gstmat));
@@ -182,8 +175,6 @@ PetscErrorCode NSSetUpSpatialOperators_Internal(NS ns)
   PetscCall(FlucaFDSetUp(ns->fd_D));
   for (e = 0; e < dim; e++) PetscCall(FlucaFDDestroy(&ops[e]));
 
-  PetscCall(NSSetUpIB_Internal(ns));
-  PetscCall(NSIBCheckWallGap_Internal(ns));
   PetscCall(CreateNegR_Private(ns));
 
   PetscCall(DMCreateGlobalVector(dm, &ns->zero));
@@ -201,13 +192,7 @@ PetscErrorCode NSDestroySpatialOperators_Internal(NS ns)
     PetscCall(FlucaFDDestroy(&ns->fd_laplacian[d]));
     PetscCall(FlucaFDDestroy(&ns->fd_grad_p[d]));
     PetscCall(FlucaFDDestroy(&ns->fd_negT[d]));
-    PetscCall(FlucaFDDestroy(&ns->fd_ibforcing[d]));
   }
-  PetscCall(ISDestroy(&ns->is_ib_mom));
-  PetscCall(ISDestroy(&ns->is_ib_face));
-  PetscCall(ISDestroy(&ns->is_ib_unit));
-  PetscCall(PetscFree(ns->ibface));
-  ns->nibface = 0;
   PetscCall(FlucaFDDestroy(&ns->fd_D));
   PetscCall(MatDestroy(&ns->negR));
   PetscCall(VecDestroy(&ns->zero));
