@@ -193,9 +193,21 @@ static PetscErrorCode TestTVD_Private(void)
   PetscCall(MatPreallocatorPreallocate(prealloc, PETSC_TRUE, Apattern));
   PetscCall(MatDestroy(&prealloc));
 
-  /* The values with the positive flux: only the upwind point is a grid point */
-  PetscCall(MatDuplicate(Apattern, MAT_DO_NOT_COPY_VALUES, &Avalue));
-  PetscCall(MatSetOption(Avalue, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  /* The values with the positive flux, preallocated from the values alone: only the upwind point is a grid point */
+  PetscCall(MatCreate(PETSC_COMM_WORLD, &prealloc));
+  PetscCall(MatSetType(prealloc, MATPREALLOCATOR));
+  PetscCall(MatSetSizes(prealloc, m, n, PETSC_DETERMINE, PETSC_DETERMINE));
+  PetscCall(MatSetLocalToGlobalMapping(prealloc, rltog, cltog));
+  PetscCall(MatSetUp(prealloc));
+  PetscCall(FlucaFDGetOperator(tvd, input_dm, output_dm, prealloc));
+  PetscCall(MatAssemblyBegin(prealloc, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(prealloc, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatCreate(PETSC_COMM_WORLD, &Avalue));
+  PetscCall(MatSetSizes(Avalue, m, n, PETSC_DETERMINE, PETSC_DETERMINE));
+  PetscCall(MatSetType(Avalue, MATAIJ));
+  PetscCall(MatSetLocalToGlobalMapping(Avalue, rltog, cltog));
+  PetscCall(MatPreallocatorPreallocate(prealloc, PETSC_TRUE, Avalue));
+  PetscCall(MatDestroy(&prealloc));
   PetscCall(FlucaFDGetOperator(tvd, input_dm, output_dm, Avalue));
   PetscCall(MatAssemblyBegin(Avalue, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(Avalue, MAT_FINAL_ASSEMBLY));
