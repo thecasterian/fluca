@@ -121,6 +121,13 @@ typedef struct {
   FlucaFD operand; /* rows kept at fluid points only */
 } FlucaFD_IBMask;
 
+#define FLUCAFD_IB_NPOINTTYPES 3 /* MESH_IB_FLUID, MESH_IB_FORCING, MESH_IB_SOLID */
+
+typedef struct {
+  FlucaFD                  operand[FLUCAFD_IB_NPOINTTYPES];                                         /* indexed by MeshIBPointType; referenced; NULL = empty row */
+  FlucaFDBoundaryCondition bcs[FLUCAFD_IB_NPOINTTYPES][FLUCAFD_MAX_COMPONENT][2 * FLUCAFD_MAX_DIM]; /* copied from operand[] in setup */
+} FlucaFD_IBSelect;
+
 FLUCA_EXTERN PetscBool      FlucaFDLimiterRegisterAllCalled;
 FLUCA_EXTERN PetscErrorCode FlucaFDLimiterRegisterAll(void);
 

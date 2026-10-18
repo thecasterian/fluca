@@ -127,9 +127,13 @@ PetscErrorCode FlucaFDEvaluateIBValue_Internal(FlucaFD fd, PetscReal t, const Fl
 
 PetscErrorCode FlucaFDValidateOperand_Internal(FlucaFD parent, FlucaFD operand)
 {
+  PetscBool isselect;
+
   PetscFunctionBegin;
   PetscCheck(operand->setupcalled, PetscObjectComm((PetscObject)parent), PETSC_ERR_ARG_WRONGSTATE, "Operand FlucaFD is not set up. Call FlucaFDSetUp() on the operand first");
   PetscCheck(parent->mesh == operand->mesh, PetscObjectComm((PetscObject)parent), PETSC_ERR_ARG_INCOMP, "Operand FlucaFD is on a different Mesh than its parent");
+  PetscCall(PetscObjectTypeCompare((PetscObject)operand, FLUCAFDIBSELECT, &isselect));
+  PetscCheck(!isselect, PetscObjectComm((PetscObject)parent), PETSC_ERR_ARG_WRONG, "FLUCAFDIBSELECT must be the outermost operator, not an operand of another FlucaFD");
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
