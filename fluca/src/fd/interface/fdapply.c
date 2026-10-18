@@ -50,8 +50,8 @@ PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* With pattern true, scale refs are left unevaluated and coefficients that may change at run time keep their points:
-   only zeros that come from fixed data are removed */
+/* With pattern true, scale and TVD refs are left unevaluated and coefficients that may change at run time keep their
+   points (both TVD upwind candidates stay grid points): only zeros that come from fixed data are removed */
 static PetscErrorCode GetStencil_Private(FlucaFD fd, PetscReal t, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFDStencilPoint merged[FLUCAFD_MAX_STENCIL_SIZE];
@@ -63,11 +63,14 @@ static PetscErrorCode GetStencil_Private(FlucaFD fd, PetscReal t, PetscInt i, Pe
   PetscCall(FlucaFDGetBoundaryConditions_Internal(fd, i, j, k, &bcs));
   PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, bcs, npoints, points));
   if (pattern) {
-    for (c = 0; c < *npoints; c++) points[c].nscales = 0;
+    for (c = 0; c < *npoints; c++) {
+      points[c].nscales = 0;
+      points[c].ntvds   = 0;
+    }
   } else {
     PetscCall(FlucaFDResolveScaleRefs_Internal(*npoints, points));
+    PetscCall(FlucaFDResolveTVDRefs_Internal(t, *npoints, points));
   }
-  PetscCall(FlucaFDResolveTVDRefs_Internal(t, *npoints, points));
   /* Re-merge points that are now identical after ref resolution */
   merged_npoints = 0;
   for (c = 0; c < *npoints; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&points[c], &merged_npoints, merged));
@@ -205,10 +208,6 @@ static PetscErrorCode GetOperator_Private(FlucaFD fd, DM input_dm, DM output_dm,
   PetscInt            ic[FLUCAFD_MAX_STENCIL_SIZE];
 
   PetscFunctionBegin;
-  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 2, DMSTAG);
-  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 3, DMSTAG);
-  PetscValidHeaderSpecific(op, MAT_CLASSID, 4);
   PetscCheck(fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "FlucaFD not setup");
 
   PetscCall(GetOutputLoopRange_Private(fd, output_dm, &i_start, &j_start, &k_start, &i_end, &j_end, &k_end));
@@ -249,6 +248,10 @@ static PetscErrorCode GetOperator_Private(FlucaFD fd, DM input_dm, DM output_dm,
 PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
 {
   PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 2, DMSTAG);
+  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 3, DMSTAG);
+  PetscValidHeaderSpecific(op, MAT_CLASSID, 4);
   PetscCall(GetOperator_Private(fd, input_dm, output_dm, PETSC_FALSE, op));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -256,6 +259,10 @@ PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
 PetscErrorCode FlucaFDGetOperatorPattern(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
 {
   PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 2, DMSTAG);
+  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 3, DMSTAG);
+  PetscValidHeaderSpecific(op, MAT_CLASSID, 4);
   PetscCall(GetOperator_Private(fd, input_dm, output_dm, PETSC_TRUE, op));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

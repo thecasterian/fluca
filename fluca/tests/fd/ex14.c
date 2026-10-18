@@ -136,6 +136,103 @@ static PetscErrorCode TestConvection3d_Private(void)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* A 1D second-order TVD operator (element phi -> face phi) taken with a positive mass flux. Its pattern keeps
+   both upwind candidates of a face, so filling the values of the reversed flux adds no entry. */
+static PetscErrorCode TestTVD_Private(void)
+{
+  DM                     input_dm, output_dm;
+  Mesh                   mesh;
+  Vec                    phi, mass_flux;
+  FlucaFD                tvd;
+  Mat                    prealloc, Avalue, Apattern;
+  ISLocalToGlobalMapping rltog, cltog;
+  MatInfo                info;
+  PetscReal              nz_before, nz_after;
+  PetscInt               m, n, nv, np, ir, gr, ncols;
+  DMStagStencil          row = {DMSTAG_LEFT, 4, 0, 0, 0};
+
+  PetscFunctionBeginUser;
+  PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, 8, 0, 1, DMSTAG_STENCIL_BOX, 1, NULL, &input_dm));
+  PetscCall(DMSetUp(input_dm));
+  PetscCall(DMStagSetUniformCoordinatesProduct(input_dm, 0., 1., 0., 0., 0., 0.));
+  PetscCall(MeshCartesianCreate(input_dm, &mesh));
+  PetscCall(MeshSetUp(mesh));
+  PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, 8, 1, 0, DMSTAG_STENCIL_BOX, 1, NULL, &output_dm));
+  PetscCall(DMSetUp(output_dm));
+  PetscCall(DMStagSetUniformCoordinatesProduct(output_dm, 0., 1., 0., 0., 0., 0.));
+  PetscCall(DMCreateGlobalVector(input_dm, &phi));
+  PetscCall(VecGetSize(phi, &n));
+  for (ir = 0; ir < n; ++ir) PetscCall(VecSetValue(phi, ir, (PetscScalar)(ir * ir), INSERT_VALUES));
+  PetscCall(VecAssemblyBegin(phi));
+  PetscCall(VecAssemblyEnd(phi));
+  PetscCall(DMCreateGlobalVector(output_dm, &mass_flux));
+  PetscCall(VecSet(mass_flux, 1.));
+
+  PetscCall(FlucaFDSecondOrderTVDCreate(mesh, FLUCAFD_X, 0, 0, &tvd));
+  PetscCall(FlucaFDSetFromOptions(tvd));
+  PetscCall(FlucaFDSetUp(tvd));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(tvd, mass_flux, 0));
+  PetscCall(FlucaFDSecondOrderTVDSetCurrentSolution(tvd, phi));
+
+  PetscCall(DMStagGetEntries(output_dm, &m));
+  PetscCall(DMStagGetEntries(input_dm, &n));
+  PetscCall(DMGetLocalToGlobalMapping(output_dm, &rltog));
+  PetscCall(DMGetLocalToGlobalMapping(input_dm, &cltog));
+  PetscCall(MatCreate(PETSC_COMM_WORLD, &prealloc));
+  PetscCall(MatSetType(prealloc, MATPREALLOCATOR));
+  PetscCall(MatSetSizes(prealloc, m, n, PETSC_DETERMINE, PETSC_DETERMINE));
+  PetscCall(MatSetLocalToGlobalMapping(prealloc, rltog, cltog));
+  PetscCall(MatSetUp(prealloc));
+  PetscCall(FlucaFDGetOperatorPattern(tvd, input_dm, output_dm, prealloc));
+  PetscCall(MatAssemblyBegin(prealloc, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(prealloc, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatCreate(PETSC_COMM_WORLD, &Apattern));
+  PetscCall(MatSetSizes(Apattern, m, n, PETSC_DETERMINE, PETSC_DETERMINE));
+  PetscCall(MatSetType(Apattern, MATAIJ));
+  PetscCall(MatSetLocalToGlobalMapping(Apattern, rltog, cltog));
+  PetscCall(MatPreallocatorPreallocate(prealloc, PETSC_TRUE, Apattern));
+  PetscCall(MatDestroy(&prealloc));
+
+  /* The values with the positive flux: only the upwind point is a grid point */
+  PetscCall(MatDuplicate(Apattern, MAT_DO_NOT_COPY_VALUES, &Avalue));
+  PetscCall(MatSetOption(Avalue, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscCall(FlucaFDGetOperator(tvd, input_dm, output_dm, Avalue));
+  PetscCall(MatAssemblyBegin(Avalue, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(Avalue, MAT_FINAL_ASSEMBLY));
+  PetscCall(DMStagStencilToIndexLocal(output_dm, 1, 1, &row, &ir));
+  PetscCall(ISLocalToGlobalMappingApply(rltog, 1, &ir, &gr));
+  PetscCall(MatGetRow(Avalue, gr, &ncols, NULL, NULL));
+  nv = ncols;
+  PetscCall(MatRestoreRow(Avalue, gr, &ncols, NULL, NULL));
+  PetscCall(MatGetRow(Apattern, gr, &ncols, NULL, NULL));
+  np = ncols;
+  PetscCall(MatRestoreRow(Apattern, gr, &ncols, NULL, NULL));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "interior face 4, positive flux: operator %" PetscInt_FMT ", pattern %" PetscInt_FMT "\n", nv, np));
+
+  /* Reverse the flux and fill the values into the pattern: no entry may be added */
+  PetscCall(MatSetOption(Apattern, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscCall(MatGetInfo(Apattern, MAT_GLOBAL_SUM, &info));
+  nz_before = info.nz_used;
+  PetscCall(VecScale(mass_flux, -1.));
+  PetscCall(FlucaFDSecondOrderTVDSetMassFlux(tvd, mass_flux, 0));
+  PetscCall(FlucaFDGetOperator(tvd, input_dm, output_dm, Apattern));
+  PetscCall(MatAssemblyBegin(Apattern, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(Apattern, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatGetInfo(Apattern, MAT_GLOBAL_SUM, &info));
+  nz_after = info.nz_used;
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "pattern entries: before %.0f, after inserting the reversed-flux operator %.0f\n", (double)nz_before, (double)nz_after));
+
+  PetscCall(MatDestroy(&Avalue));
+  PetscCall(MatDestroy(&Apattern));
+  PetscCall(FlucaFDDestroy(&tvd));
+  PetscCall(VecDestroy(&mass_flux));
+  PetscCall(VecDestroy(&phi));
+  PetscCall(MeshDestroy(&mesh));
+  PetscCall(DMDestroy(&output_dm));
+  PetscCall(DMDestroy(&input_dm));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char **argv)
 {
   DM        dm;
@@ -144,7 +241,7 @@ int main(int argc, char **argv)
   Vec       zero;
   Mat       Avalue, Apattern;
   char      test_case[16] = "constant";
-  PetscBool isvector, isconv3d;
+  PetscBool isvector, isconv3d, istvd;
   PetscInt  nv, np, r;
   PetscInt  rows[3][2] = {
     {0, 0},
@@ -158,6 +255,12 @@ int main(int argc, char **argv)
   PetscCall(PetscOptionsGetString(NULL, NULL, "-test_case", test_case, sizeof(test_case), NULL));
   PetscCall(PetscStrcmp(test_case, "vector", &isvector));
   PetscCall(PetscStrcmp(test_case, "convection3d", &isconv3d));
+  PetscCall(PetscStrcmp(test_case, "tvd", &istvd));
+  if (istvd) {
+    PetscCall(TestTVD_Private());
+    PetscCall(FlucaFinalize());
+    return 0;
+  }
   if (isconv3d) {
     PetscCall(TestConvection3d_Private());
     PetscCall(FlucaFinalize());
@@ -214,5 +317,10 @@ int main(int argc, char **argv)
     suffix: convection3d
     nsize: 1
     args: -test_case convection3d
+
+  test:
+    suffix: tvd
+    nsize: 1
+    args: -test_case tvd
 
 TEST*/
