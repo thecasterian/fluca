@@ -125,7 +125,7 @@ static PetscErrorCode FlucaFDSetUp_Derivative(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_Derivative(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
+static PetscErrorCode FlucaFDGetStencilRaw_Derivative(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_Derivative *deriv = (FlucaFD_Derivative *)fd->data;
   PetscInt            c, idx;

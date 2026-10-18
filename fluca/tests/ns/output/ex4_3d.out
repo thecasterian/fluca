@@ -1,7 +1,7 @@
 u_x corner: 14
-u_x wall: 22
-u_x interior: 24
-U_x boundary face: 2
+u_x wall: 16
+u_x interior: 15
+U_x boundary face: 1
 U_x interior face: 7
-p interior: 9
-total: 18684
+p interior: 6
+total: 14580

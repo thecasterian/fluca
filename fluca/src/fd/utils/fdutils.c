@@ -672,24 +672,6 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, const FlucaFDBoun
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* While positive, zero coefficients are kept so stencils report every location they structurally use */
-static PetscInt FlucaFDPatternDepth = 0;
-
-PetscErrorCode FlucaFDPatternModeBegin_Internal(void)
-{
-  PetscFunctionBegin;
-  ++FlucaFDPatternDepth;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode FlucaFDPatternModeEnd_Internal(void)
-{
-  PetscFunctionBegin;
-  PetscCheck(FlucaFDPatternDepth > 0, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Pattern mode was not begun");
-  --FlucaFDPatternDepth;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscScalar       v_abssum;
@@ -698,7 +680,6 @@ PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *npoints, FlucaF
   const PetscScalar atol = FLUCAFD_COEFF_ATOL, rtol = FLUCAFD_COEFF_RTOL;
 
   PetscFunctionBegin;
-  if (FlucaFDPatternDepth) PetscFunctionReturn(PETSC_SUCCESS);
   v_abssum = 0.;
   for (c = 0; c < *npoints; ++c) v_abssum += PetscAbs(points[c].v);
   npoints_new = 0;
@@ -720,11 +701,6 @@ PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt npoints, FlucaFDStencil
   PetscScalar            val;
 
   PetscFunctionBegin;
-  if (FlucaFDPatternDepth) {
-    /* Only the pattern matters, and the zero-coefficient points kept here may have scale refs outside the local array */
-    for (n = 0; n < npoints; n++) points[n].nscales = 0;
-    PetscFunctionReturn(PETSC_SUCCESS);
-  }
   for (n = 0; n < npoints; n++) {
     for (s = 0; s < points[n].nscales; s++) {
       ref = &points[n].scales[s];

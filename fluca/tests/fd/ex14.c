@@ -2,7 +2,7 @@
 #include <flucasys.h>
 #include <petscdmstag.h>
 
-static const char help[] = "Test FlucaFDGetOperatorPattern: the structural pattern survives zero coefficients\n"
+static const char help[] = "Test FlucaFDGetOperatorPattern: the pattern survives zero scales\n"
                            "Options:\n"
                            "  -test_case <constant|vector|convection3d> : scale a 2D operator by the constant 0 or by a zero vector,\n"
                            "                                              or compare the pattern of a 3D convection-like sum with its values\n";
@@ -55,8 +55,8 @@ static PetscErrorCode RowLength_Private(DM dm, Mat A, PetscInt i, PetscInt j, Pe
 }
 
 /* A 3D sum of six scaled terms, as in the NS convection: d/dx_e (interp_e(ubar) interp_e) for e = x, y, z, each
-   term scaled by a vector (so the terms cannot merge) and by a second vector. Its raw stencil in pattern mode,
-   with the zero-weight points of the one-sided corner stencils kept, has 36 points. */
+   term scaled by a vector (so the terms cannot merge) and by a second vector. Its pattern covers every
+   location a vector scale may fill; zero weights from the mesh are left out. */
 static PetscErrorCode TestConvection3d_Private(void)
 {
   DM                          dm;

@@ -6,7 +6,7 @@
 
 #define FLUCAFD_MAX_DIM          3
 #define FLUCAFD_MAX_COMPONENT    8
-#define FLUCAFD_MAX_STENCIL_SIZE 64
+#define FLUCAFD_MAX_STENCIL_SIZE 32
 #define FLUCAFD_ZERO_PIVOT_TOL   1e-14
 #define FLUCAFD_COEFF_ATOL       1e-10
 #define FLUCAFD_COEFF_RTOL       1e-8
@@ -29,7 +29,7 @@ typedef struct _FlucaFDOps *FlucaFDOps;
 struct _FlucaFDOps {
   PetscErrorCode (*setfromoptions)(FlucaFD, PetscOptionItems);
   PetscErrorCode (*setup)(FlucaFD);
-  PetscErrorCode (*getstencilraw)(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
+  PetscErrorCode (*getstencilraw)(FlucaFD, PetscInt, PetscInt, PetscInt, PetscBool, PetscInt *, FlucaFDStencilPoint[]);                     /* PetscBool: pattern mode, see FlucaFDGetStencilRaw_Internal() */
   PetscErrorCode (*getboundaryconditions)(FlucaFD, PetscInt, PetscInt, PetscInt, const FlucaFDBoundaryCondition (**)[2 * FLUCAFD_MAX_DIM]); /* optional; default: fd->bcs */
   PetscErrorCode (*destroy)(FlucaFD);
   PetscErrorCode (*view)(FlucaFD, PetscViewer);
@@ -169,12 +169,11 @@ FLUCA_INTERN PetscErrorCode FlucaFDUseFaceCoordinate_Internal(DMStagStencilLocat
 FLUCA_INTERN PetscErrorCode FlucaFDGetCoordinate_Internal(const PetscScalar **, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar, PetscScalar, PetscScalar *);
 FLUCA_INTERN PetscErrorCode FlucaFDGetGhostCorners_Internal(FlucaFD, PetscInt, PetscBool, PetscInt *, PetscInt *, PetscInt *);
 FLUCA_INTERN PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt, PetscScalar[], PetscScalar[], PetscScalar[]);
+FLUCA_INTERN PetscErrorCode FlucaFDGetStencilRaw_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, PetscBool, PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(const FlucaFDStencilPoint *, PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDGetBoundaryConditions_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, const FlucaFDBoundaryCondition (**)[2 * FLUCAFD_MAX_DIM]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, const FlucaFDBoundaryCondition[][2 * FLUCAFD_MAX_DIM], PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, FlucaFDStencilPoint[]);
-FLUCA_INTERN PetscErrorCode FlucaFDPatternModeBegin_Internal(void);
-FLUCA_INTERN PetscErrorCode FlucaFDPatternModeEnd_Internal(void);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscReal, PetscInt, FlucaFDStencilPoint[]);
 

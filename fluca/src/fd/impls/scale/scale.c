@@ -72,18 +72,20 @@ static PetscErrorCode FlucaFDSetUp_Scale(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
+static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_Scale   *scale = (FlucaFD_Scale *)fd->data;
   PetscInt         n;
   FlucaFDScaleRef *ref;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, npoints, points));
+  PetscCall(FlucaFDGetStencilRaw_Internal(scale->operand, i, j, k, pattern, npoints, points));
 
   if (scale->is_constant) {
-    /* Constant scale: multiply v directly, no deferred ref needed */
-    for (n = 0; n < *npoints; n++) points[n].v *= scale->constant;
+    /* Constant scale: multiply v directly, no deferred ref needed. A pattern must not depend on it (it may be 0
+       until the first time step), so it counts as 1 there. */
+    if (!pattern)
+      for (n = 0; n < *npoints; n++) points[n].v *= scale->constant;
   } else {
     /* Vector scale: tag each point with a deferred scale ref */
     for (n = 0; n < *npoints; n++) {

@@ -147,7 +147,7 @@ static PetscErrorCode FlucaFDSetUp_SecondOrderTVD(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
+static PetscErrorCode FlucaFDGetStencilRaw_SecondOrderTVD(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_SecondOrderTVD *tvd     = (FlucaFD_SecondOrderTVD *)fd->data;
   const void             *arr_mf  = (fd->dim == 1) ? (const void *)tvd->arr_mf_1d : (fd->dim == 2) ? (const void *)tvd->arr_mf_2d : (const void *)tvd->arr_mf_3d;
