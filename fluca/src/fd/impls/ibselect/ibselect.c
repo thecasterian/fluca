@@ -6,10 +6,15 @@ static PetscErrorCode FlucaFDSetUp_IBSelect(FlucaFD fd)
   FlucaFDTermLink   src, dst;
   FlucaFD           op;
   PetscInt          type, nb, s[3];
+  PetscInt          c, f;
   PetscBool         any = PETSC_FALSE, found;
   MeshIBPointType   ptype;
 
   PetscFunctionBegin;
+  for (c = 0; c < FLUCAFD_MAX_COMPONENT; ++c) {
+    for (f = 0; f < 2 * FLUCAFD_MAX_DIM; ++f)
+      PetscCheck(fd->bcs[c][f].type == FLUCAFD_BC_NONE && !fd->bcs[c][f].fn, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Set domain boundary conditions on the operands, not on FLUCAFDIBSELECT");
+  }
   for (type = 0; type < FLUCAFD_IB_NPOINTTYPES; ++type) {
     op = sel->operand[type];
     if (!op) {
@@ -109,7 +114,8 @@ PetscErrorCode FlucaFDCreate_IBSelect(FlucaFD fd)
 
 PetscErrorCode FlucaFDIBSelectCreate(FlucaFD fluid, FlucaFD forcing, FlucaFD solid, FlucaFD *fd)
 {
-  FlucaFD  ops[FLUCAFD_IB_NPOINTTYPES], first = NULL;
+  FlucaFD  ops[FLUCAFD_IB_NPOINTTYPES];
+  FlucaFD  first = NULL;
   MPI_Comm comm;
   PetscInt type;
 

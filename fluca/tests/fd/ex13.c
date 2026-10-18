@@ -176,7 +176,7 @@ static PetscErrorCode TestNested_Private(void)
   DM             dm;
   Mesh           mesh;
   IBBody         body;
-  FlucaFD        op, sel, sum;
+  FlucaFD        op, sel, sum, bad;
   PetscErrorCode ierr;
 
   PetscFunctionBeginUser;
@@ -190,6 +190,20 @@ static PetscErrorCode TestNested_Private(void)
   PetscCall(PetscPopErrorHandler());
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Sum over a select: %s\n", ierr ? "rejected" : "accepted"));
 
+  {
+    FlucaFDBoundaryCondition bcs[4] = {{0}};
+
+    bcs[0].type  = FLUCAFD_BC_DIRICHLET;
+    bcs[0].value = 1.;
+    PetscCall(FlucaFDIBSelectCreate(op, NULL, NULL, &bad));
+    PetscCall(FlucaFDSetBoundaryConditions(bad, 0, bcs));
+  }
+  PetscCall(PetscPushErrorHandler(PetscReturnErrorHandler, NULL));
+  ierr = FlucaFDSetUp(bad); /* expected to fail: the error code is the result under test */
+  PetscCall(PetscPopErrorHandler());
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Boundary conditions on a select: %s\n", ierr ? "rejected" : "accepted"));
+
+  PetscCall(FlucaFDDestroy(&bad));
   PetscCall(FlucaFDDestroy(&sum));
   PetscCall(FlucaFDDestroy(&sel));
   PetscCall(FlucaFDDestroy(&op));

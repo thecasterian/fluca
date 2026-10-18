@@ -164,14 +164,15 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetMassFlux(FlucaFD, Vec, Petsc
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD, Vec);
 
 /* FLUCAFDIBFORCING specific
-   Rows at forcing points exist only at owned points: use it as the outermost operator or a summand, not as an inner operand */
+   Rows at forcing points exist only at owned points: use it as the outermost operator, a summand, or a FLUCAFDIBSELECT operand, not as an inner operand */
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingCreate(Mesh, DMStagStencilLocation, PetscInt, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetInterpolationOrder(FlucaFD, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetVelocityComponent(FlucaFD, PetscInt);
 
 /* FLUCAFDIBSELECT specific
    Picks the operand for each row by its IB point type; a NULL operand yields an empty row.
-   Each row uses its operand's domain boundary conditions. Must be the outermost operator. */
+   Each row uses its operand's domain boundary conditions: set them on the operands, not on the select (setting them on the select is an error at setup).
+   Point types are exact only at owned points, so query its stencils at owned rows only. Must be the outermost operator. */
 FLUCA_EXTERN PetscErrorCode FlucaFDIBSelectCreate(FlucaFD, FlucaFD, FlucaFD, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBSelectSetOperand(FlucaFD, MeshIBPointType, FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBSelectGetOperand(FlucaFD, MeshIBPointType, FlucaFD *);
