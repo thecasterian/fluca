@@ -7,3 +7,5 @@ Select applied to zero along j = 4 (fluid walls 1, 3; forcing walls 2, 4):
   i = 5 FLUID   0.
   i = 6 FLUID   0.
   i = 7 FLUID   614.4
+After setting the forcing left wall to 5:
+  i = 0 1024.

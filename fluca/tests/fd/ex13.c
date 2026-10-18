@@ -159,6 +159,25 @@ static PetscErrorCode TestBCPerType_Private(void)
   }
   PetscCall(DMRestoreLocalVector(dm, &y_local));
 
+  /* Boundary conditions changed on an operand after the select's setup take effect */
+  {
+    FlucaFDBoundaryCondition bcs[4] = {{0}};
+
+    bcs[0].type  = FLUCAFD_BC_DIRICHLET;
+    bcs[0].value = 5.;
+    bcs[1].type  = FLUCAFD_BC_DIRICHLET;
+    bcs[1].value = 4.;
+    PetscCall(FlucaFDSetBoundaryConditions(forcing, 0, bcs));
+  }
+  PetscCall(VecZeroEntries(y)); /* FlucaFDApply() adds to y */
+  PetscCall(FlucaFDApply(sel, 0., dm, dm, x, y));
+  PetscCall(DMGetLocalVector(dm, &y_local));
+  PetscCall(DMGlobalToLocal(dm, y, INSERT_VALUES, y_local));
+  pos.i = 0;
+  PetscCall(DMStagVecGetValuesStencil(dm, y_local, 1, &pos, &val));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "After setting the forcing left wall to 5:\n  i = 0 %g\n", (double)PetscRealPart(val)));
+  PetscCall(DMRestoreLocalVector(dm, &y_local));
+
   PetscCall(VecDestroy(&y));
   PetscCall(VecDestroy(&x));
   PetscCall(FlucaFDDestroy(&sel));

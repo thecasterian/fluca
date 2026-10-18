@@ -1,5 +1,8 @@
 #include <fluca/private/flucafdimpl.h>
 
+/* Domain boundary conditions of rows whose operand is NULL (all FLUCAFD_BC_NONE) */
+static const FlucaFDBoundaryCondition nobcs[FLUCAFD_MAX_COMPONENT][2 * FLUCAFD_MAX_DIM];
+
 static PetscErrorCode FlucaFDSetUp_IBSelect(FlucaFD fd)
 {
   FlucaFD_IBSelect *sel = (FlucaFD_IBSelect *)fd->data;
@@ -17,15 +20,11 @@ static PetscErrorCode FlucaFDSetUp_IBSelect(FlucaFD fd)
   }
   for (type = 0; type < FLUCAFD_IB_NPOINTTYPES; ++type) {
     op = sel->operand[type];
-    if (!op) {
-      PetscCall(PetscMemzero(sel->bcs[type], sizeof(sel->bcs[type]))); /* all FLUCAFD_BC_NONE */
-      continue;
-    }
+    if (!op) continue;
     any = PETSC_TRUE;
     PetscCall(FlucaFDValidateOperand_Internal(fd, op));
     PetscCheck(op->input_loc == fd->input_loc && op->input_c == fd->input_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "%s operand input must match the select input", MeshIBPointTypes[type]);
     PetscCheck(op->output_loc == fd->output_loc && op->output_c == fd->output_c, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_INCOMP, "%s operand output must match the select output", MeshIBPointTypes[type]);
-    PetscCall(PetscArraycpy(&sel->bcs[type][0][0], &op->bcs[0][0], FLUCAFD_MAX_COMPONENT * 2 * FLUCAFD_MAX_DIM));
     for (src = op->termlink; src; src = src->next) {
       PetscCall(FlucaFDTermLinkFind_Internal(fd->termlink, src, &found));
       if (found) continue;
@@ -62,7 +61,9 @@ static PetscErrorCode FlucaFDGetBoundaryConditions_IBSelect(FlucaFD fd, PetscInt
 
   PetscFunctionBegin;
   PetscCall(MeshGetIBPointType(fd->mesh, fd->output_loc, i, j, k, &type));
-  *bcs = (const FlucaFDBoundaryCondition(*)[2 * FLUCAFD_MAX_DIM]) sel->bcs[type];
+  /* Read the operand's table live, so boundary conditions set on it after setup take effect */
+  if (sel->operand[type]) PetscCall(FlucaFDGetBoundaryConditions_Internal(sel->operand[type], i, j, k, bcs));
+  else *bcs = nobcs;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
