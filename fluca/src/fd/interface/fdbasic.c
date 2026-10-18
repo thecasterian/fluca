@@ -104,8 +104,8 @@ PetscErrorCode FlucaFDDestroy(FlucaFD *fd)
     PetscFunctionReturn(PETSC_SUCCESS);
   }
 
-  /* Restore coordinate arrays (only if setup was called) */
-  if ((*fd)->setupcalled) PetscCall(DMStagRestoreProductCoordinateArraysRead((*fd)->dm, &(*fd)->arr_coord[0], &(*fd)->arr_coord[1], &(*fd)->arr_coord[2]));
+  /* Restore coordinate arrays, which a failed type-specific setup also leaves checked out */
+  if ((*fd)->arr_coord[0]) PetscCall(DMStagRestoreProductCoordinateArraysRead((*fd)->dm, &(*fd)->arr_coord[0], &(*fd)->arr_coord[1], &(*fd)->arr_coord[2]));
   PetscCall(DMDestroy(&(*fd)->dm));
   PetscCall(MeshDestroy(&(*fd)->mesh));
 
@@ -190,6 +190,8 @@ PetscErrorCode FlucaFDSetUp(FlucaFD fd)
   PetscCheck(fd->mesh->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "Mesh not set up. Call MeshSetUp() first");
   PetscCall(MeshGetDM(fd->mesh, &dm));
   PetscCall(PetscObjectReference((PetscObject)dm));
+  /* Restore coordinate arrays left checked out by a failed previous call */
+  if (fd->arr_coord[0]) PetscCall(DMStagRestoreProductCoordinateArraysRead(fd->dm, &fd->arr_coord[0], &fd->arr_coord[1], &fd->arr_coord[2]));
   PetscCall(DMDestroy(&fd->dm));
   fd->dm = dm;
 
