@@ -41,14 +41,23 @@ static PetscErrorCode EvaluateBCCoordinate_Private(FlucaFD fd, PetscInt boundary
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD fd, PetscReal t, PetscInt component, PetscInt boundary_face, PetscInt i, PetscInt j, PetscInt k, PetscScalar *value)
+/* Domain boundary conditions that resolve the stencil of row (i, j, k) */
+PetscErrorCode FlucaFDGetBoundaryConditions_Internal(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, const FlucaFDBoundaryCondition (**bcs)[2 * FLUCAFD_MAX_DIM])
+{
+  PetscFunctionBegin;
+  if (fd->ops->getboundaryconditions) PetscUseTypeMethod(fd, getboundaryconditions, i, j, k, bcs);
+  else *bcs = (const FlucaFDBoundaryCondition(*)[2 * FLUCAFD_MAX_DIM]) fd->bcs;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD fd, const FlucaFDBoundaryCondition bcs[][2 * FLUCAFD_MAX_DIM], PetscReal t, PetscInt component, PetscInt boundary_face, PetscInt i, PetscInt j, PetscInt k, PetscScalar *value)
 {
   const FlucaFDBoundaryCondition *bc;
 
   PetscFunctionBegin;
   PetscCheck(component >= 0 && component < FLUCAFD_MAX_COMPONENT, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "component %" PetscInt_FMT " out of range [0, %d)", component, FLUCAFD_MAX_COMPONENT);
   PetscCheck(boundary_face >= 0 && boundary_face < 2 * fd->dim, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "boundary_face %" PetscInt_FMT " out of range for %" PetscInt_FMT "D problem", boundary_face, fd->dim);
-  bc = &fd->bcs[component][boundary_face];
+  bc = &bcs[component][boundary_face];
   if (bc->fn) {
     PetscReal x[FLUCAFD_MAX_DIM];
 
@@ -60,14 +69,14 @@ PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD fd, PetscReal t, PetscInt
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDEvaluateBCValueDot_Internal(FlucaFD fd, PetscReal t, PetscInt component, PetscInt boundary_face, PetscInt i, PetscInt j, PetscInt k, PetscScalar *value)
+PetscErrorCode FlucaFDEvaluateBCValueDot_Internal(FlucaFD fd, const FlucaFDBoundaryCondition bcs[][2 * FLUCAFD_MAX_DIM], PetscReal t, PetscInt component, PetscInt boundary_face, PetscInt i, PetscInt j, PetscInt k, PetscScalar *value)
 {
   const FlucaFDBoundaryCondition *bc;
 
   PetscFunctionBegin;
   PetscCheck(component >= 0 && component < FLUCAFD_MAX_COMPONENT, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "component %" PetscInt_FMT " out of range [0, %d)", component, FLUCAFD_MAX_COMPONENT);
   PetscCheck(boundary_face >= 0 && boundary_face < 2 * fd->dim, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "boundary_face %" PetscInt_FMT " out of range for %" PetscInt_FMT "D problem", boundary_face, fd->dim);
-  bc = &fd->bcs[component][boundary_face];
+  bc = &bcs[component][boundary_face];
   if (bc->fn_dot) {
     PetscReal x[FLUCAFD_MAX_DIM];
 
@@ -118,9 +127,13 @@ PetscErrorCode FlucaFDEvaluateIBValue_Internal(FlucaFD fd, PetscReal t, const Fl
 
 PetscErrorCode FlucaFDValidateOperand_Internal(FlucaFD parent, FlucaFD operand)
 {
+  PetscBool isselect;
+
   PetscFunctionBegin;
   PetscCheck(operand->setupcalled, PetscObjectComm((PetscObject)parent), PETSC_ERR_ARG_WRONGSTATE, "Operand FlucaFD is not set up. Call FlucaFDSetUp() on the operand first");
   PetscCheck(parent->mesh == operand->mesh, PetscObjectComm((PetscObject)parent), PETSC_ERR_ARG_INCOMP, "Operand FlucaFD is on a different Mesh than its parent");
+  PetscCall(PetscObjectTypeCompare((PetscObject)operand, FLUCAFDIBSELECT, &isselect));
+  PetscCheck(!isselect, PetscObjectComm((PetscObject)parent), PETSC_ERR_ARG_WRONG, "FLUCAFDIBSELECT must be the outermost operator, not an operand of another FlucaFD");
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -429,7 +442,7 @@ static PetscErrorCode ClearTVDPair_Private(PetscInt npoints, FlucaFDStencilPoint
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *npoints, FlucaFDStencilPoint points[])
+PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, const FlucaFDBoundaryCondition bcs[][2 * FLUCAFD_MAX_DIM], PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscInt       iter;
   const PetscInt max_iter = 100;
@@ -471,8 +484,8 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, PetscInt *npoints
       periodic = fd->periodic[off_dir];
 
       PetscCheck(off_point.c >= 0 && off_point.c < FLUCAFD_MAX_COMPONENT, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_OUTOFRANGE, "Stencil point component %" PetscInt_FMT " out of range [0, %d)", off_point.c, FLUCAFD_MAX_COMPONENT);
-      if (is_low && fd->is_first_rank[off_dir] && !periodic) bc_type = fd->bcs[off_point.c][2 * off_dir].type;
-      else if (!is_low && fd->is_last_rank[off_dir] && !periodic) bc_type = fd->bcs[off_point.c][2 * off_dir + 1].type;
+      if (is_low && fd->is_first_rank[off_dir] && !periodic) bc_type = bcs[off_point.c][2 * off_dir].type;
+      else if (!is_low && fd->is_last_rank[off_dir] && !periodic) bc_type = bcs[off_point.c][2 * off_dir + 1].type;
       else bc_type = FLUCAFD_BC_NONE;
 
       arr_coord = fd->arr_coord[off_dir];
@@ -718,9 +731,11 @@ static PetscErrorCode EvaluateGradient_Private(FlucaFD fd_grad, PetscReal t, Pet
 {
   FlucaFDStencilPoint grad_points[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt            ngrad, c;
+  const FlucaFDBoundaryCondition(*bcs)[2 * FLUCAFD_MAX_DIM];
 
   PetscFunctionBegin;
   PetscCall(FlucaFDGetStencil(fd_grad, t, i, j, k, &ngrad, grad_points));
+  PetscCall(FlucaFDGetBoundaryConditions_Internal(fd_grad, i, j, k, &bcs));
   *grad = 0.;
   for (c = 0; c < ngrad; c++) {
     switch (grad_points[c].type) {
@@ -742,7 +757,7 @@ static PetscErrorCode EvaluateGradient_Private(FlucaFD fd_grad, PetscReal t, Pet
     case FLUCAFD_STENCIL_BOUNDARY: {
       PetscScalar bc_val;
 
-      PetscCall(FlucaFDEvaluateBCValue_Internal(fd_grad, t, grad_points[c].c, grad_points[c].boundary_face, grad_points[c].i, grad_points[c].j, grad_points[c].k, &bc_val));
+      PetscCall(FlucaFDEvaluateBCValue_Internal(fd_grad, bcs, t, grad_points[c].c, grad_points[c].boundary_face, grad_points[c].i, grad_points[c].j, grad_points[c].k, &bc_val));
       *grad += grad_points[c].v * bc_val;
       break;
     }

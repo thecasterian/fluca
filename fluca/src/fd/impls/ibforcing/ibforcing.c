@@ -161,7 +161,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_IBForcing(FlucaFD fd, PetscInt i, Pet
   p[1] = j;
   p[2] = k;
   PetscCall(MeshIBGetForcingPoint_Internal(fd->mesh, fd->output_loc, i, j, k, &fp));
-  PetscCheck(fp, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "No forcing record at (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT "): FLUCAFDIBFORCING rows exist only at owned points, so use it as the outermost operator or a summand, not as an inner operand", i, j, k);
+  PetscCheck(fp, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "No forcing record at (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT "): FLUCAFDIBFORCING rows exist only at owned points, so use it as the outermost operator, a summand, or a FLUCAFDIBSELECT operand, not as an inner operand", i, j, k);
   PetscCall(GetForcingRow_Private(fd, p, fp, &nuse, use, w, nnodes, a));
   PetscCheck(nuse > 0, PETSC_COMM_SELF, PETSC_ERR_PLIB, "Forcing point (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ") has no usable grid line", i, j, k);
   for (u = 0; u < nuse; ++u) {
