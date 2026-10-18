@@ -117,10 +117,6 @@ typedef struct {
   PetscInt order;    /* interpolation order along grid lines: 1 or 2 */
 } FlucaFD_IBForcing;
 
-typedef struct {
-  FlucaFD operand; /* rows kept at fluid points only */
-} FlucaFD_IBMask;
-
 #define FLUCAFD_IB_NPOINTTYPES 3 /* MESH_IB_FLUID, MESH_IB_FORCING, MESH_IB_SOLID */
 
 typedef struct {

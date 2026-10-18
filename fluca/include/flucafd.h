@@ -16,7 +16,6 @@ typedef const char *FlucaFDType;
 #define FLUCAFDSUM            "sum"
 #define FLUCAFDSECONDORDERTVD "secondordertvd"
 #define FLUCAFDIBFORCING      "ibforcing"
-#define FLUCAFDIBMASK         "ibmask"
 #define FLUCAFDIBSELECT       "ibselect"
 
 FLUCA_EXTERN PetscClassId   FLUCAFD_CLASSID;
@@ -169,11 +168,6 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD, Vec
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingCreate(Mesh, DMStagStencilLocation, PetscInt, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetInterpolationOrder(FlucaFD, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetVelocityComponent(FlucaFD, PetscInt);
-
-/* FLUCAFDIBMASK specific
-   Point types are exact only at owned points: use it as the outermost operator or a summand, not as an inner operand */
-FLUCA_EXTERN PetscErrorCode FlucaFDIBMaskCreate(FlucaFD, FlucaFD *);
-FLUCA_EXTERN PetscErrorCode FlucaFDIBMaskSetOperand(FlucaFD, FlucaFD);
 
 /* FLUCAFDIBSELECT specific
    Picks the operand for each row by its IB point type; a NULL operand yields an empty row.

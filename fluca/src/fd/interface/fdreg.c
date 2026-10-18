@@ -6,7 +6,6 @@ FLUCA_EXTERN PetscErrorCode FlucaFDCreate_Scale(FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate_Sum(FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate_SecondOrderTVD(FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate_IBForcing(FlucaFD);
-FLUCA_EXTERN PetscErrorCode FlucaFDCreate_IBMask(FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDCreate_IBSelect(FlucaFD);
 
 PetscErrorCode FlucaFDRegister(const char sname[], PetscErrorCode (*function)(FlucaFD))
@@ -29,7 +28,6 @@ PetscErrorCode FlucaFDRegisterAll(void)
   PetscCall(FlucaFDRegister(FLUCAFDSUM, FlucaFDCreate_Sum));
   PetscCall(FlucaFDRegister(FLUCAFDSECONDORDERTVD, FlucaFDCreate_SecondOrderTVD));
   PetscCall(FlucaFDRegister(FLUCAFDIBFORCING, FlucaFDCreate_IBForcing));
-  PetscCall(FlucaFDRegister(FLUCAFDIBMASK, FlucaFDCreate_IBMask));
   PetscCall(FlucaFDRegister(FLUCAFDIBSELECT, FlucaFDCreate_IBSelect));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
