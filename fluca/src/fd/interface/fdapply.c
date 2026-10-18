@@ -223,3 +223,12 @@ PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
   /* The user must call MatAssemblyBegin/End */
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode FlucaFDGetOperatorPattern(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
+{
+  PetscFunctionBegin;
+  PetscCall(FlucaFDPatternModeBegin_Internal());
+  PetscCall(FlucaFDGetOperator(fd, input_dm, output_dm, op));
+  PetscCall(FlucaFDPatternModeEnd_Internal());
+  PetscFunctionReturn(PETSC_SUCCESS);
+}

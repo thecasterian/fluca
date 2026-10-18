@@ -173,6 +173,8 @@ FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(const FlucaFDStencil
 FLUCA_INTERN PetscErrorCode FlucaFDGetBoundaryConditions_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, const FlucaFDBoundaryCondition (**)[2 * FLUCAFD_MAX_DIM]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, const FlucaFDBoundaryCondition[][2 * FLUCAFD_MAX_DIM], PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_INTERN PetscErrorCode FlucaFDPatternModeBegin_Internal(void);
+FLUCA_INTERN PetscErrorCode FlucaFDPatternModeEnd_Internal(void);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscReal, PetscInt, FlucaFDStencilPoint[]);
 

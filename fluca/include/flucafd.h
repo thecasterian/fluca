@@ -131,6 +131,8 @@ FLUCA_EXTERN PetscErrorCode FlucaFDGetStencil(FlucaFD, PetscReal, PetscInt, Pets
 FLUCA_EXTERN PetscErrorCode FlucaFDApply(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDApplyDot(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperator(FlucaFD, DM, DM, Mat);
+/* Insert every location the operator structurally uses, whatever its coefficient values; the values are unspecified (use with MATPREALLOCATOR) */
+FLUCA_EXTERN PetscErrorCode FlucaFDGetOperatorPattern(FlucaFD, DM, DM, Mat);
 
 /* FLUCAFDDERIVATIVE specific */
 FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeCreate(Mesh, FlucaFDDirection, PetscInt, PetscInt, DMStagStencilLocation, PetscInt, DMStagStencilLocation, PetscInt, FlucaFD *);
