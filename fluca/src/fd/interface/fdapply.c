@@ -45,13 +45,15 @@ PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscReal t, PetscInt i, PetscInt j
 {
   FlucaFDStencilPoint merged[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt            merged_npoints, c;
+  const FlucaFDBoundaryCondition(*bcs)[2 * FLUCAFD_MAX_DIM];
 
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   PetscAssertPointer(npoints, 6);
   PetscAssertPointer(points, 7);
   PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, npoints, points));
-  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, npoints, points));
+  PetscCall(FlucaFDGetBoundaryConditions_Internal(fd, i, j, k, &bcs));
+  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, bcs, npoints, points));
   PetscCall(FlucaFDResolveScaleRefs_Internal(*npoints, points));
   PetscCall(FlucaFDResolveTVDRefs_Internal(t, *npoints, points));
   /* Re-merge points that are now identical after ref resolution */
@@ -75,6 +77,7 @@ static PetscErrorCode FlucaFDApply_Private(FlucaFD fd, PetscReal t, DM input_dm,
   PetscInt            npoints;
   PetscInt            ir, idx;
   PetscScalar         result, bc_val;
+  const FlucaFDBoundaryCondition(*bcs)[2 * FLUCAFD_MAX_DIM];
 
   PetscFunctionBegin;
   /* Scatter input to local vector (fills ghost values) */
@@ -100,6 +103,7 @@ static PetscErrorCode FlucaFDApply_Private(FlucaFD fd, PetscReal t, DM input_dm,
         row.c   = fd->output_c;
         row.loc = fd->output_loc;
         PetscCall(FlucaFDGetStencil(fd, t, i, j, k, &npoints, points));
+        PetscCall(FlucaFDGetBoundaryConditions_Internal(fd, i, j, k, &bcs));
 
         for (c = 0; c < npoints; ++c) {
           switch (points[c].type) {
@@ -113,9 +117,9 @@ static PetscErrorCode FlucaFDApply_Private(FlucaFD fd, PetscReal t, DM input_dm,
             break;
           case FLUCAFD_STENCIL_BOUNDARY:
             if (use_dot_bc) {
-              PetscCall(FlucaFDEvaluateBCValueDot_Internal(fd, t, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
+              PetscCall(FlucaFDEvaluateBCValueDot_Internal(fd, bcs, t, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
             } else {
-              PetscCall(FlucaFDEvaluateBCValue_Internal(fd, t, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
+              PetscCall(FlucaFDEvaluateBCValue_Internal(fd, bcs, t, points[c].c, points[c].boundary_face, points[c].i, points[c].j, points[c].k, &bc_val));
             }
             result += points[c].v * bc_val;
             break;

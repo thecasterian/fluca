@@ -30,6 +30,7 @@ struct _FlucaFDOps {
   PetscErrorCode (*setfromoptions)(FlucaFD, PetscOptionItems);
   PetscErrorCode (*setup)(FlucaFD);
   PetscErrorCode (*getstencilraw)(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
+  PetscErrorCode (*getboundaryconditions)(FlucaFD, PetscInt, PetscInt, PetscInt, const FlucaFDBoundaryCondition (**)[2 * FLUCAFD_MAX_DIM]); /* optional; default: fd->bcs */
   PetscErrorCode (*destroy)(FlucaFD);
   PetscErrorCode (*view)(FlucaFD, PetscViewer);
 };
@@ -167,13 +168,14 @@ FLUCA_INTERN PetscErrorCode FlucaFDGetCoordinate_Internal(const PetscScalar **, 
 FLUCA_INTERN PetscErrorCode FlucaFDGetGhostCorners_Internal(FlucaFD, PetscInt, PetscBool, PetscInt *, PetscInt *, PetscInt *);
 FLUCA_INTERN PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt, PetscScalar[], PetscScalar[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(const FlucaFDStencilPoint *, PetscInt *, FlucaFDStencilPoint[]);
-FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_INTERN PetscErrorCode FlucaFDGetBoundaryConditions_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, const FlucaFDBoundaryCondition (**)[2 * FLUCAFD_MAX_DIM]);
+FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, const FlucaFDBoundaryCondition[][2 * FLUCAFD_MAX_DIM], PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscReal, PetscInt, FlucaFDStencilPoint[]);
 
-FLUCA_INTERN PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD, PetscReal, PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar *);
-FLUCA_INTERN PetscErrorCode FlucaFDEvaluateBCValueDot_Internal(FlucaFD, PetscReal, PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar *);
+FLUCA_INTERN PetscErrorCode FlucaFDEvaluateBCValue_Internal(FlucaFD, const FlucaFDBoundaryCondition[][2 * FLUCAFD_MAX_DIM], PetscReal, PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar *);
+FLUCA_INTERN PetscErrorCode FlucaFDEvaluateBCValueDot_Internal(FlucaFD, const FlucaFDBoundaryCondition[][2 * FLUCAFD_MAX_DIM], PetscReal, PetscInt, PetscInt, PetscInt, PetscInt, PetscInt, PetscScalar *);
 FLUCA_INTERN PetscErrorCode FlucaFDEvaluateIBValue_Internal(FlucaFD, PetscReal, const FlucaFDStencilPoint *, PetscBool, PetscScalar *);
 
 FLUCA_INTERN PetscErrorCode FlucaFDTermLinkCreate_Internal(FlucaFDTermLink *);
