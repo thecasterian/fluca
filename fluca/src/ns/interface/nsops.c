@@ -52,6 +52,60 @@ PetscErrorCode NSSetVelocityBCs_Internal(NS ns, FlucaFD fd, PetscInt d)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* A matrix on the Phys solution DM whose nonzero pattern is exactly what fill inserts into a MATPREALLOCATOR.
+   The pattern is laid out as explicit zeros, so MatDuplicate() keeps it, and inserting outside it is an error. */
+PetscErrorCode NSCreateMatrix_Internal(NS ns, PetscErrorCode (*fill)(NS, Mat, void *), void *ctx, Mat *A)
+{
+  ISLocalToGlobalMapping ltog;
+  MatType                mtype;
+  PetscInt               m;
+  Mat                    prealloc;
+  DM                     dm;
+
+  PetscFunctionBegin;
+  PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  PetscCall(DMGetMatType(dm, &mtype));
+  PetscCall(DMStagGetEntries(dm, &m));
+  PetscCall(DMGetLocalToGlobalMapping(dm, &ltog));
+
+  PetscCall(MatCreate(PetscObjectComm((PetscObject)dm), &prealloc));
+  PetscCall(MatSetType(prealloc, MATPREALLOCATOR));
+  PetscCall(MatSetSizes(prealloc, m, m, PETSC_DETERMINE, PETSC_DETERMINE));
+  PetscCall(MatSetLocalToGlobalMapping(prealloc, ltog, ltog));
+  PetscCall(MatSetUp(prealloc));
+  PetscCall(fill(ns, prealloc, ctx));
+  PetscCall(MatAssemblyBegin(prealloc, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(prealloc, MAT_FINAL_ASSEMBLY));
+
+  PetscCall(MatCreate(PetscObjectComm((PetscObject)dm), A));
+  PetscCall(MatSetSizes(*A, m, m, PETSC_DETERMINE, PETSC_DETERMINE));
+  PetscCall(MatSetType(*A, mtype));
+  PetscCall(MatSetLocalToGlobalMapping(*A, ltog, ltog));
+  PetscCall(MatSetDM(*A, dm));
+  PetscCall(MatPreallocatorPreallocate(prealloc, PETSC_TRUE, *A));
+  PetscCall(MatDestroy(&prealloc));
+  PetscCall(MatSetOption(*A, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+typedef struct {
+  PetscInt n;
+  FlucaFD *fds;
+} NS_FDList;
+
+/* fill for NSCreateMatrix_Internal(): the structural pattern of every operator in an NS_FDList */
+static PetscErrorCode FillFDListPattern_Private(NS ns, Mat M, void *ctx)
+{
+  NS_FDList *list = (NS_FDList *)ctx;
+  PetscInt   k;
+  DM         dm;
+
+  PetscFunctionBegin;
+  PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  for (k = 0; k < list->n; ++k) PetscCall(FlucaFDGetOperatorPattern(list->fds[k], dm, dm, M));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* -R = (-T) G_c + G^st as an explicit matrix. G^st is the face-normal pressure derivative with a
    homogeneous Neumann BC on every velocity face, so its boundary-face rows are empty; the two-point
    -T has empty boundary-face rows too (its whole weight is on the boundary datum). */
@@ -61,7 +115,8 @@ static PetscErrorCode CreateNegR_Private(NS ns)
   PhysBC                   bc;
   PetscInt                 dim, c_p, c_U, e, f;
   Mat                      negTmat, Gmat, Gstmat;
-  FlucaFD                  Gst;
+  FlucaFD                  Gst[PHYS_MAX_DIM];
+  NS_FDList                lnegT, lG, lGst;
   DM                       dm;
   Mesh                     mesh;
 
@@ -77,20 +132,24 @@ static PetscErrorCode CreateNegR_Private(NS ns)
     pbcs[f].type  = FLUCAFD_BC_NEUMANN;
     pbcs[f].value = 0.;
   }
-  PetscCall(DMCreateMatrix(dm, &negTmat));
-  PetscCall(DMCreateMatrix(dm, &Gmat));
-  PetscCall(DMCreateMatrix(dm, &Gstmat));
-  PetscCall(MatSetOption(negTmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
-  PetscCall(MatSetOption(Gmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
-  PetscCall(MatSetOption(Gstmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  for (e = 0; e < dim; e++) {
+    PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, c_p, face_loc[e], c_U, &Gst[e]));
+    PetscCall(FlucaFDSetBoundaryConditions(Gst[e], c_p, pbcs));
+    PetscCall(FlucaFDSetUp(Gst[e]));
+  }
+  lnegT.n   = dim;
+  lnegT.fds = ns->fd_negT;
+  lG.n      = dim;
+  lG.fds    = ns->fd_grad_p;
+  lGst.n    = dim;
+  lGst.fds  = Gst;
+  PetscCall(NSCreateMatrix_Internal(ns, FillFDListPattern_Private, &lnegT, &negTmat));
+  PetscCall(NSCreateMatrix_Internal(ns, FillFDListPattern_Private, &lG, &Gmat));
+  PetscCall(NSCreateMatrix_Internal(ns, FillFDListPattern_Private, &lGst, &Gstmat));
   for (e = 0; e < dim; e++) {
     PetscCall(FlucaFDGetOperator(ns->fd_negT[e], dm, dm, negTmat));
     PetscCall(FlucaFDGetOperator(ns->fd_grad_p[e], dm, dm, Gmat));
-    PetscCall(FlucaFDDerivativeCreate(mesh, (FlucaFDDirection)e, 1, 2, DMSTAG_ELEMENT, c_p, face_loc[e], c_U, &Gst));
-    PetscCall(FlucaFDSetBoundaryConditions(Gst, c_p, pbcs));
-    PetscCall(FlucaFDSetUp(Gst));
-    PetscCall(FlucaFDGetOperator(Gst, dm, dm, Gstmat));
-    PetscCall(FlucaFDDestroy(&Gst));
+    PetscCall(FlucaFDGetOperator(Gst[e], dm, dm, Gstmat));
   }
   PetscCall(MatAssemblyBegin(negTmat, MAT_FINAL_ASSEMBLY));
   PetscCall(MatAssemblyEnd(negTmat, MAT_FINAL_ASSEMBLY));
@@ -100,11 +159,12 @@ static PetscErrorCode CreateNegR_Private(NS ns)
   PetscCall(MatAssemblyEnd(Gstmat, MAT_FINAL_ASSEMBLY));
   PetscCall(MatMatMult(negTmat, Gmat, MAT_INITIAL_MATRIX, PETSC_DETERMINE, &ns->negR));
   PetscCall(MatAXPY(ns->negR, 1., Gstmat, DIFFERENT_NONZERO_PATTERN));
-  /* DMCreateMatrix() lays out explicit zeros; drop them so negR stays inside the star stencil */
+  /* Drop the explicit zeros of the patterns and the entries that cancel, so negR holds its true stencil */
   PetscCall(MatEliminateZeros(ns->negR, PETSC_FALSE));
   PetscCall(MatDestroy(&Gstmat));
   PetscCall(MatDestroy(&Gmat));
   PetscCall(MatDestroy(&negTmat));
+  for (e = 0; e < dim; e++) PetscCall(FlucaFDDestroy(&Gst[e]));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
