@@ -720,6 +720,11 @@ PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt npoints, FlucaFDStencil
   PetscScalar            val;
 
   PetscFunctionBegin;
+  if (FlucaFDPatternDepth) {
+    /* Only the pattern matters, and the zero-coefficient points kept here may have scale refs outside the local array */
+    for (n = 0; n < npoints; n++) points[n].nscales = 0;
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
   for (n = 0; n < npoints; n++) {
     for (s = 0; s < points[n].nscales; s++) {
       ref = &points[n].scales[s];

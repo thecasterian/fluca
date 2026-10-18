@@ -35,6 +35,7 @@ struct _NSOps {
   PetscErrorCode (*setup)(NS);
   PetscErrorCode (*step)(NS);
   PetscErrorCode (*formjacobian)(NS, Vec, Mat);
+  PetscErrorCode (*jacobianpattern)(NS, Mat); /* insert every location formjacobian can insert */
   PetscErrorCode (*formfunction)(NS, Vec, Vec);
   PetscErrorCode (*destroy)(NS);
   PetscErrorCode (*view)(NS, PetscViewer);
@@ -70,7 +71,7 @@ struct _p_NS {
 
   /* Solver --------------------------------------------------------------- */
   SNES         snes;      /* non-linear solver */
-  Mat          J;         /* AIJ from DMCreateMatrix() on the Phys solution DM */
+  Mat          J;         /* AIJ with the exact pattern of ops->jacobianpattern, explicit zeros included */
   Vec          r;         /* residual vector */
   Vec          x;         /* solver solution vector */
   MatNullSpace nullspace; /* null space of J */
