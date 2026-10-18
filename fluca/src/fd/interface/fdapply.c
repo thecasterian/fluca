@@ -31,7 +31,7 @@ static PetscErrorCode GetOutputLoopRange_Private(FlucaFD fd, DM output_dm, Petsc
 }
 
 /* With pattern true, every scale counts as 1 (vector scales are still tagged, constant scales are not applied),
-   so the zeros removed here come only from fixed data: mesh weights and boundary conditions */
+   so the zeros removed here come only from fixed data: mesh weights */
 PetscErrorCode FlucaFDGetStencilRaw_Internal(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscFunctionBegin;

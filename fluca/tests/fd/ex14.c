@@ -4,10 +4,11 @@
 
 static const char help[] = "Test FlucaFDGetOperatorPattern: the pattern survives zero scales\n"
                            "Options:\n"
-                           "  -test_case <constant|vector|convection3d> : scale a 2D operator by the constant 0 or by a zero vector,\n"
-                           "                                              or compare the pattern of a 3D convection-like sum with its values\n";
+                           "  -test_case <constant|vector|convection3d|tvd> : scale a 2D operator by the constant 0 or by a zero vector,\n"
+                           "                                                  compare the pattern of a 3D convection-like sum with its values,\n"
+                           "                                                  or check that a 1D TVD pattern covers both flux directions\n";
 
-/* Preallocate an AIJ matrix from what fill inserted into a MATPREALLOCATOR */
+/* Preallocate an AIJ matrix from the pattern (pattern true) or the values (pattern false) of fd */
 static PetscErrorCode CreateFromPreallocator_Private(DM dm, FlucaFD fd, PetscBool pattern, Mat *A)
 {
   Mat                    prealloc;
@@ -54,9 +55,9 @@ static PetscErrorCode RowLength_Private(DM dm, Mat A, PetscInt i, PetscInt j, Pe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* A 3D sum of six scaled terms, as in the NS convection: d/dx_e (interp_e(ubar) interp_e) for e = x, y, z, each
-   term scaled by a vector (so the terms cannot merge) and by a second vector. Its pattern covers every
-   location a vector scale may fill; zero weights from the mesh are left out. */
+/* A 3D sum of six scaled terms, as in the NS convection: d/dx_e (interp_e(ubar) interp_e) for e = x, y, z. The two
+   terms of each direction carry different vector-scale objects, so they cannot merge. Its pattern covers every location
+   a vector scale may fill; zero weights from the mesh are left out. */
 static PetscErrorCode TestConvection3d_Private(void)
 {
   DM                          dm;
