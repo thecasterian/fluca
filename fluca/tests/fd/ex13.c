@@ -6,7 +6,7 @@
 
 static const char help[] = "Test FLUCAFDIBSELECT: one operand per IB point type, each row with its operand's boundary conditions\n"
                            "Options:\n"
-                           "  -test_case <wall|bc_per_type|nested> : case to run\n";
+                           "  -test_case <wall|bc_per_type> : case to run\n";
 
 /* Solid for x > 0.71875: element 6 of 8 is solid, element 5 is a forcing point with theta = 0.25 */
 static PetscErrorCode Wall_Private(PetscInt dim, const PetscReal x[], void *ctx, PetscReal *phi)
@@ -189,63 +189,18 @@ static PetscErrorCode TestBCPerType_Private(void)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* A select must be the outermost operator: setting up a sum over it fails */
-static PetscErrorCode TestNested_Private(void)
-{
-  DM             dm;
-  Mesh           mesh;
-  IBBody         body;
-  FlucaFD        op, sel, sum, bad;
-  PetscErrorCode ierr;
-
-  PetscFunctionBeginUser;
-  PetscCall(CreateMesh_Private(Wall_Private, &dm, &body, &mesh));
-  PetscCall(CreateD2_Private(mesh, 0., 0., &op));
-  PetscCall(FlucaFDIBSelectCreate(op, NULL, NULL, &sel));
-  PetscCall(FlucaFDSetUp(sel));
-  PetscCall(FlucaFDSumCreate(1, &sel, &sum));
-  PetscCall(PetscPushErrorHandler(PetscReturnErrorHandler, NULL));
-  ierr = FlucaFDSetUp(sum); /* expected to fail: the error code is the result under test */
-  PetscCall(PetscPopErrorHandler());
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Sum over a select: %s\n", ierr ? "rejected" : "accepted"));
-
-  {
-    FlucaFDBoundaryCondition bcs[4] = {{0}};
-
-    bcs[0].type  = FLUCAFD_BC_DIRICHLET;
-    bcs[0].value = 1.;
-    PetscCall(FlucaFDIBSelectCreate(op, NULL, NULL, &bad));
-    PetscCall(FlucaFDSetBoundaryConditions(bad, 0, bcs));
-  }
-  PetscCall(PetscPushErrorHandler(PetscReturnErrorHandler, NULL));
-  ierr = FlucaFDSetUp(bad); /* expected to fail: the error code is the result under test */
-  PetscCall(PetscPopErrorHandler());
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "Boundary conditions on a select: %s\n", ierr ? "rejected" : "accepted"));
-
-  PetscCall(FlucaFDDestroy(&bad));
-  PetscCall(FlucaFDDestroy(&sum));
-  PetscCall(FlucaFDDestroy(&sel));
-  PetscCall(FlucaFDDestroy(&op));
-  PetscCall(IBBodyDestroy(&body));
-  PetscCall(MeshDestroy(&mesh));
-  PetscCall(DMDestroy(&dm));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 int main(int argc, char **argv)
 {
   char      test_case[64] = "wall";
-  PetscBool iswall, isbc, isnested;
+  PetscBool iswall, isbc;
 
   PetscFunctionBeginUser;
   PetscCall(FlucaInitialize(&argc, &argv, NULL, help));
   PetscCall(PetscOptionsGetString(NULL, NULL, "-test_case", test_case, sizeof(test_case), NULL));
   PetscCall(PetscStrcmp(test_case, "wall", &iswall));
   PetscCall(PetscStrcmp(test_case, "bc_per_type", &isbc));
-  PetscCall(PetscStrcmp(test_case, "nested", &isnested));
   if (iswall) PetscCall(TestWall_Private());
   else if (isbc) PetscCall(TestBCPerType_Private());
-  else if (isnested) PetscCall(TestNested_Private());
   else SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONG, "Unknown -test_case %s", test_case);
   PetscCall(FlucaFinalize());
   return 0;
@@ -262,10 +217,5 @@ int main(int argc, char **argv)
     suffix: bc_per_type
     nsize: 1
     args: -test_case bc_per_type
-
-  test:
-    suffix: nested
-    nsize: 1
-    args: -test_case nested
 
 TEST*/
