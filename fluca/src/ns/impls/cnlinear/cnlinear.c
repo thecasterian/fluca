@@ -260,8 +260,9 @@ static PetscErrorCode NSSetUp_CNLinear(NS ns)
 }
 
 /* Assemble the blocks of the Jacobian that depend only on dt and rho into Jconst, unless it already
-   holds them for the current dt and rho. Jconst is a duplicate of ns->J, so it has the exact Jacobian
-   pattern; inserting outside it is an error. The time-step scales are set here too, so Jconst is correct even before the first step. */
+   holds them for the current dt and rho. Jconst is a duplicate of ns->J, so it has the Jacobian
+   pattern (every location formjacobian can insert); inserting outside it is an error. The time-step
+   scales are set here too, so Jconst is correct even before the first step. */
 static PetscErrorCode AssembleConstantBlocks_Private(NS ns)
 {
   NS_CNLinear *cn = (NS_CNLinear *)ns->data;

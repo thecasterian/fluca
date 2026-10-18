@@ -71,7 +71,7 @@ struct _p_NS {
 
   /* Solver --------------------------------------------------------------- */
   SNES         snes;      /* non-linear solver */
-  Mat          J;         /* AIJ with the exact pattern of ops->jacobianpattern, explicit zeros included */
+  Mat          J;         /* AIJ with the pattern of ops->jacobianpattern (zero-weight points included) */
   Vec          r;         /* residual vector */
   Vec          x;         /* solver solution vector */
   MatNullSpace nullspace; /* null space of J */

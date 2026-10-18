@@ -1,7 +1,7 @@
-u_x corner: 14 (DMCreateMatrix 49)
-u_x wall: 22 (DMCreateMatrix 77)
-u_x interior: 24 (DMCreateMatrix 91)
-U_x boundary face: 2 (DMCreateMatrix 77)
-U_x interior face: 7 (DMCreateMatrix 91)
-p interior: 9 (DMCreateMatrix 91)
-total: 18684 (DMCreateMatrix 109620)
+u_x corner: 14
+u_x wall: 22
+u_x interior: 24
+U_x boundary face: 2
+U_x interior face: 7
+p interior: 9
+total: 18684

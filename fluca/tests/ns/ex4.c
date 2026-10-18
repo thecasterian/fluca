@@ -3,10 +3,11 @@
 #include <flucasys.h>
 #include <petscdmstag.h>
 
-static const char help[] = "Test the nonzero pattern of the NS Jacobian against DMCreateMatrix()\n"
+static const char help[] = "Test the nonzero pattern of the NS Jacobian\n"
                            "Options:\n"
                            "  -dim <2|3> : dimension\n";
 
+/* Valid only at nsize 1: MatGetRow() reads the row on the owning rank */
 static PetscErrorCode RowLength_Private(DM dm, Mat A, DMStagStencil row, PetscInt *n)
 {
   ISLocalToGlobalMapping ltog;
@@ -30,10 +31,10 @@ int main(int argc, char **argv)
   Phys          phys;
   NS            ns;
   SNES          snes;
-  Mat           J, Jdm;
-  MatInfo       info, infodm;
+  Mat           J;
+  MatInfo       info;
   PhysBC        bc  = {PHYS_BC_VELOCITY, NULL, NULL, NULL, NULL};
-  PetscInt      dim = 2, d, r, n, ndm, c_vel, c_U, c_p, mid;
+  PetscInt      dim = 2, d, r, n, c_vel, c_U, c_p, mid;
   DMStagStencil rows[6];
   const char   *labels[6] = {"u_x corner", "u_x wall", "u_x interior", "U_x boundary face", "U_x interior face", "p interior"};
 
@@ -61,7 +62,6 @@ int main(int argc, char **argv)
   PetscCall(SNESGetJacobian(snes, &J, NULL, NULL, NULL));
 
   PetscCall(PhysGetSolutionDM(phys, &sdm));
-  PetscCall(DMCreateMatrix(sdm, &Jdm));
   PetscCall(PhysGetField(phys, PHYS_FIELD_VELOCITY, NULL, &c_vel, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_FACE_VELOCITY, NULL, &c_U, NULL));
   PetscCall(PhysGetField(phys, PHYS_FIELD_PRESSURE, NULL, &c_p, NULL));
@@ -79,14 +79,11 @@ int main(int argc, char **argv)
   rows[5].loc = DMSTAG_ELEMENT, rows[5].c = c_p;
   for (r = 0; r < 6; ++r) {
     PetscCall(RowLength_Private(sdm, J, rows[r], &n));
-    PetscCall(RowLength_Private(sdm, Jdm, rows[r], &ndm));
-    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s: %" PetscInt_FMT " (DMCreateMatrix %" PetscInt_FMT ")\n", labels[r], n, ndm));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s: %" PetscInt_FMT "\n", labels[r], n));
   }
   PetscCall(MatGetInfo(J, MAT_GLOBAL_SUM, &info));
-  PetscCall(MatGetInfo(Jdm, MAT_GLOBAL_SUM, &infodm));
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "total: %.0f (DMCreateMatrix %.0f)\n", info.nz_used, infodm.nz_used));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "total: %.0f\n", info.nz_used));
 
-  PetscCall(MatDestroy(&Jdm));
   PetscCall(NSDestroy(&ns));
   PetscCall(PhysDestroy(&phys));
   PetscCall(MeshDestroy(&mesh));
