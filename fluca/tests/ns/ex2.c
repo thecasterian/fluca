@@ -123,13 +123,12 @@ int main(int argc, char **argv)
      After the step, NSFormFunction() evaluates f at q = phalf, not at this step's actual right-hand side;
      the identity checked below holds for M and any right-hand side, so this mismatch does not matter. */
   PetscCall(NSStep(ns));
-  PetscCall(DMCreateMatrix(sol_dm, &M));
-  PetscCall(MatSetOption(M, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscCall(NSGetSNES(ns, &snes));
+  PetscCall(SNESGetJacobian(snes, &J, NULL, NULL, NULL));
+  PetscCall(MatDuplicate(J, MAT_DO_NOT_COPY_VALUES, &M));
   PetscCall(NSFormJacobian(ns, NULL, M));
   PetscCall(DMCreateGlobalVector(sol_dm, &f));
   PetscCall(NSFormFunction(ns, NULL, f));
-  PetscCall(NSGetSNES(ns, &snes));
-  PetscCall(SNESGetJacobian(snes, &J, NULL, NULL, NULL));
   PetscCall(MatGetNullSpace(J, &nullspace));
   PetscCall(MatSetNullSpace(M, nullspace));
 

@@ -42,14 +42,14 @@ static PetscErrorCode FlucaFDSetUp_IBSelect(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_IBSelect(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
+static PetscErrorCode FlucaFDGetStencilRaw_IBSelect(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_IBSelect *sel = (FlucaFD_IBSelect *)fd->data;
   MeshIBPointType   type;
 
   PetscFunctionBegin;
   PetscCall(MeshGetIBPointType(fd->mesh, fd->output_loc, i, j, k, &type)); /* FLUID everywhere when the Mesh has no bodies */
-  if (sel->operand[type]) PetscCall(FlucaFDGetStencilRaw(sel->operand[type], i, j, k, npoints, points));
+  if (sel->operand[type]) PetscCall(FlucaFDGetStencilRaw_Internal(sel->operand[type], i, j, k, pattern, npoints, points));
   else *npoints = 0;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

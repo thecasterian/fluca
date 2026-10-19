@@ -260,9 +260,9 @@ static PetscErrorCode NSSetUp_CNLinear(NS ns)
 }
 
 /* Assemble the blocks of the Jacobian that depend only on dt and rho into Jconst, unless it already
-   holds them for the current dt and rho. Jconst is a duplicate of ns->J, so it has the nonzero pattern
-   of every matrix made by DMCreateMatrix() on the solution DM; inserting outside it is an error. The
-   time-step scales are set here too, so Jconst is correct even before the first step. */
+   holds them for the current dt and rho. Jconst is a duplicate of ns->J, so it has the Jacobian
+   pattern (every location formjacobian can insert); inserting outside it is an error. The time-step
+   scales are set here too, so Jconst is correct even before the first step. */
 static PetscErrorCode AssembleConstantBlocks_Private(NS ns)
 {
   NS_CNLinear *cn = (NS_CNLinear *)ns->data;
@@ -299,12 +299,39 @@ static PetscErrorCode AssembleConstantBlocks_Private(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Every location NSFormJacobian_CNLinear() can insert, whatever dt, rho, mu and the state at t^n */
+static PetscErrorCode NSJacobianPattern_CNLinear(NS ns, Mat M)
+{
+  NS_CNLinear *cn = (NS_CNLinear *)ns->data;
+  PetscInt     dim, c_vel, c_U, d, e;
+  DM           dm;
+
+  PetscFunctionBegin;
+  PetscCall(PhysGetSolutionDM(ns->phys, &dm));
+  PetscCall(DMGetDimension(dm, &dim));
+  PetscCall(PhysGetField(ns->phys, PHYS_FIELD_VELOCITY, NULL, &c_vel, NULL));
+  PetscCall(PhysGetField(ns->phys, PHYS_FIELD_FACE_VELOCITY, NULL, &c_U, NULL));
+  for (d = 0; d < dim; d++) {
+    PetscCall(AddIdentity_Private(dm, M, DMSTAG_ELEMENT, c_vel + d));
+    PetscCall(FlucaFDGetOperatorPattern(cn->fd_grad[d], dm, dm, M));
+    PetscCall(FlucaFDGetOperatorPattern(cn->fd_visc[d], dm, dm, M));
+    PetscCall(FlucaFDGetOperatorPattern(cn->fd_conv[d], dm, dm, M));
+  }
+  for (e = 0; e < dim; e++) {
+    PetscCall(AddIdentity_Private(dm, M, face_loc[e], c_U));
+    PetscCall(FlucaFDGetOperatorPattern(ns->fd_negT[e], dm, dm, M));
+  }
+  PetscCall(AddScaledMatrix_Private(M, ns->negR, 1.));
+  PetscCall(FlucaFDGetOperatorPattern(ns->fd_D, dm, dm, M));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* The coupled system, with the operators refreshed by the step:
    momentum rows       [A  0  G  ]   A = I + (dt/2) conv + (dt/(2 rho)) (-mu lap), G = (dt/rho) grad
    Rhie-Chow rows      [-T I  -R ]   boundary-face rows reduce to U = u_b . n
    continuity rows     [0  D  0  ]
    Everything but the viscous and convective parts of A is copied from Jconst, which is rebuilt only
-   when dt or rho changes. J must have the nonzero pattern of DMCreateMatrix() on the solution DM. */
+   when dt or rho changes. J must have the pattern of NSJacobianPattern_CNLinear(). */
 static PetscErrorCode NSFormJacobian_CNLinear(NS ns, Vec x, Mat J)
 {
   NS_CNLinear *cn = (NS_CNLinear *)ns->data;
@@ -457,10 +484,11 @@ PetscErrorCode NSCreate_CNLinear(NS ns)
   PetscCall(PetscNew(&cn));
   ns->data = (void *)cn;
 
-  ns->ops->setup        = NSSetUp_CNLinear;
-  ns->ops->step         = NSStep_CNLinear;
-  ns->ops->formjacobian = NSFormJacobian_CNLinear;
-  ns->ops->formfunction = NSFormFunction_CNLinear;
-  ns->ops->destroy      = NSDestroy_CNLinear;
+  ns->ops->setup           = NSSetUp_CNLinear;
+  ns->ops->step            = NSStep_CNLinear;
+  ns->ops->formjacobian    = NSFormJacobian_CNLinear;
+  ns->ops->jacobianpattern = NSJacobianPattern_CNLinear;
+  ns->ops->formfunction    = NSFormFunction_CNLinear;
+  ns->ops->destroy         = NSDestroy_CNLinear;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

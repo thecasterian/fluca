@@ -131,6 +131,10 @@ FLUCA_EXTERN PetscErrorCode FlucaFDGetStencil(FlucaFD, PetscReal, PetscInt, Pets
 FLUCA_EXTERN PetscErrorCode FlucaFDApply(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDApplyDot(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperator(FlucaFD, DM, DM, Mat);
+/* Insert every location whose coefficient depends on scales (constant or vector) or TVD limiters, regardless of their current values; the values are unspecified (use with MATPREALLOCATOR).
+   Coefficients that are zero from fixed data (mesh weights, boundary conditions) are left out. Fixed zeros are judged with every constant scale taken
+   as 1, so constant scales nested inside a sum or composition are assumed uniform across the operands they merge. */
+FLUCA_EXTERN PetscErrorCode FlucaFDGetOperatorPattern(FlucaFD, DM, DM, Mat);
 
 /* FLUCAFDDERIVATIVE specific */
 FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeCreate(Mesh, FlucaFDDirection, PetscInt, PetscInt, DMStagStencilLocation, PetscInt, DMStagStencilLocation, PetscInt, FlucaFD *);

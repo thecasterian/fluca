@@ -30,38 +30,63 @@ static PetscErrorCode GetOutputLoopRange_Private(FlucaFD fd, DM output_dm, Petsc
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* With pattern true, every scale counts as 1 (vector scales are still tagged, constant scales are not applied),
+   so the zeros removed here come only from fixed data: mesh weights */
+PetscErrorCode FlucaFDGetStencilRaw_Internal(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
+{
+  PetscFunctionBegin;
+  PetscUseTypeMethod(fd, getstencilraw, i, j, k, pattern, npoints, points);
+  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
   PetscAssertPointer(npoints, 5);
   PetscAssertPointer(points, 6);
-  PetscUseTypeMethod(fd, getstencilraw, i, j, k, npoints, points);
-  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
+  PetscCall(FlucaFDGetStencilRaw_Internal(fd, i, j, k, PETSC_FALSE, npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscReal t, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
+/* With pattern true, scale and TVD refs are left unevaluated and coefficients that may change at run time keep their
+   points (both TVD upwind candidates stay grid points): only zeros that come from fixed data are removed */
+static PetscErrorCode GetStencil_Private(FlucaFD fd, PetscReal t, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFDStencilPoint merged[FLUCAFD_MAX_STENCIL_SIZE];
   PetscInt            merged_npoints, c;
   const FlucaFDBoundaryCondition(*bcs)[2 * FLUCAFD_MAX_DIM];
 
   PetscFunctionBegin;
-  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscAssertPointer(npoints, 6);
-  PetscAssertPointer(points, 7);
-  PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, npoints, points));
+  PetscCall(FlucaFDGetStencilRaw_Internal(fd, i, j, k, pattern, npoints, points));
   PetscCall(FlucaFDGetBoundaryConditions_Internal(fd, i, j, k, &bcs));
   PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, bcs, npoints, points));
-  PetscCall(FlucaFDResolveScaleRefs_Internal(*npoints, points));
-  PetscCall(FlucaFDResolveTVDRefs_Internal(t, *npoints, points));
+  if (pattern) {
+    for (c = 0; c < *npoints; c++) {
+      points[c].nscales = 0;
+      points[c].ntvds   = 0;
+    }
+  } else {
+    PetscCall(FlucaFDResolveScaleRefs_Internal(*npoints, points));
+    PetscCall(FlucaFDResolveTVDRefs_Internal(t, *npoints, points));
+  }
   /* Re-merge points that are now identical after ref resolution */
   merged_npoints = 0;
   for (c = 0; c < *npoints; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&points[c], &merged_npoints, merged));
   *npoints = merged_npoints;
   PetscCall(PetscArraycpy(points, merged, merged_npoints));
-  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
+  if (!pattern) PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDGetStencil(FlucaFD fd, PetscReal t, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscAssertPointer(npoints, 6);
+  PetscAssertPointer(points, 7);
+  PetscCall(GetStencil_Private(fd, t, i, j, k, PETSC_FALSE, npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -170,7 +195,7 @@ PetscErrorCode FlucaFDApplyDot(FlucaFD fd, PetscReal t, DM input_dm, DM output_d
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
+static PetscErrorCode GetOperator_Private(FlucaFD fd, DM input_dm, DM output_dm, PetscBool pattern, Mat op)
 {
   PetscInt            i_start, j_start, k_start, i_end, j_end, k_end;
   PetscInt            i, j, k, c;
@@ -183,10 +208,6 @@ PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
   PetscInt            ic[FLUCAFD_MAX_STENCIL_SIZE];
 
   PetscFunctionBegin;
-  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 2, DMSTAG);
-  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 3, DMSTAG);
-  PetscValidHeaderSpecific(op, MAT_CLASSID, 4);
   PetscCheck(fd->setupcalled, PetscObjectComm((PetscObject)fd), PETSC_ERR_ARG_WRONGSTATE, "FlucaFD not setup");
 
   PetscCall(GetOutputLoopRange_Private(fd, output_dm, &i_start, &j_start, &k_start, &i_end, &j_end, &k_end));
@@ -199,7 +220,7 @@ PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
         row.k   = k;
         row.c   = fd->output_c;
         row.loc = fd->output_loc;
-        PetscCall(FlucaFDGetStencil(fd, 0., i, j, k, &npoints, points));
+        PetscCall(GetStencil_Private(fd, 0., i, j, k, pattern, &npoints, points));
 
         /* Collect only grid stencil points (skip boundary and constant terms) */
         mat_ncols = 0;
@@ -221,5 +242,27 @@ PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
     }
   }
   /* The user must call MatAssemblyBegin/End */
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 2, DMSTAG);
+  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 3, DMSTAG);
+  PetscValidHeaderSpecific(op, MAT_CLASSID, 4);
+  PetscCall(GetOperator_Private(fd, input_dm, output_dm, PETSC_FALSE, op));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode FlucaFDGetOperatorPattern(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
+{
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
+  PetscValidHeaderSpecificType(input_dm, DM_CLASSID, 2, DMSTAG);
+  PetscValidHeaderSpecificType(output_dm, DM_CLASSID, 3, DMSTAG);
+  PetscValidHeaderSpecific(op, MAT_CLASSID, 4);
+  PetscCall(GetOperator_Private(fd, input_dm, output_dm, PETSC_TRUE, op));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

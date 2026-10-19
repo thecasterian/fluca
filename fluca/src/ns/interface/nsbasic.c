@@ -168,6 +168,14 @@ static PetscErrorCode CreateNullSpace_Private(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* fill for NSCreateMatrix_Internal(): the Jacobian pattern of the NS type */
+static PetscErrorCode FillJacobianPattern_Private(NS ns, Mat M, void *ctx)
+{
+  PetscFunctionBegin;
+  PetscUseTypeMethod(ns, jacobianpattern, M);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetUp(NS ns)
 {
   PetscInt  dim, sw;
@@ -205,11 +213,10 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(VecDuplicate(ns->sol, &ns->sol0));
   PetscCall(VecDuplicate(ns->sol, &ns->x));
   PetscCall(VecDuplicate(ns->sol, &ns->r));
-  PetscCall(DMCreateMatrix(dm, &ns->J));
-  PetscCall(MatSetOption(ns->J, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
-  PetscCall(MatSetNullSpace(ns->J, ns->nullspace));
-
+  /* The type's operators exist only after its setup, and the Jacobian pattern needs them */
   PetscTryTypeMethod(ns, setup);
+  PetscCall(NSCreateMatrix_Internal(ns, FillJacobianPattern_Private, NULL, &ns->J));
+  PetscCall(MatSetNullSpace(ns->J, ns->nullspace));
 
   PetscCall(NSGetSNES(ns, &snes));
   PetscCall(SNESSetPicard(snes, ns->r, FormFunction_Private, ns->J, ns->J, FormJacobian_Private, ns));
