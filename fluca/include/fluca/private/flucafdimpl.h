@@ -29,7 +29,6 @@ typedef struct _FlucaFDOps *FlucaFDOps;
 struct _FlucaFDOps {
   PetscErrorCode (*setfromoptions)(FlucaFD, PetscOptionItems);
   PetscErrorCode (*setup)(FlucaFD);
-  /* PetscBool: pattern mode, see FlucaFDGetStencilRaw_Internal() */
   PetscErrorCode (*getstencilraw)(FlucaFD, PetscInt, PetscInt, PetscInt, PetscBool, PetscInt *, FlucaFDStencilPoint[]);
   PetscErrorCode (*getboundaryconditions)(FlucaFD, PetscInt, PetscInt, PetscInt, const FlucaFDBoundaryCondition (**)[2 * FLUCAFD_MAX_DIM]); /* optional; default: fd->bcs */
   PetscErrorCode (*destroy)(FlucaFD);
