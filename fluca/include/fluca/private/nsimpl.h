@@ -32,10 +32,10 @@ typedef struct _NSOps *NSOps;
 
 struct _NSOps {
   PetscErrorCode (*setfromoptions)(NS, PetscOptionItems);
-  PetscErrorCode (*setup)(NS);
+  PetscErrorCode (*setup)(NS); /* runs before ns->J exists: ns->J is made from jacobianpattern, which needs the operators setup creates */
   PetscErrorCode (*step)(NS);
   PetscErrorCode (*formjacobian)(NS, Vec, Mat);
-  PetscErrorCode (*jacobianpattern)(NS, Mat); /* insert every location formjacobian can insert */
+  PetscErrorCode (*jacobianpattern)(NS, Mat); /* required: insert every location formjacobian can insert */
   PetscErrorCode (*formfunction)(NS, Vec, Vec);
   PetscErrorCode (*destroy)(NS);
   PetscErrorCode (*view)(NS, PetscViewer);

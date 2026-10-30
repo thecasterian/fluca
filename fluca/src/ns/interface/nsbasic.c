@@ -192,6 +192,7 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(PetscLogEventBegin(NS_SetUp, (PetscObject)ns, 0, 0, 0));
 
   if (!((PetscObject)ns)->type_name) PetscCall(NSSetType(ns, NSCNLINEAR));
+  PetscCheck(ns->ops->jacobianpattern, PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "NS type %s does not provide jacobianpattern, which NSSetUp() needs to create the Jacobian", ((PetscObject)ns)->type_name);
   PetscCheck(ns->phys, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "Phys not set. Call NSSetPhys() first");
   PetscCall(PhysSetUp(ns->phys));
   PetscCall(PhysGetSolutionDM(ns->phys, &dm));
