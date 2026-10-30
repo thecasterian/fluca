@@ -25,9 +25,6 @@ FLUCA_EXTERN PetscErrorCode MeshSetFromOptions(Mesh);
 FLUCA_EXTERN PetscErrorCode MeshSetUp(Mesh);
 FLUCA_EXTERN PetscErrorCode MeshView(Mesh, PetscViewer);
 FLUCA_EXTERN PetscErrorCode MeshViewFromOptions(Mesh, PetscObject, const char[]);
-/* Reads the grid and, when the file has them, the immersed bodies: one IBBODYPRESAMPLED body per body id, with zero
-   velocity (set it with MeshGetBody() and IBBodySetVelocity()). Bodies added after MeshLoad() follow the loaded ones.
-   A loaded mesh writes its bodies with MeshView() only after MeshSetUp(). */
 FLUCA_EXTERN PetscErrorCode MeshLoad(Mesh, PetscViewer);
 FLUCA_EXTERN PetscErrorCode MeshDestroy(Mesh *);
 
@@ -42,13 +39,10 @@ typedef enum {
 } MeshIBPointType;
 FLUCA_EXTERN const char *MeshIBPointTypes[];
 
-/* Ghost values (phi and body id) that have an owner, periodic images included, are taken from their owners, so owned
-   values must already be right: a body crossing a periodic boundary needs a level set that is periodic on the owned grid */
 FLUCA_EXTERN PetscErrorCode MeshAddBody(Mesh, IBBody);
 FLUCA_EXTERN PetscErrorCode MeshGetNumBodies(Mesh, PetscInt *);
 FLUCA_EXTERN PetscErrorCode MeshGetBody(Mesh, PetscInt, IBBody *);
 FLUCA_EXTERN PetscErrorCode MeshGetIBLevelSet(Mesh, Vec *);
-/* Exact for owned points. At ghost points whose star neighbour lies outside the local ghosted range, that neighbour is not examined, so a FORCING point may be reported as FLUID. */
 FLUCA_EXTERN PetscErrorCode MeshGetIBPointType(Mesh, DMStagStencilLocation, PetscInt, PetscInt, PetscInt, MeshIBPointType *);
 
 FLUCA_EXTERN PetscFunctionList MeshList;

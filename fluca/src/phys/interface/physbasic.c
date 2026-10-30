@@ -117,6 +117,7 @@ PetscErrorCode PhysSetUp(Phys phys)
   PetscCall(MeshGetDimension(phys->mesh, &phys->dim));
 
   PetscCheck(phys->nfields > 0, PetscObjectComm((PetscObject)phys), PETSC_ERR_ARG_WRONGSTATE, "No field declared. Call PhysDeclareField() first");
+  /* The optional subtype setup runs before the solution DM is built */
   PetscTryTypeMethod(phys, setup);
   PetscCall(PhysCreateSolutionDM_Internal(phys));
 

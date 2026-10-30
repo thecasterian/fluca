@@ -41,7 +41,8 @@ static PetscErrorCode EvaluateBCCoordinate_Private(FlucaFD fd, PetscInt boundary
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Domain boundary conditions that resolve the stencil of row (i, j, k) */
+/* Domain boundary conditions that resolve the stencil of row (i, j, k): from the optional getboundaryconditions type
+   method, else fd->bcs */
 PetscErrorCode FlucaFDGetBoundaryConditions_Internal(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, const FlucaFDBoundaryCondition (**bcs)[2 * FLUCAFD_MAX_DIM])
 {
   PetscFunctionBegin;

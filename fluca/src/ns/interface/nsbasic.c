@@ -168,7 +168,8 @@ static PetscErrorCode CreateNullSpace_Private(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* fill for NSCreateMatrix_Internal(): the Jacobian pattern of the NS type */
+/* fill for NSCreateMatrix_Internal(): the required jacobianpattern type method inserts every location the type's
+   formjacobian can insert */
 static PetscErrorCode FillJacobianPattern_Private(NS ns, Mat M, void *ctx)
 {
   PetscFunctionBegin;
@@ -214,7 +215,8 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(VecDuplicate(ns->sol, &ns->sol0));
   PetscCall(VecDuplicate(ns->sol, &ns->x));
   PetscCall(VecDuplicate(ns->sol, &ns->r));
-  /* The type's operators exist only after its setup, and the Jacobian pattern needs them */
+  /* The type's setup runs before ns->J exists: ns->J is made from the Jacobian pattern, which needs the operators the
+     setup creates */
   PetscTryTypeMethod(ns, setup);
   PetscCall(NSCreateMatrix_Internal(ns, FillJacobianPattern_Private, NULL, &ns->J));
   PetscCall(MatSetNullSpace(ns->J, ns->nullspace));
@@ -268,6 +270,7 @@ PetscErrorCode NSStep(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* The Mat must have the NS Jacobian pattern: duplicate the SNES Jacobian (NSGetSNES(), SNESGetJacobian()) */
 PetscErrorCode NSFormJacobian(NS ns, Vec x, Mat J)
 {
   MatInfo   info;

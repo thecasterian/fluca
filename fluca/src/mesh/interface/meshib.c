@@ -73,6 +73,8 @@ PetscErrorCode MeshIBClassify_Internal(Mesh mesh, const MeshIBLocation *l, Petsc
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Ghost values (phi and body id) that have an owner, periodic images included, are taken from their owners, so owned
+   values must already be right: a body crossing a periodic boundary needs a level set that is periodic on the owned grid */
 PetscErrorCode MeshAddBody(Mesh mesh, IBBody body)
 {
   IBBody  *bodies;
@@ -124,6 +126,7 @@ PetscErrorCode MeshGetIBLevelSet(Mesh mesh, Vec *phi)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Exact for owned points. At ghost points whose star neighbour lies outside the local ghosted range, that neighbour is not examined, so a FORCING point may be reported as FLUID. */
 PetscErrorCode MeshGetIBPointType(Mesh mesh, DMStagStencilLocation loc, PetscInt i, PetscInt j, PetscInt k, MeshIBPointType *type)
 {
   const MeshIBLocation *l;

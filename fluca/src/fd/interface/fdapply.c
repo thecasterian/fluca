@@ -249,6 +249,10 @@ PetscErrorCode FlucaFDGetOperator(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Insert every location whose coefficient depends on scales (constant or vector) or TVD limiters, regardless of their current values; the values are unspecified (use with MATPREALLOCATOR).
+   Coefficients that are zero from fixed data (mesh weights, boundary conditions) are left out. Each scale is taken as an independent unknown, so weights
+   under different scales never cancel, and a weight counts as zero only relative to the weights under the same scales, so the pattern covers
+   FlucaFDGetOperator() for any scale values (unless weights under other scales cancel down to round-off of a dropped one). */
 PetscErrorCode FlucaFDGetOperatorPattern(FlucaFD fd, DM input_dm, DM output_dm, Mat op)
 {
   PetscFunctionBegin;

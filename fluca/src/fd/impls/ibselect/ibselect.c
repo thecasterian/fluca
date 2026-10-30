@@ -113,6 +113,9 @@ PetscErrorCode FlucaFDCreate_IBSelect(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Picks the operand for each row by its IB point type; a NULL operand yields an empty row.
+   Each row uses its operand's domain boundary conditions: set them on the operands, not on the select (setting them on the select is an error at setup).
+   Point types are exact only at owned points, so query its stencils at owned rows only. Must be the outermost operator. */
 PetscErrorCode FlucaFDIBSelectCreate(FlucaFD fluid, FlucaFD forcing, FlucaFD solid, FlucaFD *fd)
 {
   FlucaFD  ops[FLUCAFD_IB_NPOINTTYPES];

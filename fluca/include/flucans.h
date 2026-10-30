@@ -51,7 +51,6 @@ FLUCA_EXTERN PetscErrorCode NSSetErrorIfStepFailed(NS, PetscBool);
 FLUCA_EXTERN PetscErrorCode NSGetErrorIfStepFailed(NS, PetscBool *);
 FLUCA_EXTERN PetscErrorCode NSCheckDiverged(NS);
 
-/* The Mat must have the NS Jacobian pattern: duplicate the SNES Jacobian (NSGetSNES(), SNESGetJacobian()) */
 FLUCA_EXTERN PetscErrorCode NSFormJacobian(NS, Vec, Mat);
 FLUCA_EXTERN PetscErrorCode NSFormFunction(NS, Vec, Vec);
 

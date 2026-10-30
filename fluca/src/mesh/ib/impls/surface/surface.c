@@ -325,6 +325,7 @@ static PetscErrorCode SetSurface_Private(IBBody body, PetscInt dim, PetscInt nv,
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Every rank holds the full surface until the Mesh releases it after sampling in MeshSetUp() */
 PetscErrorCode IBBodySurfaceSetPolyline(IBBody body, PetscInt n, const PetscReal xy[])
 {
   PetscInt *seg, s;

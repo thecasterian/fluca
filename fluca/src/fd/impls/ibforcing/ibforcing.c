@@ -230,6 +230,7 @@ PetscErrorCode FlucaFDCreate_IBForcing(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Rows at forcing points exist only at owned points: use it as the outermost operator, a summand, or a FLUCAFDIBSELECT operand, not as an inner operand */
 PetscErrorCode FlucaFDIBForcingCreate(Mesh mesh, DMStagStencilLocation loc, PetscInt c, PetscInt vel_comp, FlucaFD *fd)
 {
   MPI_Comm comm;

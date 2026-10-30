@@ -71,6 +71,7 @@ PetscErrorCode MeshSetUp(Mesh mesh)
 
   if (!((PetscObject)mesh)->type_name) PetscCall(MeshSetType(mesh, MESHCARTESIAN));
   PetscCheck(mesh->dm, PetscObjectComm((PetscObject)mesh), PETSC_ERR_ARG_WRONGSTATE, "DM not set. Call MeshSetDM() or MeshLoad() first");
+  /* The type validates mesh->dm */
   PetscTryTypeMethod(mesh, setup);
 
   PetscCall(PetscLogEventEnd(MESH_SetUp, (PetscObject)mesh, 0, 0, 0));
@@ -103,6 +104,9 @@ PetscErrorCode MeshViewFromOptions(Mesh mesh, PetscObject obj, const char name[]
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Reads the grid and, when the file has them, the immersed bodies: one IBBODYPRESAMPLED body per body id, with zero
+   velocity (set it with MeshGetBody() and IBBodySetVelocity()). Bodies added after MeshLoad() follow the loaded ones.
+   A loaded mesh writes its bodies with MeshView() only after MeshSetUp(). */
 PetscErrorCode MeshLoad(Mesh mesh, PetscViewer viewer)
 {
   PetscBool iscgns;
@@ -117,6 +121,7 @@ PetscErrorCode MeshLoad(Mesh mesh, PetscViewer viewer)
   PetscCall(PetscObjectTypeCompare((PetscObject)viewer, PETSCVIEWERFLUCACGNS, &iscgns));
   PetscCheck(iscgns, PetscObjectComm((PetscObject)viewer), PETSC_ERR_ARG_WRONG, "Invalid viewer; open viewer with PetscViewerFlucaCGNSOpen()");
   if (!((PetscObject)mesh)->type_name) PetscCall(MeshSetType(mesh, MESHCARTESIAN));
+  /* The type replaces mesh->dm */
   PetscUseTypeMethod(mesh, load, viewer);
   PetscFunctionReturn(PETSC_SUCCESS);
 }

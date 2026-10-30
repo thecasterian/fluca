@@ -30,7 +30,7 @@ struct _FlucaFDOps {
   PetscErrorCode (*setfromoptions)(FlucaFD, PetscOptionItems);
   PetscErrorCode (*setup)(FlucaFD);
   PetscErrorCode (*getstencilraw)(FlucaFD, PetscInt, PetscInt, PetscInt, PetscBool, PetscInt *, FlucaFDStencilPoint[]);
-  PetscErrorCode (*getboundaryconditions)(FlucaFD, PetscInt, PetscInt, PetscInt, const FlucaFDBoundaryCondition (**)[2 * FLUCAFD_MAX_DIM]); /* optional; default: fd->bcs */
+  PetscErrorCode (*getboundaryconditions)(FlucaFD, PetscInt, PetscInt, PetscInt, const FlucaFDBoundaryCondition (**)[2 * FLUCAFD_MAX_DIM]);
   PetscErrorCode (*destroy)(FlucaFD);
   PetscErrorCode (*view)(FlucaFD, PetscViewer);
 };

@@ -132,10 +132,6 @@ FLUCA_EXTERN PetscErrorCode FlucaFDGetStencil(FlucaFD, PetscReal, PetscInt, Pets
 FLUCA_EXTERN PetscErrorCode FlucaFDApply(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDApplyDot(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperator(FlucaFD, DM, DM, Mat);
-/* Insert every location whose coefficient depends on scales (constant or vector) or TVD limiters, regardless of their current values; the values are unspecified (use with MATPREALLOCATOR).
-   Coefficients that are zero from fixed data (mesh weights, boundary conditions) are left out. Each scale is taken as an independent unknown, so weights
-   under different scales never cancel, and a weight counts as zero only relative to the weights under the same scales, so the pattern covers
-   FlucaFDGetOperator() for any scale values (unless weights under other scales cancel down to round-off of a dropped one). */
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperatorPattern(FlucaFD, DM, DM, Mat);
 
 /* FLUCAFDDERIVATIVE specific */
@@ -169,16 +165,12 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetLimiter(FlucaFD, const char 
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetMassFlux(FlucaFD, Vec, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD, Vec);
 
-/* FLUCAFDIBFORCING specific
-   Rows at forcing points exist only at owned points: use it as the outermost operator, a summand, or a FLUCAFDIBSELECT operand, not as an inner operand */
+/* FLUCAFDIBFORCING specific */
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingCreate(Mesh, DMStagStencilLocation, PetscInt, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetInterpolationOrder(FlucaFD, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetVelocityComponent(FlucaFD, PetscInt);
 
-/* FLUCAFDIBSELECT specific
-   Picks the operand for each row by its IB point type; a NULL operand yields an empty row.
-   Each row uses its operand's domain boundary conditions: set them on the operands, not on the select (setting them on the select is an error at setup).
-   Point types are exact only at owned points, so query its stencils at owned rows only. Must be the outermost operator. */
+/* FLUCAFDIBSELECT specific */
 FLUCA_EXTERN PetscErrorCode FlucaFDIBSelectCreate(FlucaFD, FlucaFD, FlucaFD, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBSelectSetOperand(FlucaFD, MeshIBPointType, FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBSelectGetOperand(FlucaFD, MeshIBPointType, FlucaFD *);
