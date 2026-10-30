@@ -1,6 +1,6 @@
 ---
 name: petsc-conventions
-description: PETSc coding conventions for Fluca. Use when writing or reviewing C code in this project — covers naming, error handling, memory management, function structure, and the quick checklist.
+description: PETSc coding conventions for Fluca. Use when writing or reviewing C code in this project — covers naming, error handling, memory management, function structure, where comments go, and the quick checklist.
 ---
 
 # PETSc Coding Conventions for Fluca
@@ -12,6 +12,7 @@ This project follows PETSc style. All C code must conform to these rules.
 - Pure **C** (not C++). Intersection of C99, C++11, MSVC v1900+.
 - No variable-length arrays. No `assert.h` (use `PetscAssert()`). No `register`. No `rand()`.
 - **Never** use `(void)param;` casts to suppress unused-parameter warnings. Leave unused parameters as-is; the compiler warnings are suppressed project-wide via build flags.
+- **Never** cast to `PetscBool`. It is a typedef of C `bool`, so assign boolean expressions directly: `remove = v == 0.;`, not `remove = (PetscBool)(v == 0.);`.
 
 ## Naming
 
@@ -24,8 +25,20 @@ This project follows PETSc style. All C code must conform to these rules.
 | Ops struct members | Lowercase, no prefix | `setup`, `destroy`, `setfromoptions` |
 | Options database keys | Lowercase with underscores | `-flucafd_deriv_order` |
 | Subtype functions | `Base_Subtype` | `FlucaFDSetUp_Derivative()` |
-| Private/internal | Append `_Internal`, `_Private`, or class/type name | `FlucaFDTermLinkDestroy_Internal()` |
-| Function pointer typedefs | End in `Fn` | `SNESFunctionFn` |
+| File-local (`static`) | Append `_Private` | `CreateNegR_Private()` |
+| Module-internal across files (`FLUCA_INTERN`) | Append `_Internal` | `FlucaFDTermLinkDestroy_Internal()` |
+| Function typedefs | End in `Fn`; a plain function type, never a pointer type | `typedef PetscErrorCode PhysBCFn(...)` |
+
+Choose the private suffix by visibility: a function used only in its own file is `static` and ends in `_Private`. A function called from other files of the module is declared `FLUCA_INTERN` in a private header and ends in `_Internal`. Recheck the suffix when a helper moves between files.
+
+`Fn` typedefs name the function type itself; the pointer is written at the point of use:
+
+```c
+typedef PetscErrorCode SomeFn(PetscInt, PetscReal *);    /* correct */
+typedef PetscErrorCode (*SomeFn)(PetscInt, PetscReal *); /* wrong */
+
+SomeFn *fn; /* struct field or parameter: explicit pointer */
+```
 
 Function prototypes in headers **exclude parameter names** — types only.
 
@@ -93,6 +106,8 @@ PetscValidLogicalCollectiveInt(fd, n, 3);           /* collective int arg */
 
 The number is the 1-based argument position.
 
+`PetscValidLogicalCollective*` runs an MPI reduction in debug builds, so use it only in collective functions. Never use it in functions called per grid point or per stencil (e.g. `FlucaFDGetStencilRaw()`): ranks call those a different number of times, and the reduction hangs or aborts.
+
 ## Variable Declarations
 
 - All locals at **block top** (C90 style).
@@ -100,6 +115,7 @@ The number is the 1-based argument position.
 - Pointers of different arity are different types (separate lines).
 - Arrays of different size are different types.
 - Don't declare pointers and non-pointers in a single line. Same for arrays and non-arrays.
+- Cast a subtype's `data` at the declaration: `Phys_INS *ins = (Phys_INS *)phys->data;`, not a bare declaration followed by `ins = (Phys_INS *)phys->data;`. In a public function that first validates the type (`PetscValidHeaderSpecificType`), make the cast the statement right after the validation block.
 
 ## Memory Management
 
@@ -149,6 +165,13 @@ Key points for writing new code:
 - **Never** `/*No space*/`.
 - Proper grammar and spelling.
 
+### Where comments go
+
+- **Function behavior goes at the definition, in the source file.** Headers hold bare prototypes, plus section labels such as `/* FLUCAFDSCALE specific */` or `/* Defined in interface/nsops.c */`. A comment that says what a function does, what it requires, or what it guarantees goes above the function's definition.
+- **Type methods are explained where they are dispatched.** Members of an ops struct (`struct _FooOps`) carry no comments. Explain what a type method must do, or when it runs, at the call that dispatches it (`PetscUseTypeMethod`/`PetscTryTypeMethod` in `FooSetUp()` and the like).
+- **Parameters are explained by their names, not by comments.** Prototypes have no parameter names, so never annotate one (`/* PetscBool: pattern mode */`). Give the parameter the same descriptive name in every definition (`PetscBool pattern`) and describe its effect at the definition or call site.
+- Comments on callback typedefs (`...Fn`) stay in the header: users implement these, and the typedef is the contract.
+
 ## Printf Format Specifiers
 
 ```c
@@ -190,7 +213,10 @@ PetscCall(FlucaFDDestroy(&fd));   /* Destroy takes pointer-to-pointer */
 - [ ] Format specifiers: `PetscInt_FMT`, cast `PetscReal` to `double`
 - [ ] No bare `return`, no `malloc`/`free`, no `assert()`, no VLAs
 - [ ] Locals at block (scope) top, blank line before `PetscFunctionBegin`, no blank line before `PetscFunctionReturn`
-- [ ] `_Internal`, `_Private`, or class/type name suffix on all non-public functions
+- [ ] `_Private` on `static` functions, `_Internal` on `FLUCA_INTERN` ones, class/type name suffix on subtype implementations
+- [ ] `Fn` typedefs are plain function types; no `PetscBool` casts; subtype `data` cast at the declaration
+- [ ] No behavior comments in headers or on ops struct members: explain functions at definitions, type methods at dispatch sites, parameters by name
+- [ ] `PetscValidLogicalCollective*` only in collective functions
 - [ ] Functions that may raise an error (via `PetscCall`, `SETERRQ`, `PetscCheck`) must return `PetscErrorCode`
 - [ ] No braces for single-statement `if`/`else`/`for`
 - [ ] No trailing zeros after decimal point

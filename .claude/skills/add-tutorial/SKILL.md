@@ -107,6 +107,7 @@ ctest --test-dir build -R "tutorials_<module>" # Run tutorial test cases
 ## Checklist
 
 - [ ] Help string documents all custom options
+- [ ] Grid size comes from `DMSetFromOptions()` (`-stag_grid_x`/`-stag_grid_y`/`-stag_grid_z`), not a custom option like `-N`
 - [ ] Key steps have explanatory comments
 - [ ] `/*TEST*/` block with at least one test case
 - [ ] Source added to `TUTORIAL_SRCS` in CMakeLists.txt
