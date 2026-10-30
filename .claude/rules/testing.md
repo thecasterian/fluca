@@ -7,7 +7,8 @@ Tests validate **internal algorithms directly** — not end-to-end numerical res
 - **No SNES or TS in tests.** Solving a nonlinear or time-dependent system requires assembling operators, iterating a solver, and checking convergence — too many moving parts to isolate a bug in one component.
 - **Construct inputs analytically.** Set up a Vec or DM with known values, call the function under test, and compare the output against analytically known results.
 - **One component per test.** Each test exercises a single operator, transform, or data structure. If you need a solver to get a meaningful input, the test is at the wrong abstraction level — test the solver's components separately.
-- **Minimal setup.** If the test body needs more than ~30 lines before the assertion, reconsider the scope.
+- **Minimal setup.** Set up only what the component under test needs. If a test needs extensive setup before its assertion, reconsider the scope.
+- **Set the grid size with PETSc options.** Pass a default size to `DMStagCreate1d/2d/3d`, call `DMSetFromOptions(dm)`, and override it with `-stag_grid_x`/`-stag_grid_y`/`-stag_grid_z` in `args:`. Never add a custom option such as `-N` for the grid size.
 - **Print deterministic values only.** Golden output is byte-exact, so never print solver residuals, iteration counts, or errors between a computed result and an exact solution — these vary across platforms, PETSc versions, and floating-point rounding. Print things that are determined entirely by the algorithm logic: structured field values at fixed indices, norms of analytically constructed vectors, or integer metadata.
 
 This project uses a **golden-output testing system** — not googletest. Tests are C executables that print results to stdout, compared against expected output files.

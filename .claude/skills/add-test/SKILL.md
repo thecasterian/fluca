@@ -97,6 +97,7 @@ Examples from the codebase: `first_deriv`, `second_deriv_left_bc_dirichlet`, `al
 - [ ] Inputs are constructed analytically; expected outputs are known without running a solver
 - [ ] No error-code checks: nothing calls a function expecting it to fail
 - [ ] `/*TEST*/` block has `suffix` and `args`
+- [ ] Grid size comes from `DMSetFromOptions()` (`-stag_grid_x`/`-stag_grid_y`/`-stag_grid_z`), not a custom option like `-N`
 - [ ] Source added to `TEST_SRCS` in CMakeLists.txt
 - [ ] Golden output captured from actual run (never hand-written)
 - [ ] All new tests pass via `ctest`

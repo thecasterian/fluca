@@ -61,6 +61,8 @@ FLUCA_EXTERN PetscClassId FOO_CLASSID;
 
 ## Template: Private Header (`fooimpl.h`)
 
+Keep the ops struct and the prototypes free of behavior comments. Explain each type method where `foobasic.c` dispatches it, and each function at its definition (see `petsc-conventions`, "Where comments go").
+
 ```c
 #pragma once
 
