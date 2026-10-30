@@ -133,8 +133,9 @@ FLUCA_EXTERN PetscErrorCode FlucaFDApply(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDApplyDot(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperator(FlucaFD, DM, DM, Mat);
 /* Insert every location whose coefficient depends on scales (constant or vector) or TVD limiters, regardless of their current values; the values are unspecified (use with MATPREALLOCATOR).
-   Coefficients that are exactly zero from fixed data (mesh weights, boundary conditions) are left out. Each scale is taken as an independent unknown, so
-   weights under different scales never cancel, and no tolerance is applied, so the pattern covers FlucaFDGetOperator() for any scale values. */
+   Coefficients that are zero from fixed data (mesh weights, boundary conditions) are left out. Each scale is taken as an independent unknown, so weights
+   under different scales never cancel, and a weight counts as zero only relative to the weights under the same scales, so the pattern covers
+   FlucaFDGetOperator() for any scale values (unless weights under other scales cancel down to round-off of a dropped one). */
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperatorPattern(FlucaFD, DM, DM, Mat);
 
 /* FLUCAFDDERIVATIVE specific */

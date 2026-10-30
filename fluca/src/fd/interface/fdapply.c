@@ -31,7 +31,7 @@ static PetscErrorCode GetOutputLoopRange_Private(FlucaFD fd, DM output_dm, Petsc
 }
 
 /* With pattern true, every scale, constant or vector, is a deferred ref, so points merge only under the same scales
-   and the exact zeros removed here come only from fixed data: mesh weights */
+   and the zeros removed here come only from fixed data: mesh weights */
 PetscErrorCode FlucaFDGetStencilRaw_Internal(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscFunctionBegin;

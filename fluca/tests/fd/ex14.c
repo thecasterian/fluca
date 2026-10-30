@@ -124,7 +124,7 @@ static PetscErrorCode TestCancel_Private(void)
 }
 
 /* (1000 d2/dx2) d2/dx2 on a 1D grid with h = 1000: each factor has weights of order 1e-6, so the raw products
-   (order 1e-12) are below the zero tolerance while the scaled ones (order 1e-9) are not. The pattern must keep them. */
+   (order 1e-12) are below the absolute zero tolerance while the scaled ones (order 1e-9) are not. The pattern must keep them. */
 static PetscErrorCode TestSmall_Private(void)
 {
   DM      dm;

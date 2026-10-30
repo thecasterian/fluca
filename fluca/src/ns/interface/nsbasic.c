@@ -279,8 +279,8 @@ PetscErrorCode NSFormJacobian(NS ns, Vec x, Mat J)
   PetscValidHeaderSpecific(J, MAT_CLASSID, 3);
   PetscCheck(ns->J, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "NS not set up. Call NSSetUp() first");
   if (J != ns->J) {
-    /* The type inserts only inside the Jacobian pattern and may copy whole blocks into J, so a stored-entry count
-       that differs from ns->J means another pattern */
+    /* The type may copy whole blocks into J with SAME_NONZERO_PATTERN, so J needs the pattern of ns->J. Equal
+       stored-entry counts do not prove it, but a different count rules it out with a clear message */
     PetscCall(MatGetInfo(ns->J, MAT_GLOBAL_SUM, &info));
     nz = info.nz_used;
     PetscCall(MatGetInfo(J, MAT_GLOBAL_SUM, &info));
