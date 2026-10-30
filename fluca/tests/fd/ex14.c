@@ -4,9 +4,11 @@
 
 static const char help[] = "Test FlucaFDGetOperatorPattern: the pattern survives zero scales\n"
                            "Options:\n"
-                           "  -test_case <constant|vector|convection3d|tvd> : scale a 2D operator by the constant 0 or by a zero vector,\n"
-                           "                                                  compare the pattern of a 3D convection-like sum with its values,\n"
-                           "                                                  or check that a 1D TVD pattern covers both flux directions\n";
+                           "  -test_case <constant|vector|convection3d|tvd|cancel|small> : scale a 2D operator by the constant 0 or by a zero vector,\n"
+                           "                                                               compare the pattern of a 3D convection-like sum with its values,\n"
+                           "                                                               check that a 1D TVD pattern covers both flux directions,\n"
+                           "                                                               or check that a 1D pattern keeps weights that cancel or are small\n"
+                           "                                                               before the constant scales are applied\n";
 
 /* Preallocate an AIJ matrix from the pattern (pattern true) or the values (pattern false) of fd */
 static PetscErrorCode CreateFromPreallocator_Private(DM dm, FlucaFD fd, PetscBool pattern, Mat *A)
@@ -36,10 +38,10 @@ static PetscErrorCode CreateFromPreallocator_Private(DM dm, FlucaFD fd, PetscBoo
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* Number of stored entries in the row of element (i, j, k) (k is ignored in 2D). Valid only at nsize 1 */
-static PetscErrorCode RowLength_Private(DM dm, Mat A, PetscInt i, PetscInt j, PetscInt k, PetscInt *n)
+/* Number of stored entries in the row of component 0 at loc of (i, j, k) (j and k are ignored below their dimension). Valid only at nsize 1 */
+static PetscErrorCode RowLength_Private(DM dm, Mat A, DMStagStencilLocation loc, PetscInt i, PetscInt j, PetscInt k, PetscInt *n)
 {
-  DMStagStencil          row = {DMSTAG_ELEMENT, i, j, k, 0};
+  DMStagStencil          row = {loc, i, j, k, 0};
   PetscInt               dim;
   ISLocalToGlobalMapping ltog;
   PetscInt               ir, gr, ncols;
@@ -52,6 +54,106 @@ static PetscErrorCode RowLength_Private(DM dm, Mat A, PetscInt i, PetscInt j, Pe
   PetscCall(MatGetRow(A, gr, &ncols, NULL, NULL));
   *n = ncols;
   PetscCall(MatRestoreRow(A, gr, &ncols, NULL, NULL));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Print the length of one row of the operator and of the pattern of a 1D fd, then fill the values into the
+   pattern: no entry may be added */
+static PetscErrorCode ComparePatternWithValues_Private(DM dm, FlucaFD fd, DMStagStencilLocation loc, PetscInt i, const char label[])
+{
+  Mat       Avalue, Apattern;
+  MatInfo   info;
+  PetscReal nz_before, nz_after;
+  PetscInt  nv, np;
+
+  PetscFunctionBeginUser;
+  PetscCall(CreateFromPreallocator_Private(dm, fd, PETSC_FALSE, &Avalue));
+  PetscCall(CreateFromPreallocator_Private(dm, fd, PETSC_TRUE, &Apattern));
+  PetscCall(RowLength_Private(dm, Avalue, loc, i, 0, 0, &nv));
+  PetscCall(RowLength_Private(dm, Apattern, loc, i, 0, 0, &np));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s %" PetscInt_FMT ": operator %" PetscInt_FMT ", pattern %" PetscInt_FMT "\n", label, i, nv, np));
+  PetscCall(MatSetOption(Apattern, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
+  PetscCall(MatGetInfo(Apattern, MAT_GLOBAL_SUM, &info));
+  nz_before = info.nz_used;
+  PetscCall(FlucaFDGetOperator(fd, dm, dm, Apattern));
+  PetscCall(MatAssemblyBegin(Apattern, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(Apattern, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatGetInfo(Apattern, MAT_GLOBAL_SUM, &info));
+  nz_after = info.nz_used;
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD, "pattern entries: before %.0f, after inserting the operator %.0f\n", (double)nz_before, (double)nz_after));
+  PetscCall(MatDestroy(&Apattern));
+  PetscCall(MatDestroy(&Avalue));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* 1 T + 2 G on faces of a uniform 1D grid with h = 2: T = (1/2, 1/2) and G = (-1/2, 1/2), so their raw left weights
+   cancel, but the scaled ones do not. The pattern must keep the point: the two scales are independent. */
+static PetscErrorCode TestCancel_Private(void)
+{
+  DM      dm;
+  Mesh    mesh;
+  FlucaFD interp, grad, terms[2], sum;
+
+  PetscFunctionBeginUser;
+  PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, 4, 1, 1, DMSTAG_STENCIL_STAR, 2, NULL, &dm));
+  PetscCall(DMSetUp(dm));
+  PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 8., 0., 0., 0., 0.));
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetUp(mesh));
+  PetscCall(FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 0, 2, DMSTAG_ELEMENT, 0, DMSTAG_LEFT, 0, &interp));
+  PetscCall(FlucaFDSetUp(interp));
+  PetscCall(FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 1, 2, DMSTAG_ELEMENT, 0, DMSTAG_LEFT, 0, &grad));
+  PetscCall(FlucaFDSetUp(grad));
+  PetscCall(FlucaFDScaleCreateConstant(interp, 1., &terms[0]));
+  PetscCall(FlucaFDSetUp(terms[0]));
+  PetscCall(FlucaFDScaleCreateConstant(grad, 2., &terms[1]));
+  PetscCall(FlucaFDSetUp(terms[1]));
+  PetscCall(FlucaFDSumCreate(2, terms, &sum));
+  PetscCall(FlucaFDSetUp(sum));
+
+  PetscCall(ComparePatternWithValues_Private(dm, sum, DMSTAG_LEFT, 2, "interior face"));
+
+  PetscCall(FlucaFDDestroy(&sum));
+  PetscCall(FlucaFDDestroy(&terms[1]));
+  PetscCall(FlucaFDDestroy(&terms[0]));
+  PetscCall(FlucaFDDestroy(&grad));
+  PetscCall(FlucaFDDestroy(&interp));
+  PetscCall(MeshDestroy(&mesh));
+  PetscCall(DMDestroy(&dm));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* (1000 d2/dx2) d2/dx2 on a 1D grid with h = 1000: each factor has weights of order 1e-6, so the raw products
+   (order 1e-12) are below the zero tolerance while the scaled ones (order 1e-9) are not. The pattern must keep them. */
+static PetscErrorCode TestSmall_Private(void)
+{
+  DM      dm;
+  Mesh    mesh;
+  FlucaFD d2_inner, d2_outer, outer, comp;
+
+  PetscFunctionBeginUser;
+  PetscCall(DMStagCreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, 8, 0, 1, DMSTAG_STENCIL_STAR, 2, NULL, &dm));
+  PetscCall(DMSetUp(dm));
+  PetscCall(DMStagSetUniformCoordinatesProduct(dm, 0., 8000., 0., 0., 0., 0.));
+  PetscCall(MeshCartesianCreate(dm, &mesh));
+  PetscCall(MeshSetUp(mesh));
+  PetscCall(FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 2, 2, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &d2_inner));
+  PetscCall(FlucaFDSetUp(d2_inner));
+  PetscCall(FlucaFDDerivativeCreate(mesh, FLUCAFD_X, 2, 2, DMSTAG_ELEMENT, 0, DMSTAG_ELEMENT, 0, &d2_outer));
+  PetscCall(FlucaFDSetUp(d2_outer));
+  PetscCall(FlucaFDScaleCreateConstant(d2_outer, 1000., &outer));
+  PetscCall(FlucaFDSetUp(outer));
+  PetscCall(FlucaFDCompositionCreate(d2_inner, outer, &comp));
+  PetscCall(FlucaFDSetUp(comp));
+
+  PetscCall(ComparePatternWithValues_Private(dm, comp, DMSTAG_ELEMENT, 4, "interior element"));
+
+  PetscCall(FlucaFDDestroy(&comp));
+  PetscCall(FlucaFDDestroy(&outer));
+  PetscCall(FlucaFDDestroy(&d2_outer));
+  PetscCall(FlucaFDDestroy(&d2_inner));
+  PetscCall(MeshDestroy(&mesh));
+  PetscCall(DMDestroy(&dm));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -111,11 +213,11 @@ static PetscErrorCode TestConvection3d_Private(void)
   nz_value = info.nz_used;
   PetscCall(MatGetInfo(Apattern, MAT_GLOBAL_SUM, &info));
   nz_pattern = info.nz_used;
-  PetscCall(RowLength_Private(dm, Avalue, 0, 0, 0, &nv));
-  PetscCall(RowLength_Private(dm, Apattern, 0, 0, 0, &np));
+  PetscCall(RowLength_Private(dm, Avalue, DMSTAG_ELEMENT, 0, 0, 0, &nv));
+  PetscCall(RowLength_Private(dm, Apattern, DMSTAG_ELEMENT, 0, 0, 0, &np));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "corner (0, 0, 0): operator %" PetscInt_FMT ", pattern %" PetscInt_FMT "\n", nv, np));
-  PetscCall(RowLength_Private(dm, Avalue, 1, 1, 1, &nv));
-  PetscCall(RowLength_Private(dm, Apattern, 1, 1, 1, &np));
+  PetscCall(RowLength_Private(dm, Avalue, DMSTAG_ELEMENT, 1, 1, 1, &nv));
+  PetscCall(RowLength_Private(dm, Apattern, DMSTAG_ELEMENT, 1, 1, 1, &np));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD, "interior (1, 1, 1): operator %" PetscInt_FMT ", pattern %" PetscInt_FMT "\n", nv, np));
 
   /* Every value must land inside the pattern: filling the values into the pattern matrix adds no entry */
@@ -254,7 +356,7 @@ int main(int argc, char **argv)
   Vec       zero;
   Mat       Avalue, Apattern;
   char      test_case[16] = "constant";
-  PetscBool isvector, isconv3d, istvd;
+  PetscBool isvector, isconv3d, istvd, iscancel, issmall;
   PetscInt  nv, np, r;
   PetscInt  rows[3][2] = {
     {0, 0},
@@ -269,6 +371,18 @@ int main(int argc, char **argv)
   PetscCall(PetscStrcmp(test_case, "vector", &isvector));
   PetscCall(PetscStrcmp(test_case, "convection3d", &isconv3d));
   PetscCall(PetscStrcmp(test_case, "tvd", &istvd));
+  PetscCall(PetscStrcmp(test_case, "cancel", &iscancel));
+  PetscCall(PetscStrcmp(test_case, "small", &issmall));
+  if (iscancel) {
+    PetscCall(TestCancel_Private());
+    PetscCall(FlucaFinalize());
+    return 0;
+  }
+  if (issmall) {
+    PetscCall(TestSmall_Private());
+    PetscCall(FlucaFinalize());
+    return 0;
+  }
   if (istvd) {
     PetscCall(TestTVD_Private());
     PetscCall(FlucaFinalize());
@@ -298,8 +412,8 @@ int main(int argc, char **argv)
   PetscCall(CreateFromPreallocator_Private(dm, scaled, PETSC_FALSE, &Avalue));
   PetscCall(CreateFromPreallocator_Private(dm, scaled, PETSC_TRUE, &Apattern));
   for (r = 0; r < 3; ++r) {
-    PetscCall(RowLength_Private(dm, Avalue, rows[r][0], rows[r][1], 0, &nv));
-    PetscCall(RowLength_Private(dm, Apattern, rows[r][0], rows[r][1], 0, &np));
+    PetscCall(RowLength_Private(dm, Avalue, DMSTAG_ELEMENT, rows[r][0], rows[r][1], 0, &nv));
+    PetscCall(RowLength_Private(dm, Apattern, DMSTAG_ELEMENT, rows[r][0], rows[r][1], 0, &np));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "%s (%" PetscInt_FMT ", %" PetscInt_FMT "): operator %" PetscInt_FMT ", pattern %" PetscInt_FMT "\n", labels[r], rows[r][0], rows[r][1], nv, np));
   }
 
@@ -335,5 +449,15 @@ int main(int argc, char **argv)
     suffix: tvd
     nsize: 1
     args: -test_case tvd
+
+  test:
+    suffix: cancel
+    nsize: 1
+    args: -test_case cancel
+
+  test:
+    suffix: small
+    nsize: 1
+    args: -test_case small
 
 TEST*/

@@ -442,7 +442,7 @@ static PetscErrorCode ClearTVDPair_Private(PetscInt npoints, FlucaFDStencilPoint
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, const FlucaFDBoundaryCondition bcs[][2 * FLUCAFD_MAX_DIM], PetscInt *npoints, FlucaFDStencilPoint points[])
+PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, const FlucaFDBoundaryCondition bcs[][2 * FLUCAFD_MAX_DIM], PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscInt       iter;
   const PetscInt max_iter = 100;
@@ -668,24 +668,35 @@ PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD fd, const FlucaFDBoun
   }
 
   PetscCheck(iter < max_iter, PetscObjectComm((PetscObject)fd), PETSC_ERR_CONV_FAILED, "Failed to remove all off-grid points after %" PetscInt_FMT " iterations", max_iter);
-  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
+  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(pattern, npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *npoints, FlucaFDStencilPoint points[])
+/* With pattern true, the weights are not yet multiplied by their scales, so an absolute tolerance would not carry over
+   to the scaled weights. Each weight is compared only with the weights under the same scale and TVD refs: those get the
+   same factor, so their ratios do. */
+PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscScalar       v_abssum;
-  PetscInt          npoints_new, c;
-  PetscBool         remove;
+  PetscReal         group_abssum;
+  PetscInt          npoints_new, c, d;
+  PetscBool         remove[FLUCAFD_MAX_STENCIL_SIZE];
   const PetscScalar atol = FLUCAFD_COEFF_ATOL, rtol = FLUCAFD_COEFF_RTOL;
 
   PetscFunctionBegin;
   v_abssum = 0.;
   for (c = 0; c < *npoints; ++c) v_abssum += PetscAbs(points[c].v);
+  for (c = 0; c < *npoints; ++c) {
+    if (pattern) {
+      group_abssum = 0.;
+      for (d = 0; d < *npoints; ++d)
+        if (FlucaFDScaleRefsSame_Private(&points[c], &points[d]) && FlucaFDTVDRefsSame_Private(&points[c], &points[d])) group_abssum += PetscAbs(points[d].v);
+      remove[c] = points[c].v == 0. || PetscAbs(points[c].v) < PetscRealPart(rtol) * group_abssum;
+    } else remove[c] = PetscAbs(points[c].v) < atol || PetscAbs(points[c].v / v_abssum) < rtol;
+  }
   npoints_new = 0;
   for (c = 0; c < *npoints; ++c) {
-    remove = PetscAbs(points[c].v) < atol || PetscAbs(points[c].v / v_abssum) < rtol;
-    if (!remove) {
+    if (!remove[c]) {
       points[npoints_new] = points[c];
       ++npoints_new;
     }

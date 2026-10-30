@@ -58,7 +58,8 @@ typedef enum {
 
 /* Deferred vector scale reference. Array pointers are borrowed from FlucaFD_Scale's
    DMDA local vector and are valid only while the owning FlucaFD object is alive.
-   Stencil points with nscales > 0 must not be stored beyond the current call frame. */
+   Stencil points with nscales > 0 must not be stored beyond the current call frame.
+   dim 0 tags a constant scale in pattern mode: arr is then the scale FlucaFD itself and is never read. */
 typedef struct {
   PetscInt    dim;
   PetscInt    i, j, k; /* position to evaluate scale vec */
@@ -132,8 +133,8 @@ FLUCA_EXTERN PetscErrorCode FlucaFDApply(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDApplyDot(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperator(FlucaFD, DM, DM, Mat);
 /* Insert every location whose coefficient depends on scales (constant or vector) or TVD limiters, regardless of their current values; the values are unspecified (use with MATPREALLOCATOR).
-   Coefficients that are zero from fixed data (mesh weights, boundary conditions) are left out. Fixed zeros are judged with every constant scale taken
-   as 1, so constant scales nested inside a sum or composition are assumed uniform across the operands they merge. */
+   Coefficients that are exactly zero from fixed data (mesh weights, boundary conditions) are left out. Each scale is taken as an independent unknown, so
+   weights under different scales never cancel, and no tolerance is applied, so the pattern covers FlucaFDGetOperator() for any scale values. */
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperatorPattern(FlucaFD, DM, DM, Mat);
 
 /* FLUCAFDDERIVATIVE specific */

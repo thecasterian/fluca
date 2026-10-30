@@ -30,13 +30,13 @@ static PetscErrorCode GetOutputLoopRange_Private(FlucaFD fd, DM output_dm, Petsc
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* With pattern true, every scale counts as 1 (vector scales are still tagged, constant scales are not applied),
-   so the zeros removed here come only from fixed data: mesh weights */
+/* With pattern true, every scale, constant or vector, is a deferred ref, so points merge only under the same scales
+   and the exact zeros removed here come only from fixed data: mesh weights */
 PetscErrorCode FlucaFDGetStencilRaw_Internal(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscFunctionBegin;
   PetscUseTypeMethod(fd, getstencilraw, i, j, k, pattern, npoints, points);
-  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
+  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(pattern, npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -61,7 +61,7 @@ static PetscErrorCode GetStencil_Private(FlucaFD fd, PetscReal t, PetscInt i, Pe
   PetscFunctionBegin;
   PetscCall(FlucaFDGetStencilRaw_Internal(fd, i, j, k, pattern, npoints, points));
   PetscCall(FlucaFDGetBoundaryConditions_Internal(fd, i, j, k, &bcs));
-  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, bcs, npoints, points));
+  PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, bcs, pattern, npoints, points));
   if (pattern) {
     for (c = 0; c < *npoints; c++) {
       points[c].nscales = 0;
@@ -76,7 +76,7 @@ static PetscErrorCode GetStencil_Private(FlucaFD fd, PetscReal t, PetscInt i, Pe
   for (c = 0; c < *npoints; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&points[c], &merged_npoints, merged));
   *npoints = merged_npoints;
   PetscCall(PetscArraycpy(points, merged, merged_npoints));
-  if (!pattern) PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(npoints, points));
+  if (!pattern) PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(PETSC_FALSE, npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
