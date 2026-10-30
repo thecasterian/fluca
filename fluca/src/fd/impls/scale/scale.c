@@ -79,7 +79,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscIn
   FlucaFDScaleRef *ref;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencilRaw_Internal(scale->operand, i, j, k, pattern, npoints, points));
+  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, pattern, npoints, points));
 
   if (scale->is_constant && !pattern) {
     /* Constant scale: multiply v directly, no deferred ref needed */

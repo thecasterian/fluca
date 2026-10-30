@@ -46,7 +46,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_Sum(FlucaFD fd, PetscInt i, PetscInt 
   *npoints = 0;
 
   for (op = sum->oplink; op != NULL; op = op->next) {
-    PetscCall(FlucaFDGetStencilRaw_Internal(op->fd, i, j, k, pattern, &op_npoints, op_points));
+    PetscCall(FlucaFDGetStencilRaw(op->fd, i, j, k, pattern, &op_npoints, op_points));
     for (c = 0; c < op_npoints; c++) PetscCall(FlucaFDAddStencilPoint_Internal(&op_points[c], npoints, points));
   }
   PetscFunctionReturn(PETSC_SUCCESS);

@@ -32,21 +32,14 @@ static PetscErrorCode GetOutputLoopRange_Private(FlucaFD fd, DM output_dm, Petsc
 
 /* With pattern true, every scale, constant or vector, is a deferred ref, so points merge only under the same scales
    and the zeros removed here come only from fixed data: mesh weights */
-PetscErrorCode FlucaFDGetStencilRaw_Internal(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
-{
-  PetscFunctionBegin;
-  PetscUseTypeMethod(fd, getstencilraw, i, j, k, pattern, npoints, points);
-  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(pattern, npoints, points));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
+PetscErrorCode FlucaFDGetStencilRaw(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(fd, FLUCAFD_CLASSID, 1);
-  PetscAssertPointer(npoints, 5);
-  PetscAssertPointer(points, 6);
-  PetscCall(FlucaFDGetStencilRaw_Internal(fd, i, j, k, PETSC_FALSE, npoints, points));
+  PetscAssertPointer(npoints, 6);
+  PetscAssertPointer(points, 7);
+  PetscUseTypeMethod(fd, getstencilraw, i, j, k, pattern, npoints, points);
+  PetscCall(FlucaFDRemoveZeroStencilPoints_Internal(pattern, npoints, points));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -59,7 +52,7 @@ static PetscErrorCode GetStencil_Private(FlucaFD fd, PetscReal t, PetscInt i, Pe
   const FlucaFDBoundaryCondition(*bcs)[2 * FLUCAFD_MAX_DIM];
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencilRaw_Internal(fd, i, j, k, pattern, npoints, points));
+  PetscCall(FlucaFDGetStencilRaw(fd, i, j, k, pattern, npoints, points));
   PetscCall(FlucaFDGetBoundaryConditions_Internal(fd, i, j, k, &bcs));
   PetscCall(FlucaFDRemoveOffGridPoints_Internal(fd, bcs, pattern, npoints, points));
   if (pattern) {

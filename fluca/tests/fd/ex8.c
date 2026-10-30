@@ -51,7 +51,7 @@ int main(int argc, char **argv)
   PetscCall(PetscOptionsGetInt(NULL, NULL, "-i", &idx, NULL));
 
   /* GetStencilRaw: should have nscales > 0 (unresolved vector scale) */
-  PetscCall(FlucaFDGetStencilRaw(fd_scale, idx, 0, 0, &npoints_raw, raw_points));
+  PetscCall(FlucaFDGetStencilRaw(fd_scale, idx, 0, 0, PETSC_FALSE, &npoints_raw, raw_points));
   PetscCall(SortStencil(npoints_raw, raw_points));
   any_unresolved = PETSC_FALSE;
   {

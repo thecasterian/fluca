@@ -55,7 +55,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, P
   PetscInt             oc, ic, s, t;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencilRaw_Internal(comp->outer, i, j, k, pattern, &outer_npoints, outer_points));
+  PetscCall(FlucaFDGetStencilRaw(comp->outer, i, j, k, pattern, &outer_npoints, outer_points));
 
   *npoints = 0;
   for (oc = 0; oc < outer_npoints; oc++) {
@@ -64,7 +64,7 @@ static PetscErrorCode FlucaFDGetStencilRaw_Composition(FlucaFD fd, PetscInt i, P
       PetscCall(FlucaFDAddStencilPoint_Internal(&outer_points[oc], npoints, points));
       continue;
     }
-    PetscCall(FlucaFDGetStencilRaw_Internal(comp->inner, outer_points[oc].i, outer_points[oc].j, outer_points[oc].k, pattern, &inner_npoints, inner_points));
+    PetscCall(FlucaFDGetStencilRaw(comp->inner, outer_points[oc].i, outer_points[oc].j, outer_points[oc].k, pattern, &inner_npoints, inner_points));
     for (ic = 0; ic < inner_npoints; ic++) {
       scaled = inner_points[ic];
       /* Multiply unresolved coefficient by outer's unresolved coefficient */
