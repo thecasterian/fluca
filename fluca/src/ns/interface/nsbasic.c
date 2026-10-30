@@ -270,10 +270,22 @@ PetscErrorCode NSStep(NS ns)
 
 PetscErrorCode NSFormJacobian(NS ns, Vec x, Mat J)
 {
+  MatInfo   info;
+  PetscReal nz;
+
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   if (x) PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
   PetscValidHeaderSpecific(J, MAT_CLASSID, 3);
+  PetscCheck(ns->J, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "NS not set up. Call NSSetUp() first");
+  if (J != ns->J) {
+    /* The type inserts only inside the Jacobian pattern and may copy whole blocks into J, so a stored-entry count
+       that differs from ns->J means another pattern */
+    PetscCall(MatGetInfo(ns->J, MAT_GLOBAL_SUM, &info));
+    nz = info.nz_used;
+    PetscCall(MatGetInfo(J, MAT_GLOBAL_SUM, &info));
+    PetscCheck(info.nz_used == nz, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_INCOMP, "J has %.0f stored entries, but the NS Jacobian pattern has %.0f: duplicate the SNES Jacobian (NSGetSNES(), SNESGetJacobian())", (double)info.nz_used, (double)nz);
+  }
   PetscCall(PetscLogEventBegin(NS_FormJacobian, ns, x, J, NULL));
   PetscUseTypeMethod(ns, formjacobian, x, J);
   PetscCall(PetscLogEventEnd(NS_FormJacobian, ns, x, J, NULL));
