@@ -1,8 +1,13 @@
 #include <fluca/private/flucaviewercgnsimpl.h>
 #include <petscdmstag.h>
 
-/* CGNS output of fields of a vector on a DMStag. The grid zone itself is written by the Mesh (MeshView()); these
-   routines only add a FlowSolution per output step and the field arrays under it. */
+/* CGNS I/O of fields of a vector on a DMStag. The grid zone itself is written by the Mesh (MeshView()); these
+   routines only write a FlowSolution per output step and the field arrays under it, or read them back.
+
+   A field is the components [c0, c0 + ncomp) at loc, which is DMSTAG_ELEMENT for cell data or DMSTAG_LEFT for face
+   data covering the faces normal to every direction, stored under name (suffixed X, Y, Z when ncomp > 1; ncomp is at
+   most 3). Writing needs PetscViewerFlucaCGNSBeginStep_Internal() and then the grid zone (MeshView()) first; reading
+   takes the last step in the file and sets the DM's output sequence number from it. */
 
 static const char *const                face_sol_names[3]     = {"IFaceCenteredSolution", "JFaceCenteredSolution", "KFaceCenteredSolution"};
 static const CGNS_ENUMT(GridLocation_t) face_sol_grid_locs[3] = {CGNS_ENUMV(IFaceCenter), CGNS_ENUMV(JFaceCenter), CGNS_ENUMV(KFaceCenter)};
@@ -522,6 +527,10 @@ PetscErrorCode PetscViewerFlucaCGNSBeginStep_Internal(PetscViewer viewer, PetscI
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Write components [c0, c0 + ncomp) of v at loc (DMSTAG_ELEMENT, or DMSTAG_LEFT for the faces normal to every direction)
+   into FlowSolution sol of the current zone, named as for PetscViewerFlucaCGNSWriteDMStagComponents_Internal(). Values
+   are written as CGNS Integer (rounded half up) when as_int is true, otherwise as PetscScalar. Face arrays go under the
+   I/J/KFaceCenteredSolution UserDefinedData nodes of sol, created on first use. The grid zone must be written first. */
 PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponentsToSolution_Internal(PetscViewer viewer, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp, const char name[], int sol, PetscBool as_int)
 {
   PetscViewer_FlucaCGNS *cgv;
@@ -586,6 +595,9 @@ PetscErrorCode PetscViewerFlucaCGNSWriteDMStagComponents_Internal(PetscViewer vi
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Read components [c0, c0 + ncomp) of v at loc (DMSTAG_ELEMENT, or DMSTAG_LEFT for the faces normal to every direction)
+   from FlowSolution sol of zone 1, named as for PetscViewerFlucaCGNSWriteDMStagComponents_Internal(). Components outside
+   [c0, c0 + ncomp) keep their values. Data stored as RealSingle, RealDouble or Integer is converted to PetscScalar. */
 PetscErrorCode PetscViewerFlucaCGNSReadDMStagComponentsFromSolution_Internal(PetscViewer viewer, Vec v, DMStagStencilLocation loc, PetscInt c0, PetscInt ncomp, const char name[], int sol)
 {
   PetscViewer_FlucaCGNS *cgv;

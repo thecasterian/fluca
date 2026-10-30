@@ -33,7 +33,7 @@ FLUCA_EXTERN PetscErrorCode IBBodySetVelocityFunction(IBBody, IBBodyVelocityFn *
 /* IBBODYLEVELSET */
 FLUCA_EXTERN PetscErrorCode IBBodyLevelSetSetFunction(IBBody, IBBodyLevelSetFn *, void *);
 
-/* IBBODYSURFACE: every rank holds the full surface until the Mesh releases it after sampling in MeshSetUp() */
+/* IBBODYSURFACE */
 FLUCA_EXTERN PetscErrorCode IBBodySurfaceSetPolyline(IBBody, PetscInt, const PetscReal[]);
 FLUCA_EXTERN PetscErrorCode IBBodySurfaceSetTriangles(IBBody, PetscInt, const PetscReal[], PetscInt, const PetscInt[]);
 FLUCA_EXTERN PetscErrorCode IBBodySurfaceLoadSTL(IBBody, const char[]);

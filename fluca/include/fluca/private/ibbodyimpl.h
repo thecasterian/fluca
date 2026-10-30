@@ -58,8 +58,6 @@ typedef struct {
 #define IBBODY_STL_ERR_MALFORMED -4 /* ASCII STL with a bad vertex line or a vertex count that is not a positive multiple of 3 */
 FLUCA_INTERN PetscErrorCode IBBodySurfaceReadSTL_Internal(const char[], PetscInt *, PetscReal **);
 
-/* Sample phi on the tensor-product points (coord[0][i], coord[1][j], coord[2][k]); n[d] = 1 for d >= dim.
-   phi is indexed by i + n[0] * (j + n[1] * k). */
 FLUCA_EXTERN PetscErrorCode IBBodySample_Internal(IBBody, PetscInt, const PetscInt[], const PetscReal *const[], PetscReal[]);
 FLUCA_EXTERN PetscErrorCode IBBodyReleaseGeometry_Internal(IBBody);
 FLUCA_EXTERN PetscErrorCode IBBodyEvaluateVelocity_Internal(IBBody, PetscInt, PetscReal, const PetscReal[], PetscBool, PetscScalar[]);

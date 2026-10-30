@@ -72,37 +72,47 @@ static PetscErrorCode FlucaFDSetUp_Scale(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
+static PetscErrorCode FlucaFDGetStencilRaw_Scale(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_Scale   *scale = (FlucaFD_Scale *)fd->data;
   PetscInt         n;
   FlucaFDScaleRef *ref;
 
   PetscFunctionBegin;
-  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, npoints, points));
+  PetscCall(FlucaFDGetStencilRaw(scale->operand, i, j, k, pattern, npoints, points));
 
-  if (scale->is_constant) {
+  if (scale->is_constant && !pattern) {
     /* Constant scale: multiply v directly, no deferred ref needed */
     for (n = 0; n < *npoints; n++) points[n].v *= scale->constant;
   } else {
-    /* Vector scale: tag each point with a deferred scale ref */
+    /* Tag each point with a deferred scale ref. A pattern must not depend on the value of a constant scale (it may
+       be 0 until the first time step), so there it is tagged too, as a ref of dim 0 to this FlucaFD: points under
+       different scales then never merge, and their weights cannot cancel */
     for (n = 0; n < *npoints; n++) {
       PetscCheck(points[n].nscales < FLUCAFD_MAX_SCALES, PetscObjectComm((PetscObject)fd), PETSC_ERR_SUP, "Stencil point already has %" PetscInt_FMT " deferred scale refs; FLUCAFD_MAX_SCALES=%d exceeded", points[n].nscales, FLUCAFD_MAX_SCALES);
-      ref      = &points[n].scales[points[n].nscales];
-      ref->dim = fd->dim;
-      ref->i   = i;
-      ref->j   = j;
-      ref->k   = k;
-      switch (fd->dim) {
-      case 1:
-        ref->arr = scale->arr_vec_1d;
-        break;
-      case 2:
-        ref->arr = scale->arr_vec_2d;
-        break;
-      case 3:
-        ref->arr = scale->arr_vec_3d;
-        break;
+      ref = &points[n].scales[points[n].nscales];
+      if (scale->is_constant) {
+        ref->dim = 0;
+        ref->i   = 0;
+        ref->j   = 0;
+        ref->k   = 0;
+        ref->arr = (const void *)fd;
+      } else {
+        ref->dim = fd->dim;
+        ref->i   = i;
+        ref->j   = j;
+        ref->k   = k;
+        switch (fd->dim) {
+        case 1:
+          ref->arr = scale->arr_vec_1d;
+          break;
+        case 2:
+          ref->arr = scale->arr_vec_2d;
+          break;
+        case 3:
+          ref->arr = scale->arr_vec_3d;
+          break;
+        }
       }
       ++points[n].nscales;
     }

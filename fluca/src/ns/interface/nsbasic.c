@@ -168,6 +168,15 @@ static PetscErrorCode CreateNullSpace_Private(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* fill for NSCreateMatrix_Internal(): the required jacobianpattern type method inserts every location the type's
+   formjacobian can insert */
+static PetscErrorCode FillJacobianPattern_Private(NS ns, Mat M, void *ctx)
+{
+  PetscFunctionBegin;
+  PetscUseTypeMethod(ns, jacobianpattern, M);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode NSSetUp(NS ns)
 {
   PetscInt  dim, sw;
@@ -184,6 +193,7 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(PetscLogEventBegin(NS_SetUp, (PetscObject)ns, 0, 0, 0));
 
   if (!((PetscObject)ns)->type_name) PetscCall(NSSetType(ns, NSCNLINEAR));
+  PetscCheck(ns->ops->jacobianpattern, PetscObjectComm((PetscObject)ns), PETSC_ERR_SUP, "NS type %s does not provide jacobianpattern, which NSSetUp() needs to create the Jacobian", ((PetscObject)ns)->type_name);
   PetscCheck(ns->phys, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "Phys not set. Call NSSetPhys() first");
   PetscCall(PhysSetUp(ns->phys));
   PetscCall(PhysGetSolutionDM(ns->phys, &dm));
@@ -205,11 +215,11 @@ PetscErrorCode NSSetUp(NS ns)
   PetscCall(VecDuplicate(ns->sol, &ns->sol0));
   PetscCall(VecDuplicate(ns->sol, &ns->x));
   PetscCall(VecDuplicate(ns->sol, &ns->r));
-  PetscCall(DMCreateMatrix(dm, &ns->J));
-  PetscCall(MatSetOption(ns->J, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE));
-  PetscCall(MatSetNullSpace(ns->J, ns->nullspace));
-
+  /* The type's setup runs before ns->J exists: ns->J is made from the Jacobian pattern, which needs the operators the
+     setup creates */
   PetscTryTypeMethod(ns, setup);
+  PetscCall(NSCreateMatrix_Internal(ns, FillJacobianPattern_Private, NULL, &ns->J));
+  PetscCall(MatSetNullSpace(ns->J, ns->nullspace));
 
   PetscCall(NSGetSNES(ns, &snes));
   PetscCall(SNESSetPicard(snes, ns->r, FormFunction_Private, ns->J, ns->J, FormJacobian_Private, ns));
@@ -260,12 +270,25 @@ PetscErrorCode NSStep(NS ns)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* The Mat must have the NS Jacobian pattern: duplicate the SNES Jacobian (NSGetSNES(), SNESGetJacobian()) */
 PetscErrorCode NSFormJacobian(NS ns, Vec x, Mat J)
 {
+  MatInfo   info;
+  PetscReal nz;
+
   PetscFunctionBegin;
   PetscValidHeaderSpecific(ns, NS_CLASSID, 1);
   if (x) PetscValidHeaderSpecific(x, VEC_CLASSID, 2);
   PetscValidHeaderSpecific(J, MAT_CLASSID, 3);
+  PetscCheck(ns->J, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_WRONGSTATE, "NS not set up. Call NSSetUp() first");
+  if (J != ns->J) {
+    /* The type may copy whole blocks into J with SAME_NONZERO_PATTERN, so J needs the pattern of ns->J. Equal
+       stored-entry counts do not prove it, but a different count rules it out with a clear message */
+    PetscCall(MatGetInfo(ns->J, MAT_GLOBAL_SUM, &info));
+    nz = info.nz_used;
+    PetscCall(MatGetInfo(J, MAT_GLOBAL_SUM, &info));
+    PetscCheck(info.nz_used == nz, PetscObjectComm((PetscObject)ns), PETSC_ERR_ARG_INCOMP, "J has %.0f stored entries, but the NS Jacobian pattern has %.0f: duplicate the SNES Jacobian (NSGetSNES(), SNESGetJacobian())", (double)info.nz_used, (double)nz);
+  }
   PetscCall(PetscLogEventBegin(NS_FormJacobian, ns, x, J, NULL));
   PetscUseTypeMethod(ns, formjacobian, x, J);
   PetscCall(PetscLogEventEnd(NS_FormJacobian, ns, x, J, NULL));

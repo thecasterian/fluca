@@ -72,10 +72,10 @@ typedef struct _MeshOps *MeshOps;
 
 struct _MeshOps {
   PetscErrorCode (*setfromoptions)(Mesh, PetscOptionItems);
-  PetscErrorCode (*setup)(Mesh); /* validates mesh->dm */
+  PetscErrorCode (*setup)(Mesh);
   PetscErrorCode (*destroy)(Mesh);
   PetscErrorCode (*view)(Mesh, PetscViewer);
-  PetscErrorCode (*load)(Mesh, PetscViewer); /* replaces mesh->dm */
+  PetscErrorCode (*load)(Mesh, PetscViewer);
 };
 
 struct _p_Mesh {

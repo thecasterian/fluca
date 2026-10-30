@@ -124,7 +124,7 @@ static PetscErrorCode FlucaFDSetUp_IBForcing(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_IBForcing(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
+static PetscErrorCode FlucaFDGetStencilRaw_IBForcing(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_IBForcing        *ibf = (FlucaFD_IBForcing *)fd->data;
   PetscInt                  p[3], u, mm, sigma, nuse, use[2 * FLUCAFD_MAX_DIM], nnodes[2 * FLUCAFD_MAX_DIM];
@@ -230,6 +230,7 @@ PetscErrorCode FlucaFDCreate_IBForcing(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Rows at forcing points exist only at owned points: use it as the outermost operator, a summand, or a FLUCAFDIBSELECT operand, not as an inner operand */
 PetscErrorCode FlucaFDIBForcingCreate(Mesh mesh, DMStagStencilLocation loc, PetscInt c, PetscInt vel_comp, FlucaFD *fd)
 {
   MPI_Comm comm;

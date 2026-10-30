@@ -156,6 +156,8 @@ PetscErrorCode IBBodySetVelocityFunction(IBBody body, IBBodyVelocityFn *fn, IBBo
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Sample phi on the tensor-product points (coord[0][i], coord[1][j], coord[2][k]); n[d] = 1 for d >= dim.
+   phi is indexed by i + n[0] * (j + n[1] * k). */
 PetscErrorCode IBBodySample_Internal(IBBody body, PetscInt dim, const PetscInt n[], const PetscReal *const coord[], PetscReal phi[])
 {
   PetscFunctionBegin;

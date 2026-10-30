@@ -35,6 +35,7 @@ struct _NSOps {
   PetscErrorCode (*setup)(NS);
   PetscErrorCode (*step)(NS);
   PetscErrorCode (*formjacobian)(NS, Vec, Mat);
+  PetscErrorCode (*jacobianpattern)(NS, Mat);
   PetscErrorCode (*formfunction)(NS, Vec, Vec);
   PetscErrorCode (*destroy)(NS);
   PetscErrorCode (*view)(NS, PetscViewer);
@@ -70,7 +71,7 @@ struct _p_NS {
 
   /* Solver --------------------------------------------------------------- */
   SNES         snes;      /* non-linear solver */
-  Mat          J;         /* AIJ from DMCreateMatrix() on the Phys solution DM */
+  Mat          J;         /* AIJ with the pattern of ops->jacobianpattern (entries that scales or TVD limiters may fill, whatever their current values) */
   Vec          r;         /* residual vector */
   Vec          x;         /* solver solution vector */
   MatNullSpace nullspace; /* null space of J */
@@ -92,6 +93,7 @@ struct _p_NS {
 FLUCA_INTERN PetscErrorCode NSSetUpSpatialOperators_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSDestroySpatialOperators_Internal(NS);
 FLUCA_INTERN PetscErrorCode NSSetVelocityBCs_Internal(NS, FlucaFD, PetscInt);
+FLUCA_INTERN PetscErrorCode NSCreateMatrix_Internal(NS, PetscErrorCode (*)(NS, Mat, void *), void *, Mat *);
 
 /* Defined in interface/nsmon.c */
 FLUCA_INTERN PetscErrorCode NSMonitorSolutionSetUp_Internal(NS, PetscViewerAndFormat *);

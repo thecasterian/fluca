@@ -42,14 +42,14 @@ static PetscErrorCode FlucaFDSetUp_IBSelect(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode FlucaFDGetStencilRaw_IBSelect(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscInt *npoints, FlucaFDStencilPoint points[])
+static PetscErrorCode FlucaFDGetStencilRaw_IBSelect(FlucaFD fd, PetscInt i, PetscInt j, PetscInt k, PetscBool pattern, PetscInt *npoints, FlucaFDStencilPoint points[])
 {
   FlucaFD_IBSelect *sel = (FlucaFD_IBSelect *)fd->data;
   MeshIBPointType   type;
 
   PetscFunctionBegin;
   PetscCall(MeshGetIBPointType(fd->mesh, fd->output_loc, i, j, k, &type)); /* FLUID everywhere when the Mesh has no bodies */
-  if (sel->operand[type]) PetscCall(FlucaFDGetStencilRaw(sel->operand[type], i, j, k, npoints, points));
+  if (sel->operand[type]) PetscCall(FlucaFDGetStencilRaw(sel->operand[type], i, j, k, pattern, npoints, points));
   else *npoints = 0;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -113,6 +113,9 @@ PetscErrorCode FlucaFDCreate_IBSelect(FlucaFD fd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* Picks the operand for each row by its IB point type; a NULL operand yields an empty row.
+   Each row uses its operand's domain boundary conditions: set them on the operands, not on the select (setting them on the select is an error at setup).
+   Point types are exact only at owned points, so query its stencils at owned rows only. Must be the outermost operator. */
 PetscErrorCode FlucaFDIBSelectCreate(FlucaFD fluid, FlucaFD forcing, FlucaFD solid, FlucaFD *fd)
 {
   FlucaFD  ops[FLUCAFD_IB_NPOINTTYPES];

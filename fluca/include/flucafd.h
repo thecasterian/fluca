@@ -58,7 +58,8 @@ typedef enum {
 
 /* Deferred vector scale reference. Array pointers are borrowed from FlucaFD_Scale's
    DMDA local vector and are valid only while the owning FlucaFD object is alive.
-   Stencil points with nscales > 0 must not be stored beyond the current call frame. */
+   Stencil points with nscales > 0 must not be stored beyond the current call frame.
+   dim 0 tags a constant scale in pattern mode: arr is then the scale FlucaFD itself and is never read. */
 typedef struct {
   PetscInt    dim;
   PetscInt    i, j, k; /* position to evaluate scale vec */
@@ -126,11 +127,12 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSetOptionsPrefix(FlucaFD, const char[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDAppendOptionsPrefix(FlucaFD, const char[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOptionsPrefix(FlucaFD, const char *[]);
 
-FLUCA_EXTERN PetscErrorCode FlucaFDGetStencilRaw(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_EXTERN PetscErrorCode FlucaFDGetStencilRaw(FlucaFD, PetscInt, PetscInt, PetscInt, PetscBool, PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetStencil(FlucaFD, PetscReal, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_EXTERN PetscErrorCode FlucaFDApply(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDApplyDot(FlucaFD, PetscReal, DM, DM, Vec, Vec);
 FLUCA_EXTERN PetscErrorCode FlucaFDGetOperator(FlucaFD, DM, DM, Mat);
+FLUCA_EXTERN PetscErrorCode FlucaFDGetOperatorPattern(FlucaFD, DM, DM, Mat);
 
 /* FLUCAFDDERIVATIVE specific */
 FLUCA_EXTERN PetscErrorCode FlucaFDDerivativeCreate(Mesh, FlucaFDDirection, PetscInt, PetscInt, DMStagStencilLocation, PetscInt, DMStagStencilLocation, PetscInt, FlucaFD *);
@@ -163,16 +165,12 @@ FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetLimiter(FlucaFD, const char 
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetMassFlux(FlucaFD, Vec, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDSecondOrderTVDSetCurrentSolution(FlucaFD, Vec);
 
-/* FLUCAFDIBFORCING specific
-   Rows at forcing points exist only at owned points: use it as the outermost operator, a summand, or a FLUCAFDIBSELECT operand, not as an inner operand */
+/* FLUCAFDIBFORCING specific */
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingCreate(Mesh, DMStagStencilLocation, PetscInt, PetscInt, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetInterpolationOrder(FlucaFD, PetscInt);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBForcingSetVelocityComponent(FlucaFD, PetscInt);
 
-/* FLUCAFDIBSELECT specific
-   Picks the operand for each row by its IB point type; a NULL operand yields an empty row.
-   Each row uses its operand's domain boundary conditions: set them on the operands, not on the select (setting them on the select is an error at setup).
-   Point types are exact only at owned points, so query its stencils at owned rows only. Must be the outermost operator. */
+/* FLUCAFDIBSELECT specific */
 FLUCA_EXTERN PetscErrorCode FlucaFDIBSelectCreate(FlucaFD, FlucaFD, FlucaFD, FlucaFD *);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBSelectSetOperand(FlucaFD, MeshIBPointType, FlucaFD);
 FLUCA_EXTERN PetscErrorCode FlucaFDIBSelectGetOperand(FlucaFD, MeshIBPointType, FlucaFD *);

@@ -27,7 +27,7 @@ typedef struct _PhysOps *PhysOps;
 
 struct _PhysOps {
   PetscErrorCode (*setfromoptions)(Phys, PetscOptionItems);
-  PetscErrorCode (*setup)(Phys); /* optional subtype setup hook; runs before the solution DM is built */
+  PetscErrorCode (*setup)(Phys);
   PetscErrorCode (*destroy)(Phys);
   PetscErrorCode (*view)(Phys, PetscViewer);
 };

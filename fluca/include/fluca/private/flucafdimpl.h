@@ -29,8 +29,8 @@ typedef struct _FlucaFDOps *FlucaFDOps;
 struct _FlucaFDOps {
   PetscErrorCode (*setfromoptions)(FlucaFD, PetscOptionItems);
   PetscErrorCode (*setup)(FlucaFD);
-  PetscErrorCode (*getstencilraw)(FlucaFD, PetscInt, PetscInt, PetscInt, PetscInt *, FlucaFDStencilPoint[]);
-  PetscErrorCode (*getboundaryconditions)(FlucaFD, PetscInt, PetscInt, PetscInt, const FlucaFDBoundaryCondition (**)[2 * FLUCAFD_MAX_DIM]); /* optional; default: fd->bcs */
+  PetscErrorCode (*getstencilraw)(FlucaFD, PetscInt, PetscInt, PetscInt, PetscBool, PetscInt *, FlucaFDStencilPoint[]);
+  PetscErrorCode (*getboundaryconditions)(FlucaFD, PetscInt, PetscInt, PetscInt, const FlucaFDBoundaryCondition (**)[2 * FLUCAFD_MAX_DIM]);
   PetscErrorCode (*destroy)(FlucaFD);
   PetscErrorCode (*view)(FlucaFD, PetscViewer);
 };
@@ -171,8 +171,8 @@ FLUCA_INTERN PetscErrorCode FlucaFDGetGhostCorners_Internal(FlucaFD, PetscInt, P
 FLUCA_INTERN PetscErrorCode FlucaFDSolveLinearSystem_Internal(PetscInt, PetscScalar[], PetscScalar[], PetscScalar[]);
 FLUCA_INTERN PetscErrorCode FlucaFDAddStencilPoint_Internal(const FlucaFDStencilPoint *, PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDGetBoundaryConditions_Internal(FlucaFD, PetscInt, PetscInt, PetscInt, const FlucaFDBoundaryCondition (**)[2 * FLUCAFD_MAX_DIM]);
-FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, const FlucaFDBoundaryCondition[][2 * FLUCAFD_MAX_DIM], PetscInt *, FlucaFDStencilPoint[]);
-FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_INTERN PetscErrorCode FlucaFDRemoveOffGridPoints_Internal(FlucaFD, const FlucaFDBoundaryCondition[][2 * FLUCAFD_MAX_DIM], PetscBool, PetscInt *, FlucaFDStencilPoint[]);
+FLUCA_INTERN PetscErrorCode FlucaFDRemoveZeroStencilPoints_Internal(PetscBool, PetscInt *, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveScaleRefs_Internal(PetscInt, FlucaFDStencilPoint[]);
 FLUCA_INTERN PetscErrorCode FlucaFDResolveTVDRefs_Internal(PetscReal, PetscInt, FlucaFDStencilPoint[]);
 
